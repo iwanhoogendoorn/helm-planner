@@ -1,0 +1,30 @@
+{
+  "name": "helm-planner",
+  "version": "0.1.0",
+  "description": "Helm — steer projects, phases, tasks and habits from your daily note. An Obsidian plugin.",
+  "main": "main.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs dev",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit --skipLibCheck",
+    "seed": "node scripts/run.mjs scripts/seed-vault.ts",
+    "install:vault": "node scripts/install.mjs"
+  },
+  "keywords": ["obsidian", "tasks", "projects", "habits", "daily-notes"],
+  "author": "Iwan Hoogendoorn",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.0",
+    "jsdom": "^25.0.1",
+    "obsidian": "latest",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": { "node": ">=20.11" }
+}
