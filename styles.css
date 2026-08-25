@@ -250,9 +250,9 @@
 .modal:has(.helm-plan) { width: min(1100px, 95vw); }
 .modal:has(.helm-wrapup) { width: min(900px, 95vw); }
 .modal:has(.helm-task-editor), .modal:has(.helm-project-form) { width: min(720px, 95vw); }
-.helm-plan-cols { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; max-height: 65vh; }
+.helm-plan-cols { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; max-height: 62vh; min-height: 0; }
 @media (max-width: 800px) { .helm-plan-cols { grid-template-columns: 1fr; max-height: none; } }
-.helm-plan-col { overflow-y: auto; padding-right: 4px; }
+.helm-plan-col { overflow-y: auto; padding-right: 4px; min-height: 0; max-height: 62vh; }
 .helm-plan-group { margin-bottom: 12px; }
 .helm-plan-group-title { display: flex; align-items: center; gap: 6px; font-size: var(--font-ui-smaller); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; padding: 4px 2px; }
 .helm-plan-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: var(--radius-s); cursor: pointer; }

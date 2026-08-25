@@ -54,7 +54,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
       h('span', { cls: 'helm-spacer' }),
       button(project ? 'Change project' : 'Project…', { icon: 'folder', onClick: () => pickProject(ctx, (p, ph) => { project = p; phaseId = ph; render(); }, { phases: true }) }),
       project ? button('', { icon: 'x', title: 'No project', onClick: () => { project = undefined; phaseId = undefined; render(); } }) : null,
-      button(date ? 'Not planned' : 'Plan today', { icon: date ? 'calendar-x' : 'sun', onClick: () => { explicitDate = true; date = date ? undefined : today; render(); } }),
+      button(date ? 'Unplan' : 'Plan today', { icon: date ? 'calendar-x' : 'sun', title: date ? 'Keep it unplanned (inbox or project only)' : 'Plan it on today', onClick: () => { explicitDate = true; date = date ? undefined : today; render(); } }),
     ]);
   };
   input.addEventListener('input', render);
