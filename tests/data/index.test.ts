@@ -106,7 +106,9 @@ describe('planner', () => {
     expect(h.flags).toContain('overdue');
     expect(h.phaseProgress.map((p) => p.state)).toEqual(['active', 'planned']);
     const u = projectHealth(index.snapshot, index.project('prj-oracle')!, TODAY, settings);
-    expect(u.flags).toContain('no-next-action');
+    expect(u.flags).not.toContain('no-next-action'); // umbrella with an active child
+    const k = projectHealth(index.snapshot, index.project('prj-kitchen')!, TODAY, settings);
+    expect(k.nextAction?.text).toBe('Get three quotes');
   });
 
   it('week and review', async () => {

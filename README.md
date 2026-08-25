@@ -1,9 +1,157 @@
-# task-task
+# Helm
 
-Scaffolded by the `orca-new` shell function on 2026-08-26.
+**Steer your projects from your daily note.** An Obsidian plugin for projects,
+phases, tasks and habits, built around one idea: the day is the unit of work,
+and the daily note is where the day lives.
 
-- **Path:** `/Users/iwanhoogendoorn/orca/projects/task-task`
-- **Registered with Orca:** yes — appears in the sidebar as a project
-- **Base branch:** `master`
+Markdown is the source of truth. Every task is a real `- [ ]` line in a real
+note, in the standard Obsidian Tasks emoji format. Uninstall Helm and nothing
+breaks — you keep a plain-text task system that other plugins can read.
 
-Replace this README once the project has a real purpose.
+## The loop
+
+```
+   morning              during the day               evening              weekly
+┌────────────┐   ┌──────────────────────────┐   ┌──────────────┐   ┌──────────────┐
+│  Plan day  │ → │ Capture · tick · reschedule│ → │   Wrap up    │ → │    Review    │
+│ pull work  │   │ (Helm view or the note)    │   │ carry forward│   │ health check │
+└────────────┘   └──────────────────────────┘   └──────────────┘   └──────────────┘
+```
+
+1. **Plan day** — a ranked list of what deserves today (overdue, carried over,
+   in progress, due soon, each active project's next action, inbox) against a
+   capacity bar. Pick, confirm, and the plan is *written into the daily note*.
+2. **Work** — tick boxes in Helm or in the note itself; both are the same line.
+   Capture new tasks in one line of natural language. Drag tasks between days.
+3. **Wrap up** — decide the fate of every open item (tomorrow, a date, off the
+   calendar, done, cancelled). Yesterday's note keeps a `[>]` record of what
+   moved; it is a log, not a to-do list that rots.
+4. **Review** — weekly: throughput, overdue, inbox, stale projects, projects
+   without a next action, habit streaks, what got done by project.
+
+## How notes look
+
+**Project** — a folder with a note of the same name. Phases are headings;
+their status is derived from their tasks (no callout ceremony):
+
+```markdown
+---
+title: OCI Networking Book
+type: project
+id: prj-3f9a2c
+status: active          # idea · planned · active · on-hold · done · cancelled · archived
+priority: high          # low · normal · medium · high · urgent · critical
+area: Oracle
+due_date: 2026-12-31
+---
+# OCI Networking Book
+
+## Phase: Outline 📅 2026-09-15
+- [x] Draft chapter list 🆔 tsk-8821 ✅ 2026-08-20
+- [/] Collect diagrams ⏫ ⏱️ 2h
+
+## Phase: Writing
+- [ ] Chapter 1 📅 2026-09-30 ⏳ 2026-08-27
+
+## Tasks
+- [ ] Buy reference books ⏱️ 45m
+
+## Log
+- 2026-08-26 — Outline approved.
+```
+
+**Daily note** — Helm owns one region between two invisible markers and
+never touches anything outside it:
+
+```markdown
+%% helm:start %%
+## Plan
+### Habits
+- [x] 🏃 Morning workout 🆔 hab-0012 ✅ 2026-08-27
+### Today
+- [ ] Fix router config ⏱️ 30m
+### From projects
+- [ ] Chapter 1 🆔 tsk-8822 📅 2026-09-30 🔗 [[OCI Networking Book]]
+%% helm:end %%
+```
+
+A line under *From projects* is a **mirror** of the task in the project note:
+same id, same text. Tick it in either place and the other follows. Edit the
+text in the project and the mirror is rewritten. Past daily notes are never
+rewritten.
+
+**Habit** — a note with `type: habit`, a schedule, and nothing else.
+Completions are the ticks in daily notes; streaks and rates are computed from
+them.
+
+Full details: [`docs/FORMAT.md`](docs/FORMAT.md). Design rationale:
+[`docs/DESIGN.md`](docs/DESIGN.md).
+
+## Capture grammar
+
+One line, anywhere (`Helm: Capture a task`, the `+` in the view, or the Inbox):
+
+```
+Call the plumber tomorrow !high #home @Kitchen Remodel ~30m 14:00-15:00 due friday every week
+```
+
+| Piece | Means |
+|---|---|
+| `today` `tomorrow` `fri` `next mon` `next week` `in 3 days` `1/9` `12 sep` `eom` `eow` | plan it on that day |
+| `due friday` / `by 1/9` | due date 📅 |
+| `!` `!!` `!!!` `!!!!` or `!low` `!high` | priority |
+| `@Project Name` | goes into that project |
+| `~45m` `~2h` | effort estimate ⏱️ |
+| `14:00` or `14:00-15:00` | time block |
+| `every day` `every week on monday` `weekly` | recurrence 🔁 |
+| `#tag` | stays in the text, also indexed |
+
+A capture with a date goes into that day's note. With a project, into the
+project (and also the day if dated). With neither, into the inbox note.
+
+## Commands
+
+| Command | |
+|---|---|
+| Open Helm / Today / Week / Projects / Inbox / Review | the five tabs |
+| Capture a task · Capture a task for today | |
+| Plan my day · Wrap up the day | the two rituals |
+| Open today’s daily note (create if missing) | |
+| New project · New habit | |
+| Plan the task under the cursor for today / tomorrow | works in any note Helm indexes |
+| Move the task under the cursor to a project… | |
+| Add today’s habits to the daily note | |
+| Rebuild index | |
+
+`obsidian://helm?tab=today` opens the view from outside; `&action=capture&text=…` pre-fills a capture.
+
+## Settings you will want to check
+
+- **Projects folder** (`02 PROJECTS`), **Habits folder**, **Inbox note**.
+- **Daily notes**: Helm follows the Daily Notes / Periodic Notes plugin
+  automatically (folder, format, template). Override only if you must.
+- **Where the plan goes** in a note that has no region yet: before the first
+  heading (default), after a heading you name, or at the end.
+- **Daily capacity** and **default effort** drive the capacity bar.
+- **Extra folders to scan**: tasks in other notes become plannable; they get
+  mirrored into the day with a 🔗 link back to their note.
+
+## Development
+
+```bash
+npm install
+npm test            # vitest: core, data, and jsdom UI tests
+npm run build       # typecheck + bundle to ./main.js
+npm run seed        # build ~/dev/helm-test-vault (refuses real-looking paths)
+npm run dev         # watch-build into the test vault
+node scripts/install.mjs "/path/to/vault"   # copy main.js/manifest/styles; never enables
+```
+
+Layout: `src/core` (pure parsing/serialising, no Obsidian), `src/data` (index,
+planner, mutations — the only writer), `src/ui` (views and modals),
+`src/main.ts` (the plugin). `tests/` mirrors it; UI tests render real DOM under
+jsdom against an in-memory vault.
+
+In-app: enable **Developer actions** in settings and run **Helm: Run self-test**
+— it exercises the whole plan/tick/reschedule/wrap-up path against the live
+vault and writes `Helm Self-Test Report.md`.

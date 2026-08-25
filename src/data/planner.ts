@@ -167,8 +167,10 @@ export interface ProjectHealth {
   phaseProgress: { phase: Project['phases'][number]; total: number; done: number; state: 'planned' | 'active' | 'done' }[];
 }
 
-export function projectHealth(snap: Snapshot, p: Project, today: IsoDate, settings: HelmSettings): ProjectHealth {
+export function projectHealth(snap: Snapshot, p: Project, today: IsoDate, settings: HelmSettings, depth = 0): ProjectHealth {
   const keys = [...p.phases.flatMap((ph) => ph.taskKeys), ...p.looseTaskKeys];
+  // An umbrella's activity is its children's activity.
+  const children = depth < 4 ? p.childIds.map((id) => snap.projects.get(id)).filter((c): c is Project => c !== undefined).map((c) => projectHealth(snap, c, today, settings, depth + 1)) : [];
   const tasks = keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined);
   const done = tasks.filter((t) => t.status === 'done').length;
   const cancelled = tasks.filter((t) => t.status === 'cancelled').length;
@@ -181,6 +183,7 @@ export function projectHealth(snap: Snapshot, p: Project, today: IsoDate, settin
   const bump = (d?: IsoDate): void => { if (d && d <= today && (last === undefined || d > last)) last = d; };
   for (const t of tasks) { bump(t.done); bump(t.cancelled); bump(t.created); }
   for (const t of snap.tasks.values()) if (t.origin === 'daily-mirror' && t.mirrorOf && keys.includes(t.mirrorOf)) bump(t.noteDate);
+  for (const c of children) bump(c.lastTouched);
   if (!last && p.mtime) {
     const d = new Date(p.mtime);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -188,9 +191,10 @@ export function projectHealth(snap: Snapshot, p: Project, today: IsoDate, settin
   }
   const flags: ProjectHealth['flags'] = [];
   const stale = last ? diffDays(last, today) : undefined;
+  const activeChildren = children.filter((c) => c.project.status === 'active');
   if (p.status === 'active') {
     if (!na && open.length > 0 && open.every((t) => isBlocked(t, snap))) flags.push('blocked');
-    else if (!na) flags.push('no-next-action');
+    else if (!na && activeChildren.length === 0) flags.push('no-next-action');
     if (stale !== undefined && stale >= settings.staleProjectDays) flags.push('stale');
     if (overdue > 0) flags.push('overdue');
     if (p.due && p.due < today && open.length > 0) flags.push('past-due');

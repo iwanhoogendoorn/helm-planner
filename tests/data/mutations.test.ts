@@ -151,6 +151,14 @@ describe('editing', () => {
     expect(await vault.read(dailyPath('2026-08-27'))).toContain('tsk-0001');
   });
 
+  it('editing the text of an id-less task keeps working afterwards', async () => {
+    const { m, vault, index } = await setup();
+    const t = index.allTasks().find((x) => x.text === 'Get three quotes')!;
+    await m.updateTask(t.key, { text: 'Get four quotes', scheduled: TODAY });
+    expect(await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')).toMatch(/- \[ \] Get four quotes 🆔 tsk-\w+ ⏳ 2026-08-26/);
+    expect(await vault.read(dailyPath(TODAY))).toContain('Get four quotes');
+  });
+
   it('deletes with subtree and mirrors', async () => {
     const { m, vault } = await setup();
     await m.schedule('tsk-0001', TODAY);

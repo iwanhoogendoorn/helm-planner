@@ -81,6 +81,11 @@ export class Mutations {
     return t;
   }
 
+  /** After rewriting a line, the task's derived key may have changed: find it by position. */
+  private freshAt(path: string, line: number, fallbackKey: string): Task {
+    return this.index.tasksInFile(path).find((x) => x.line === line) ?? this.fresh(fallbackKey);
+  }
+
   private lineOf(lines: string[], t: Task): TaskLine {
     const parsed = parseTaskLine(lines[t.line] ?? '');
     if (!parsed || (t.id && parsed.id !== t.id) || (!t.id && parsed.text !== t.text)) throw new Error(`Line moved under us: ${t.path}:${t.line + 1}`);
@@ -425,7 +430,7 @@ export class Mutations {
         lines[t.line] = serialiseTaskLine(next, { force: true });
         return true;
       });
-      t = this.fresh(key);
+      t = this.freshAt(t.path, t.line, key);
       await this.refreshMirrors(t);
     }
     if (hasSched && (t.scheduled ?? (t.origin === 'daily' ? t.noteDate : undefined)) !== scheduled) await this.schedule(t.key, scheduled);
