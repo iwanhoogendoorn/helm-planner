@@ -30,7 +30,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
       iconButton('chevron-left', 'Previous day', () => ctx.navigate('today', { date: addDays(date, -1) })),
       h('button', { cls: ['helm-day-title', isToday && 'is-today'], onClick: () => ctx.navigate('today', { date: today }), title: isToday ? date : 'Jump to today' },
         h('span', { cls: 'helm-day-title-main', text: humanDate(date, today) }),
-        h('span', { cls: 'helm-day-title-sub', text: isToday || Math.abs(new Date(date).getTime() - new Date(today).getTime()) <= 86400000 ? humanDate(date, undefined, { year: true }) : date }),
+        h('span', { cls: 'helm-day-title-sub', text: humanDate(date, undefined, { year: true }) }),
       ),
       iconButton('chevron-right', 'Next day', () => ctx.navigate('today', { date: addDays(date, 1) })),
     ),

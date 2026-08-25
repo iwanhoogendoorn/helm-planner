@@ -1,6 +1,6 @@
 /** Seven columns; drag a task onto a day to plan it. */
 import type { IsoDate, Task } from '../../core/types';
-import { addDays, humanDate, isoWeek, minutesToHuman, WEEKDAY_SHORT } from '../../core/dates';
+import { addDays, humanDate, isoWeek, isoWeekday, minutesToHuman, WEEKDAY_SHORT } from '../../core/dates';
 import { weekView } from '../../data/planner';
 import { button, chip, h, iconButton, section } from '../dom';
 import type { UiContext } from '../context';
@@ -49,7 +49,7 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
     });
     col.append(
       h('div', { cls: 'helm-week-day-head', onClick: () => ctx.navigate('today', { date: d.date }) },
-        h('span', { cls: 'helm-week-dow', text: WEEKDAY_SHORT[w.days.indexOf(d) % 7 + (settings.weekStartsOn === 7 ? 6 : 0)] ?? '' }),
+        h('span', { cls: 'helm-week-dow', text: WEEKDAY_SHORT[isoWeekday(d.date) - 1] ?? '' }),
         h('span', { cls: 'helm-week-dom', text: String(Number(d.date.slice(8, 10))) }),
         h('span', { cls: 'helm-spacer' }),
         d.minutes > 0 ? chip(minutesToHuman(d.minutes), d.minutes > settings.dailyCapacityMinutes ? 'effort is-over' : 'effort') : null,

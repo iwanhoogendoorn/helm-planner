@@ -205,7 +205,7 @@ describe('Modals', () => {
     await ctx.mutations.addTask({ text: 'Loose end', date: TODAY });
     openWrapUp(ctx, TODAY);
     const m = Modal.last!;
-    expect(m.contentEl.querySelectorAll('.helm-wrapup-row')).toHaveLength(2);
+    expect(m.contentEl.querySelectorAll('.helm-wrapup-row')).toHaveLength(2); // mirror + loose end; planner slots excluded
     click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Apply'));
     await flush();
     await flush();

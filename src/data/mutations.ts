@@ -522,7 +522,7 @@ export class Mutations {
   /** Carry unfinished work from `from` to `to` (or off the calendar). */
   async rollover(from: IsoDate, to: IsoDate | undefined): Promise<{ moved: number; unscheduled: number }> {
     const snap = this.index.snapshot;
-    const open = [...snap.tasks.values()].filter((t) => (t.origin === 'daily' || t.origin === 'daily-mirror') && t.noteDate === from && !['done', 'cancelled', 'forwarded'].includes(t.status) && t.depth === 0 && !(t.section === 'outside' && t.time && t.text === ''));
+    const open = [...snap.tasks.values()].filter((t) => (t.origin === 'daily' || t.origin === 'daily-mirror') && t.noteDate === from && !['done', 'cancelled', 'forwarded'].includes(t.status) && t.depth === 0 && t.section !== 'outside');
     let moved = 0;
     let unscheduled = 0;
     for (const t of open) {

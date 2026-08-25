@@ -18,7 +18,7 @@ export function openWrapUp(ctx: UiContext, date: IsoDate): void {
   const settings = ctx.settings();
   const snap = ctx.index.snapshot;
   const plan = dayPlan(snap, date, settings);
-  const open: Task[] = [...plan.timeBlocks, ...plan.today, ...plan.mirrors.map((x) => x.mirror), ...plan.unmirrored, ...plan.elsewhere].filter((t) => !['done', 'cancelled', 'forwarded'].includes(t.status));
+  const open: Task[] = [...plan.today.filter((t) => t.section !== 'outside'), ...plan.mirrors.map((x) => x.mirror), ...plan.unmirrored, ...plan.elsewhere].filter((t) => !['done', 'cancelled', 'forwarded'].includes(t.status));
   const tomorrow = addDays(date, 1);
   const fates = new Map<string, Fate>(open.map((t) => [t.key, settings.rolloverTarget === 'tomorrow' ? { kind: 'move', date: tomorrow } : { kind: 'unschedule' }]));
   let note = '';

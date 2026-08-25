@@ -104,6 +104,8 @@ export function candidates(snap: Snapshot, date: IsoDate, settings: HelmSettings
   const hasOpenChildren = (t: Task): boolean => t.childKeys.some((k) => { const c = snap.tasks.get(k); return c !== undefined && isOpen(c); });
   const isCandidateTask = (t: Task): boolean => {
     if (!isOpen(t) || t.origin === 'daily-mirror') return false;
+    // Lines outside the Helm region of a daily note (the user's own planner slots) are a log, not a backlog.
+    if (t.origin === 'daily' && t.section === 'outside') return false;
     if (plannedDate(t) === date) return false;
     if (isBlocked(t, snap)) return false;
     if (t.start !== undefined && t.start > date) return false;

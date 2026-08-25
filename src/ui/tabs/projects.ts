@@ -75,7 +75,7 @@ function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: Is
     ),
     progressBar(hh.progress, 'is-thin'),
     h('div', { cls: 'helm-project-foot' },
-      hh.nextAction ? h('span', { cls: 'helm-project-next' }, icon('arrow-right'), h('span', { text: hh.nextAction.text })) : h('span', { cls: 'helm-hint', text: hh.open === 0 && hh.total > 0 ? 'All tasks done' : p.status === 'active' ? 'No next action' : '' }),
+      hh.nextAction ? h('span', { cls: 'helm-project-next' }, icon('arrow-right'), h('span', { text: hh.nextAction.text })) : h('span', { cls: 'helm-hint', text: hh.open === 0 && hh.total > 0 ? 'All tasks done' : hh.flags.includes('no-next-action') ? 'No next action' : p.childIds.length > 0 ? `${p.childIds.length} sub-project${p.childIds.length === 1 ? '' : 's'}` : '' }),
       h('span', { cls: 'helm-spacer' }),
       ...hh.flags.map((f) => chip(FLAG_LABEL[f], `flag flag-${f}`)),
       hh.lastTouched ? h('span', { cls: 'helm-hint', text: relativeDays(hh.lastTouched, today), title: `Last activity ${hh.lastTouched}` }) : null,
@@ -144,8 +144,8 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   root.appendChild(toolbar);
 
   const renderTasks = (keys: string[]): HTMLElement[] => {
-    const tasks = keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined && t.depth === 0 || (t !== undefined && t.parentKey !== undefined && !keys.includes(t.parentKey)));
-    const roots = tasks.filter((t) => !t.parentKey || !snap.tasks.has(t.parentKey));
+    const tasks = keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined);
+    const roots = tasks.filter((t) => !t.parentKey || !keys.includes(t.parentKey));
     const shown = state.showDone ? roots : roots.filter((t) => isOpen(t) || t.childKeys.some((k) => { const c = snap.tasks.get(k); return c && isOpen(c); }));
     return shown.map((t) => taskRow(ctx, t, { showProject: false, showChildren: true, showDate: 'both', draggable: true }));
   };

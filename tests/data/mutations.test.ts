@@ -201,14 +201,14 @@ describe('day rituals', () => {
   it('rollover from yesterday to today', async () => {
     const { m, vault, index } = await setup({ [BOOK]: (await setup()).vault.files.get(BOOK)!.replace('- [ ] Chapter 1 📅 2026-08-20', '- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 ⏳ 2026-08-25') });
     const r = await m.rollover('2026-08-25', TODAY);
-    expect(r.moved).toBe(3);
+    expect(r.moved).toBe(2);
     const y = await vault.read(dailyPath('2026-08-25'));
-    expect(y).toContain('- [>] 08:00 - 09:00: Start with OIB');
+    expect(y).toContain('- [ ] 08:00 - 09:00: Start with OIB'); // planner slots are a log, not carried
     expect(y).toContain('- [>] Fix router config ⏱️ 30m');
     expect(y).toContain('- [x] Pay invoice ✅ 2026-08-25');
     expect(y).toContain('- [>] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
     const t = await vault.read(dailyPath(TODAY));
-    expect(t).toContain('### Today\n- [ ] 08:00 - 09:00: Start with OIB\n- [ ] Fix router config ⏱️ 30m\n### From projects\n- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
+    expect(t).toContain('### Today\n- [ ] Fix router config ⏱️ 30m\n### From projects\n- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
     expect(index.task('tsk-0003')!.scheduled).toBe(TODAY);
   });
 });
