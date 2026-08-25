@@ -15,7 +15,7 @@
 .helm-tab.is-active { background: var(--background-modifier-active-hover, var(--background-secondary)); color: var(--text-normal); font-weight: 600; }
 .helm-indexing { animation: helm-pulse 1.2s infinite; margin-right: 8px; }
 @keyframes helm-pulse { 50% { opacity: 0.4; } }
-@container (max-width: 520px) { .helm-tab-label { display: none; } }
+@container (max-width: 520px) { .helm-tab-label { display: none; } .helm-day-title { min-width: 0; padding: 2px 6px; } .helm-day-title-sub { display: none; } .helm-day-actions .helm-btn span { display: none; } .helm-capacity-label { font-size: var(--font-ui-smaller); } }
 .helm-root { container-type: inline-size; }
 
 /* Buttons */

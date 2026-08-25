@@ -29,6 +29,22 @@ breaks — you keep a plain-text task system that other plugins can read.
 4. **Review** — weekly: throughput, overdue, inbox, stale projects, projects
    without a next action, habit streaks, what got done by project.
 
+## What it looks like
+
+| Today — the cockpit | Plan day |
+|---|---|
+| ![Today](docs/img/today.png) | ![Plan day](docs/img/plan-day.png) |
+
+| Week (drag between days) | Project detail |
+|---|---|
+| ![Week](docs/img/week.png) | ![Project](docs/img/project.png) |
+
+| Review | Capture |
+|---|---|
+| ![Review](docs/img/review.png) | ![Capture](docs/img/capture.png) |
+
+Screenshots are of the seeded test vault (`npm run seed`).
+
 ## How notes look
 
 **Project** — a folder with a note of the same name. Phases are headings;
