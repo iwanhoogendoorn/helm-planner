@@ -323,6 +323,7 @@ export class Mutations {
       return true;
     });
     if (carried.length === 0) return;
+    if (t.noteDate !== undefined && t.noteDate >= today && t.section !== 'outside') await this.editRegion(t.noteDate, (rc) => rc); // drop an emptied section heading
     const baseIndent = carried[0]!.raw.indent;
     const rebased = carried.map((l) => ({ ...l, status: l === carried[0] ? 'todo' as TaskStatus : l.status, marker: l === carried[0] ? ' ' : l.marker, raw: { ...l.raw, indent: l.raw.indent.slice(baseIndent.length), eol: '' } }));
     delete rebased[0]!.done;
@@ -449,8 +450,9 @@ export class Mutations {
 
   async deleteTask(key: string): Promise<void> {
     const t = this.fresh(key);
-    if (t.origin === 'daily-mirror') {
+    if (t.origin === 'daily-mirror' || (t.origin === 'daily' && t.section !== 'outside')) {
       await this.editFile(t.path, (lines) => { const r = this.subtreeRange(lines, t); lines.splice(r.start, r.end - r.start); return true; });
+      if (t.noteDate !== undefined && t.noteDate >= this.today) await this.editRegion(t.noteDate, (rc) => rc);
       return;
     }
     const days = new Set<IsoDate>();

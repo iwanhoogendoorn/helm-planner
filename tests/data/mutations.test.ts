@@ -63,6 +63,18 @@ describe('scheduling', () => {
     expect(await vault.read(dailyPath(TODAY))).not.toContain('Renew passport');
   });
 
+  it('moving the last task out of a section drops the empty heading', async () => {
+    const { m, vault, index } = await setup();
+    await m.addTask({ text: 'Only one', date: TODAY });
+    await m.addTask({ text: 'Its child', parentKey: index.allTasks().find((x) => x.text === 'Only one')!.key });
+    const t = index.allTasks().find((x) => x.text === 'Only one')!;
+    await m.schedule(t.key, '2026-08-27');
+    const today = await vault.read(dailyPath(TODAY));
+    expect(today).not.toContain('### Today');
+    expect(today).toContain('%% helm:start %%\n## Plan\n%% helm:end %%'); // markers stay, sections go
+    expect(await vault.read(dailyPath('2026-08-27'))).toContain('### Today\n- [ ] Only one ➕ 2026-08-26\n\t- [ ] Its child ➕ 2026-08-26\n');
+  });
+
   it('moves a daily task from a past day: leaves a forwarded record', async () => {
     const { m, vault, index } = await setup();
     const t = index.allTasks().find((x) => x.text === 'Fix router config')!;

@@ -75,6 +75,15 @@ describe('planner', () => {
     expect(plan.doneCount).toBe(1);
   });
 
+  it('day plan lists only top-level items; subtasks travel with their parent', async () => {
+    const { index, settings, m } = await setup();
+    const t = index.allTasks().find((x) => x.text === 'Renew passport')!;
+    await m.schedule(t.key, TODAY);
+    const plan = dayPlan(index.snapshot, TODAY, settings);
+    expect(plan.today.map((x) => x.text)).toEqual(['Renew passport']);
+    expect(plan.openCount).toBe(1);
+  });
+
   it('next action skips blocked and done, prefers phase order', async () => {
     const { index } = await setup();
     const book = index.project('prj-book')!;

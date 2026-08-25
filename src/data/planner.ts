@@ -59,6 +59,7 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
   const plan: DayPlan = { date, today: [], mirrors: [], unmirrored: [], elsewhere: [], timeBlocks: [], done: [], openCount: 0, doneCount: 0, plannedMinutes: 0, doneMinutes: 0 };
   const mirroredSources = new Set<string>();
   for (const t of snap.tasks.values()) {
+    if (t.depth > 0) continue; // subtasks travel with their parent
     if (t.origin === 'daily-mirror' && t.noteDate === date) {
       const source = t.mirrorOf ? snap.tasks.get(t.mirrorOf) : undefined;
       plan.mirrors.push({ mirror: t, ...(source ? { source } : {}) });
@@ -66,6 +67,7 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
     }
   }
   for (const t of snap.tasks.values()) {
+    if (t.depth > 0) continue;
     if (t.origin === 'daily' && t.noteDate === date) {
       if (t.time && settings.showTimeBlocks && t.section === 'outside') plan.timeBlocks.push(t);
       else plan.today.push(t);

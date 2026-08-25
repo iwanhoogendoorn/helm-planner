@@ -140,13 +140,14 @@ export default class HelmPlugin extends Plugin {
     }
   }
 
+  /** Obsidian may hand back a deferred placeholder for a background tab; only real views can render. */
   private refreshViews(): void {
-    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) (leaf.view as HelmView).requestRender();
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) if (leaf.view instanceof HelmView) leaf.view.requestRender();
   }
 
   activeView(): HelmView | undefined {
-    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
-    return leaves[0]?.view as HelmView | undefined;
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) if (leaf.view instanceof HelmView) return leaf.view;
+    return undefined;
   }
 
   async openView(): Promise<HelmView> {
@@ -156,8 +157,11 @@ export default class HelmPlugin extends Plugin {
       leaf = this.app.workspace.getLeaf('tab');
       await leaf.setViewState({ type: VIEW_TYPE, active: true });
     }
-    void this.app.workspace.revealLeaf(leaf);
-    return leaf.view as HelmView;
+    const deferred = leaf as WorkspaceLeaf & { loadIfDeferred?: () => Promise<void> };
+    if (typeof deferred.loadIfDeferred === 'function') await deferred.loadIfDeferred();
+    await this.app.workspace.revealLeaf(leaf);
+    if (!(leaf.view instanceof HelmView)) throw new Error('Helm view did not load');
+    return leaf.view;
   }
 
   private async openFile(path: string, line?: number): Promise<void> {
