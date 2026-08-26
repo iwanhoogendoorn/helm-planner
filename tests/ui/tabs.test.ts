@@ -310,9 +310,10 @@ describe('Dashboard tab', () => {
     expect(root.querySelectorAll('svg.helm-chart').length).toBeGreaterThanOrEqual(6);
     expect(texts(root, '.helm-table tbody tr td:first-child')).toContain('Oracle Book Writing');
     click([...root.querySelectorAll('.helm-bar-group')].find((g) => g.querySelector('title')?.textContent?.includes('Yesterday')));
-    expect(state.drill?.tasks.map((t) => t.text)).toEqual(['Pay invoice']);
-    const root2 = render((r) => renderDashboard(ctx, r, state));
-    expect(root2.querySelector('.helm-drill .helm-section-title')!.textContent).toBe('Done on Yesterday');
+    const m = Modal.last!;
+    expect(m.titleEl.textContent).toBe('Done on Yesterday');
+    expect(texts(m.contentEl, '.helm-task-text')).toEqual(['Pay invoice']);
+    expect(m.contentEl.querySelector('.helm-drilldown-summary')!.textContent).toContain('1 task');
   });
 
   it('Today tab renders parts with drop zones and moves a task on drop', async () => {

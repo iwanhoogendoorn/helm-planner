@@ -370,7 +370,9 @@
 .helm-table tr.is-clickable:hover { background: var(--background-modifier-hover); }
 .helm-table td.is-bad { color: var(--color-red); }
 .helm-table-progress { display: inline-block; width: 90px; vertical-align: middle; }
-.helm-drill .helm-section-title { color: var(--text-accent); }
+.modal:has(.helm-drilldown) { width: min(900px, 95vw); }
+.helm-drilldown-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.helm-drilldown-list { max-height: 60vh; overflow-y: auto; }
 
 /* Calendar */
 .helm-cal-bar { display: flex; align-items: center; gap: 10px; padding: var(--size-4-3) 0 0; flex-wrap: wrap; }

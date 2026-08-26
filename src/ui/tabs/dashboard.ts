@@ -7,7 +7,7 @@ import { PART_LABEL } from '../../core/dailyNote';
 import { barChart, donut, gauge, legend, lineChart } from '../charts';
 import { button, chip, h, icon, section } from '../dom';
 import type { UiContext } from '../context';
-import { taskRow } from '../taskRow';
+import { openDrilldown } from '../modals/drilldown';
 
 export type RangePreset = '7d' | '14d' | '30d' | '90d' | 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom';
 
@@ -19,7 +19,6 @@ export interface DashboardState {
   area?: string;
   tag?: string;
   periodKey?: string;
-  drill?: { title: string; tasks: Task[] };
   collapsed: Map<string, boolean>;
 }
 
@@ -53,7 +52,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   const s = computeStats(snap, filter, today, settings);
   const opts = filterOptions(snap);
   const refresh = (): void => ctx.refresh();
-  const drill = (title: string, tasks: Task[]): void => { state.drill = { title, tasks }; refresh(); };
+  const drill = (title: string, tasks: Task[]): void => openDrilldown(ctx, title, tasks);
 
   // Filter bar.
   const presetSel = h('select', { cls: 'helm-select-inline', onChange: (ev) => { state.preset = (ev.target as HTMLSelectElement).value as RangePreset; refresh(); } });
@@ -100,8 +99,8 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   const grid = h('div', { cls: 'helm-dash-grid' });
   // Done per day / per week.
   const dayBars = s.perDay.map((d) => ({ key: d.key, label: humanDate(d.key).replace(/^\w+ /, ''), value: d.value, title: `${humanDate(d.key, today)}: ${d.value} done` }));
-  grid.appendChild(card('Done per day', 'perday', 'click a bar to see the tasks', s.days <= 120
-    ? barChart(dayBars, { onClick: (k) => { const d = s.perDay.find((x) => x.key === k); if (d) drill(`Done on ${humanDate(k, today)}`, d.tasks); }, selected: state.drill?.title.startsWith('Done on') ? undefined : undefined, valueLabels: s.days <= 31 })
+  grid.appendChild(card('Done per day', 'perday', 'click a bar for the tasks', s.days <= 120
+    ? barChart(dayBars, { onClick: (k) => { const d = s.perDay.find((x) => x.key === k); if (d) drill(`Done on ${humanDate(k, today)}`, d.tasks); }, valueLabels: s.days <= 31 })
     : barChart(s.perWeek.map((w) => ({ key: w.weekStart, label: humanDate(w.weekStart).replace(/^\w+ /, ''), value: w.done })), { onClick: (k) => { const w = s.perWeek.find((x) => x.weekStart === k); if (w) drill(`Done in week of ${humanDate(k)}`, w.tasks); }, valueLabels: true })));
   // Cumulative flow.
   grid.appendChild(card('Cumulative flow', 'flow', 'captured vs done — a widening gap means the backlog grows', lineChart([
@@ -156,13 +155,6 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   if (s.goals.length > 0) root.appendChild(section('Goals', { store, key: 'goals', count: s.goals.length },
     barChart(s.goals.map((g) => ({ key: g.goal.key, label: `${g.goal.periodKey} ${g.goal.text}`, value: Math.round(g.progress * 100), title: `${g.goal.text}: ${Math.round(g.progress * 100)}% · ${g.projects} project(s)`, color: g.goal.status === 'done' ? 'var(--color-green)' : undefined })), { horizontal: true, onClick: (k) => ctx.navigate('horizons', { periodKey: ctx.index.goal(k)?.periodKey ?? '' }) })));
 
-  // Drilldown.
-  if (state.drill) {
-    root.appendChild(section(state.drill.title, { store, key: 'drill', count: state.drill.tasks.length, cls: 'helm-drill', actions: [button('Close', { icon: 'x', onClick: () => { state.drill = undefined; refresh(); } })] },
-      ...state.drill.tasks.slice(0, 200).map((t) => taskRow(ctx, t, { showDate: 'both' })),
-      state.drill.tasks.length > 200 ? h('div', { cls: 'helm-hint', text: `… ${state.drill.tasks.length - 200} more` }) : null,
-    ));
-  }
 }
 
 export type { Series };
