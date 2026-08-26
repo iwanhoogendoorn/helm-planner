@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 — 2026-08-26
+
+- **Horizons**: yearly / quarterly / monthly goals in periodic notes; projects
+  bound to a period (`period:`) and a goal (`goal:`); a Horizons tab, goal
+  progress rolled up from projects, goals in Review, period/goal pickers in
+  the project form and detail, a boost for current-period work in Plan day.
+- Fixed: a loose project note in the projects folder (`02 PROJECTS/X.md`) was
+  treated as an umbrella of every project; only folder notes can be.
+- New setting **Never index these paths** (archives), defaulting to the
+  vault's archive folders.
+
 ## 0.1.0 — 2026-08-26
 
 First build. A ground-up rewrite of the idea behind Task Command Center,

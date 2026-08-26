@@ -12,6 +12,7 @@ import { openProjectForm } from '../modals/projectForm';
 import { openCapture } from '../modals/capture';
 import { openDatePicker } from '../modals/datePicker';
 import { minutesToHuman } from '../../core/dates';
+import { periodChoices, projectPeriodLabel } from './horizons';
 
 export interface ProjectsState { projectId?: string; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
 
@@ -69,6 +70,7 @@ function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: Is
       h('span', { cls: 'helm-project-title', text: p.title }),
       p.priority !== 'normal' ? chip(p.priority, `prio prio-${p.priority}`) : null,
       p.area ? chip(p.area, 'area') : null,
+      p.period ? chip(projectPeriodLabel(p) ?? p.period, 'scheduled', 'Horizon') : null,
       h('span', { cls: 'helm-spacer' }),
       p.due ? chip(`due ${humanDate(p.due, today)}`, p.due < today && hh.open > 0 ? 'due is-overdue' : 'due') : null,
       h('span', { cls: 'helm-project-count', text: `${hh.done}/${hh.total}` }),
@@ -107,6 +109,17 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   const prioSel = h('select', { cls: 'helm-select-inline', onChange: (ev) => void ctx.run('Priority', () => ctx.mutations.setProjectFields(p.id, { priority: (ev.target as HTMLSelectElement).value as ProjectPriority })) });
   for (const s of PROJECT_PRIORITIES) prioSel.appendChild(h('option', { text: s, attr: { value: s, selected: p.priority === s } }));
 
+  const periodSel = h('select', { cls: 'helm-select-inline', title: 'Horizon: the year, quarter or month this project is bound to', onChange: (ev) => void ctx.run('Period', () => ctx.mutations.setProjectFields(p.id, { period: (ev.target as HTMLSelectElement).value || null })) });
+  periodSel.appendChild(h('option', { text: 'no horizon', attr: { value: '' } }));
+  const choices = periodChoices(today);
+  if (p.period && !choices.some((c) => c.key === p.period)) choices.unshift({ key: p.period, label: projectPeriodLabel(p) ?? p.period });
+  for (const c of choices) periodSel.appendChild(h('option', { text: c.label.trim(), attr: { value: c.key, selected: p.period === c.key } }));
+  const goalSel = h('select', { cls: 'helm-select-inline', title: 'Goal this project serves', onChange: (ev) => void ctx.run('Goal', () => ctx.mutations.linkProjectToGoal(p.id, (ev.target as HTMLSelectElement).value || null)) });
+  goalSel.appendChild(h('option', { text: 'no goal', attr: { value: '' } }));
+  const goals = ctx.index.allGoals().sort((a, b) => a.periodKey.localeCompare(b.periodKey) || a.line - b.line);
+  for (const g of goals) goalSel.appendChild(h('option', { text: `${g.periodKey} · ${g.text}`, attr: { value: g.key, selected: p.goalId === g.key } }));
+  if (goals.length === 0) goalSel.disabled = true;
+
   root.appendChild(h('div', { cls: 'helm-detail-head' },
     h('div', { cls: 'helm-breadcrumb' },
       h('a', { cls: 'helm-link', text: 'Projects', onClick: () => ctx.navigate('projects') }),
@@ -123,6 +136,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       statusSel, prioSel,
       p.area ? chip(p.area, 'area') : null,
       button(p.due ? `due ${humanDate(p.due, today)}` : 'no due date', { icon: 'calendar', cls: 'helm-btn-quiet', onClick: () => openDatePicker(ctx, { title: 'Due date', initial: p.due, allowClear: true }, (d) => void ctx.run('Due', () => ctx.mutations.setProjectFields(p.id, { due: d ?? null }))) }),
+      h('span', { cls: 'helm-horizon-controls' }, icon('mountain'), periodSel, goalSel, p.period ? button('', { icon: 'external-link', title: 'Open in Horizons', cls: 'helm-btn-quiet', onClick: () => ctx.navigate('horizons', { periodKey: p.period! }) }) : null),
       h('span', { cls: 'helm-spacer' }),
       ...hh.flags.map((f) => chip(FLAG_LABEL[f], `flag flag-${f}`)),
       hh.lastTouched ? h('span', { cls: 'helm-hint', text: `last activity ${relativeDays(hh.lastTouched, today)}` }) : null,

@@ -165,7 +165,7 @@ export function makeVault(extra: Record<string, string> = {}): MemoryVault {
 export async function setup(extra: Record<string, string> = {}, settings: Partial<HelmSettings> = {}) {
   const vault = makeVault(extra);
   const s = { ...SETTINGS, ...settings };
-  const index = new HelmIndex(vault, { settings: () => s, today: () => TODAY, dailyConfig: () => ({ folder: DAILY_FOLDER, format: DAILY_FORMAT }) });
+  const index = new HelmIndex(vault, { settings: () => s, today: () => TODAY, dailyConfig: () => ({ folder: DAILY_FOLDER, format: DAILY_FORMAT }), periodicConfig: () => ({ year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' } }) });
   await index.rebuild();
   let seed = 42;
   const rng = (): number => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };

@@ -2,7 +2,8 @@
  * Read-only planning intelligence over a Snapshot: what is on a day, what is
  * overdue, what a project's next action is, what needs review.
  */
-import type { HelmSettings, IsoDate, Project, ProjectStatus, Snapshot, Task } from '../core/types';
+import type { Goal, HelmSettings, IsoDate, Project, ProjectStatus, Snapshot, Task } from '../core/types';
+import { parsePeriod, periodContains, periodsOfYear, periodWithin, type Period } from '../core/periods';
 import { addDays, diffDays, startOfWeek } from '../core/dates';
 import { isTerminal, priorityRank } from '../core/taskLine';
 import { PROJECT_PRIORITY_RANK } from '../core/project';
@@ -119,7 +120,7 @@ export function candidates(snap: Snapshot, date: IsoDate, settings: HelmSettings
     if (!isCandidateTask(t)) continue;
     if (t.origin === 'daily' && t.noteDate !== undefined && t.noteDate >= date) continue;
     const prio = 5 - priorityRank(t.priority);
-    const projBoost = t.projectId && activeProjects.has(t.projectId) ? 2 : 0;
+    const projBoost = (t.projectId && activeProjects.has(t.projectId) ? 2 : 0) + horizonBoost(snap, t, date);
     if (t.due !== undefined && t.due < date) push(t, 'overdue', 100 + Math.min(30, diffDays(t.due, date)) + prio);
     else if (t.due !== undefined && diffDays(date, t.due) <= 3) push(t, 'due-soon', 80 + (3 - diffDays(date, t.due)) * 3 + prio);
     else if (plannedDate(t) !== undefined && plannedDate(t)! < date) push(t, 'scheduled-past', 70 + prio + projBoost);
@@ -130,7 +131,7 @@ export function candidates(snap: Snapshot, date: IsoDate, settings: HelmSettings
     if (p.status !== 'active') continue;
     const na = nextAction(snap, p);
     if (na && !seen.has(na.key) && isCandidateTask(na) && !(na.origin === 'daily' && na.noteDate !== undefined && na.noteDate >= date)) {
-      push(na, 'next-action', 40 + (5 - PROJECT_PRIORITY_RANK[p.priority]) * 2 + (5 - priorityRank(na.priority)));
+      push(na, 'next-action', 40 + (5 - PROJECT_PRIORITY_RANK[p.priority]) * 2 + (5 - priorityRank(na.priority)) + horizonBoost(snap, na, date));
     }
   }
   for (const t of snap.tasks.values()) {
@@ -138,6 +139,14 @@ export function candidates(snap: Snapshot, date: IsoDate, settings: HelmSettings
   }
   void settings; void today;
   return out.sort((a, b) => b.score - a.score || compareTasks(a.task, b.task));
+}
+
+/** A task whose project is bound to the current month / quarter / year is a little more urgent. */
+export function horizonBoost(snap: Snapshot, t: Task, date: IsoDate): number {
+  const p = t.projectId ? snap.projects.get(t.projectId) : undefined;
+  const per = p?.period ? parsePeriod(p.period) : undefined;
+  if (!per || !periodContains(per, date)) return 0;
+  return per.kind === 'month' ? 3 : per.kind === 'quarter' ? 2 : 1;
 }
 
 /** First open, unblocked, startable task in document order: first phase with open work, else loose. */
@@ -321,4 +330,56 @@ export function inboxItems(snap: Snapshot): { inbox: Task[]; loose: Map<string, 
     else if (t.origin === 'project' && t.due === undefined && t.scheduled === undefined) unscheduledProject.push(t);
   }
   return { inbox: inbox.sort((a, b) => a.line - b.line), loose, unscheduledProject };
+}
+
+/* ── Horizons: year → quarters → months, goals and the projects bound to them ── */
+
+export interface HorizonGoal {
+  goal: Goal;
+  projects: ProjectHealth[];
+  /** 0..1 — from linked projects' tasks, else from the goal's own checkbox. */
+  progress: number;
+  taskTotal: number;
+  taskDone: number;
+}
+
+export interface HorizonPeriod {
+  period: Period;
+  goals: HorizonGoal[];
+  /** Projects bound exactly to this period. */
+  projects: ProjectHealth[];
+  /** Everything bound to this period or any period inside it. */
+  projectsWithin: ProjectHealth[];
+  openTasks: number;
+  doneTasks: number;
+  isCurrent: boolean;
+  isPast: boolean;
+}
+
+export interface Horizons { year: HorizonPeriod; quarters: HorizonPeriod[]; months: HorizonPeriod[] }
+
+export function goalProgress(snap: Snapshot, g: Goal, today: IsoDate, settings: HelmSettings): HorizonGoal {
+  const projects = g.projectIds.map((id) => snap.projects.get(id)).filter((p): p is Project => p !== undefined).map((p) => projectHealth(snap, p, today, settings));
+  const taskTotal = projects.reduce((s, h) => s + h.total, 0);
+  const taskDone = projects.reduce((s, h) => s + h.done, 0);
+  const progress = g.status === 'done' ? 1 : taskTotal > 0 ? taskDone / taskTotal : 0;
+  return { goal: g, projects, progress, taskTotal, taskDone };
+}
+
+export function horizons(snap: Snapshot, year: number, today: IsoDate, settings: HelmSettings): Horizons {
+  const all = [...snap.projects.values()].map((p) => ({ p, per: p.period ? parsePeriod(p.period) : undefined })).filter((x): x is { p: Project; per: Period } => x.per !== undefined);
+  const health = new Map<string, ProjectHealth>();
+  const hOf = (p: Project): ProjectHealth => { let h = health.get(p.id); if (!h) { h = projectHealth(snap, p, today, settings); health.set(p.id, h); } return h; };
+  const build = (period: Period): HorizonPeriod => {
+    const exact = all.filter((x) => x.per.key === period.key).map((x) => hOf(x.p)).sort(compareProjects);
+    const within = all.filter((x) => periodWithin(x.per, period)).map((x) => hOf(x.p)).sort(compareProjects);
+    const goals = [...snap.goals.values()].filter((g) => g.periodKey === period.key).sort((a, b) => a.line - b.line).map((g) => goalProgress(snap, g, today, settings));
+    return {
+      period, goals, projects: exact, projectsWithin: within,
+      openTasks: within.reduce((s, h) => s + h.open, 0), doneTasks: within.reduce((s, h) => s + h.done, 0),
+      isCurrent: periodContains(period, today), isPast: period.end < today,
+    };
+  };
+  const py = periodsOfYear(year);
+  return { year: build(py.year), quarters: py.quarters.map(build), months: py.months.map(build) };
 }

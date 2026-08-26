@@ -2,7 +2,9 @@
  * The index: a Snapshot built from markdown, kept fresh per file.
  * Never a source of truth — delete it and rebuild at any time.
  */
-import type { DailyNoteInfo, Diagnostic, Habit, HabitCompletion, HelmSettings, IsoDate, Project, Snapshot, Task, TaskOrigin } from '../core/types';
+import type { DailyNoteInfo, Diagnostic, Goal, Habit, HabitCompletion, HelmSettings, IsoDate, Project, Snapshot, Task, TaskOrigin } from '../core/types';
+import { DEFAULT_PERIOD_FORMATS, formatPeriod, parsePeriodFromPath, type Period, type PeriodKind } from '../core/periods';
+import { sectionRange } from '../core/document';
 import { parseDocument } from '../core/document';
 import { isProjectNote, parseProject } from '../core/project';
 import { parseHabit } from '../core/habit';
@@ -13,7 +15,10 @@ import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
 
 export const DAILY_FALLBACK = { folder: 'Daily Notes', format: 'YYYY-MM-DD' };
 
-export type FileKind = 'project' | 'habit' | 'daily' | 'inbox' | 'note';
+export type FileKind = 'project' | 'habit' | 'daily' | 'inbox' | 'note' | 'periodic';
+
+export type PeriodicConfig = Record<PeriodKind, { folder: string; format: string }>;
+export const PERIODIC_FALLBACK: PeriodicConfig = { year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' } };
 
 interface FileEntry {
   path: string;
@@ -22,6 +27,7 @@ interface FileEntry {
   project?: Project;
   habit?: Habit;
   date?: IsoDate;
+  period?: Period;
   hasRegion: boolean;
   completions: HabitCompletion[];
   diagnostics: Diagnostic[];
@@ -32,6 +38,8 @@ export interface IndexOptions {
   today: () => IsoDate;
   /** Resolved daily-note config (folder/format), from Obsidian when the settings are empty. */
   dailyConfig: () => { folder: string; format: string };
+  /** Resolved periodic-note config, from the Periodic Notes plugin when the settings are empty. */
+  periodicConfig?: () => PeriodicConfig;
 }
 
 export class HelmIndex {
@@ -75,12 +83,40 @@ export class HelmIndex {
     return parseDateFromPath(path.replace(/\.md$/, ''), this.dailyFormat());
   }
 
+  /** Folder + format for yearly / quarterly / monthly notes: settings override, else the Periodic Notes plugin, else a fallback. */
+  periodicConfig(kind: PeriodKind): { folder: string; format: string } {
+    const s = this.settings;
+    const ov = kind === 'year' ? { folder: s.yearlyFolder, format: s.yearlyFormat } : kind === 'quarter' ? { folder: s.quarterlyFolder, format: s.quarterlyFormat } : { folder: s.monthlyFolder, format: s.monthlyFormat };
+    const ext = this.opts.periodicConfig?.()[kind];
+    const folder = (ov.folder.trim() || ext?.folder || PERIODIC_FALLBACK[kind].folder).replace(/\/+$/, '');
+    const format = ov.format.trim() || ext?.format || DEFAULT_PERIOD_FORMATS[kind];
+    return { folder, format };
+  }
+
+  periodicPath(p: Period): string {
+    const c = this.periodicConfig(p.kind);
+    return `${c.folder ? c.folder + '/' : ''}${formatPeriod(p, c.format)}.md`;
+  }
+
+  periodOfPath(path: string): Period | undefined {
+    if (!path.endsWith('.md')) return undefined;
+    for (const kind of ['month', 'quarter', 'year'] as PeriodKind[]) {
+      const c = this.periodicConfig(kind);
+      if (!isUnder(path, c.folder)) continue;
+      const p = parsePeriodFromPath(path.replace(/\.md$/, ''), c.format, kind);
+      if (p) return p;
+    }
+    return undefined;
+  }
+
   inScope(path: string): boolean {
     if (!path.endsWith('.md')) return false;
     const s = this.settings;
+    if (s.excludePaths.some((x) => x.trim() !== '' && isUnder(path, x.trim()))) return false;
     if (path === s.inboxNote) return true;
     if (isUnder(path, s.projectsFolder) || isUnder(path, s.habitsFolder)) return true;
     if (this.dateOfPath(path) !== undefined) return true;
+    if (this.periodOfPath(path) !== undefined) return true;
     return s.extraFolders.some((f) => f.trim() !== '' && isUnder(path, f.trim()));
   }
 
@@ -125,6 +161,23 @@ export class HelmIndex {
       if (h) { entry.kind = 'habit'; entry.habit = h; return entry; }
     }
     const doc = parseDocument(content);
+
+    const period = this.periodOfPath(path);
+    if (period !== undefined && !isProjectNote(doc)) {
+      entry.kind = 'periodic';
+      entry.period = period;
+      const want = s.goalsHeading.replace(/^#+\s*/, '').trim().toLowerCase();
+      const heading = doc.headings.find((h) => h.text.trim().toLowerCase() === want) ?? doc.headings.find((h) => /^(goals?|objectives?|okrs?)$/i.test(h.text.trim()));
+      if (heading) {
+        const { start, end } = sectionRange(doc, heading);
+        for (const dt of doc.tasks) {
+          if (dt.line < start || dt.line >= end || dt.depth > 0) continue;
+          const key = dt.task.id ?? derivedKey(path, dt.line, dt.task.text);
+          entry.tasks.push({ ...dt.task, key, path, line: dt.line, depth: 0, childKeys: [], origin: 'goal', periodKey: period.key });
+        }
+      }
+      return entry;
+    }
 
     if (isProjectNote(doc)) {
       const parsed = parseProject(path, content, { ...(mtime !== undefined ? { mtime } : {}) });
@@ -184,6 +237,7 @@ export class HelmIndex {
     const tasks = new Map<string, Task>();
     const projects = new Map<string, Project>();
     const habits = new Map<string, Habit>();
+    const goals = new Map<string, Goal>();
     const completions: HabitCompletion[] = [];
     const dailyNotes = new Map<IsoDate, DailyNoteInfo>();
     const diagnostics: Diagnostic[] = [];
@@ -218,6 +272,9 @@ export class HelmIndex {
     }
 
     for (const t of tasks.values()) {
+      if (t.origin === 'goal' && t.periodKey) goals.set(t.key, { id: t.id ?? t.key, key: t.key, text: t.text, periodKey: t.periodKey, status: t.status, path: t.path, line: t.line, projectIds: [] });
+    }
+    for (const t of tasks.values()) {
       if (t.parentKey) tasks.get(t.parentKey)?.childKeys.push(t.key);
       if (t.origin === 'daily-mirror' && t.mirrorOf && !tasks.has(t.mirrorOf)) {
         diagnostics.push({ severity: 'warning', code: 'HELM-M01', message: `Mirror line points at unknown task ${t.mirrorOf}`, path: t.path, line: t.line });
@@ -231,7 +288,19 @@ export class HelmIndex {
       byTitle.set(k, [...(byTitle.get(k) ?? []), p]);
     }
     const byPath = new Map([...projects.values()].map((p) => [p.path, p]));
-    const sortedByFolderDepth = [...projects.values()].sort((a, b) => b.folder.length - a.folder.length);
+    // Only a folder note (`<Folder>/<Folder>.md`) can be an umbrella; a loose note in the projects folder cannot.
+    const sortedByFolderDepth = [...projects.values()].filter((p) => p.folderNote).sort((a, b) => b.folder.length - a.folder.length);
+    // Goals ↔ projects.
+    const goalByText = new Map<string, Goal>();
+    for (const g of goals.values()) goalByText.set(g.text.trim().toLowerCase(), g);
+    const goalById = new Map<string, Goal>();
+    for (const g of goals.values()) goalById.set(g.id, g);
+    for (const p of projects.values()) {
+      if (!p.goalRef) continue;
+      const g = goalById.get(p.goalRef) ?? goalByText.get(p.goalRef.trim().toLowerCase());
+      if (g) { p.goalId = g.key; g.projectIds.push(p.id); }
+      else diagnostics.push({ severity: 'info', code: 'HELM-G01', message: `goal "${p.goalRef}" not found in any yearly/quarterly/monthly note`, path: p.path });
+    }
     for (const p of projects.values()) {
       let parent: Project | undefined;
       if (p.parentRef) {
@@ -257,7 +326,7 @@ export class HelmIndex {
     }
     for (const p of projects.values()) p.childIds.sort((a, b) => projects.get(a)!.title.localeCompare(projects.get(b)!.title));
 
-    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, completions, dailyNotes, diagnostics, tasksByPath };
+    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath };
   }
 
   /* ── Queries ─────────────────────────────────────────────────────────── */
@@ -272,6 +341,8 @@ export class HelmIndex {
   allTasks(): Task[] { return [...this.snapshot.tasks.values()]; }
   allProjects(): Project[] { return [...this.snapshot.projects.values()]; }
   allHabits(): Habit[] { return [...this.snapshot.habits.values()]; }
+  allGoals(): Goal[] { return [...this.snapshot.goals.values()]; }
+  goal(key: string): Goal | undefined { return this.snapshot.goals.get(key); }
   tasksInFile(path: string): Task[] { return (this.snapshot.tasksByPath.get(path) ?? []).map((k) => this.snapshot.tasks.get(k)!).filter(Boolean); }
   mirrorsOf(sourceKey: string): Task[] { return this.allTasks().filter((t) => t.origin === 'daily-mirror' && t.mirrorOf === sourceKey); }
   fileKind(path: string): FileKind | undefined { return this.files.get(path)?.kind; }
@@ -280,5 +351,5 @@ export class HelmIndex {
 }
 
 export function emptySnapshot(): Snapshot {
-  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map() };
+  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map() };
 }

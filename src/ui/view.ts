@@ -9,6 +9,7 @@ import { renderWeek, type WeekState } from './tabs/week';
 import { renderProjects, type ProjectsState } from './tabs/projects';
 import { renderInbox, type InboxState } from './tabs/inbox';
 import { renderReview, type ReviewState } from './tabs/review';
+import { renderHorizons, type HorizonsState } from './tabs/horizons';
 import { openCapture } from './modals/capture';
 
 export const VIEW_TYPE = 'helm-view';
@@ -19,9 +20,10 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'projects', label: 'Projects', icon: 'folder-kanban' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox' },
   { id: 'review', label: 'Review', icon: 'clipboard-check' },
+  { id: 'horizons', label: 'Horizons', icon: 'mountain' },
 ];
 
-interface ViewState { tab: TabId; date?: IsoDate; weekAnchor?: IsoDate; projectId?: string }
+interface ViewState { tab: TabId; date?: IsoDate; weekAnchor?: IsoDate; projectId?: string; year?: number; periodKey?: string }
 
 export class HelmView extends ItemView {
   private tab: TabId;
@@ -30,6 +32,7 @@ export class HelmView extends ItemView {
   private projectsState: ProjectsState = { filter: '', showClosed: false, collapsed: new Map(), showDone: false };
   private inboxState: InboxState = { collapsed: new Map() };
   private reviewState: ReviewState = { collapsed: new Map(), checks: new Set() };
+  private horizonsState: HorizonsState;
   private body!: HTMLElement;
   private tabBar!: HTMLElement;
   private scrollTop = new Map<string, number>();
@@ -41,6 +44,7 @@ export class HelmView extends ItemView {
     const today = this.ctx().today();
     this.todayState = { date: today, collapsed: new Map() };
     this.weekState = { anchor: startOfWeek(today, this.ctx().settings().weekStartsOn), collapsed: new Map() };
+    this.horizonsState = { year: Number(today.slice(0, 4)), collapsed: new Map() };
     this.navigation = false;
   }
 
@@ -66,6 +70,8 @@ export class HelmView extends ItemView {
   override getState(): Record<string, unknown> {
     const s: ViewState = { tab: this.tab, date: this.todayState.date, weekAnchor: this.weekState.anchor };
     if (this.projectsState.projectId) s.projectId = this.projectsState.projectId;
+    s.year = this.horizonsState.year;
+    if (this.horizonsState.selected) s.periodKey = this.horizonsState.selected;
     return s as unknown as Record<string, unknown>;
   }
 
@@ -75,15 +81,18 @@ export class HelmView extends ItemView {
     if (s.date) this.todayState.date = s.date;
     if (s.weekAnchor) this.weekState.anchor = s.weekAnchor;
     if (s.projectId !== undefined) this.projectsState.projectId = s.projectId;
+    if (typeof s.year === 'number') this.horizonsState.year = s.year;
+    if (s.periodKey) this.horizonsState.selected = s.periodKey;
     await super.setState(state, result);
     if (this.body) this.render();
   }
 
-  navigate(tab: TabId, opts: { date?: IsoDate; projectId?: string } = {}): void {
+  navigate(tab: TabId, opts: { date?: IsoDate; projectId?: string; periodKey?: string } = {}): void {
     this.tab = tab;
     if (tab === 'today' && opts.date) this.todayState.date = opts.date;
     if (tab === 'week' && opts.date) this.weekState.anchor = startOfWeek(opts.date, this.ctx().settings().weekStartsOn);
     if (tab === 'projects') this.projectsState.projectId = opts.projectId;
+    if (tab === 'horizons' && opts.periodKey) { this.horizonsState.selected = opts.periodKey; const y = Number(opts.periodKey.slice(0, 4)); if (y) this.horizonsState.year = y; }
     this.render();
     this.app.workspace.requestSaveLayout();
   }
@@ -117,6 +126,7 @@ export class HelmView extends ItemView {
         case 'projects': renderProjects(ctx, this.body, this.projectsState); break;
         case 'inbox': renderInbox(ctx, this.body, this.inboxState); break;
         case 'review': renderReview(ctx, this.body, this.reviewState); break;
+        case 'horizons': renderHorizons(ctx, this.body, this.horizonsState); break;
       }
     } catch (e) {
       console.error('[helm] render failed', e);

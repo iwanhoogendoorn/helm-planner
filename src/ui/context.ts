@@ -4,7 +4,7 @@ import type { HelmSettings, IsoDate, Task } from '../core/types';
 import type { HelmIndex } from '../data/index';
 import type { Mutations } from '../data/mutations';
 
-export type TabId = 'today' | 'week' | 'projects' | 'inbox' | 'review';
+export type TabId = 'today' | 'week' | 'projects' | 'inbox' | 'review' | 'horizons';
 
 export interface UiContext {
   app: App;
@@ -20,7 +20,7 @@ export interface UiContext {
   /** Ask the current view to re-render from the index. */
   refresh: () => void;
   /** Navigate the view: a tab, and optionally a date (today/week) or project (projects). */
-  navigate: (tab: TabId, opts?: { date?: IsoDate; projectId?: string }) => void;
+  navigate: (tab: TabId, opts?: { date?: IsoDate; projectId?: string; periodKey?: string }) => void;
   /** Run a mutation with error handling and a refresh afterwards. */
   run: (label: string, fn: () => Promise<unknown>) => Promise<void>;
 }

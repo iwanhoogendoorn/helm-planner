@@ -14,6 +14,7 @@ import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { taskRow } from '../../src/ui/taskRow';
 import { parsePhases } from '../../src/ui/modals/projectForm';
+import { renderHorizons } from '../../src/ui/tabs/horizons';
 
 async function ctxFor() {
   const s = await setup();
@@ -158,7 +159,7 @@ describe('Review tab', () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderReview(ctx, r, { collapsed: new Map(), checks: new Set() }));
     expect(texts(root, '.helm-stat-value')).toEqual(['1', '2', '2', '3', '2', '0']);
-    expect(texts(root, '.helm-section-title')).toEqual(['Review checklist', 'Projects needing attention', 'Overdue', 'Due in the next 14 days', 'Habits', 'Completed this week']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Review checklist', 'Goals in play', 'Projects needing attention', 'Overdue', 'Due in the next 14 days', 'Habits', 'Completed this week']);
     expect(root.querySelectorAll('.helm-heat-cell')).toHaveLength(84 * 2);
     expect(root.querySelectorAll('.helm-spark-bar')).toHaveLength(8);
   });
@@ -242,5 +243,53 @@ describe('Modals', () => {
   it('parses the phases textarea', () => {
     expect(parsePhases('Phase: Design 📅 2026-09-30\n- Sketch\n- [ ] Tiles\nPhase: Build\nDemolition\n')).toEqual({ phases: [{ title: 'Design', due: '2026-09-30', tasks: ['Sketch', 'Tiles'] }, { title: 'Build', tasks: ['Demolition'] }], tasks: [] });
     expect(parsePhases('- Loose one')).toEqual({ phases: [], tasks: ['Loose one'] });
+  });
+});
+
+describe('Horizons tab', () => {
+  const YEARLY = '---\ntitle: 2026\n---\n# 2026\n\n## Goals\n\n- [ ] Publish the book 🆔 gol-book26\n';
+  it('renders year, quarters, months; selecting a quarter shows its goals and projects; adding a goal writes the note', async () => {
+    const base = await setup();
+    const book = base.vault.files.get('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')!.replace('---\n\n# ', 'period: 2026-Q3\ngoal: gol-book26\n---\n\n# ');
+    const s = await setup({ 'Yearly Notes/2026.md': YEARLY, '02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md': book });
+    const ctx: UiContext = { ...(await ctxFor()).ctx, index: s.index, mutations: s.m };
+    const state = { year: 2026, collapsed: new Map(), selected: undefined as string | undefined };
+    const root = render((r) => renderHorizons(ctx, r, state));
+    expect(root.querySelectorAll('.helm-horizon.kind-quarter')).toHaveLength(4);
+    expect(root.querySelectorAll('.helm-horizon.kind-month')).toHaveLength(12);
+    expect(root.querySelector('.helm-horizon.kind-year .helm-horizon-goal-text')!.textContent).toBe('Publish the book');
+    expect(root.querySelector('.helm-horizon.kind-quarter.is-current .helm-horizon-label')!.textContent).toBe('Q3 2026');
+    click(root.querySelectorAll('.helm-horizon.kind-quarter')[2]);
+    expect(state.selected).toBe('2026-Q3');
+    const root2 = render((r) => renderHorizons(ctx, r, state));
+    expect(root2.querySelector('.helm-horizon-detail h2')!.textContent).toBe('Q3 2026');
+    expect(texts(root2, '.helm-horizon-detail .helm-project-title')).toEqual(['Oracle Book Writing']);
+    const input = root2.querySelector<HTMLInputElement>('.helm-horizon-detail .helm-quickadd-input')!;
+    input.value = 'Finish chapters 4-6';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flush();
+    expect(await s.vault.read('Quarterly Notes/2026-Q3.md')).toMatch(/## Goals\n\n- \[ \] Finish chapters 4-6 🆔 gol-\w+/);
+    // Year goal shows the linked project's progress.
+    state.selected = '2026';
+    const root3 = render((r) => renderHorizons(ctx, r, state));
+    expect(root3.querySelector('.helm-horizon-detail .helm-goal-progress .helm-hint')!.textContent).toBe('2/7 tasks · 29%');
+    expect(texts(root3, '.helm-horizon-detail .helm-goal .helm-chip.project')).toEqual(['Oracle Book Writing']);
+  });
+
+  it('project detail offers horizon and goal selects', async () => {
+    const s = await setup({ 'Yearly Notes/2026.md': YEARLY });
+    const ctx: UiContext = { ...(await ctxFor()).ctx, index: s.index, mutations: s.m };
+    const state = { projectId: 'prj-book', filter: '', showClosed: false, collapsed: new Map(), showDone: false };
+    const root = render((r) => renderProjects(ctx, r, state));
+    const selects = root.querySelectorAll<HTMLSelectElement>('.helm-horizon-controls select');
+    expect(selects).toHaveLength(2);
+    selects[0]!.value = '2026-Q4';
+    selects[0]!.dispatchEvent(new Event('change'));
+    await flush();
+    expect(s.index.project('prj-book')!.period).toBe('2026-Q4');
+    selects[1]!.value = 'gol-book26';
+    selects[1]!.dispatchEvent(new Event('change'));
+    await flush();
+    expect(s.index.project('prj-book')!.goalId).toBe('gol-book26');
   });
 });

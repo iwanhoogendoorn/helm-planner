@@ -271,3 +271,37 @@
 .helm-seg + .helm-seg { border-left: 1px solid var(--background-modifier-border); }
 .helm-seg.is-active { background: var(--interactive-accent); color: var(--text-on-accent); }
 .helm-richtext code { font-size: 0.9em; }
+
+/* Horizons */
+.helm-horizon-grid { display: grid; gap: 8px; margin-top: var(--size-4-3); }
+.helm-horizon-grid.quarters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.helm-horizon-grid.months { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@container (max-width: 900px) { .helm-horizon-grid.quarters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .helm-horizon-grid.months { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (max-width: 520px) { .helm-horizon-grid.months { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.helm-horizon { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); padding: 8px 10px; cursor: pointer; background: var(--background-primary); }
+.helm-horizon:hover { background: var(--background-modifier-hover); }
+.helm-horizon.is-current { border-color: var(--interactive-accent); }
+.helm-horizon.is-selected { box-shadow: 0 0 0 2px var(--interactive-accent) inset; }
+.helm-horizon.is-past { opacity: 0.7; }
+.helm-horizon.is-large { margin-top: var(--size-4-3); padding: 12px 14px; }
+.helm-horizon.is-compact { padding: 6px 8px; }
+.helm-horizon-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.helm-horizon-label { font-weight: 700; }
+.helm-horizon.is-large .helm-horizon-label { font-size: var(--font-ui-large); }
+.helm-horizon-goals { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.helm-horizon-goal { display: flex; align-items: center; gap: 6px; font-size: var(--font-ui-small); }
+.helm-horizon-goal.is-done .helm-horizon-goal-text { color: var(--text-muted); text-decoration: line-through; }
+.helm-horizon-goal-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helm-horizon-goal .helm-icon { color: var(--text-accent); }
+.helm-horizon-detail { margin-top: var(--size-4-4); }
+.helm-goal { display: flex; align-items: flex-start; gap: 8px; padding: 8px 6px; border-radius: var(--radius-s); cursor: pointer; }
+.helm-goal:hover { background: var(--background-modifier-hover); }
+.helm-goal > .helm-icon { margin-top: 3px; color: var(--text-accent); }
+.helm-goal-main { flex: 1; min-width: 0; }
+.helm-goal-text { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.helm-goal.is-done .helm-goal-text { color: var(--text-muted); text-decoration: line-through; }
+.helm-goal-progress { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.helm-goal-progress .helm-progress { flex: 1; max-width: 320px; }
+.helm-goal .helm-task-actions { display: inline-flex; }
+.helm-horizon-controls { display: inline-flex; align-items: center; gap: 6px; }
+.helm-horizon-controls .helm-icon { color: var(--text-muted); }

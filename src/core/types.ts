@@ -59,7 +59,7 @@ export interface TaskLine {
   raw: { indent: string; bullet: string; eol: string; line: string };
 }
 
-export type TaskOrigin = 'project' | 'daily' | 'daily-mirror' | 'inbox' | 'note';
+export type TaskOrigin = 'project' | 'daily' | 'daily-mirror' | 'inbox' | 'note' | 'goal';
 
 export interface Task extends TaskLine {
   /** Stable key: the `🆔` when present, else derived from path+line+text. */
@@ -80,6 +80,20 @@ export interface Task extends TaskLine {
   section?: 'habits' | 'today' | 'projects' | 'outside';
   /** For a mirror line: the key of the source task if resolved. */
   mirrorOf?: string;
+  /** For a goal line: the period key of the periodic note it lives in. */
+  periodKey?: string;
+}
+
+/** A goal is a checkbox line under the Goals heading of a yearly, quarterly or monthly note. */
+export interface Goal {
+  id: string; // 🆔 gol-… or the task's derived key
+  key: string; // task key in the snapshot
+  text: string;
+  periodKey: string;
+  status: TaskStatus;
+  path: string;
+  line: number;
+  projectIds: string[];
 }
 
 export interface Phase {
@@ -108,6 +122,13 @@ export interface Project {
   parentRef?: string;
   parentId?: string;
   childIds: string[];
+  /** Horizon this project is bound to: 2026 · 2026-Q3 · 2026-08. */
+  period?: string;
+  /** Goal this project serves: a goal id, or its text / [[link]] as written. */
+  goalRef?: string;
+  goalId?: string;
+  /** True when the note is `<Folder>/<Folder>.md` — only those can be umbrellas. */
+  folderNote: boolean;
   tags: string[];
   phases: Phase[];
   looseTaskKeys: string[];
@@ -157,6 +178,7 @@ export interface Snapshot {
   tasks: Map<string, Task>;
   projects: Map<string, Project>;
   habits: Map<string, Habit>;
+  goals: Map<string, Goal>;
   completions: HabitCompletion[];
   dailyNotes: Map<IsoDate, DailyNoteInfo>;
   diagnostics: Diagnostic[];
@@ -174,12 +196,23 @@ export interface HelmSettings {
   regionPlacement: 'before-first-heading' | 'after-anchor' | 'end';
   regionAnchor: string;
   extraFolders: string[];
+  /** Path prefixes never indexed (archives). */
+  excludePaths: string[];
+  /** Periodic-note overrides; empty → follow the Periodic Notes plugin. */
+  yearlyFolder: string;
+  yearlyFormat: string;
+  quarterlyFolder: string;
+  quarterlyFormat: string;
+  monthlyFolder: string;
+  monthlyFormat: string;
+  /** Heading under which goals live in a periodic note. */
+  goalsHeading: string;
   dailyCapacityMinutes: number;
   defaultEffortMinutes: number;
   rolloverTarget: 'tomorrow' | 'unschedule';
   staleProjectDays: number;
   weekStartsOn: 1 | 7;
-  defaultTab: 'today' | 'week' | 'projects' | 'inbox' | 'review';
+  defaultTab: 'today' | 'week' | 'projects' | 'inbox' | 'review' | 'horizons';
   openOnStartup: boolean;
   showTimeBlocks: boolean;
   indentUnit: string;
@@ -196,6 +229,14 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   regionPlacement: 'before-first-heading',
   regionAnchor: '## Helm',
   extraFolders: [],
+  excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
+  yearlyFolder: '',
+  yearlyFormat: '',
+  quarterlyFolder: '',
+  quarterlyFormat: '',
+  monthlyFolder: '',
+  monthlyFormat: '',
+  goalsHeading: '## Goals',
   dailyCapacityMinutes: 360,
   defaultEffortMinutes: 30,
   rolloverTarget: 'tomorrow',

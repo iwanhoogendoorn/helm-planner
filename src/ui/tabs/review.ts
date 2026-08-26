@@ -7,7 +7,9 @@ import type { UiContext } from '../context';
 import { taskRow } from '../taskRow';
 import { openHabitForm } from '../modals/habitForm';
 import { openCapture } from '../modals/capture';
-import { effortOf } from '../../data/planner';
+import { effortOf, goalProgress } from '../../data/planner';
+import { periodOf } from '../../core/periods';
+import { progressBar, richText } from '../dom';
 
 export interface ReviewState { collapsed: Map<string, boolean>; checks: Set<string> }
 
@@ -49,6 +51,19 @@ export function renderReview(ctx: UiContext, root: HTMLElement, state: ReviewSta
     const on = auto || state.checks.has(k);
     return h('label', { cls: ['helm-checkitem', on && 'is-done'] }, h('input', { attr: { type: 'checkbox', checked: on, disabled: auto }, onChange: (ev) => { if ((ev.target as HTMLInputElement).checked) state.checks.add(k); else state.checks.delete(k); ctx.refresh(); } }), h('span', { text: label }), auto ? chip('auto', 'auto') : null);
   }))));
+
+  // Goals for the current quarter and year.
+  const quarter = periodOf(today, 'quarter');
+  const year = periodOf(today, 'year');
+  const month = periodOf(today, 'month');
+  const goalRows = [month, quarter, year].flatMap((per) => ctx.index.allGoals().filter((g) => g.periodKey === per.key).map((g) => ({ per, hg: goalProgress(snap, g, today, settings) })));
+  root.appendChild(section('Goals in play', { count: goalRows.length, store, key: 'goals', actions: [button('Horizons', { icon: 'mountain', onClick: () => ctx.navigate('horizons', { periodKey: quarter.key }) })] },
+    goalRows.length === 0 ? h('div', { cls: 'helm-hint', text: `No goals for ${month.label}, ${quarter.label} or ${year.label} yet — add them on the Horizons tab.` }) : null,
+    ...goalRows.map(({ per, hg }) => h('div', { cls: ['helm-goal', hg.goal.status === 'done' && 'is-done'], onClick: () => ctx.navigate('horizons', { periodKey: per.key }) },
+      icon(hg.goal.status === 'done' ? 'check-circle' : 'target'),
+      h('div', { cls: 'helm-goal-main' }, h('div', { cls: 'helm-goal-text' }, richText(hg.goal.text), chip(per.label, 'scheduled')), h('div', { cls: 'helm-goal-progress' }, progressBar(hg.progress, 'is-thin'), h('span', { cls: 'helm-hint', text: hg.taskTotal > 0 ? `${hg.taskDone}/${hg.taskTotal} tasks across ${hg.projects.length} project${hg.projects.length === 1 ? '' : 's'}` : 'no project linked' }))),
+    )),
+  ));
 
   // Projects needing attention.
   if (r.attention.length > 0) {

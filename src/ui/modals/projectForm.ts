@@ -5,8 +5,9 @@ import { isIsoDate } from '../../core/dates';
 import { PROJECT_PRIORITIES, PROJECT_STATUSES } from '../../core/project';
 import { button, h } from '../dom';
 import type { UiContext } from '../context';
+import { periodChoices } from '../tabs/horizons';
 
-export function openProjectForm(ctx: UiContext, opts: { parentId?: string; onCreated?: (p: Project) => void } = {}): void {
+export function openProjectForm(ctx: UiContext, opts: { parentId?: string; period?: string; goalKey?: string; onCreated?: (p: Project) => void } = {}): void {
   const m = new Modal(ctx.app);
   m.titleEl.setText('New project');
   const root = m.contentEl;
@@ -25,6 +26,13 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; onCre
   const areaList = h('datalist', { attr: { id: 'helm-areas' } }, ...areas.map((a) => h('option', { attr: { value: a } })));
   const start = h('input', { attr: { type: 'date' } });
   const due = h('input', { attr: { type: 'date' } });
+  const period = h('select');
+  period.appendChild(h('option', { text: '— no horizon —', attr: { value: '' } }));
+  for (const c of periodChoices(ctx.today())) period.appendChild(h('option', { text: c.label.replace(/^\s+/, (m) => '\u00a0'.repeat(m.length)), attr: { value: c.key, selected: c.key === opts.period } }));
+  const goal = h('select');
+  goal.appendChild(h('option', { text: '— no goal —', attr: { value: '' } }));
+  for (const g of ctx.index.allGoals().sort((a, b) => a.periodKey.localeCompare(b.periodKey) || a.line - b.line)) goal.appendChild(h('option', { text: `${g.periodKey} · ${g.text}`, attr: { value: g.key, selected: g.key === opts.goalKey } }));
+  goal.addEventListener('change', () => { const g = ctx.index.goal(goal.value); if (g && !period.value) period.value = g.periodKey; });
   const objective = h('textarea', { cls: 'helm-input-wide', attr: { rows: 2, placeholder: 'This project is successful when…' } });
   const phases = h('textarea', { cls: 'helm-input-wide helm-mono', attr: { rows: 8, placeholder: 'Phase: Design 📅 2026-09-30\n- Sketch layout\n- Pick tiles\nPhase: Build\n- Demolition\n\nLines without a phase above them become loose tasks.' } });
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
@@ -33,6 +41,7 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; onCre
     h('div', { cls: 'helm-grid2' }, field('Part of', parent), field('Area', area), areaList),
     h('div', { cls: 'helm-grid2' }, field('Status', status), field('Priority', priority)),
     h('div', { cls: 'helm-grid2' }, field('Start', start), field('Due', due)),
+    h('div', { cls: 'helm-grid2' }, field('Horizon (year · quarter · month)', period), field('Serves goal', goal)),
     field('Objective', objective),
     field('Phases and tasks', phases),
     h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button('Create project', { primary: true, icon: 'folder-plus', onClick: () => void create() })),
@@ -48,6 +57,7 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; onCre
         ...(area.value.trim() ? { area: area.value.trim() } : {}), ...(parent.value ? { parentId: parent.value } : {}),
         ...(isIsoDate(start.value) ? { start: start.value } : {}), ...(isIsoDate(due.value) ? { due: due.value } : {}),
         ...(objective.value.trim() ? { objective: objective.value.trim() } : {}),
+        ...(period.value ? { period: period.value } : {}), ...(goal.value ? { goal: ctx.index.goal(goal.value)?.id ?? goal.value } : {}),
         phases: parsed.phases, tasks: parsed.tasks,
       });
       ctx.notify(`Created “${p.title}”.`);

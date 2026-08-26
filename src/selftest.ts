@@ -85,6 +85,21 @@ export async function runSelfTest(host: Host): Promise<string> {
     check('Frontmatter status updated', index.project(p.id)?.status === 'on-hold');
     await m.setProjectFields(p.id, { status: 'active' });
 
+    // Horizons: a goal in this quarter's note, the project bound to it, progress rolled up.
+    const qKey = `${today.slice(0, 4)}-Q${Math.floor((Number(today.slice(5, 7)) - 1) / 3) + 1}`;
+    const goalId = await m.addGoal(qKey, 'Self-test goal');
+    const goal = index.allGoals().find((g) => g.id === goalId);
+    check('Goal written into the quarterly note and indexed', goal !== undefined && goal.periodKey === qKey, index.periodicPath({ kind: 'quarter', key: qKey, start: '', end: '', label: qKey, year: 0 }));
+    if (goal) {
+      await m.linkProjectToGoal(p.id, goal.key);
+      const pp = index.project(p.id);
+      check('Project bound to the goal and its period', pp?.goalId === goal.key && pp?.period === qKey, `${pp?.period} / ${pp?.goalId}`);
+      check('Goal lists the project', index.goal(goal.key)?.projectIds.includes(p.id) === true);
+      await m.setStatus(goal.key, 'done');
+      check('Goal can be marked achieved', index.goal(goal.key)?.status === 'done');
+      await m.setStatus(goal.key, 'todo');
+    }
+
     const rec = await m.reconcile();
     check('Reconcile finds nothing to fix after a clean run', rec === 0, `${rec} writes`);
     const diags = index.snapshot.diagnostics.filter((d) => d.path === p.path);

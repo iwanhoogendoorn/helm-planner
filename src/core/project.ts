@@ -10,6 +10,7 @@ import { parseDocument, type DocHeading, type Document } from './document';
 import { list, scalar } from './frontmatter';
 import { slugify } from './ids';
 import { isIsoDate } from './dates';
+import { parsePeriod } from './periods';
 
 export const PHASE_HEADING_RE = /^(?:phase|fase|stage|milestone)\s*[:\-–—]\s*(.+?)\s*$/i;
 export const PHASE_DATE_RE = /\s*📅\s*(\d{4}-\d{2}-\d{2})\s*$/;
@@ -83,7 +84,14 @@ export function parseProject(path: string, content: string, opts: { fallbackId?:
     phases: [],
     looseTaskKeys: [],
     frontmatterEndLine: doc.frontmatter.endLine,
+    folderNote: folder !== '' && folder.slice(folder.lastIndexOf('/') + 1) === base,
   };
+  const periodRaw = scalar(fm['period']) ?? scalar(fm['horizon']) ?? scalar(fm['quarter']) ?? scalar(fm['month']) ?? scalar(fm['year']);
+  const period = parsePeriod(periodRaw);
+  if (period) project.period = period.key;
+  else if (periodRaw) diagnostics.push({ severity: 'warning', code: 'HELM-P07', message: `Unknown period "${periodRaw}" — use 2026, 2026-Q3 or 2026-08.`, path });
+  const goalRef = scalar(fm['goal']) ?? scalar(fm['goals']);
+  if (goalRef) project.goalRef = goalRef.replace(/^\[\[|\]\]$/g, '').split('|')[0]!.trim();
   const area = scalar(fm['area']);
   if (area) project.area = area;
   if (start) project.start = start;
@@ -140,13 +148,14 @@ function firstDate(fm: Record<string, string | string[] | null>, keys: string[])
 
 /** Render a new project note. */
 export function renderProjectNote(p: {
-  id: string; title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parent?: string;
+  id: string; title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parent?: string; period?: string; goal?: string;
   start?: string; due?: string; tags?: string[]; today: string;
   phases?: { title: string; due?: string; tasks?: string[] }[]; tasks?: string[]; objective?: string;
 }): string {
   const fm: string[] = ['---', `title: ${quote(p.title)}`, 'type: project', `id: ${p.id}`, `status: ${p.status}`, `priority: ${p.priority}`];
   if (p.area) fm.push(`area: ${quote(p.area)}`);
   if (p.parent) fm.push(`parent: ${quote(p.parent)}`);
+  fm.push(`period: ${p.period ?? ''}`, `goal: ${p.goal ? quote(p.goal) : ''}`);
   fm.push(`start_date: ${p.start ?? ''}`, `due_date: ${p.due ?? ''}`, `creation_date: ${p.today}`);
   fm.push('tags:', '  - project', ...(p.tags ?? []).map((t) => `  - ${t}`));
   fm.push('---', '');

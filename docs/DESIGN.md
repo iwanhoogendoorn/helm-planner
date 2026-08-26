@@ -80,6 +80,18 @@ inbox            20 + priority
 Blocked tasks, tasks with a future `🛫`, and parents whose children are still
 open (unless the parent itself is dated) are never candidates.
 
+## Horizons
+
+The user plans in Periodic Notes — daily, weekly, monthly, quarterly, yearly.
+Goals therefore live in the yearly / quarterly / monthly notes as checkbox
+lines under `## Goals`, not in a separate goals database: the year note *is*
+the place you look at when you ask "what am I doing this year". Projects bind
+to a period (`period: 2026-Q3`) and optionally to a goal (`goal: gol-…`);
+tasks inherit the binding through their project, which is the only place a
+task should have to know about strategy. Progress rolls up: task → project →
+goal → period. Nothing is written into the periodic note except the goal lines
+themselves.
+
 ## Capture grammar
 
 Chosen to be typeable without thinking: dates as words, `!` for priority

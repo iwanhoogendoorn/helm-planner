@@ -22,6 +22,7 @@ import { columnWidth } from '../core/tree';
 import type { HelmIndex } from './index';
 import { baseName, type VaultAdapter } from './vault';
 import { habitDue } from './habits';
+import { parsePeriod, type Period, type PeriodKind } from '../core/periods';
 
 export interface MutationDeps {
   vault: VaultAdapter;
@@ -31,6 +32,8 @@ export interface MutationDeps {
   notify: (msg: string) => void;
   /** Daily-note template text, when configured. */
   dailyTemplate?: () => Promise<string | undefined>;
+  /** Yearly / quarterly / monthly note template text, when configured. */
+  periodicTemplate?: (kind: PeriodKind) => Promise<string | undefined>;
   rng?: () => number;
 }
 
@@ -544,7 +547,7 @@ export class Mutations {
 
   /* ── Projects ───────────────────────────────────────────────────────── */
 
-  async createProject(spec: { title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parentId?: string; start?: IsoDate; due?: IsoDate; tags?: string[]; phases?: { title: string; due?: IsoDate; tasks?: string[] }[]; tasks?: string[]; objective?: string }): Promise<Project> {
+  async createProject(spec: { title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parentId?: string; period?: string; goal?: string; start?: IsoDate; due?: IsoDate; tags?: string[]; phases?: { title: string; due?: IsoDate; tasks?: string[] }[]; tasks?: string[]; objective?: string }): Promise<Project> {
     const title = spec.title.trim().replace(/[\\/:*?"<>|]/g, '-');
     if (title === '') throw new Error('A project needs a name');
     const parent = spec.parentId ? this.index.project(spec.parentId) : undefined;
@@ -553,7 +556,7 @@ export class Mutations {
     const path = `${folder}/${title}.md`;
     if (await this.d.vault.exists(path)) throw new Error(`A project note already exists at ${path}`);
     const id = uniqueId('prj', (x) => this.index.snapshot.projects.has(x), this.d.rng);
-    const content = renderProjectNote({ id, title: spec.title.trim(), status: spec.status, priority: spec.priority, today: this.today, ...(spec.area ? { area: spec.area } : {}), ...(parent ? { parent: parent.title } : {}), ...(spec.start ? { start: spec.start } : {}), ...(spec.due ? { due: spec.due } : {}), ...(spec.tags ? { tags: spec.tags } : {}), ...(spec.phases ? { phases: spec.phases } : {}), ...(spec.tasks ? { tasks: spec.tasks } : {}), ...(spec.objective ? { objective: spec.objective } : {}) });
+    const content = renderProjectNote({ id, title: spec.title.trim(), status: spec.status, priority: spec.priority, today: this.today, ...(spec.area ? { area: spec.area } : {}), ...(parent ? { parent: parent.title } : {}), ...(spec.period ? { period: spec.period } : {}), ...(spec.goal ? { goal: spec.goal } : {}), ...(spec.start ? { start: spec.start } : {}), ...(spec.due ? { due: spec.due } : {}), ...(spec.tags ? { tags: spec.tags } : {}), ...(spec.phases ? { phases: spec.phases } : {}), ...(spec.tasks ? { tasks: spec.tasks } : {}), ...(spec.objective ? { objective: spec.objective } : {}) });
     await this.createFile(path, content);
     // Assign ids to the created tasks so they can be planned right away.
     const p = this.index.project(id);
@@ -561,7 +564,7 @@ export class Mutations {
     return p;
   }
 
-  async setProjectFields(id: string, fields: { status?: ProjectStatus; priority?: ProjectPriority; area?: string; due?: IsoDate | null; start?: IsoDate | null; title?: string }): Promise<void> {
+  async setProjectFields(id: string, fields: { status?: ProjectStatus; priority?: ProjectPriority; area?: string; due?: IsoDate | null; start?: IsoDate | null; title?: string; period?: string | null; goal?: string | null }): Promise<void> {
     const p = this.index.project(id);
     if (!p) throw new Error('Project not found');
     await this.editFile(p.path, (lines, doc) => {
@@ -574,6 +577,8 @@ export class Mutations {
       if (fields.title !== undefined) updates['title'] = fields.title;
       if (fields.due !== undefined) updates[pick(['due_date', 'due', 'deadline', 'target_date'])] = fields.due ?? '';
       if (fields.start !== undefined) updates[pick(['start_date', 'start'])] = fields.start ?? '';
+      if (fields.period !== undefined) updates[pick(['period', 'horizon', 'quarter', 'month', 'year'])] = fields.period ?? '';
+      if (fields.goal !== undefined) updates[pick(['goal', 'goals'])] = fields.goal ?? '';
       return setFrontmatter(lines, updates);
     });
   }
@@ -646,6 +651,48 @@ export class Mutations {
     if (fields.graceDays !== undefined) u['grace_days'] = String(fields.graceDays);
     if (fields.icon !== undefined) u['icon'] = fields.icon;
     await this.editFile(h.path, (lines) => setFrontmatter(lines, u));
+  }
+
+  /* ── Horizons: goals in yearly / quarterly / monthly notes ───────────── */
+
+  async ensurePeriodicNote(period: Period): Promise<string> {
+    const path = this.index.periodicPath(period);
+    if (await this.d.vault.exists(path)) return path;
+    const tpl = this.d.periodicTemplate ? await this.d.periodicTemplate(period.kind) : undefined;
+    const title = baseName(path);
+    let content = renderDailyTemplate(tpl, period.start, title);
+    if (!tpl) content = `---\ntitle: ${title}\nperiod: ${period.key}\n---\n\n# ${period.label}\n\n${this.settings.goalsHeading}\n\n`;
+    await this.createFile(path, content);
+    return path;
+  }
+
+  /** Append a goal line under the Goals heading of the period's note (created when missing). */
+  async addGoal(periodKey: string, text: string): Promise<string> {
+    const period = parsePeriod(periodKey);
+    if (!period) throw new Error(`Not a period: ${periodKey}`);
+    const path = await this.ensurePeriodicNote(period);
+    const id = uniqueId('gol', (x) => this.index.snapshot.tasks.has(x), this.d.rng);
+    const want = this.settings.goalsHeading.replace(/^#+\s*/, '').trim().toLowerCase();
+    await this.editFile(path, (lines, doc) => {
+      const h = doc.headings.find((x) => x.text.trim().toLowerCase() === want) ?? doc.headings.find((x) => /^(goals?|objectives?|okrs?)$/i.test(x.text.trim()));
+      const line = serialiseTaskLine(newTaskLine(text.trim(), { id, created: this.today }));
+      if (h) { lines.splice(sectionInsertPoint(doc, h), 0, line); return true; }
+      let e = lines.length;
+      while (e > 0 && lines[e - 1]!.trim() === '') e--;
+      lines.splice(e, lines.length - e, '', this.settings.goalsHeading, '', line, '');
+      return true;
+    });
+    return id;
+  }
+
+  /** Bind a project to a goal (and to the goal's period when the project has none). */
+  async linkProjectToGoal(projectId: string, goalKey: string | null): Promise<void> {
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    if (goalKey === null) { await this.setProjectFields(projectId, { goal: null }); return; }
+    const g = this.index.goal(goalKey);
+    if (!g) throw new Error('Goal not found');
+    await this.setProjectFields(projectId, { goal: g.id, ...(p.period ? {} : { period: g.periodKey }) });
   }
 
   /* ── Reconcile: mirrors vs sources after outside edits ──────────────── */

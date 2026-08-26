@@ -20,6 +20,9 @@ const DAILY_FORMAT = 'YYYY/MM - MMMM/ww/DD, dddd, MMM, YYYY';
 const files = new Map<string, string>();
 const put = (p: string, c: string): void => { files.set(p, c); };
 const d = (n: number): string => addDays(today, n);
+const q = (date: string): string => `${date.slice(0, 4)}-Q${Math.floor((Number(date.slice(5, 7)) - 1) / 3) + 1}`;
+const nextQ = (date: string): string => { const y = Number(date.slice(0, 4)); const qq = Math.floor((Number(date.slice(5, 7)) - 1) / 3) + 1; return qq === 4 ? `${y + 1}-Q1` : `${y}-Q${qq + 1}`; };
+const year = today.slice(0, 4);
 
 put('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md', `---
 title: Oracle Book Writing
@@ -32,6 +35,8 @@ area:
   - Oracle
 id: prj-book01
 deadline: ${d(90)}
+period: ${q(today)}
+goal: gol-book26
 tags: project
 ---
 
@@ -77,6 +82,8 @@ status: planned
 priority: medium
 area: House
 id: prj-kitch1
+period: ${nextQ(today)}
+goal: gol-house26
 start_date: ${d(14)}
 due_date: ${d(120)}
 ---
@@ -117,6 +124,8 @@ status: active
 priority: high
 area: Oracle
 id: prj-cert01
+period: ${today.slice(0, 7)}
+goal: gol-cert26
 due_date: ${d(21)}
 ---
 
@@ -275,6 +284,48 @@ ${mirrors}
 // The mirrored task must exist in the project note with that id: patch it in.
 files.set('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md', files.get('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')!.replace(`- [ ] Chapter 5: create routing tables on the diagrams 📅 ${d(-3)} ⏱️ 1h30m`, `- [ ] Chapter 5: create routing tables on the diagrams 🆔 tsk-bk0003 ⏳ ${d(-1)} 📅 ${d(-3)} ⏱️ 1h30m`));
 
+put(`70 OBSIDIAN/70-19 Yearly Notes/${year}.md`, `---
+title: ${year}
+Type: Yearly Note
+---
+
+# ${year}
+
+## Theme
+
+Ship, learn, keep the house in order.
+
+## Goals
+
+- [ ] Publish the OCI networking book 🆔 gol-book26
+- [ ] Get OCI certified 🆔 gol-cert26
+- [ ] Finish the house projects 🆔 gol-house26
+- [x] Set up the home studio 🆔 gol-studio ✅ ${d(-60)}
+`);
+put(`70 OBSIDIAN/70-18 Quarterly Notes/${q(today)}.md`, `---
+title: ${q(today)}
+Type: Quarterly Note
+---
+
+# ${q(today)}
+
+## Goals
+
+- [ ] Chapters 4–6 in the publisher's hands 🆔 gol-q3book
+- [ ] Book the certification exam 🆔 gol-q3exam
+`);
+put(`70 OBSIDIAN/70-17 Monthly Notes/${today.slice(0, 7)}.md`, `---
+title: ${today.slice(0, 7)}
+Type: Monthly Note
+---
+
+# ${today.slice(0, 7)}
+
+## Goals
+
+- [ ] Two practice tests done 🆔 gol-m-tests
+`);
+
 put('70 OBSIDIAN/70-07 Templates/DAILY NOTE TEMPLATE.md', `---
 title: <% tp.file.title %>
 Type: Daily Note
@@ -306,6 +357,7 @@ put('.obsidian/app.json', '{}');
 put('.obsidian/appearance.json', '{ "accentColor": "" }');
 put('.obsidian/core-plugins.json', JSON.stringify(['file-explorer', 'global-search', 'switcher', 'command-palette', 'daily-notes', 'page-preview', 'outline', 'word-count', 'file-recovery'], null, 2));
 put('.obsidian/daily-notes.json', JSON.stringify({ folder: DAILY_FOLDER, template: '70 OBSIDIAN/70-07 Templates/DAILY NOTE TEMPLATE', format: DAILY_FORMAT, autorun: false }, null, 2));
+put('.obsidian/plugins/periodic-notes/data.json', JSON.stringify({ daily: { format: DAILY_FORMAT, folder: DAILY_FOLDER, template: '70 OBSIDIAN/70-07 Templates/DAILY NOTE TEMPLATE', enabled: true }, weekly: { format: '', folder: '70 OBSIDIAN/70-12 Weekly Notes', enabled: true }, monthly: { format: '', folder: '70 OBSIDIAN/70-17 Monthly Notes', enabled: true }, quarterly: { format: '', folder: '70 OBSIDIAN/70-18 Quarterly Notes', enabled: true }, yearly: { format: '', folder: '70 OBSIDIAN/70-19 Yearly Notes', enabled: true } }, null, 2));
 put('.obsidian/community-plugins.json', JSON.stringify(['helm-planner'], null, 2));
 put('.obsidian/plugins/helm-planner/data.json', JSON.stringify({ projectsFolder: '02 PROJECTS', habitsFolder: '02 PROJECTS/Habits', inboxNote: '01 INBOX/Inbox.md', developerActions: true, openOnStartup: true, dailyCapacityMinutes: 360 }, null, 2));
 

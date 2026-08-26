@@ -131,19 +131,50 @@ Completions are lines in `### Habits` carrying the habit id: `[x]` done,
 `[-]` skipped (neutral), anything else a miss. The completion date is the
 note's date.
 
-## 5. Inbox
+## 5. Horizons: goals and periods
+
+**Periods** are keys: `2026` (year), `2026-Q3` (quarter), `2026-08` (month).
+Read leniently (`Q3 2026`, `Aug 2026`, `08-2026`), always written in that
+canonical form.
+
+**Periodic notes** are located via the Periodic Notes plugin (yearly /
+quarterly / monthly folder + moment format; defaults `YYYY`, `YYYY-[Q]Q`,
+`YYYY-MM`) or the plugin settings. A note's period is parsed from its path.
+
+**Goals** are depth-0 task lines under the goals heading (`## Goals` by
+default; `Objectives` / `OKRs` also recognised) of a periodic note:
+
+```markdown
+- [ ] Publish the book 🆔 gol-xxxxxx ➕ 2026-08-26
+```
+
+Status follows the checkbox (`[x]` = achieved). Id prefix `gol-`. Everything
+else in a periodic note is ignored by Helm.
+
+**Project binding** — frontmatter on the project note:
+
+| Key | Value |
+|---|---|
+| `period` (also read: `horizon`, `quarter`, `month`, `year`) | a period key |
+| `goal` (also read: `goals`) | a goal's `🆔`, or its exact text / `[[link]]` |
+
+A project bound to `2026-08` is also *within* `2026-Q3` and `2026`. Goal
+progress = done/total tasks of the projects linked to it, or 100 % when the
+goal line is ticked.
+
+## 6. Inbox
 
 Any note; default `01 INBOX/Inbox.md`. Captures without a date or project are
 appended. Planning an inbox task onto a day moves the line (with its subtree)
 into that day's `### Today`.
 
-## 6. Ids
+## 7. Ids
 
-`tsk-` / `prj-` / `hab-` + 6 lowercase base36 characters, random, checked for
+`tsk-` / `prj-` / `hab-` / `gol-` + 6 lowercase base36 characters, random, checked for
 collisions against the index at generation time. A line without a `🆔` is
 keyed by a hash of (path, line, text) that changes when the line moves.
 
-## 7. Diagnostics
+## 8. Diagnostics
 
 | Code | Meaning |
 |---|---|
@@ -155,3 +186,5 @@ keyed by a hash of (path, line, text) that changes when the line moves.
 | HELM-T01 | duplicate task id |
 | HELM-D01 | daily note region has no end marker |
 | HELM-M01 | mirror line points at an unknown task |
+| HELM-P07 | project `period` not understood |
+| HELM-G01 | project `goal` matches no goal line |

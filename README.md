@@ -45,6 +45,35 @@ breaks — you keep a plain-text task system that other plugins can read.
 
 Screenshots are of the seeded test vault (`npm run seed`).
 
+## Horizons — goals by year, quarter, month
+
+Goals live where you already plan the long game: in your **yearly, quarterly
+and monthly notes** (Periodic Notes folders are read automatically). A goal is
+a checkbox line under `## Goals`:
+
+```markdown
+# 2026
+## Goals
+- [ ] Publish the OCI networking book 🆔 gol-book26
+- [x] Set up the home studio 🆔 gol-studio ✅ 2026-06-30
+```
+
+A project is **bound to a horizon** and can **serve a goal** through two
+frontmatter keys:
+
+```yaml
+period: 2026-Q3        # 2026 · 2026-Q3 · 2026-08 (also "Q3 2026", "Aug 2026")
+goal: gol-book26       # the goal's 🆔, or its text
+```
+
+Every task in that project is therefore tied to the quarter (or year, or
+month). The **Horizons** tab shows the year card, four quarters and twelve
+months with their goals, progress (rolled up from the linked projects' tasks)
+and the projects bound to each; add goals inline, bind a project with one
+click, or start a new project straight from a goal. Plan day gives a small
+boost to tasks from projects bound to the current month/quarter/year, and
+Review shows the goals in play.
+
 ## How notes look
 
 **Project** — a folder with a note of the same name. Phases are headings;
@@ -129,7 +158,7 @@ project (and also the day if dated). With neither, into the inbox note.
 
 | Command | |
 |---|---|
-| Open Helm / Today / Week / Projects / Inbox / Review | the five tabs |
+| Open Helm / Today / Week / Projects / Inbox / Review / Horizons | the six tabs |
 | Capture a task · Capture a task for today | |
 | Plan my day · Wrap up the day | the two rituals |
 | Open today’s daily note (create if missing) | |
@@ -151,6 +180,10 @@ project (and also the day if dated). With neither, into the inbox note.
 - **Daily capacity** and **default effort** drive the capacity bar.
 - **Extra folders to scan**: tasks in other notes become plannable; they get
   mirrored into the day with a 🔗 link back to their note.
+- **Never index these paths**: archives and old task boards (defaults cover
+  `ZZZ. Project Archive`, `999. ARCHIVED TASKS.md`, `90 ARCHIVE`).
+- **Horizons**: goals heading (default `## Goals`) and, if you don't use
+  Periodic Notes, the yearly/quarterly/monthly folders and formats.
 
 ## Development
 
