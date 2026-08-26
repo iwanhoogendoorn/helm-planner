@@ -244,3 +244,9 @@ inside the project folder), get an embed under `## Diagrams` in the note, and
 AI overviews carry `helm-generated: true` with the summary as a quote above the
 scene.
 
+AI diagrams come in two modes. *Overview* draws the digest of a period, day
+or project (what moved, what is stuck, what is next). *Research* treats a task
+or a project's subject as a topic: the model may search the web and read pages
+(`Allow web research`), and the drawing carries the knowledge itself. Research
+drawings are named `<subject> — research`, overviews `<note> — overview`, skill
+drawings `<note> — diagram`.

@@ -18,6 +18,12 @@
   Drawings: the CLI runs the skill in a scratch folder (edits auto-accepted,
   only uv allowed), optionally with its render-and-fix loop, and Helm imports
   the finished scene into the vault as a normal drawing.
+- Two diagram modes: *overview* (a period, day or project seen through its
+  digest) and *research* (a task — or a project's subject — treated as a
+  topic: the model researches it on the web when allowed and draws the
+  actual knowledge: tracks, levels, prerequisites, prices, options; never a
+  restatement of the task). Tasks get research by default; projects offer
+  both. Settings → Drawings → *Allow web research*.
 - Built-in yearly, quarterly, monthly and weekly note templates (Templater
   flavour: navigation links derived from the title, a Goals section, focus
   and review). Helm uses your override, else the Periodic Notes template,
