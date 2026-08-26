@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { setup, dailyPath, TODAY } from './fixture';
+import { setup, dailyPath, TODAY, SETTINGS } from './fixture';
 import { renderDailyTemplate } from '../../src/data/mutations';
 
 const BOOK = '02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md';
@@ -294,6 +294,41 @@ describe('projects & habits', () => {
 });
 
 describe('daily template', () => {
+  it('evaluates moment() chains, offsets and lowercase yyyy from the real daily template', () => {
+    const tpl = `---
+title: <% tp.file.title %>
+week: "[[<% moment(tp.file.title, 'DD, dddd, MMM, YYYY').format('YYYY-[W]WW') %>]]"
+creation_date: <% tp.date.now("yyyy-MM-DD") %>
+---
+<%tp.web.daily_quote()%>  
+Previous day: [[<% fileDate = moment(tp.file.title, 'DD, dddd, MMM, YYYY').subtract(1, 'd').format('DD, dddd, MMM, YYYY') %>|Yesterday]]  
+Next day: [[<% fileDate = moment(tp.file.title, 'DD, dddd, MMM, YYYY').add(1, 'd').format('DD, dddd, MMM, YYYY') %>|Tomorrow]]
+Next week: <% tp.date.now("YYYY-MM-DD", 7) %> · <% tp.date.tomorrow("DD") %>
+`;
+    expect(renderDailyTemplate(tpl, '2026-08-26', '26, Wednesday, Aug, 2026')).toBe(`---
+title: 26, Wednesday, Aug, 2026
+week: "[[2026-W35]]"
+creation_date: 2026-08-26
+---
+  
+Previous day: [[25, Tuesday, Aug, 2026|Yesterday]]  
+Next day: [[27, Thursday, Aug, 2026|Tomorrow]]
+Next week: 2026-09-02 · 27
+`);
+  });
+
+  it('hands a Templater template to the engine when one is available', async () => {
+    const { m, vault, index } = await setup();
+    const { Mutations } = await import('../../src/data/mutations');
+    const calls: string[] = [];
+    const m2 = new Mutations({ vault, index, settings: () => (m as unknown as { d: { settings: () => typeof SETTINGS } }).d.settings(), today: () => TODAY, notify: () => undefined, dailyTemplate: async () => '<% tp.web.daily_quote() %>\n# {{title}}\n', processTemplate: async (p) => { calls.push(p); await vault.write(p, '> a quote\n# processed\n'); return true; } });
+    const path = await m2.ensureDailyNote('2026-08-28');
+    expect(calls).toEqual([path]);
+    expect(await vault.read(path)).toBe('> a quote\n# processed\n');
+    await m2.addTask({ text: 'After templater', date: '2026-08-28' });
+    expect(await vault.read(path)).toBe('> a quote\n\n## Plan\n### Anytime\n- [ ] After templater\n\n# processed\n');
+  });
+
   it('renders core and Templater placeholders', () => {
     const tpl = '---\ntitle: <% tp.file.title %>\ncreation_date: <% tp.date.now("YYYY-MM-DD") %>\n---\n<%tp.web.daily_quote()%>\n{{date:dddd}} {{title}}\n';
     expect(renderDailyTemplate(tpl, '2026-08-26', '26, Wednesday, Aug, 2026')).toBe('---\ntitle: 26, Wednesday, Aug, 2026\ncreation_date: 2026-08-26\n---\n\nWednesday 26, Wednesday, Aug, 2026\n');

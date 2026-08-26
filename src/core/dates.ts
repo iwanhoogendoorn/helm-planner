@@ -175,9 +175,9 @@ export function formatDate(d: IsoDate, pattern: string): string {
       continue;
     }
     let matched = false;
-    for (const tok of ['YYYY', 'MMMM', 'dddd', 'gggg', 'GGGG', 'MMM', 'ddd', 'YY', 'MM', 'DD', 'ww', 'WW', 'M', 'D', 'w', 'W']) {
+    for (const tok of ['YYYY', 'yyyy', 'MMMM', 'dddd', 'gggg', 'GGGG', 'MMM', 'ddd', 'YY', 'MM', 'DD', 'ww', 'WW', 'M', 'D', 'w', 'W']) {
       if (pattern.startsWith(tok, i)) {
-        out += tokens[tok];
+        out += tokens[tok === 'yyyy' ? 'YYYY' : tok];
         i += tok.length;
         matched = true;
         break;

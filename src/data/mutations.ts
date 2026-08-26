@@ -12,7 +12,7 @@ import type { HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Ta
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
 import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
-import { addDays, diffDays, formatDate } from '../core/dates';
+import { addDays, addMonths, diffDays, formatDate } from '../core/dates';
 import { nextOccurrence } from '../core/recurrence';
 import { uniqueId } from '../core/ids';
 import { setFrontmatter } from '../core/frontmatter';
@@ -34,6 +34,12 @@ export interface MutationDeps {
   dailyTemplate?: () => Promise<string | undefined>;
   /** Yearly / quarterly / monthly note template text, when configured. */
   periodicTemplate?: (kind: PeriodKind) => Promise<string | undefined>;
+  /**
+   * Let a template engine (Templater) process a freshly created note that
+   * holds the raw template. Returns true when it did; false to fall back to
+   * Helm's own placeholder rendering.
+   */
+  processTemplate?: (path: string) => Promise<boolean>;
   rng?: () => number;
 }
 
@@ -145,9 +151,21 @@ export class Mutations {
     const path = this.index.dailyPath(date);
     if (await this.d.vault.exists(path)) return path;
     const tpl = this.d.dailyTemplate ? await this.d.dailyTemplate() : undefined;
-    const content = renderDailyTemplate(tpl, date, baseName(path));
-    await this.createFile(path, content);
+    await this.createFromTemplate(path, tpl, date, baseName(path));
     return path;
+  }
+
+  /** Create a note from a template: Templater first when available, else Helm's renderer. */
+  private async createFromTemplate(path: string, tpl: string | undefined, date: IsoDate, title: string): Promise<void> {
+    if (tpl && tpl.includes('<%') && this.d.processTemplate) {
+      await this.createFile(path, tpl);
+      let ok = false;
+      try { ok = await this.d.processTemplate(path); } catch { ok = false; }
+      if (ok) { const c = await this.d.vault.read(path); this.index.update(path, c); return; }
+    }
+    const content = renderDailyTemplate(tpl, date, title);
+    if (await this.d.vault.exists(path)) { await this.d.vault.write(path, content); this.index.update(path, content); }
+    else await this.createFile(path, content);
   }
 
   private async editRegion(date: IsoDate, fn: (rc: RegionContent) => RegionContent | undefined): Promise<boolean> {
@@ -701,9 +719,8 @@ export class Mutations {
     if (await this.d.vault.exists(path)) return path;
     const tpl = this.d.periodicTemplate ? await this.d.periodicTemplate(period.kind) : undefined;
     const title = baseName(path);
-    let content = renderDailyTemplate(tpl, period.start, title);
-    if (!tpl) content = `---\ntitle: ${title}\nperiod: ${period.key}\n---\n\n# ${period.label}\n\n${this.settings.goalsHeading}\n\n`;
-    await this.createFile(path, content);
+    if (!tpl) { await this.createFile(path, `---\ntitle: ${title}\nperiod: ${period.key}\n---\n\n# ${period.label}\n\n${this.settings.goalsHeading}\n\n`); return path; }
+    await this.createFromTemplate(path, tpl, period.start, title);
     return path;
   }
 
@@ -784,11 +801,28 @@ export function renderDailyTemplate(template: string | undefined, date: IsoDate,
   out = out.replace(/\{\{\s*title\s*\}\}/g, title);
   out = out.replace(/\{\{\s*time\s*\}\}/g, '');
   out = out.replace(/<%[-*_]?\s*tp\.file\.title\s*%>/g, title);
-  out = out.replace(/<%[-*_]?\s*tp\.date\.now\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(date, f));
+  // moment(tp.file.title, 'FMT').add(1, 'd').subtract(2, 'weeks').format('FMT') — with or without an assignment in front.
+  out = out.replace(/<%[-*_]?\s*(?:[\w$]+\s*=\s*)?moment\((?:\s*tp\.file\.title\s*,\s*["'][^"']*["']\s*)?\)((?:\s*\.(?:add|subtract)\(\s*-?\d+\s*,\s*["'][A-Za-z]+["']\s*\))*)\s*\.format\(\s*["']([^"']*)["']\s*\)\s*%>/g, (_, chain: string, fmt: string) => {
+    let d = date;
+    for (const m of chain.matchAll(/\.(add|subtract)\(\s*(-?\d+)\s*,\s*["']([A-Za-z]+)["']\s*\)/g)) { const n = Number(m[2]) * (m[1] === 'subtract' ? -1 : 1); d = shiftDate(d, n, m[3]!); }
+    return formatDate(d, fmt);
+  });
+  out = out.replace(/<%[-*_]?\s*tp\.date\.now\(\s*["']([^"']*)["']\s*(?:,\s*(-?\d+)\s*)?[^)]*\)\s*%>/g, (_, f: string, off?: string) => formatDate(off ? addDays(date, Number(off)) : date, f));
+  out = out.replace(/<%[-*_]?\s*tp\.date\.tomorrow\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(addDays(date, 1), f));
+  out = out.replace(/<%[-*_]?\s*tp\.date\.yesterday\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(addDays(date, -1), f));
   out = out.replace(/<%[-*_]?\s*tp\.file\.last_modified_date\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(date, f));
   out = out.replace(/<%[-*_]?\s*tp\.file\.creation_date\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(date, f));
   out = out.replace(/<%[\s\S]*?%>/g, '');
   return out;
+}
+
+function shiftDate(d: IsoDate, n: number, unit: string): IsoDate {
+  const u = unit.toLowerCase();
+  if (u.startsWith('d')) return addDays(d, n);
+  if (u.startsWith('w')) return addDays(d, 7 * n);
+  if (u === 'm' || u.startsWith('month')) return addMonths(d, n);
+  if (u.startsWith('y')) return addMonths(d, 12 * n);
+  return d;
 }
 
 function escapeRe(s: string): string {

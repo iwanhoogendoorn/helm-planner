@@ -47,6 +47,7 @@ export default class HelmPlugin extends Plugin {
       notify: (m) => { new Notice(m); },
       dailyTemplate: () => this.readDailyTemplate(),
       periodicTemplate: (kind) => this.readTemplate(this.periodic[kind].template),
+      processTemplate: (path) => this.runTemplater(path),
     });
     this.index.onChange(() => this.refreshViews());
 
@@ -111,6 +112,22 @@ export default class HelmPlugin extends Plugin {
   }
 
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string } { return this.periodic[kind]; }
+
+  /**
+   * Hand a freshly created note (holding the raw template) to Templater, so the
+   * user's own template — quotes, moment() links, scripts — comes out exactly
+   * as it would from Templater itself. Undocumented API; guarded, best effort.
+   */
+  private async runTemplater(path: string): Promise<boolean> {
+    const plugins = (this.app as unknown as { plugins?: { plugins?: Record<string, unknown> } }).plugins?.plugins;
+    const tp = plugins?.['templater-obsidian'] as { templater?: { overwrite_file_commands?: (file: TFile) => Promise<void> } } | undefined;
+    const fn = tp?.templater?.overwrite_file_commands;
+    if (typeof fn !== 'function') return false;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return false;
+    await fn.call(tp!.templater, file);
+    return true;
+  }
 
   private async readTemplate(p: string): Promise<string | undefined> {
     if (!p) return undefined;

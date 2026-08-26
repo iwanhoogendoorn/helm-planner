@@ -9,6 +9,31 @@ export function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<
   return el;
 }
 
+/**
+ * Charts are drawn for a concrete pixel width so text is never stretched.
+ * The wrapper re-draws when its width changes (ResizeObserver), and falls
+ * back to a fixed width where that API is missing (tests).
+ */
+export function responsive(draw: (width: number) => SVGSVGElement, minHeight = 0): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'helm-chart-wrap';
+  if (minHeight) wrap.style.minHeight = `${minHeight}px`;
+  let last = 0;
+  const paint = (): void => {
+    const w = Math.max(200, Math.floor(wrap.clientWidth || 600));
+    if (w === last) return;
+    last = w;
+    wrap.replaceChildren(draw(w));
+  };
+  paint();
+  if (typeof ResizeObserver !== 'undefined') {
+    let raf = 0;
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); });
+    ro.observe(wrap);
+  }
+  return wrap;
+}
+
 export interface Bar { key: string; label: string; value: number; color?: string; title?: string }
 
 export interface BarOptions {
@@ -22,44 +47,49 @@ export interface BarOptions {
   horizontal?: boolean;
 }
 
-export function barChart(bars: Bar[], opts: BarOptions = {}): SVGSVGElement {
+export function barChart(bars: Bar[], opts: BarOptions = {}): HTMLElement {
+  if (opts.horizontal) return responsive((w) => hBarChart(bars, opts, w));
+  return responsive((w) => vBarChart(bars, opts, w), opts.height ?? 140);
+}
+
+function vBarChart(bars: Bar[], opts: BarOptions, W: number): SVGSVGElement {
   const H = opts.height ?? 140;
-  if (opts.horizontal) return hBarChart(bars, opts);
-  const W = Math.max(240, bars.length * 14);
-  const padB = 22;
+  const padB = 20;
   const padT = opts.valueLabels ? 16 : 8;
   const max = Math.max(1, ...bars.map((b) => b.value));
-  const el = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'helm-chart helm-chart-bars', preserveAspectRatio: 'none' });
-  const bw = W / bars.length;
-  const every = opts.labelEvery ?? Math.max(1, Math.ceil(bars.length / 12));
+  const el = svg('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'helm-chart helm-chart-bars' });
+  const n = Math.max(1, bars.length);
+  const slot = W / n;
+  const bw = Math.min(36, slot * 0.7);
+  const every = opts.labelEvery ?? Math.max(1, Math.ceil((n * 34) / W));
+  el.appendChild(svg('line', { x1: 0, x2: W, y1: H - padB + 0.5, y2: H - padB + 0.5, class: 'helm-chart-grid' }));
   bars.forEach((b, i) => {
     const h = ((H - padB - padT) * b.value) / max;
-    const x = i * bw + bw * 0.15;
+    const cx = i * slot + slot / 2;
     const g = svg('g', { class: `helm-bar-group${opts.selected === b.key ? ' is-selected' : ''}${opts.onClick ? ' is-clickable' : ''}` });
-    g.appendChild(svg('rect', { x, y: H - padB - h, width: bw * 0.7, height: Math.max(h, b.value > 0 ? 2 : 0), rx: 2, class: 'helm-bar', style: b.color ? `fill:${b.color}` : opts.color ? `fill:${opts.color}` : '' }));
-    g.appendChild(svg('rect', { x: i * bw, y: 0, width: bw, height: H, class: 'helm-bar-hit' }));
+    g.appendChild(svg('rect', { x: i * slot, y: 0, width: slot, height: H, class: 'helm-bar-hit' }));
+    g.appendChild(svg('rect', { x: cx - bw / 2, y: H - padB - h, width: bw, height: Math.max(h, b.value > 0 ? 2 : 0), rx: 3, class: 'helm-bar', style: b.color ? `fill:${b.color}` : opts.color ? `fill:${opts.color}` : '' }));
     g.appendChild(svg('title', {}, b.title ?? `${b.label}: ${b.value}`));
-    if (opts.valueLabels && b.value > 0) g.appendChild(svg('text', { x: x + bw * 0.35, y: H - padB - h - 4, class: 'helm-chart-value', 'text-anchor': 'middle' }, String(b.value)));
-    if (i % every === 0) g.appendChild(svg('text', { x: x + bw * 0.35, y: H - 6, class: 'helm-chart-label', 'text-anchor': 'middle' }, b.label));
+    if (opts.valueLabels && b.value > 0 && slot >= 18) g.appendChild(svg('text', { x: cx, y: H - padB - h - 4, class: 'helm-chart-value', 'text-anchor': 'middle' }, String(b.value)));
+    if (i % every === 0) g.appendChild(svg('text', { x: cx, y: H - 6, class: 'helm-chart-label', 'text-anchor': 'middle' }, b.label));
     if (opts.onClick) g.addEventListener('click', () => opts.onClick!(b.key));
     el.appendChild(g);
   });
   return el;
 }
 
-function hBarChart(bars: Bar[], opts: BarOptions): SVGSVGElement {
+function hBarChart(bars: Bar[], opts: BarOptions, W: number): SVGSVGElement {
   const rowH = 22;
-  const W = 320;
-  const labelW = 110;
+  const labelW = Math.min(160, Math.max(90, W * 0.3));
   const H = Math.max(rowH, bars.length * rowH);
   const max = Math.max(1, ...bars.map((b) => b.value));
-  const el = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'helm-chart helm-chart-hbars', style: `height:${H}px` });
+  const el = svg('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'helm-chart helm-chart-hbars' });
   bars.forEach((b, i) => {
     const w = ((W - labelW - 40) * b.value) / max;
     const y = i * rowH;
     const g = svg('g', { class: `helm-bar-group${opts.selected === b.key ? ' is-selected' : ''}${opts.onClick ? ' is-clickable' : ''}` });
     g.appendChild(svg('rect', { x: 0, y, width: W, height: rowH, class: 'helm-bar-hit' }));
-    g.appendChild(svg('text', { x: labelW - 6, y: y + rowH * 0.68, class: 'helm-chart-label', 'text-anchor': 'end' }, truncate(b.label, 18)));
+    g.appendChild(svg('text', { x: labelW - 6, y: y + rowH * 0.68, class: 'helm-chart-label', 'text-anchor': 'end' }, truncate(b.label, Math.floor(labelW / 6.5))));
     g.appendChild(svg('rect', { x: labelW, y: y + 4, width: Math.max(w, b.value > 0 ? 2 : 0), height: rowH - 8, rx: 3, class: 'helm-bar', style: b.color ? `fill:${b.color}` : opts.color ? `fill:${opts.color}` : '' }));
     g.appendChild(svg('text', { x: labelW + w + 6, y: y + rowH * 0.68, class: 'helm-chart-value' }, String(b.value)));
     g.appendChild(svg('title', {}, b.title ?? `${b.label}: ${b.value}`));
@@ -71,15 +101,19 @@ function hBarChart(bars: Bar[], opts: BarOptions): SVGSVGElement {
 
 export interface Line { label: string; points: number[]; color?: string; area?: boolean }
 
-export function lineChart(lines: Line[], labels: string[], opts: { height?: number } = {}): SVGSVGElement {
+export function lineChart(lines: Line[], labels: string[], opts: { height?: number } = {}): HTMLElement {
+  return responsive((w) => lineChartAt(lines, labels, opts, w), opts.height ?? 140);
+}
+
+function lineChartAt(lines: Line[], labels: string[], opts: { height?: number }, W: number): SVGSVGElement {
   const H = opts.height ?? 140;
-  const W = 400;
   const padB = 20;
   const padT = 8;
+  const padX = 10;
   const n = Math.max(2, labels.length);
   const max = Math.max(1, ...lines.flatMap((l) => l.points));
-  const el = svg('svg', { viewBox: `0 0 ${W} ${H}`, class: 'helm-chart helm-chart-lines', preserveAspectRatio: 'none' });
-  const x = (i: number): number => (i / (n - 1)) * W;
+  const el = svg('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'helm-chart helm-chart-lines' });
+  const x = (i: number): number => padX + (i / (n - 1)) * (W - 2 * padX);
   const y = (v: number): number => H - padB - ((H - padB - padT) * v) / max;
   for (let i = 1; i <= 3; i++) el.appendChild(svg('line', { x1: 0, x2: W, y1: y((max * i) / 4), y2: y((max * i) / 4), class: 'helm-chart-grid' }));
   for (const l of lines) {
@@ -87,9 +121,9 @@ export function lineChart(lines: Line[], labels: string[], opts: { height?: numb
     if (l.area) el.appendChild(svg('path', { d: `${d} L${x(l.points.length - 1).toFixed(1)},${y(0)} L0,${y(0)} Z`, class: 'helm-chart-area', style: l.color ? `fill:${l.color}` : '' }));
     el.appendChild(svg('path', { d, class: 'helm-chart-line', style: l.color ? `stroke:${l.color}` : '' }));
   }
-  const every = Math.max(1, Math.ceil(labels.length / 8));
+  const every = Math.max(1, Math.ceil((labels.length * 40) / W));
   labels.forEach((lab, i) => { if (i % every === 0 || i === labels.length - 1) el.appendChild(svg('text', { x: Math.min(W - 20, Math.max(16, x(i))), y: H - 5, class: 'helm-chart-label', 'text-anchor': 'middle' }, lab)); });
-  el.appendChild(svg('text', { x: W - 4, y: padT + 9, class: 'helm-chart-value', 'text-anchor': 'end' }, String(max)));
+  el.appendChild(svg('text', { x: 4, y: padT + 9, class: 'helm-chart-value' }, String(max)));
   return el;
 }
 

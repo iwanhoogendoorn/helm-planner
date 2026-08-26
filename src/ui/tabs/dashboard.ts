@@ -119,8 +119,9 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
       button('Show planned', { cls: 'helm-btn-quiet', onClick: () => drill('Planned onto days', s.adherence.tasks) }),
     ),
   )));
-  grid.appendChild(card('Done by part of the day', 'parts', 'where your finished work actually happens', h('div', { cls: 'helm-dash-row' },
-    donut(partSlices, { centre: String(partSlices.reduce((a, b) => a + b.value, 0)), onClick: (k) => drill(`Done in the ${PART_LABEL[k as keyof typeof PART_LABEL].toLowerCase()}`, s.byPart[k as keyof typeof s.byPart].tasks) }),
+  const partTotal = partSlices.reduce((a, b) => a + b.value, 0);
+  grid.appendChild(card('Done by part of the day', 'parts', 'where your finished work actually happens', partTotal === 0 ? h('div', { cls: 'helm-hint', text: 'Nothing planned onto a day was completed in this range yet — plan work through Helm and this fills up.' }) : h('div', { cls: 'helm-dash-row' },
+    donut(partSlices, { centre: String(partTotal), onClick: (k) => drill(`Done in the ${PART_LABEL[k as keyof typeof PART_LABEL].toLowerCase()}`, s.byPart[k as keyof typeof s.byPart].tasks) }),
     h('div', {}, legend(partSlices, (k) => drill(`Done in the ${PART_LABEL[k as keyof typeof PART_LABEL].toLowerCase()}`, s.byPart[k as keyof typeof s.byPart].tasks)),
       h('div', { cls: 'helm-hint', text: (['morning', 'afternoon', 'evening', 'anytime'] as const).map((p) => `${PART_LABEL[p]}: ${s.byPart[p].planned ? Math.round((100 * s.byPart[p].done) / s.byPart[p].planned) : 0}% kept`).join(' · ') })),
   )));
@@ -129,7 +130,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   // Age.
   grid.appendChild(card('Age of open tasks', 'age', 'old open tasks are decisions you have not made', barChart(s.ageBuckets.map((b) => ({ key: b.key, label: b.label, value: b.value, color: b.key === '> 1 year' || b.key === '3–12 months' ? 'var(--color-red)' : undefined })), { horizontal: true, onClick: (k) => { const b = s.ageBuckets.find((x) => x.key === k); if (b) drill(`Open for ${b.label}`, b.tasks); } })));
   // Areas & tags.
-  grid.appendChild(card('Done by area', 'area', 'where the effort went', h('div', { cls: 'helm-dash-row' }, donut(s.byArea.map((a) => ({ key: a.key, label: a.label, value: a.value })), { centre: String(s.totals.done), onClick: (k) => { const a = s.byArea.find((x) => x.key === k); if (a) drill(`Done in ${a.label}`, a.tasks); } }), legend(s.byArea.map((a) => ({ key: a.key, label: a.label, value: a.value })), (k) => { const a = s.byArea.find((x) => x.key === k); if (a) drill(`Done in ${a.label}`, a.tasks); }))));
+  grid.appendChild(card('Done by area', 'area', 'where the effort went', s.byArea.length === 0 ? h('div', { cls: 'helm-hint', text: 'Nothing done in this range.' }) : h('div', { cls: 'helm-dash-row' }, donut(s.byArea.map((a) => ({ key: a.key, label: a.label, value: a.value })), { centre: String(s.totals.done), onClick: (k) => { const a = s.byArea.find((x) => x.key === k); if (a) drill(`Done in ${a.label}`, a.tasks); } }), legend(s.byArea.map((a) => ({ key: a.key, label: a.label, value: a.value })), (k) => { const a = s.byArea.find((x) => x.key === k); if (a) drill(`Done in ${a.label}`, a.tasks); }))));
   grid.appendChild(card('Done by tag', 'tag', 'top tags on finished work', s.byTag.length ? barChart(s.byTag.map((t) => ({ key: t.key, label: t.label, value: t.value })), { horizontal: true, onClick: (k) => { const t = s.byTag.find((x) => x.key === k); if (t) drill(`Done with ${t.label}`, t.tasks); } }) : h('div', { cls: 'helm-hint', text: 'No tags on finished tasks in this range.' })));
   root.appendChild(grid);
 

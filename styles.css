@@ -211,7 +211,8 @@
 
 /* Review */
 .helm-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; padding: var(--size-4-3) 0 var(--size-4-2); }
-.helm-stat { background: var(--background-secondary); border-radius: var(--radius-m); padding: 10px; text-align: center; border: none; box-shadow: none; height: auto; }
+.helm-stat, button.helm-stat { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--background-secondary); border-radius: var(--radius-m); padding: 10px 8px; text-align: center; border: none; box-shadow: none; height: auto; min-width: 0; font-family: var(--font-interface); }
+.helm-stat-label { white-space: normal; line-height: 1.2; }
 .helm-stat.is-clickable { cursor: pointer; }
 .helm-stat.is-clickable:hover { background: var(--background-modifier-hover); }
 .helm-stat-value { font-size: 1.6em; font-weight: 700; line-height: 1.1; }
@@ -323,27 +324,29 @@
 @container (max-width: 760px) { .helm-dash-grid { grid-template-columns: 1fr; } }
 .helm-dash-card { padding: 6px 2px; }
 .helm-dash-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.helm-dash-row > div { min-width: 0; flex: 1; }
+.helm-dash-row > svg { flex: none; }
 .helm-dash-facts { display: flex; flex-direction: column; gap: 4px; font-size: var(--font-ui-small); }
-.helm-chart { width: 100%; height: 140px; display: block; overflow: visible; }
-.helm-chart-hbars { height: auto; }
+.helm-chart-wrap { width: 100%; }
+.helm-chart { display: block; overflow: visible; max-width: 100%; }
 .helm-chart-donut { flex: none; }
 .helm-bar { fill: var(--interactive-accent); opacity: 0.85; }
 .helm-bar-group.is-clickable { cursor: pointer; }
 .helm-bar-group:hover .helm-bar { opacity: 1; }
 .helm-bar-group.is-selected .helm-bar { opacity: 1; stroke: var(--text-normal); }
 .helm-bar-hit { fill: transparent; }
-.helm-chart-label { font-size: 9px; fill: var(--text-muted); font-family: var(--font-interface); }
-.helm-chart-value { font-size: 9px; fill: var(--text-muted); font-family: var(--font-interface); }
+.helm-chart-label { font-size: 10px; fill: var(--text-muted); font-family: var(--font-interface); }
+.helm-chart-value { font-size: 10px; fill: var(--text-muted); font-family: var(--font-interface); font-variant-numeric: tabular-nums; }
 .helm-chart-centre { font-size: 18px; font-weight: 700; fill: var(--text-normal); font-family: var(--font-interface); }
 .helm-chart-grid { stroke: var(--background-modifier-border); stroke-width: 1; }
 .helm-chart-line { fill: none; stroke: var(--interactive-accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .helm-chart-area { fill: var(--interactive-accent); opacity: 0.12; }
 .helm-donut-slice.is-clickable { cursor: pointer; }
 .helm-donut-slice:hover { opacity: 0.85; }
-.helm-legend { display: flex; flex-direction: column; gap: 3px; font-size: var(--font-ui-small); }
-.helm-legend-item { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; box-shadow: none; padding: 1px 4px; color: var(--text-normal); cursor: default; height: auto; text-align: left; }
-button.helm-legend-item { cursor: pointer; }
-button.helm-legend-item:hover { background: var(--background-modifier-hover); }
+.helm-legend { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: var(--font-ui-small); min-width: 0; }
+.helm-legend .helm-legend-item, .helm-legend button.helm-legend-item { display: inline-flex; align-items: center; gap: 6px; background-color: transparent; border: none; box-shadow: none; padding: 1px 6px; border-radius: var(--radius-s); color: var(--text-normal); cursor: default; height: auto; width: auto; text-align: left; font-size: var(--font-ui-small); }
+.helm-legend button.helm-legend-item { cursor: pointer; }
+.helm-legend button.helm-legend-item:hover { background-color: var(--background-modifier-hover); }
 .helm-legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .helm-gauge { flex: none; }
 .helm-gauge-track { fill: none; stroke: var(--background-modifier-border); stroke-width: 8; }
