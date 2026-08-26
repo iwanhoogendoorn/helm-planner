@@ -16,6 +16,7 @@ import { taskRow } from '../../src/ui/taskRow';
 import { parsePhases } from '../../src/ui/modals/projectForm';
 import { renderHorizons } from '../../src/ui/tabs/horizons';
 import { renderDashboard, defaultDashboardState } from '../../src/ui/tabs/dashboard';
+import { renderCalendar, type CalendarState } from '../../src/ui/tabs/calendar';
 
 async function ctxFor() {
   const s = await setup();
@@ -326,5 +327,64 @@ describe('Dashboard tab', () => {
     await flush();
     expect(await vault.read(dailyPath(TODAY))).toMatch(/### Evening\n- \[ \] Draft chapter list/);
     expect(await vault.read(dailyPath(TODAY))).not.toContain('### Morning');
+  });
+});
+
+describe('Calendar tab', () => {
+  const YEARLY = '---\ntitle: 2026\n---\n# 2026\n\n## Goals\n\n- [ ] Publish the book 🆔 gol-book26\n';
+  const MONTHLY = '---\ntitle: 2026-08\n---\n## Goals\n\n- [ ] Finish chapter 5\n';
+  async function cal() {
+    const base = await setup();
+    const book = base.vault.files.get('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')!.replace('---\n\n# ', 'period: 2026-08\ngoal: gol-book26\n---\n\n# ');
+    const s = await setup({ 'Yearly Notes/2026.md': YEARLY, 'Monthly Notes/2026-08.md': MONTHLY, '02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md': book });
+    const c = await ctxFor();
+    const ctx: UiContext = { ...c.ctx, index: s.index, mutations: s.m };
+    return { ...s, ctx, nav: c.nav };
+  }
+  it('month: grid with week numbers, counts, goals and projects; day click drills to Today; drop plans', async () => {
+    const { ctx, nav, vault } = await cal();
+    const state: CalendarState = { scope: 'month', anchor: TODAY, collapsed: new Map() };
+    const root = render((r) => renderCalendar(ctx, r, state));
+    expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('August 2026');
+    expect(root.querySelectorAll('.helm-month-row')).toHaveLength(6);
+    expect(root.querySelectorAll('.helm-month-cell:not(.is-outside)')).toHaveLength(31);
+    const yesterday = root.querySelector('.helm-month-cell[data-date="2026-08-25"]')!;
+    expect(yesterday.querySelector('.helm-chip.done-count')!.textContent).toBe('✓1');
+    expect(texts(yesterday as HTMLElement, '.helm-month-item')).toEqual(['08:00Start with OIB', 'Chapter 1', 'Fix router config']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Goals for August 2026', 'Projects in August 2026']);
+    expect(texts(root, '.helm-goal-text')).toEqual(['Finish chapter 5']);
+    expect(texts(root, '.helm-project-title')).toEqual(['Oracle Book Writing']);
+    click(root.querySelector('.helm-month-cell[data-date="2026-08-28"]'));
+    expect(nav.at(-1)).toEqual({ tab: 'today', opts: { date: '2026-08-28' } });
+    click(root.querySelectorAll('button.helm-month-wk')[1]);
+    expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: '2026-08-03', scope: 'week' } });
+    const dt = { types: ['text/helm-task'], getData: () => 'tsk-0001' };
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: dt });
+    root.querySelector('.helm-month-cell[data-date="2026-08-28"]')!.dispatchEvent(ev);
+    await flush();
+    expect(await vault.read(dailyPath('2026-08-28'))).toContain('tsk-0001');
+  });
+  it('quarter: three mini months drill to month; year: four quarters drill to quarter', async () => {
+    const { ctx, nav } = await cal();
+    const q = render((r) => renderCalendar(ctx, r, { scope: 'quarter', anchor: TODAY, collapsed: new Map() }));
+    expect(q.querySelector('.helm-day-title-main')!.textContent).toBe('Q3 2026');
+    expect(q.querySelectorAll('.helm-qmonth')).toHaveLength(3);
+    expect(q.querySelector('.helm-qmonth.is-current .helm-qmonth-title')!.textContent).toBe('August');
+    click(q.querySelectorAll('.helm-qmonth-head')[0]);
+    expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: '2026-07-01', scope: 'month' } });
+    const y = render((r) => renderCalendar(ctx, r, { scope: 'year', anchor: TODAY, collapsed: new Map() }));
+    expect(y.querySelector('.helm-day-title-main')!.textContent).toBe('2026');
+    expect(y.querySelectorAll('.helm-year-quarter')).toHaveLength(4);
+    expect(y.querySelectorAll('.helm-year-month')).toHaveLength(12);
+    expect(texts(y, '.helm-goal-text')).toEqual(['Publish the book']);
+    click(y.querySelectorAll('.helm-year-quarter-head')[3]);
+    expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: '2026-10-01', scope: 'quarter' } });
+    expect(texts(y, '.helm-crumb')).toEqual(['2026', 'Q3', 'Aug', 'W35']);
+  });
+  it('week scope still renders the week grid', async () => {
+    const { ctx } = await cal();
+    const w = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: TODAY, collapsed: new Map() }));
+    expect(w.querySelectorAll('.helm-week-day')).toHaveLength(7);
   });
 });

@@ -263,6 +263,27 @@ export function compareProjects(a: ProjectHealth, b: ProjectHealth): number {
   return a.project.title.localeCompare(b.project.title);
 }
 
+export interface DayBucket { date: IsoDate; open: Task[]; done: Task[]; minutes: number; dueUnplanned: Task[] }
+
+/** Tasks on each day of [from, to]: planned lines (daily + mirrors + ⏳), done-on-that-day, and due-but-unplanned. */
+export function tasksByDay(snap: Snapshot, from: IsoDate, to: IsoDate, settings: HelmSettings): Map<IsoDate, DayBucket> {
+  const days = new Map<IsoDate, DayBucket>();
+  for (let d = from; d <= to; d = addDays(d, 1)) days.set(d, { date: d, open: [], done: [], minutes: 0, dueUnplanned: [] });
+  for (const t of snap.tasks.values()) {
+    if (t.origin === 'goal' || t.depth > 0) continue;
+    let d: IsoDate | undefined;
+    if (t.origin === 'daily-mirror') { d = t.noteDate; if (t.mirrorOf && snap.tasks.has(t.mirrorOf)) continue; }
+    else if (t.origin === 'daily') { if (t.section === 'outside' && (!t.time || !settings.showTimeBlocks)) continue; d = t.noteDate; }
+    else d = t.scheduled;
+    const doneOn = t.status === 'done' ? (t.done ?? t.noteDate) : undefined;
+    if (doneOn && days.has(doneOn)) days.get(doneOn)!.done.push(t);
+    if (d !== undefined && days.has(d) && isOpen(t)) { const b = days.get(d)!; b.open.push(t); b.minutes += effortOf(t, settings); }
+    if (isOpen(t) && t.origin !== 'daily-mirror' && t.due !== undefined && days.has(t.due) && plannedDate(t) === undefined) days.get(t.due)!.dueUnplanned.push(t);
+  }
+  for (const b of days.values()) { b.open.sort(compareTasks); b.done.sort(compareTasks); b.dueUnplanned.sort(compareTasks); }
+  return days;
+}
+
 export interface WeekSummary {
   start: IsoDate;
   days: { date: IsoDate; open: Task[]; done: Task[]; minutes: number }[];
@@ -390,20 +411,24 @@ export function goalProgress(snap: Snapshot, g: Goal, today: IsoDate, settings: 
   return { goal: g, projects, progress, taskTotal, taskDone };
 }
 
-export function horizons(snap: Snapshot, year: number, today: IsoDate, settings: HelmSettings): Horizons {
-  const all = [...snap.projects.values()].map((p) => ({ p, per: p.period ? parsePeriod(p.period) : undefined })).filter((x): x is { p: Project; per: Period } => x.per !== undefined);
-  const health = new Map<string, ProjectHealth>();
+/** Goals and bound projects of one period. */
+export function horizonPeriod(snap: Snapshot, period: Period, today: IsoDate, settings: HelmSettings, cache?: Map<string, ProjectHealth>): HorizonPeriod {
+  const health = cache ?? new Map<string, ProjectHealth>();
   const hOf = (p: Project): ProjectHealth => { let h = health.get(p.id); if (!h) { h = projectHealth(snap, p, today, settings); health.set(p.id, h); } return h; };
-  const build = (period: Period): HorizonPeriod => {
-    const exact = all.filter((x) => x.per.key === period.key).map((x) => hOf(x.p)).sort(compareProjects);
-    const within = all.filter((x) => periodWithin(x.per, period)).map((x) => hOf(x.p)).sort(compareProjects);
-    const goals = [...snap.goals.values()].filter((g) => g.periodKey === period.key).sort((a, b) => a.line - b.line).map((g) => goalProgress(snap, g, today, settings));
-    return {
-      period, goals, projects: exact, projectsWithin: within,
-      openTasks: within.reduce((s, h) => s + h.open, 0), doneTasks: within.reduce((s, h) => s + h.done, 0),
-      isCurrent: periodContains(period, today), isPast: period.end < today,
-    };
+  const all = [...snap.projects.values()].map((p) => ({ p, per: p.period ? parsePeriod(p.period) : undefined })).filter((x): x is { p: Project; per: Period } => x.per !== undefined);
+  const exact = all.filter((x) => x.per.key === period.key).map((x) => hOf(x.p)).sort(compareProjects);
+  const within = all.filter((x) => periodWithin(x.per, period)).map((x) => hOf(x.p)).sort(compareProjects);
+  const goals = [...snap.goals.values()].filter((g) => g.periodKey === period.key).sort((a, b) => a.line - b.line).map((g) => goalProgress(snap, g, today, settings));
+  return {
+    period, goals, projects: exact, projectsWithin: within,
+    openTasks: within.reduce((s, h) => s + h.open, 0), doneTasks: within.reduce((s, h) => s + h.done, 0),
+    isCurrent: periodContains(period, today), isPast: period.end < today,
   };
+}
+
+export function horizons(snap: Snapshot, year: number, today: IsoDate, settings: HelmSettings): Horizons {
+  const cache = new Map<string, ProjectHealth>();
+  const build = (period: Period): HorizonPeriod => horizonPeriod(snap, period, today, settings, cache);
   const py = periodsOfYear(year);
   return { year: build(py.year), quarters: py.quarters.map(build), months: py.months.map(build) };
 }

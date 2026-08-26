@@ -45,6 +45,17 @@ breaks — you keep a plain-text task system that other plugins can read.
 
 Screenshots are of the seeded test vault (`npm run seed`).
 
+## Calendar — week, month, quarter, year
+
+One tab, four scopes, each a click away from the next: **Year** (done-per-
+month chart, four quarter cards with twelve heat-mapped mini months) →
+**Quarter** (three months side by side with their goals and projects) →
+**Month** (a real grid: planned items per day, ✓ done counts, `!` due-but-
+unplanned, week numbers that open the week, drop a task on a day to plan it)
+→ **Week** → **Day** (the Today tab). Breadcrumbs `2026 › Q3 › Aug › W35`
+jump between levels. Every scope shows the goals and the projects bound to
+that period underneath, with inline add/bind.
+
 ## Horizons — goals by year, quarter, month, week
 
 Goals live where you already plan the long game: in your **yearly, quarterly,
@@ -175,7 +186,7 @@ project (and also the day if dated). With neither, into the inbox note.
 
 | Command | |
 |---|---|
-| Open Helm / Today / Week / Projects / Inbox / Review / Horizons / Dashboard | the seven tabs |
+| Open Helm / Today / Week / Month / Quarter / Year / Projects / Inbox / Review / Horizons / Dashboard | the tabs and calendar scopes |
 | Capture a task · Capture a task for today | |
 | Plan my day · Wrap up the day | the two rituals |
 | Open today’s daily note (create if missing) | |

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-08-26
+
+- **Calendar tab** with Week · Month · Quarter · Year scopes, breadcrumbs,
+  drill-down (year → quarter → month → week → day), month grid with
+  drag-to-plan and due-but-unplanned markers, quarter/year heat maps of
+  completions, and each period's goals and projects underneath.
+- Commands: Open Month / Quarter / Year.
+
 ## 0.3.0 — 2026-08-26
 
 - **Clean daily notes**: no more `%% helm %%` markers. The plan is the

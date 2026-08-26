@@ -20,7 +20,7 @@ export interface UiContext {
   /** Ask the current view to re-render from the index. */
   refresh: () => void;
   /** Navigate the view: a tab, and optionally a date (today/week) or project (projects). */
-  navigate: (tab: TabId, opts?: { date?: IsoDate; projectId?: string; periodKey?: string }) => void;
+  navigate: (tab: TabId, opts?: { date?: IsoDate; projectId?: string; periodKey?: string; scope?: 'week' | 'month' | 'quarter' | 'year' }) => void;
   /** Run a mutation with error handling and a refresh afterwards. */
   run: (label: string, fn: () => Promise<unknown>) => Promise<void>;
 }

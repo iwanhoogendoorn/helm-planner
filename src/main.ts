@@ -246,7 +246,10 @@ export default class HelmPlugin extends Plugin {
     const ctx = (): UiContext => this.uiContext(this.activeView());
     this.addCommand({ id: 'open', name: 'Open Helm', callback: () => void this.openView() });
     this.addCommand({ id: 'open-today', name: 'Open Today', callback: () => void this.openView().then((v) => v.navigate('today', { date: this.today() })) });
-    this.addCommand({ id: 'open-week', name: 'Open Week', callback: () => void this.openView().then((v) => v.navigate('week', { date: this.today() })) });
+    this.addCommand({ id: 'open-week', name: 'Open Week', callback: () => void this.openView().then((v) => v.navigate('week', { date: this.today(), scope: 'week' })) });
+    this.addCommand({ id: 'open-month', name: 'Open Month', callback: () => void this.openView().then((v) => v.navigate('week', { date: this.today(), scope: 'month' })) });
+    this.addCommand({ id: 'open-quarter', name: 'Open Quarter', callback: () => void this.openView().then((v) => v.navigate('week', { date: this.today(), scope: 'quarter' })) });
+    this.addCommand({ id: 'open-year', name: 'Open Year', callback: () => void this.openView().then((v) => v.navigate('week', { date: this.today(), scope: 'year' })) });
     this.addCommand({ id: 'open-projects', name: 'Open Projects', callback: () => void this.openView().then((v) => v.navigate('projects')) });
     this.addCommand({ id: 'open-inbox', name: 'Open Inbox', callback: () => void this.openView().then((v) => v.navigate('inbox')) });
     this.addCommand({ id: 'open-review', name: 'Open Review', callback: () => void this.openView().then((v) => v.navigate('review')) });
