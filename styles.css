@@ -248,6 +248,8 @@
 .helm-capture-text { font-weight: 600; }
 .helm-capture-dest { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--font-ui-small); }
 .helm-capture-where { color: var(--text-muted); }
+.helm-capture-time { display: inline-flex; align-items: center; gap: 4px; }
+.helm-capture-time input[type="time"] { width: auto; }
 .modal:has(.helm-plan) { width: min(1100px, 95vw); }
 .modal:has(.helm-wrapup) { width: min(900px, 95vw); }
 .modal:has(.helm-task-editor), .modal:has(.helm-project-form) { width: min(720px, 95vw); }

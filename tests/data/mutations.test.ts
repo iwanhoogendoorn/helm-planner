@@ -443,3 +443,15 @@ describe('recurring tasks spawned in old notes', () => {
     expect(await vault.read(dailyPath('2026-08-25'))).toContain('- [ ] Old thing 📅 2026-08-25');
   });
 });
+
+describe('timed lines are kept in time order', () => {
+  const NOTE = `# Day planner\n\n### A. Morning\n\n- [ ] 07:00 - 08:00: \n- [ ] 09:00 - 10:00: \n\n### B. Afternoon\n\n- [ ] 13:00 - 14:00: Clean up email\n- [ ] 16:00 - 17:00: \n`;
+  it('a captured task with a time slots in chronologically and by part', async () => {
+    const { m, vault } = await setup({ [dailyPath(TODAY)]: NOTE });
+    await m.addTask({ text: 'Standup', date: TODAY, fields: { time: { start: '08:00', end: '08:30' } } });
+    await m.addTask({ text: 'Dentist', date: TODAY, fields: { time: { start: '14:30' } } });
+    await m.addTask({ text: 'Late one', date: TODAY, fields: { time: { start: '17:30' } } });
+    await m.addTask({ text: 'No time', date: TODAY, part: 'afternoon' });
+    expect(await vault.read(dailyPath(TODAY))).toBe(`# Day planner\n\n### A. Morning\n\n- [ ] 07:00 - 08:00: \n- [ ] 08:00 - 08:30: Standup\n- [ ] 09:00 - 10:00: \n\n### B. Afternoon\n\n- [ ] 13:00 - 14:00: Clean up email\n- [ ] 14:30: Dentist\n- [ ] 16:00 - 17:00: \n- [ ] 17:30: Late one\n- [ ] No time\n`);
+  });
+});

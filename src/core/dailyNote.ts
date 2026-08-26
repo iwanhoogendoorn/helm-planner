@@ -326,8 +326,10 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
     const r = findRegion(lines, settings).region;
     const info = r?.sections[sec];
     if (info && info.line >= 0) {
-      const at = info.taskLines.length > 0 ? subtreeEnd(lines, info.taskLines[info.taskLines.length - 1]!) : firstContentLine(lines, info.start, info.end);
-      lines.splice(at, 0, ...inserts[sec]);
+      for (const text of inserts[sec]) {
+        const cur = findRegion(lines, settings).region!.sections[sec];
+        lines.splice(insertionIndexInSection(lines, cur, text), 0, text);
+      }
     } else {
       const at = newSectionPoint(lines, sec, r ?? region, settings);
       const level = at.level;
@@ -356,6 +358,24 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
     }
   }
   return { lines, eol: doc.eol };
+}
+
+/**
+ * Where a new line goes inside a section: a timed line slots in before the
+ * first top-level line with a later start time (so a 07:30 task lands between
+ * the 07:00 and 08:00 slots); everything else goes after the last task line.
+ */
+function insertionIndexInSection(lines: string[], info: SectionInfo, text: string): number {
+  if (info.taskLines.length === 0) return firstContentLine(lines, info.start, info.end);
+  const t = parseTaskLine(text)?.time?.start;
+  if (t) {
+    for (const idx of info.taskLines) {
+      if (/^[ \t]/.test(lines[idx]!)) continue; // subtasks follow their parent
+      const other = parseTaskLine(lines[idx]!)?.time?.start;
+      if (other && other > t) return idx;
+    }
+  }
+  return subtreeEnd(lines, info.taskLines[info.taskLines.length - 1]!);
 }
 
 /** First line after a heading where content can go: after the heading's blank line if it has one. */
