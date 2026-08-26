@@ -307,7 +307,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   skillPath: '~/.claude/skills/excalidraw-diagram',
   skillBackground: 'white',
   skillRender: true,
-  skillTimeoutSec: 600,
+  skillTimeoutSec: 900,
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
   archiveFolder: '02 PROJECTS/ZZZ. Project Archive',

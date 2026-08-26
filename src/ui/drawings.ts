@@ -46,7 +46,7 @@ export function newDrawing(ctx: UiContext, target: DrawingTarget): void {
 }
 
 export function aiDiagram(ctx: UiContext, target: DrawingTarget): void {
-  ctx.notify(`Asking the AI for an overview of ${target.title}…`);
+  ctx.notify(ctx.settings().aiEngine === 'skill' ? `Asking the excalidraw-diagram skill for ${target.title}… this takes several minutes; Helm will say when it is done.` : `Asking the AI for an overview of ${target.title}…`);
   void ctx.run('AI diagram', async () => { const p = await ctx.mutations.generateDiagram(target); ctx.notify(`Drew ${p.slice(p.lastIndexOf('/') + 1).replace(/\.excalidraw\.md$/, '')}.`); await ctx.openFile(p); });
 }
 

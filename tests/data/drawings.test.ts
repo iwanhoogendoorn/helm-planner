@@ -138,3 +138,16 @@ describe('excalidraw-diagram skill engine', () => {
     await expect(bad.generateDiagram({ kind: 'date', date: TODAY, title: TODAY })).rejects.toThrow(/did not produce an Excalidraw file/);
   });
 });
+
+describe('skill engine when the clock runs out', () => {
+  it('imports the file the skill already wrote, and only fails when there is none', async () => {
+    const { vault, index, settings } = await setup();
+    const s = { ...settings, aiEngine: 'skill' as const };
+    const notices: string[] = [];
+    const scene = JSON.stringify({ type: 'excalidraw', elements: [{ id: 'a', type: 'rectangle', x: 0, y: 0, width: 10, height: 10 }] });
+    const mk = (file?: string) => new Mutations({ vault, index, settings: () => s, today: () => TODAY, notify: (m) => notices.push(m), skill: { workDir: () => '/tmp/w', expandHome: (p) => p, run: async () => { throw new Error('The AI took longer than 900s'); }, readFile: async (p) => { if (file !== undefined && p === '/tmp/w/diagram.excalidraw') return file; throw new Error('ENOENT'); } } });
+    expect(await mk(scene).generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' })).toBe('Excalidraw/2026-W35 — diagram.excalidraw.md');
+    expect(notices[0]).toMatch(/longer than 900s — imported the diagram it had already written/);
+    await expect(mk().generateDiagram({ kind: 'period', key: '2026-W36', title: 'Week 36' })).rejects.toThrow(/longer than 900s/);
+  });
+});

@@ -907,9 +907,15 @@ export class Mutations {
     const skillDir = sk.expandHome(this.settings.skillPath.trim() || '~/.claude/skills/excalidraw-diagram');
     const work = sk.workDir();
     const outPath = `${work}/diagram.excalidraw`;
-    const reply = await sk.run(this.skillPrompt(target, outPath, skillDir), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 600), extraDirs: [skillDir] });
+    let reply = '';
+    let timedOut: Error | undefined;
+    try { reply = await sk.run(this.skillPrompt(target, outPath, skillDir), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 900), extraDirs: [skillDir] }); }
+    catch (e) { timedOut = e as Error; }
     let raw: string | undefined;
     try { raw = await sk.readFile(outPath); } catch { raw = undefined; }
+    // The skill writes the whole file before its render-and-fix loop; if the clock ran out during that loop, what is on disk is still a finished diagram.
+    if (timedOut && raw === undefined) throw timedOut;
+    if (timedOut) this.d.notify(`${timedOut.message} — imported the diagram it had already written.`);
     if (raw === undefined) {
       // The skill may have chosen its own file name inside the work dir, or answered with the path.
       const m = /(\/[^\s"']+\.excalidraw(?:\.json)?)/.exec(reply);

@@ -354,7 +354,7 @@ export class HelmSettingTab extends PluginSettingTab {
       this.text(ai.content, 'skillPath', { name: 'Skill folder', desc: 'Where the excalidraw-diagram skill is installed (SKILL.md and references/ inside).', placeholder: '~/.claude/skills/excalidraw-diagram', fallback: '~/.claude/skills/excalidraw-diagram' });
       this.dropdown(ai.content, 'skillBackground', 'Background', 'The skill asks black or white before drawing; this answers for you.', { white: 'White', dark: 'Black' });
       this.toggle(ai.content, 'skillRender', 'Render and validate', 'Let the skill render the diagram to PNG and fix what it sees (needs uv and Playwright set up in the skill’s references folder). Slower, better.');
-      this.slider(ai.content, 'skillTimeoutSec', 'Skill time limit', 'Seconds to wait for the skill run.', 120, 1800, 60, 's');
+      this.slider(ai.content, 'skillTimeoutSec', 'Skill time limit', 'A run takes 5–10 minutes, more with rendering. If the clock runs out after the file was written, Helm imports it anyway.', 120, 1800, 60, 's');
       this.note(ai.content, 'The run happens in a scratch folder outside the vault with file edits auto-accepted and only uv / cd / ls / cat allowed as commands. Helm imports the finished scene into the vault as a normal drawing with its helm-* frontmatter; the PNG stays in the scratch folder.');
     }
     this.text(ai.content, 'aiCommand', { name: 'Command', desc: 'The Claude Code CLI. A bare name is looked up in the usual places (~/.local/bin, Homebrew).', placeholder: 'claude', fallback: 'claude' });
