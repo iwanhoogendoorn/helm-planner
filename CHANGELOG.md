@@ -2,6 +2,14 @@
 
 ## 0.5.0 — 2026-08-26
 
+- Settings redesigned in the AWTY / Food Spot / WRL shell: a left nav
+  (Folders · Daily notes · Horizons · Planning · View · About) over grouped
+  panels with an icon, a subtitle and a status chip (found / not found /
+  follows Obsidian / custom). Folder and note fields are pickers, excluded
+  and extra paths are chips with a picker, times are time inputs, sliders
+  show their value, `?` reveals the long explanation. About has Re-index and
+  Reset to defaults.
+- One crumb bar on every tab, same spot and style, tab name first.
 - New project form is a builder: add phases as cards (name, target date,
   reorder, remove) and tasks per phase or loose, one per row. Task rows use
   the capture grammar (`due friday !high ~1h`, `every week`…) and preview

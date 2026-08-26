@@ -1,68 +1,320 @@
-import { PluginSettingTab, Setting, type App, type Plugin } from 'obsidian';
-import type { HelmSettings } from '../core/types';
+/**
+ * Settings: a left nav over grouped panels, the layout AWTY / Food Spot /
+ * Watch, Read and Learn use. Each panel has an icon, a subtitle and a status
+ * chip so its state is legible without reading every row; paths are picked
+ * from a suggester rather than typed; lists are chips, not comma strings.
+ */
+import { AbstractInputSuggest, PluginSettingTab, Setting, setIcon, TFile, TFolder, type App, type Plugin, type TextComponent } from 'obsidian';
+import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
 
 export interface SettingsHost extends Plugin {
   settings: HelmSettings;
   saveSettings(): Promise<void>;
+  loadSettings(): Promise<void>;
   dailyConfig(): { folder: string; format: string; template: string };
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string };
   onSettingsChanged(): void;
 }
 
+type ChipTone = 'ok' | 'warn' | 'pending';
+interface GroupHandle { content: HTMLElement; setChip(text: string, tone: ChipTone): void }
+type StrKey = { [K in keyof HelmSettings]: HelmSettings[K] extends string ? K : never }[keyof HelmSettings];
+type BoolKey = { [K in keyof HelmSettings]: HelmSettings[K] extends boolean ? K : never }[keyof HelmSettings];
+type NumKey = 'dailyCapacityMinutes' | 'defaultEffortMinutes' | 'staleProjectDays';
+
+export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
+  { id: 'folders', label: 'Folders', icon: 'folder' },
+  { id: 'daily', label: 'Daily notes', icon: 'calendar-days' },
+  { id: 'horizons', label: 'Horizons', icon: 'mountain' },
+  { id: 'planning', label: 'Planning', icon: 'sliders-horizontal' },
+  { id: 'view', label: 'View', icon: 'layout-dashboard' },
+  { id: 'about', label: 'About', icon: 'info' },
+];
+
+/** Folder or note picker on a plain text input. */
+class PathSuggest extends AbstractInputSuggest<string> {
+  constructor(app: App, private input: HTMLInputElement, private kind: 'folder' | 'note', private onPick: (v: string) => void) { super(app, input); }
+  private candidates(): string[] {
+    const vault = this.app.vault as unknown as { getAllLoadedFiles?: () => unknown[]; getMarkdownFiles: () => { path: string }[] };
+    if (this.kind === 'note') return vault.getMarkdownFiles().map((f) => f.path);
+    const loaded = vault.getAllLoadedFiles?.();
+    if (loaded) return loaded.filter((f): f is TFolder => f instanceof TFolder).map((f) => f.path).filter((p) => p !== '/' && p !== '');
+    const out = new Set<string>();
+    for (const f of vault.getMarkdownFiles()) { const parts = f.path.split('/'); for (let i = 1; i < parts.length; i++) out.add(parts.slice(0, i).join('/')); }
+    return [...out];
+  }
+  override getSuggestions(query: string): string[] {
+    const q = query.toLowerCase();
+    return this.candidates().filter((p) => p.toLowerCase().includes(q)).sort((a, b) => a.length - b.length || a.localeCompare(b)).slice(0, 30);
+  }
+  override renderSuggestion(value: string, el: HTMLElement): void { el.setText(value); }
+  override selectSuggestion(value: string): void { this.input.value = value; this.onPick(value); this.close(); }
+}
+
 export class HelmSettingTab extends PluginSettingTab {
+  private active = 'folders';
+  private navEl!: HTMLElement;
+  private bodyEl!: HTMLElement;
+
   constructor(app: App, private host: SettingsHost) { super(app, host); }
+
+  /** Save, and if the write fails say so and fall back to what the disk holds. */
+  private async save(): Promise<void> {
+    try { await this.host.saveSettings(); this.host.onSettingsChanged(); }
+    catch (err) {
+      console.error('[helm] could not save settings', err);
+      try { await this.host.loadSettings(); } catch { /* disk unreadable; the live object is the best truth */ }
+      this.renderBody();
+      throw new Error('Helm: could not save that setting — reverted.');
+    }
+  }
+
+  private exists(path: string): boolean {
+    if (path.trim() === '') return false;
+    const p = path.replace(/\/+$/, '');
+    if (this.app.vault.getAbstractFileByPath(p)) return true;
+    return this.app.vault.getMarkdownFiles().some((f) => f.path.startsWith(p + '/'));
+  }
+  private pathChip(path: string, what = 'folder'): { text: string; tone: ChipTone } {
+    return path.trim() === '' ? { text: `no ${what}`, tone: 'warn' } : this.exists(path) ? { text: 'found', tone: 'ok' } : { text: 'not found', tone: 'warn' };
+  }
+
+  private group(parent: HTMLElement, o: { icon: string; title: string; subtitle: string; chip?: { text: string; tone: ChipTone } }): GroupHandle {
+    const box = parent.createDiv({ cls: 'helm-sgroup' });
+    const head = box.createDiv({ cls: 'helm-sgroup-head' });
+    setIcon(head.createDiv({ cls: 'helm-sgroup-icon' }), o.icon);
+    const titles = head.createDiv({ cls: 'helm-sgroup-titles' });
+    titles.createDiv({ cls: 'helm-sgroup-title', text: o.title });
+    titles.createDiv({ cls: 'helm-sgroup-sub', text: o.subtitle });
+    const chip = head.createSpan({ cls: 'helm-schip' });
+    chip.style.display = 'none';
+    const setChip = (text: string, tone: ChipTone): void => {
+      chip.style.display = '';
+      chip.setText(text);
+      chip.removeClass('helm-schip-ok', 'helm-schip-warn', 'helm-schip-pending');
+      chip.addClass(`helm-schip-${tone}`);
+    };
+    if (o.chip) setChip(o.chip.text, o.chip.tone);
+    return { content: box.createDiv({ cls: 'helm-sgroup-body' }), setChip };
+  }
+
+  /** A `?` on a row that reveals the long explanation only when asked. */
+  private help(setting: Setting, text: string): void {
+    let helpEl: HTMLElement | null = null;
+    setting.addExtraButton((b) => b.setIcon('help-circle').setTooltip('What does this do?').onClick(() => {
+      if (helpEl) { helpEl.remove(); helpEl = null; return; }
+      helpEl = createDiv({ cls: 'helm-setting-help', text });
+      setting.settingEl.insertAdjacentElement('afterend', helpEl);
+    }));
+  }
+  private note(parent: HTMLElement, text: string): void { parent.createDiv({ cls: 'helm-setting-note', text }); }
+
+  /** Text row bound to a string setting; `pick` turns it into a folder / note picker. */
+  private text(parent: HTMLElement, key: StrKey, o: { name: string; desc?: string; placeholder?: string; pick?: 'folder' | 'note'; fallback?: string; after?: (v: string) => void; help?: string; type?: string }): Setting {
+    const s = this.host.settings;
+    const commit = async (v: string): Promise<void> => { (s as Record<StrKey, string>)[key] = v.trim() || (o.fallback ?? ''); await this.save(); o.after?.(s[key]); };
+    const st = new Setting(parent).setName(o.name);
+    if (o.desc) st.setDesc(o.desc);
+    st.addText((t: TextComponent) => {
+      t.setPlaceholder(o.placeholder ?? '').setValue(s[key]).onChange((v) => void commit(v));
+      if (o.type) t.inputEl.type = o.type;
+      if (o.pick) { t.inputEl.addClass('helm-path-input'); new PathSuggest(this.app, t.inputEl, o.pick, (v) => void commit(v)); }
+    });
+    if (o.help) this.help(st, o.help);
+    return st;
+  }
+  private toggle(parent: HTMLElement, key: BoolKey, name: string, desc: string, help?: string): Setting {
+    const s = this.host.settings;
+    const st = new Setting(parent).setName(name).setDesc(desc).addToggle((t) => t.setValue(s[key]).onChange((v) => { s[key] = v; void this.save(); }));
+    if (help) this.help(st, help);
+    return st;
+  }
+  private slider(parent: HTMLElement, key: NumKey, name: string, desc: string, min: number, max: number, step: number, unit: string): void {
+    const s = this.host.settings;
+    const st = new Setting(parent).setName(name).setDesc(desc);
+    const val = st.controlEl.createSpan({ cls: 'helm-slider-value', text: `${s[key]} ${unit}` });
+    st.addSlider((sl) => sl.setLimits(min, max, step).setValue(s[key]).setDynamicTooltip().onChange((v) => { (s as Record<NumKey, number>)[key] = v; val.setText(`${v} ${unit}`); void this.save(); }));
+  }
+  private dropdown<K extends StrKey | 'weekStartsOn'>(parent: HTMLElement, key: K, name: string, desc: string, options: Record<string, string>, after?: () => void): void {
+    const s = this.host.settings as unknown as Record<string, unknown>;
+    new Setting(parent).setName(name).setDesc(desc).addDropdown((d) => d.addOptions(options).setValue(String(s[key])).onChange((v) => { s[key as string] = key === 'weekStartsOn' ? Number(v) : v; void this.save().then(after); }));
+  }
+
+  /** A list of paths as removable chips plus a picker to add one. */
+  private pathList(parent: HTMLElement, key: 'excludePaths' | 'extraFolders', o: { name: string; desc: string; placeholder: string; onChange?: () => void }): void {
+    const s = this.host.settings;
+    const st = new Setting(parent).setName(o.name).setDesc(o.desc);
+    st.settingEl.addClass('helm-setting-list');
+    const list = st.controlEl.createDiv({ cls: 'helm-slist' });
+    const commit = async (): Promise<void> => { await this.save(); draw(); o.onChange?.(); };
+    const draw = (): void => {
+      list.empty();
+      if (s[key].length === 0) list.createSpan({ cls: 'helm-slist-empty', text: 'none' });
+      for (const p of s[key]) {
+        const chip = list.createSpan({ cls: 'helm-slist-item' });
+        chip.createSpan({ text: p, cls: 'helm-slist-text' });
+        if (!this.exists(p)) chip.createSpan({ cls: 'helm-slist-missing', text: '· not found' });
+        const x = chip.createEl('button', { cls: 'helm-slist-remove', attr: { 'aria-label': `Remove ${p}` } });
+        setIcon(x, 'x');
+        x.onclick = () => { s[key] = s[key].filter((q) => q !== p); void commit(); };
+      }
+    };
+    draw();
+    const row = st.controlEl.createDiv({ cls: 'helm-slist-add' });
+    const input = row.createEl('input', { type: 'text', placeholder: o.placeholder, cls: 'helm-path-input' });
+    const add = (v: string): void => { const p = v.trim().replace(/\/+$/, ''); if (p === '' || s[key].includes(p)) return; s[key] = [...s[key], p]; input.value = ''; void commit(); };
+    new PathSuggest(this.app, input, 'folder', add);
+    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); add(input.value); } });
+    const btn = row.createEl('button', { text: 'Add' });
+    btn.onclick = () => add(input.value);
+  }
+
+  // ── shell ─────────────────────────────────────────────────────────────
 
   override display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    const s = this.host.settings;
-    const save = async (): Promise<void> => { await this.host.saveSettings(); this.host.onSettingsChanged(); };
-    const text = (name: string, desc: string, key: keyof HelmSettings, placeholder = ''): void => {
-      new Setting(containerEl).setName(name).setDesc(desc).addText((t) => t.setPlaceholder(placeholder).setValue(String(s[key] ?? '')).onChange(async (v) => { (s as unknown as Record<string, unknown>)[key] = v.trim(); await save(); }));
-    };
-
-    new Setting(containerEl).setName('Where things live').setHeading();
-    text('Projects folder', 'One folder per project, with a note of the same name inside. Any note with “type: project” in its frontmatter is a project wherever it lives, but this is where Helm looks and creates.', 'projectsFolder', '02 PROJECTS');
-    text('Habits folder', 'Notes with “type: habit” in their frontmatter.', 'habitsFolder', '02 PROJECTS/Habits');
-    text('Inbox note', 'Where quick captures land when they have no date and no project.', 'inboxNote', '01 INBOX/Inbox.md');
-    new Setting(containerEl).setName('Never index these paths').setDesc('Comma-separated path prefixes — archives, old task boards. Keeps the Inbox and the index clean.').addText((t) => t.setValue(s.excludePaths.join(', ')).onChange(async (v) => { s.excludePaths = v.split(',').map((x) => x.trim()).filter(Boolean); await save(); }));
-    new Setting(containerEl).setName('Archive folder').setDesc('“Archive project” moves a project folder here (keep it in the list above so it stays out of the index).').addText((t) => t.setValue(s.archiveFolder).onChange(async (v) => { s.archiveFolder = v.trim(); await save(); }));
-    new Setting(containerEl).setName('Extra folders to scan').setDesc('Comma-separated. Tasks in these notes show up under “Tasks in other notes” in the Inbox and can be planned onto a day.').addText((t) => t.setValue(s.extraFolders.join(', ')).onChange(async (v) => { s.extraFolders = v.split(',').map((x) => x.trim()).filter(Boolean); await save(); }));
-
-    const dc = this.host.dailyConfig();
-    new Setting(containerEl).setName('Daily notes').setHeading();
-    new Setting(containerEl).setName('Daily note folder').setDesc(`Leave empty to follow the Daily Notes / Periodic Notes plugin (currently: ${dc.folder || 'not configured'}).`).addText((t) => t.setPlaceholder(dc.folder).setValue(s.dailyNoteFolder).onChange(async (v) => { s.dailyNoteFolder = v.trim(); await save(); }));
-    new Setting(containerEl).setName('Daily note format').setDesc(`Moment-style date format of the note path inside the folder. Leave empty to follow Obsidian (currently: ${dc.format || 'YYYY-MM-DD'}).`).addText((t) => t.setPlaceholder(dc.format).setValue(s.dailyNoteFormat).onChange(async (v) => { s.dailyNoteFormat = v.trim(); await save(); }));
-    new Setting(containerEl).setName('Daily note template').setDesc(`Used when Helm has to create a daily note. Leave empty to follow Obsidian (currently: ${dc.template || 'none'}). {{date:FORMAT}}, {{title}} and the common Templater tags are filled in.`).addText((t) => t.setPlaceholder(dc.template).setValue(s.dailyNoteTemplate).onChange(async (v) => { s.dailyNoteTemplate = v.trim(); await save(); }));
-    new Setting(containerEl).setName('Plan heading').setDesc('The heading whose section Helm owns in a daily note. Sub-headings Habits / Morning / Afternoon / Evening / Anytime live under it. Nothing outside that section is touched.').addText((t) => t.setValue(s.planHeading).onChange(async (v) => { s.planHeading = v.trim() || '## Plan'; await save(); }));
-    new Setting(containerEl).setName('Parts of the day').setDesc('When the morning ends and when the afternoon ends (HH:MM). Time-blocked lines fall into a part by their start time.').addText((t) => t.setPlaceholder('12:00').setValue(s.morningEnds).onChange(async (v) => { if (/^\d{2}:\d{2}$/.test(v.trim())) { s.morningEnds = v.trim(); await save(); } })).addText((t) => t.setPlaceholder('18:00').setValue(s.afternoonEnds).onChange(async (v) => { if (/^\d{2}:\d{2}$/.test(v.trim())) { s.afternoonEnds = v.trim(); await save(); } }));
-    new Setting(containerEl).setName('Move spawned recurrences to their date').setDesc('When a recurring task is ticked, Obsidian Tasks writes its next occurrence in the same note, dated later. On, Helm moves such lines into the note of their date (same part of the day) as soon as it sees them — only for dates from today on; older ones are left for the “Move recurring tasks to their next date” command, which moves everything.').addToggle((t) => t.setValue(s.autoMoveRecurring).onChange(async (v) => { s.autoMoveRecurring = v; await save(); }));
-    new Setting(containerEl).setName('Capture starts at the current hour').setDesc('A task captured for today gets the current hour as its start time (14:37 → 14:00); the end follows the effort. Type a time or clear the field to override.').addToggle((t) => t.setValue(s.defaultCaptureTime).onChange(async (v) => { s.defaultCaptureTime = v; await save(); }));
-    new Setting(containerEl).setName('Stamp ➕ created date on new tasks').setDesc('Off keeps daily notes clean; on gives every captured task an Obsidian-Tasks created date.').addToggle((t) => t.setValue(s.writeCreatedDate).onChange(async (v) => { s.writeCreatedDate = v; await save(); }));
-    new Setting(containerEl).setName('Where the plan goes in a new daily note').setDesc('Only matters for a note that has no plan heading yet.').addDropdown((d) => d.addOptions({ 'before-first-heading': 'Before the first heading', 'after-anchor': 'After a heading of my choosing', end: 'At the end of the note' }).setValue(s.regionPlacement).onChange(async (v) => { s.regionPlacement = v as HelmSettings['regionPlacement']; await save(); this.display(); }));
-    if (s.regionPlacement === 'after-anchor') text('Anchor heading', 'Exact heading text, e.g. “## Tasks”. Falls back to “before the first heading” when it is missing.', 'regionAnchor', '## Helm');
-    new Setting(containerEl).setName('Show day-planner time blocks').setDesc('Checkbox lines like “- [ ] 08:00 - 09:00: …” outside the Helm region are shown on the Today tab as time blocks.').addToggle((t) => t.setValue(s.showTimeBlocks).onChange(async (v) => { s.showTimeBlocks = v; await save(); }));
-
-    new Setting(containerEl).setName('Horizons — yearly, quarterly, monthly goals').setHeading();
-    new Setting(containerEl).setName('Goals heading').setDesc('Heading in a yearly / quarterly / monthly note under which goals live as checkbox lines.').addText((t) => t.setValue(s.goalsHeading).onChange(async (v) => { s.goalsHeading = v.trim() || '## Goals'; await save(); }));
-    for (const [kind, label, fk, fmk] of [['year', 'Yearly notes', 'yearlyFolder', 'yearlyFormat'], ['quarter', 'Quarterly notes', 'quarterlyFolder', 'quarterlyFormat'], ['month', 'Monthly notes', 'monthlyFolder', 'monthlyFormat'], ['week', 'Weekly notes', 'weeklyFolder', 'weeklyFormat']] as const) {
-      const pc = this.host.periodicConfigFor(kind);
-      new Setting(containerEl).setName(label).setDesc(`Folder and moment format. Leave empty to follow the Periodic Notes plugin (currently: ${pc.folder || 'not configured'} · ${pc.format || 'default'}).`)
-        .addText((t) => t.setPlaceholder(pc.folder || 'folder').setValue(s[fk]).onChange(async (v) => { s[fk] = v.trim(); await save(); }))
-        .addText((t) => t.setPlaceholder(pc.format || 'format').setValue(s[fmk]).onChange(async (v) => { s[fmk] = v.trim(); await save(); }));
+    containerEl.addClass('helm-settings');
+    this.navEl = containerEl.createDiv({ cls: 'helm-settings-nav' });
+    this.bodyEl = containerEl.createDiv({ cls: 'helm-settings-body' });
+    for (const section of NAV_SECTIONS) {
+      const btn = this.navEl.createEl('button', { cls: 'helm-settings-nav-item' });
+      setIcon(btn.createSpan({ cls: 'helm-settings-nav-icon' }), section.icon);
+      btn.createSpan({ text: section.label });
+      btn.toggleClass('is-active', section.id === this.active);
+      btn.onclick = () => {
+        this.active = section.id;
+        for (const el of Array.from(this.navEl.querySelectorAll('.helm-settings-nav-item'))) el.removeClass('is-active');
+        btn.addClass('is-active');
+        this.renderBody();
+      };
     }
+    this.renderBody();
+  }
 
-    new Setting(containerEl).setName('Planning').setHeading();
-    new Setting(containerEl).setName('Daily capacity').setDesc('Minutes of focused work a day holds. Drives the capacity bar.').addSlider((sl) => sl.setLimits(60, 720, 30).setValue(s.dailyCapacityMinutes).setDynamicTooltip().onChange(async (v) => { s.dailyCapacityMinutes = v; await save(); }));
-    new Setting(containerEl).setName('Default effort').setDesc('Minutes assumed for a task without a ⏱️ estimate.').addSlider((sl) => sl.setLimits(5, 120, 5).setValue(s.defaultEffortMinutes).setDynamicTooltip().onChange(async (v) => { s.defaultEffortMinutes = v; await save(); }));
-    new Setting(containerEl).setName('Wrap-up default for unfinished tasks').addDropdown((d) => d.addOptions({ tomorrow: 'Move to tomorrow', unschedule: 'Take off the calendar' }).setValue(s.rolloverTarget).onChange(async (v) => { s.rolloverTarget = v as HelmSettings['rolloverTarget']; await save(); }));
-    new Setting(containerEl).setName('Stale project after').setDesc('Days without activity before an active project is flagged in Review.').addSlider((sl) => sl.setLimits(3, 60, 1).setValue(s.staleProjectDays).setDynamicTooltip().onChange(async (v) => { s.staleProjectDays = v; await save(); }));
-    new Setting(containerEl).setName('Week starts on').addDropdown((d) => d.addOptions({ '1': 'Monday', '7': 'Sunday' }).setValue(String(s.weekStartsOn)).onChange(async (v) => { s.weekStartsOn = Number(v) as 1 | 7; await save(); }));
-    new Setting(containerEl).setName('Indent for new subtasks').addDropdown((d) => d.addOptions({ '\t': 'Tab', '  ': 'Two spaces', '    ': 'Four spaces' }).setValue(s.indentUnit).onChange(async (v) => { s.indentUnit = v; await save(); }));
+  override hide(): void { this.containerEl.removeClass('helm-settings'); super.hide(); }
 
-    new Setting(containerEl).setName('View').setHeading();
-    new Setting(containerEl).setName('Tab to open on').addDropdown((d) => d.addOptions({ today: 'Today', week: 'Week', projects: 'Projects', inbox: 'Inbox', review: 'Review', horizons: 'Horizons', dashboard: 'Dashboard' }).setValue(s.defaultTab).onChange(async (v) => { s.defaultTab = v as HelmSettings['defaultTab']; await save(); }));
-    new Setting(containerEl).setName('Open Helm on startup').addToggle((t) => t.setValue(s.openOnStartup).onChange(async (v) => { s.openOnStartup = v; await save(); }));
-    new Setting(containerEl).setName('Developer actions').setDesc('Adds the “Run self-test” command, which writes a report note into the vault. Off unless you are testing Helm.').addToggle((t) => t.setValue(s.developerActions).onChange(async (v) => { s.developerActions = v; await save(); }));
+  private renderBody(): void {
+    const body = this.bodyEl;
+    body.empty();
+    switch (this.active) {
+      case 'daily': this.renderDaily(body); break;
+      case 'horizons': this.renderHorizons(body); break;
+      case 'planning': this.renderPlanning(body); break;
+      case 'view': this.renderView(body); break;
+      case 'about': this.renderAbout(body); break;
+      default: this.renderFolders(body);
+    }
+  }
+
+  // ── folders ───────────────────────────────────────────────────────────
+
+  private renderFolders(body: HTMLElement): void {
+    const s = this.host.settings;
+    const where = this.group(body, { icon: 'folder', title: 'Where things live', subtitle: 'Projects, habits and the inbox. Start typing to pick from the vault.', chip: this.pathChip(s.projectsFolder) });
+    this.text(where.content, 'projectsFolder', { name: 'Projects folder', desc: 'One folder per project with a note of the same name inside.', placeholder: DEFAULT_SETTINGS.projectsFolder, pick: 'folder', fallback: DEFAULT_SETTINGS.projectsFolder, after: (v) => where.setChip(this.pathChip(v).text, this.pathChip(v).tone), help: 'Any note with “type: project” in its frontmatter is a project wherever it lives, but this is where Helm looks first and where “New project” creates folders. Only a folder note (Folder/Folder.md) can be an umbrella for sub-projects.' });
+    this.text(where.content, 'habitsFolder', { name: 'Habits folder', desc: 'Notes with “type: habit”. Uploaded icons go in an “icons” subfolder.', placeholder: DEFAULT_SETTINGS.habitsFolder, pick: 'folder', fallback: DEFAULT_SETTINGS.habitsFolder });
+    this.text(where.content, 'inboxNote', { name: 'Inbox note', desc: 'Where captures with no date and no project land.', placeholder: DEFAULT_SETTINGS.inboxNote, pick: 'note', fallback: DEFAULT_SETTINGS.inboxNote });
+    this.text(where.content, 'archiveFolder', { name: 'Archive folder', desc: '“Archive project” moves a project folder here.', placeholder: DEFAULT_SETTINGS.archiveFolder, pick: 'folder', help: 'Keep the archive in the excluded paths below so archived projects stay out of the index and the Inbox.' });
+
+    const scan = this.group(body, { icon: 'scan-search', title: 'What Helm scans', subtitle: 'Keep the index lean: skip archives, pull in extra task notes.' });
+    const scanChip = (): void => scan.setChip(`${s.excludePaths.length} excluded · ${s.extraFolders.length} extra`, 'pending');
+    scanChip();
+    this.pathList(scan.content, 'excludePaths', { name: 'Never index these paths', desc: 'Path prefixes Helm skips entirely — archives, old task boards.', placeholder: 'Pick a folder to exclude…', onChange: scanChip });
+    this.pathList(scan.content, 'extraFolders', { name: 'Extra folders to scan', desc: 'Tasks in these notes show up under “Tasks in other notes” in the Inbox and can be planned onto a day.', placeholder: 'Pick a folder to scan…', onChange: scanChip });
+  }
+
+  // ── daily notes ───────────────────────────────────────────────────────
+
+  private renderDaily(body: HTMLElement): void {
+    const s = this.host.settings;
+    const dc = this.host.dailyConfig();
+    const custom = (): boolean => !!(s.dailyNoteFolder || s.dailyNoteFormat || s.dailyNoteTemplate);
+    const loc = this.group(body, { icon: 'calendar-days', title: 'Daily note location', subtitle: 'Leave everything empty to follow the Daily Notes / Periodic Notes plugin.', chip: custom() ? { text: 'custom', tone: 'ok' } : { text: 'follows Obsidian', tone: 'pending' } });
+    const chip = (): void => loc.setChip(custom() ? 'custom' : 'follows Obsidian', custom() ? 'ok' : 'pending');
+    this.note(loc.content, `Obsidian currently says: folder “${dc.folder || 'not configured'}”, format “${dc.format || 'YYYY-MM-DD'}”, template “${dc.template || 'none'}”.`);
+    this.text(loc.content, 'dailyNoteFolder', { name: 'Folder', desc: 'Override only if Helm should look somewhere else.', placeholder: dc.folder || 'follows Obsidian', pick: 'folder', after: chip });
+    this.text(loc.content, 'dailyNoteFormat', { name: 'Date format', desc: 'Moment format of the note path inside the folder; slashes make subfolders.', placeholder: dc.format || 'YYYY-MM-DD', after: chip, help: 'Example: YYYY/MM - MMMM/WW/DD, dddd, MMM, YYYY. Helm reads this to find the note for any date and to create missing ones.' });
+    this.text(loc.content, 'dailyNoteTemplate', { name: 'Template', desc: 'Used when Helm has to create a daily note.', placeholder: dc.template || 'follows Obsidian', pick: 'note', after: chip, help: 'Templater is asked to render the note when it is installed; otherwise {{date:FORMAT}}, {{title}} and the common Templater date tags are filled in by Helm.' });
+
+    const layout = this.group(body, { icon: 'list-tree', title: 'Plan layout', subtitle: 'Which sections of a daily note Helm writes into.', chip: { text: s.planHeading, tone: 'pending' } });
+    this.text(layout.content, 'planHeading', { name: 'Plan heading', desc: 'Used only when a note has no Morning / Afternoon / Evening sections of its own.', placeholder: '## Plan', fallback: '## Plan', after: (v) => layout.setChip(v, 'pending'), help: 'Helm adopts the sections your template already has (Habits, Morning, Afternoon, Evening, Anytime — with or without an “A.” prefix, under any parent heading). Only when none exist does it create this heading with sub-sections under it. Nothing outside those sections is touched.' });
+    this.dropdown(layout.content, 'regionPlacement', 'Where a new plan heading goes', 'Only matters for a note that has none of the sections yet.', { 'before-first-heading': 'Before the first heading', 'after-anchor': 'After a heading of my choosing', end: 'At the end of the note' }, () => this.renderBody());
+    if (s.regionPlacement === 'after-anchor') this.text(layout.content, 'regionAnchor', { name: 'Anchor heading', desc: 'Exact heading text, e.g. “## Tasks”. Falls back to “before the first heading” when missing.', placeholder: '## Tasks' });
+    this.toggle(layout.content, 'showTimeBlocks', 'Show day-planner time blocks', 'Lines like “- [ ] 08:00 - 09:00: …” outside Helm’s sections appear on Today as time blocks.');
+
+    const parts = this.group(body, { icon: 'sun', title: 'Parts of the day', subtitle: 'Timed lines fall into Morning, Afternoon or Evening by their start time.', chip: { text: `${s.morningEnds} · ${s.afternoonEnds}`, tone: 'pending' } });
+    const partsChip = (): void => parts.setChip(`${s.morningEnds} · ${s.afternoonEnds}`, 'pending');
+    this.text(parts.content, 'morningEnds', { name: 'Morning ends at', placeholder: '12:00', fallback: '12:00', type: 'time', after: partsChip });
+    this.text(parts.content, 'afternoonEnds', { name: 'Afternoon ends at', placeholder: '18:00', fallback: '18:00', type: 'time', after: partsChip });
+
+    const beh = this.group(body, { icon: 'wand-sparkles', title: 'Behaviour', subtitle: 'What Helm does on its own while you work.' });
+    this.toggle(beh.content, 'autoMoveRecurring', 'Move spawned recurrences to their date', 'When a recurring task is ticked, the next occurrence lands in the same note dated later. Helm moves it into the right day’s note.', 'Only occurrences dated today or later move automatically; older ones are left for the “Move recurring tasks to their next date” command, which moves everything.');
+    this.toggle(beh.content, 'defaultCaptureTime', 'Capture starts at the current hour', 'A task captured for today gets the current hour as start time (14:37 → 14:00); the end follows the effort.');
+    this.toggle(beh.content, 'writeCreatedDate', 'Stamp ➕ created date on new tasks', 'Off keeps daily notes clean; on gives every captured task an Obsidian Tasks created date.');
+  }
+
+  // ── horizons ──────────────────────────────────────────────────────────
+
+  private renderHorizons(body: HTMLElement): void {
+    const s = this.host.settings;
+    const goals = this.group(body, { icon: 'target', title: 'Goals', subtitle: 'Goals are checkbox lines in your yearly, quarterly, monthly and weekly notes.', chip: { text: s.goalsHeading, tone: 'pending' } });
+    this.text(goals.content, 'goalsHeading', { name: 'Goals heading', desc: 'The heading under which goals live in a periodic note.', placeholder: '## Goals', fallback: '## Goals', after: (v) => goals.setChip(v, 'pending'), help: 'A project bound to a goal (“Serves goal” in the project form) rolls its progress up into that goal on the Horizons tab.' });
+
+    const kinds = [['year', 'Yearly notes', 'yearlyFolder', 'yearlyFormat', 'YYYY'], ['quarter', 'Quarterly notes', 'quarterlyFolder', 'quarterlyFormat', 'YYYY-[Q]Q'], ['month', 'Monthly notes', 'monthlyFolder', 'monthlyFormat', 'YYYY-MM'], ['week', 'Weekly notes', 'weeklyFolder', 'weeklyFormat', 'gggg-[W]ww']] as const;
+    const custom = (): boolean => kinds.some(([, , fk, fmk]) => s[fk] !== '' || s[fmk] !== '');
+    const per = this.group(body, { icon: 'calendar-range', title: 'Periodic notes', subtitle: 'Leave empty to follow the Periodic Notes plugin.', chip: custom() ? { text: 'custom', tone: 'ok' } : { text: 'follows Periodic Notes', tone: 'pending' } });
+    const chip = (): void => per.setChip(custom() ? 'custom' : 'follows Periodic Notes', custom() ? 'ok' : 'pending');
+    for (const [kind, label, fk, fmk, fallbackFmt] of kinds) {
+      const pc = this.host.periodicConfigFor(kind);
+      per.content.createDiv({ cls: 'helm-sgroup-label', text: label });
+      this.note(per.content, `Periodic Notes says: ${pc.folder ? `“${pc.folder}”` : 'no folder'} · ${pc.format || fallbackFmt}${pc.template ? ` · template “${pc.template}”` : ''}.`);
+      this.text(per.content, fk, { name: 'Folder', placeholder: pc.folder || 'follows Periodic Notes', pick: 'folder', after: chip });
+      this.text(per.content, fmk, { name: 'Date format', placeholder: pc.format || fallbackFmt, after: chip });
+    }
+  }
+
+  // ── planning ──────────────────────────────────────────────────────────
+
+  private renderPlanning(body: HTMLElement): void {
+    const s = this.host.settings;
+    const cap = this.group(body, { icon: 'gauge', title: 'Capacity', subtitle: 'What a day holds and what an unestimated task costs.', chip: { text: `${Math.round(s.dailyCapacityMinutes / 60 * 10) / 10}h a day`, tone: 'pending' } });
+    this.slider(cap.content, 'dailyCapacityMinutes', 'Daily capacity', 'Minutes of focused work a day holds. Drives the capacity bar on Today.', 60, 720, 30, 'min');
+    this.slider(cap.content, 'defaultEffortMinutes', 'Default effort', 'Minutes assumed for a task without a ⏱️ estimate.', 5, 120, 5, 'min');
+
+    const rhythm = this.group(body, { icon: 'repeat', title: 'Rhythm', subtitle: 'Wrap-up, review and the shape of the week.' });
+    this.dropdown(rhythm.content, 'rolloverTarget', 'Wrap-up default for unfinished tasks', 'What Wrap up proposes for tasks that did not get done.', { tomorrow: 'Move to tomorrow', unschedule: 'Take off the calendar' });
+    this.slider(rhythm.content, 'staleProjectDays', 'Stale project after', 'Days without activity before an active project is flagged in Review.', 3, 60, 1, 'days');
+    this.dropdown(rhythm.content, 'weekStartsOn', 'Week starts on', 'Affects week numbers, the Calendar and “next week” in capture.', { '1': 'Monday', '7': 'Sunday' });
+
+    const writing = this.group(body, { icon: 'pencil', title: 'Writing', subtitle: 'How Helm writes into your notes.' });
+    this.dropdown(writing.content, 'indentUnit', 'Indent for new subtasks', 'Match what your editor uses.', { '\t': 'Tab', '  ': 'Two spaces', '    ': 'Four spaces' });
+  }
+
+  // ── view ──────────────────────────────────────────────────────────────
+
+  private renderView(body: HTMLElement): void {
+    const s = this.host.settings;
+    const open = this.group(body, { icon: 'layout-dashboard', title: 'Opening Helm', subtitle: 'Where the view starts and whether it opens by itself.' });
+    this.dropdown(open.content, 'defaultTab', 'Tab to open on', '', { today: 'Today', week: 'Calendar', projects: 'Projects', inbox: 'Inbox', review: 'Review', horizons: 'Horizons', dashboard: 'Dashboard' });
+    this.toggle(open.content, 'openOnStartup', 'Open Helm on startup', 'Opens the Helm view when the vault loads.');
+
+    const dev = this.group(body, { icon: 'bug', title: 'Developer', subtitle: 'Only useful when testing Helm itself.', chip: s.developerActions ? { text: 'on', tone: 'warn' } : { text: 'off', tone: 'pending' } });
+    this.toggle(dev.content, 'developerActions', 'Developer actions', 'Adds the “Run self-test” command, which writes a report note into the vault.').settingEl.addClass('helm-setting-dev');
+    if (s.developerActions) new Setting(dev.content).setName('Self-test').setDesc('Runs Helm’s checks against this vault and writes “Helm Self-Test Report.md”.').addButton((b) => b.setButtonText('Run self-test').onClick(() => { (this.app as unknown as { commands?: { executeCommandById?: (id: string) => void } }).commands?.executeCommandById?.('helm-planner:self-test'); }));
+  }
+
+  // ── about ─────────────────────────────────────────────────────────────
+
+  private renderAbout(body: HTMLElement): void {
+    const m = this.host.manifest;
+    const about = this.group(body, { icon: 'compass', title: `Helm ${m.version}`, subtitle: m.description });
+    this.note(about.content, 'Helm plans your days from the notes you already keep: daily notes hold the plan, project notes hold the work, periodic notes hold the goals. Everything it writes is plain Obsidian Tasks markdown.');
+    const cmds: [string, string][] = [['Open Helm', 'the view — Today, Calendar, Projects, Inbox, Review, Horizons, Dashboard'], ['Capture', 'one line in, a task out — dates, !priority, @Project, ~effort, times'], ['Plan today / Wrap up today', 'the morning and evening rituals'], ['Move recurring tasks to their next date', 'tidy spawned recurrences in one go'], ['New project / New habit', 'the click-driven forms']];
+    const list = about.content.createDiv({ cls: 'helm-about-commands' });
+    for (const [name, desc] of cmds) { const row = list.createDiv({ cls: 'helm-about-command' }); row.createSpan({ cls: 'helm-about-command-name', text: name }); row.createSpan({ cls: 'helm-about-command-desc', text: desc }); }
+    new Setting(about.content).setName('Re-index the vault').setDesc('Rebuild Helm’s picture of projects, tasks, habits and goals from disk.').addButton((b) => b.setButtonText('Re-index').onClick(() => { this.host.onSettingsChanged(); }));
+    new Setting(about.content).setName('Reset to defaults').setDesc('Puts every setting back to its default. Your notes are not touched.').addButton((b) => b.setButtonText('Reset').setWarning().onClick(() => { Object.assign(this.host.settings, DEFAULT_SETTINGS, { excludePaths: [...DEFAULT_SETTINGS.excludePaths], extraFolders: [...DEFAULT_SETTINGS.extraFolders] }); void this.save().then(() => { this.active = 'folders'; this.display(); }); }));
+    void TFile;
   }
 }
