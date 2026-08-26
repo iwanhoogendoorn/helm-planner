@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { bundledTemplate } from '../../src/core/periodicTemplates';
 import { renderDailyTemplate } from '../../src/data/mutations';
-import { setup, TODAY } from '../data/fixture';
+import { setup, TODAY, makeVault, SETTINGS, DAILY_FOLDER, DAILY_FORMAT } from '../data/fixture';
+import { HelmIndex } from '../../src/data/index';
+import { Mutations } from '../../src/data/mutations';
 
 const CFG = { formats: { year: 'YYYY', quarter: 'YYYY-[Q]Q', month: 'YYYY-MM', week: 'gggg-[W]ww' }, dailyTitleFormat: 'DD, dddd, MMM, YYYY', goalsHeading: '## Goals' };
 
@@ -61,5 +63,39 @@ describe('periodic notes from templates', () => {
     expect(await m.writeTemplateNote('week', 'Templates/WEEKLY NOTE TEMPLATE.md', { replace: true })).toBe('replaced');
     expect(await vault.read('Templates/WEEKLY NOTE TEMPLATE.md')).toContain('Type: Weekly Note');
     expect(await vault.read('Templates/WEEKLY NOTE TEMPLATE.md')).toContain("format('DD, dddd, MMM, YYYY')");
+  });
+});
+
+describe('Templater hand-off', () => {
+  it('gets a note whose title, dates and moment chains are already rendered; only the script block is left', async () => {
+    const vault = makeVault();
+    const index = new HelmIndex(vault, { settings: () => SETTINGS, today: () => TODAY, dailyConfig: () => ({ folder: DAILY_FOLDER, format: DAILY_FORMAT }), periodicConfig: () => ({ year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' }, week: { folder: 'Weekly Notes', format: 'gggg-[W]ww' } }) });
+    await index.rebuild();
+    const seen: string[] = [];
+    const m = new Mutations({ vault, index, settings: () => SETTINGS, today: () => TODAY, notify: () => undefined, processTemplate: async (path) => { seen.push(await vault.read(path)); return true; } });
+    await m.ensurePeriodicNote({ kind: 'month', key: '2026-08', start: '2026-08-01', end: '2026-08-31', label: 'August 2026', year: 2026, month: 8 });
+    expect(seen).toHaveLength(1);
+    const handed = seen[0]!;
+    expect(handed).toContain('title: 2026-08');
+    expect(handed).toContain('# August 2026');
+    expect(handed).toContain('[[2026-07|July]]');
+    expect(handed).not.toContain('tp.file.title');
+    expect(handed).toContain('<%* const m = moment("2026-08", \'YYYY-MM\')');
+  });
+});
+
+describe('template notes survive a template engine that renders new files', () => {
+  it('re-asserts the template after the engine has mangled the fresh file', async () => {
+    const vault = makeVault();
+    const index = new HelmIndex(vault, { settings: () => SETTINGS, today: () => TODAY, dailyConfig: () => ({ folder: DAILY_FOLDER, format: DAILY_FORMAT }), periodicConfig: () => ({ year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' }, week: { folder: 'Weekly Notes', format: 'gggg-[W]ww' } }) });
+    await index.rebuild();
+    const m = new Mutations({ vault, index, settings: () => SETTINGS, today: () => TODAY, notify: () => undefined, processTemplate: async () => true, templateSettleMs: 5 });
+    const origWrite = vault.write.bind(vault);
+    let mangled = false;
+    vault.write = async (p, c) => { await origWrite(p, c); if (!mangled) { mangled = true; await origWrite(p, '---\ntitle: SOMETHING ELSE\n---\n# Invalid date'); } };
+    expect(await m.writeTemplateNote('week', 'Templates/WEEKLY NOTE TEMPLATE.md')).toBe('created');
+    const final = await vault.read('Templates/WEEKLY NOTE TEMPLATE.md');
+    expect(final).toContain('title: <% tp.file.title %>');
+    expect(final).not.toContain('Invalid date');
   });
 });

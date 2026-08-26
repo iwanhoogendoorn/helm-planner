@@ -36,6 +36,8 @@ export interface MutationDeps {
   dailyTemplate?: () => Promise<string | undefined>;
   /** Yearly / quarterly / monthly note template text, when configured. */
   periodicTemplate?: (kind: PeriodKind) => Promise<string | undefined>;
+  /** How long a template engine gets to react to a new file before Helm re-asserts a template note's content (ms). */
+  templateSettleMs?: number;
   /**
    * Let a template engine (Templater) process a freshly created note that
    * holds the raw template. Returns true when it did; false to fall back to
@@ -160,7 +162,10 @@ export class Mutations {
   /** Create a note from a template: Templater first when available, else Helm's renderer. */
   private async createFromTemplate(path: string, tpl: string | undefined, date: IsoDate, title: string): Promise<void> {
     if (tpl && tpl.includes('<%') && this.d.processTemplate) {
-      await this.createFile(path, tpl);
+      // Render everything Helm understands first — the title, dates, moment() chains — so the result
+      // never depends on which file Templater thinks it is working on (its on-create trigger and
+      // this hand-off can run concurrently). Only what Helm cannot do (scripts, tp.web…) is left.
+      await this.createFile(path, renderKnownTags(tpl, date, title));
       let ok = false;
       try { ok = await this.d.processTemplate(path); } catch { ok = false; }
       if (ok) { const c = await this.d.vault.read(path); this.index.update(path, c); return; }
@@ -815,7 +820,19 @@ export class Mutations {
   async writeTemplateNote(kind: PeriodKind, path: string, opts: { replace?: boolean } = {}): Promise<'created' | 'replaced' | 'skipped'> {
     const exists = await this.d.vault.exists(path);
     if (exists && !opts.replace) return 'skipped';
-    await this.d.vault.write(path, bundledTemplate(kind, this.templateConfig()));
+    const content = bundledTemplate(kind, this.templateConfig());
+    await this.d.vault.write(path, content);
+    if (!exists && this.d.processTemplate) {
+      // Templater's "trigger on new file creation" renders any new file holding <% %> tags — including a
+      // template note, which would destroy it. Let it have its go, then put the template back (a modify,
+      // which it leaves alone), and check once more.
+      const settle = this.d.templateSettleMs ?? 2000;
+      for (let i = 0; i < 2; i++) {
+        await new Promise((r) => setTimeout(r, settle));
+        if ((await this.d.vault.read(path)) === content) break;
+        await this.d.vault.write(path, content);
+      }
+    }
     return exists ? 'replaced' : 'created';
   }
 
@@ -922,6 +939,15 @@ export class Mutations {
  */
 export function renderDailyTemplate(template: string | undefined, date: IsoDate, title: string): string {
   if (!template || template.trim() === '') return `---\ntitle: ${title}\ndate: ${date}\n---\n\n# ${title}\n\n`;
+  let out = renderKnownTags(template, date, title);
+  // Script blocks (<%* … %>) need a real Templater; they are dropped here, as is anything else unknown.
+  out = out.replace(/<%\*[\s\S]*?%>/g, '');
+  out = out.replace(/<%[\s\S]*?%>/g, '');
+  return out;
+}
+
+/** Fill in the tags Helm understands and leave the rest for a template engine. */
+export function renderKnownTags(template: string, date: IsoDate, title: string): string {
   let out = template;
   out = out.replace(/\{\{\s*date\s*:\s*([^}]+?)\s*\}\}/g, (_, f: string) => formatDate(date, f.trim()));
   out = out.replace(/\{\{\s*date\s*\}\}/g, date);
@@ -929,8 +955,6 @@ export function renderDailyTemplate(template: string | undefined, date: IsoDate,
   out = out.replace(/\{\{\s*time\s*\}\}/g, '');
   out = out.replace(/<%[-*_]?\s*tp\.file\.title\s*%>/g, title);
   // moment(tp.file.title, 'FMT').add(1, 'd').subtract(2, 'weeks').format('FMT') — with or without an assignment in front.
-  // Script blocks (<%* … %>) need a real Templater; they are dropped here.
-  out = out.replace(/<%\*[\s\S]*?%>/g, '');
   out = out.replace(/<%[-_]?\s*(?:[\w$]+\s*=\s*)?moment\((?:\s*tp\.file\.title\s*,\s*["'][^"']*["']\s*)?\)((?:\s*\.(?:add|subtract|startOf|endOf)\((?:\s*-?\d+\s*,)?\s*["'][A-Za-z]+["']\s*\))*)\s*\.format\(\s*["']([^"']*)["']\s*\)\s*%>/g, (_, chain: string, fmt: string) => {
     let d = date;
     for (const m of chain.matchAll(/\.(add|subtract|startOf|endOf)\((?:\s*(-?\d+)\s*,)?\s*["']([A-Za-z]+)["']\s*\)/g)) {
@@ -944,7 +968,8 @@ export function renderDailyTemplate(template: string | undefined, date: IsoDate,
   out = out.replace(/<%[-*_]?\s*tp\.date\.yesterday\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(addDays(date, -1), f));
   out = out.replace(/<%[-*_]?\s*tp\.file\.last_modified_date\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(date, f));
   out = out.replace(/<%[-*_]?\s*tp\.file\.creation_date\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(date, f));
-  out = out.replace(/<%[\s\S]*?%>/g, '');
+  // Any remaining reference to the title (inside scripts, say) becomes a literal, so Templater cannot get it wrong.
+  out = out.replace(/\btp\.file\.title\b/g, JSON.stringify(title));
   return out;
 }
 
