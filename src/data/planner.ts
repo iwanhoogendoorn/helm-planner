@@ -146,7 +146,9 @@ export function candidates(snap: Snapshot, date: IsoDate, settings: HelmSettings
     if (!isOpen(t) || t.origin === 'daily-mirror') return false;
     // Lines outside the Helm region of a daily note (the user's own planner slots) are a log, not a backlog.
     if (t.origin === 'daily' && t.section === 'outside') return false;
-    if (plannedDate(t) === date) return false;
+    // Already on a day that has not passed: today's work is still today's, tomorrow's is tomorrow's.
+    const planned = plannedDate(t);
+    if (planned !== undefined && planned >= today) return false;
     if (isBlocked(t, snap)) return false;
     if (t.start !== undefined && t.start > date) return false;
     // A parent whose children are still open is not actionable itself — unless it carries its own date.
@@ -158,9 +160,9 @@ export function candidates(snap: Snapshot, date: IsoDate, settings: HelmSettings
     if (t.origin === 'daily' && t.noteDate !== undefined && t.noteDate >= date) continue;
     const prio = 5 - priorityRank(t.priority);
     const projBoost = (t.projectId && activeProjects.has(t.projectId) ? 2 : 0) + horizonBoost(snap, t, date);
-    if (t.due !== undefined && t.due < date) push(t, 'overdue', 100 + Math.min(30, diffDays(t.due, date)) + prio);
+    if (t.due !== undefined && t.due < today) push(t, 'overdue', 100 + Math.min(30, diffDays(t.due, today)) + prio);
     else if (t.due !== undefined && diffDays(date, t.due) <= 3) push(t, 'due-soon', 80 + (3 - diffDays(date, t.due)) * 3 + prio);
-    else if (plannedDate(t) !== undefined && plannedDate(t)! < date) push(t, 'scheduled-past', 70 + prio + projBoost);
+    else if (plannedDate(t) !== undefined && plannedDate(t)! < today) push(t, 'scheduled-past', 70 + prio + projBoost);
     else if (t.status === 'doing') push(t, 'in-progress', 60 + prio + projBoost);
   }
   // Next actions of active projects.
@@ -174,7 +176,7 @@ export function candidates(snap: Snapshot, date: IsoDate, settings: HelmSettings
   for (const t of snap.tasks.values()) {
     if (t.origin === 'inbox' && isCandidateTask(t) && !seen.has(t.key)) push(t, 'inbox', 20 + (5 - priorityRank(t.priority)));
   }
-  void settings; void today;
+  void settings;
   return out.sort((a, b) => b.score - a.score || compareTasks(a.task, b.task));
 }
 

@@ -106,6 +106,20 @@ describe('planner', () => {
     expect(c.some((x) => x.task.text === 'Call the plumber' && x.reason === 'inbox')).toBe(true);
   });
 
+  it('candidates for a future day do not carry today\'s work over', async () => {
+    const { index, settings, m } = await setup();
+    await m.addTask({ text: 'Todays thing', date: TODAY });
+    await m.schedule('tsk-0001', TODAY);
+    const tomorrow = candidates(index.snapshot, '2026-08-27', settings, TODAY);
+    expect(tomorrow.some((c) => c.task.text === 'Todays thing')).toBe(false);
+    expect(tomorrow.some((c) => c.task.text === 'Draft chapter list')).toBe(false);
+    expect(tomorrow.some((c) => c.task.text === 'Fix router config' && c.reason === 'scheduled-past')).toBe(true); // yesterday's, still not done
+    expect(tomorrow.some((c) => c.task.text === 'Renew passport' && c.reason === 'overdue')).toBe(true);
+    // Looking back at yesterday offers nothing as "carried over" from today either.
+    const back = candidates(index.snapshot, '2026-08-25', settings, TODAY);
+    expect(back.some((c) => c.task.text === 'Todays thing')).toBe(false);
+  });
+
   it('project health', async () => {
     const { index, settings } = await setup();
     const h = projectHealth(index.snapshot, index.project('prj-book')!, TODAY, settings);
