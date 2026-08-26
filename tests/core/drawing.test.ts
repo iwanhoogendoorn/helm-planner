@@ -54,6 +54,11 @@ describe('drawings', () => {
     expect(doc).toContain('## Text Elements\nWeek 35 ^');
     const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(doc)![1]!) as { elements: { type: string; text?: string; containerId?: string }[] };
     expect(json.elements.length).toBe(els.length);
+    // Entries are blank-line separated and keep their own line breaks, which is how the Excalidraw plugin parses them back.
+    const section = /## Text Elements\n([\s\S]*?)\n%%/.exec(doc)![1]!;
+    const entries = section.split('\n\n').filter(Boolean);
+    expect(entries.length).toBe(json.elements.filter((e) => e.type === 'text').length);
+    expect(entries.every((e) => /\^helm\w+$/.test(e.trim()))).toBe(true);
     const texts = json.elements.filter((e) => e.type === 'text').map((e) => e.text);
     expect(texts).toEqual(expect.arrayContaining(['Week 35', 'A good week.', 'Kitchen', 'Pick tiles', 'Highlights', 'Tiles chosen', 'Next', 'Plumber quote']));
     // Every box label is bound to its rectangle.

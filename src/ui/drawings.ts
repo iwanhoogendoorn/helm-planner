@@ -50,11 +50,18 @@ export function aiDiagram(ctx: UiContext, target: DrawingTarget): void {
   void ctx.run('AI diagram', async () => { const p = await ctx.mutations.generateDiagram(target); ctx.notify(`Drew ${p.slice(p.lastIndexOf('/') + 1).replace(/\.excalidraw\.md$/, '')}.`); await ctx.openFile(p); });
 }
 
+export function regenerate(ctx: UiContext, target: DrawingTarget, path: string): void {
+  ctx.notify(`Redrawing the overview of ${target.title}…`);
+  void ctx.run('AI diagram', async () => { await ctx.mutations.generateDiagram(target, { replacePath: path }); ctx.notify('Overview redrawn.'); await ctx.openFile(path); });
+}
+
 /** Fill a menu with the drawings of a target and the ways to add one. */
 export function addDrawingItems(menu: Menu, ctx: UiContext, target: DrawingTarget): void {
   const today = ctx.today();
   const list = ctx.index.drawingsFor(target);
-  for (const d of list.slice(0, 12)) menu.addItem((i) => i.setTitle(`${d.title}${d.mtime ? ` · ${when(d, today)}` : ''}`).setIcon(d.kind === 'canvas' ? 'layout-grid' : 'pen-tool').onClick(() => void ctx.openFile(d.path)));
+  for (const d of list.slice(0, 12)) menu.addItem((i) => i.setTitle(`${d.title}${d.generated ? ' · AI' : ''}${d.mtime ? ` · ${when(d, today)}` : ''}`).setIcon(d.kind === 'canvas' ? 'layout-grid' : 'pen-tool').onClick(() => void ctx.openFile(d.path)));
+  const gen = list.filter((d) => d.generated);
+  if (aiOn(ctx) && gen.length > 0) menu.addItem((i) => i.setTitle(gen.length === 1 ? `Regenerate “${gen[0]!.title}” (AI)` : 'Regenerate the AI overview').setIcon('refresh-cw').onClick(() => regenerate(ctx, target, gen[0]!.path)));
   if (list.length > 12) menu.addItem((i) => i.setTitle(`… ${list.length - 12} more`).setIcon('more-horizontal').setDisabled(true));
   if (list.length > 0) menu.addSeparator();
   menu.addItem((i) => i.setTitle('New drawing…').setIcon('pen-tool').onClick(() => newDrawing(ctx, target)));

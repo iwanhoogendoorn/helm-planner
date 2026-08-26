@@ -871,19 +871,19 @@ export class Mutations {
   }
 
   /** Ask the AI for a visual overview of a target and draw it. Returns the drawing path. */
-  async generateDiagram(target: DrawingTarget, opts: { name?: string } = {}): Promise<string> {
+  async generateDiagram(target: DrawingTarget, opts: { name?: string; replacePath?: string } = {}): Promise<string> {
     if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
     const raw = await this.d.ai(this.diagramPrompt(target));
     const spec = parseDiagramSpec(raw);
     if (!spec) throw new Error('The AI reply was not a diagram (expected JSON with title and themes)');
-    return this.drawSpec(target, spec, opts.name);
+    return this.drawSpec(target, spec, opts.name, opts.replacePath);
   }
 
   /** Draw a spec for a target without any AI involved (also what the AI path ends in). */
-  async drawSpec(target: DrawingTarget, spec: DiagramSpec, name?: string): Promise<string> {
+  async drawSpec(target: DrawingTarget, spec: DiagramSpec, name?: string, replacePath?: string): Promise<string> {
     let id: string | undefined;
     if (target.kind === 'task') id = await this.ensureId(target.key);
-    const path = await this.uniquePath(this.drawingPathFor(target, name ?? 'overview'));
+    const path = replacePath ?? await this.uniquePath(this.drawingPathFor(target, name ?? 'overview'));
     const frontmatter = { ...this.drawingFrontmatter(target, id), 'helm-generated': true, 'helm-generated-on': this.today };
     const content = renderExcalidrawDocument({ elements: layoutDiagram(spec), frontmatter, extra: spec.summary ? `> ${spec.summary}` : undefined });
     await this.d.vault.write(path, content);

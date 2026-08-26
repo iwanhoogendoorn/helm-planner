@@ -89,7 +89,8 @@ export function renderExcalidrawDocument(opts: { elements?: ExcalidrawElement[];
   }
   fm.push('excalidraw-plugin: parsed', 'tags: [excalidraw]', '---');
   const elements = opts.elements ?? [];
-  const texts = elements.filter((e) => e.type === 'text').map((e) => `${String(e['text'] ?? '').replace(/\n/g, ' ')} ^${e.id}`);
+  // The plugin reads this section back as the source of text: one entry per element, entries separated by a blank line.
+  const texts = elements.filter((e) => e.type === 'text').flatMap((e) => [`${String(e['text'] ?? '')} ^${e.id}`, '']);
   const scene = { type: 'excalidraw', version: 2, source: 'https://github.com/zsviczian/obsidian-excalidraw-plugin', elements, appState: { theme: 'light', viewBackgroundColor: opts.background ?? '#ffffff', currentItemFontFamily: 1, gridSize: null }, files: {} };
   return [
     ...fm, '',
