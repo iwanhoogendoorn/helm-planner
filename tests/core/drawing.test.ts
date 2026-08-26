@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDrawing, renderExcalidrawDocument, drawingTitle, isDrawingPath, parseExcalidrawScene } from '../../src/core/drawing';
+import { parseDrawing, renderExcalidrawDocument, drawingTitle, isDrawingPath, parseExcalidrawScene, sanitiseElementIds } from '../../src/core/drawing';
 import { layoutDiagram, parseDiagramSpec } from '../../src/core/diagram';
 import { extractResult } from '../../src/ai';
 
@@ -88,5 +88,24 @@ describe('scene import', () => {
     expect(sc.background).toBe('#1e1e1e');
     expect(parseExcalidrawScene('{"elements":[]}')).toBeUndefined();
     expect(parseExcalidrawScene('nope')).toBeUndefined();
+  });
+});
+
+describe('element ids', () => {
+  it('rewrites ids to block-id-safe, unique values and follows every reference', () => {
+    const els = sanitiseElementIds([
+      { id: 'stat_done', type: 'rectangle', x: 0, y: 0, width: 1, height: 1, boundElements: [{ type: 'text', id: 'stat_done.txt' }] },
+      { id: 'stat_done.txt', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '40', containerId: 'stat_done' },
+      { id: 'stat-done', type: 'ellipse', x: 0, y: 0, width: 1, height: 1 },
+      { id: 'arr', type: 'arrow', x: 0, y: 0, width: 1, height: 1, startBinding: { elementId: 'stat_done', focus: 0, gap: 1 }, endBinding: { elementId: 'stat-done', focus: 0, gap: 1 } },
+    ] as never);
+    expect(els.map((e) => e.id)).toEqual(['stat-done', 'stat-done-txt', 'stat-done-2', 'arr']);
+    expect((els[0]!['boundElements'] as { id: string }[])[0]!.id).toBe('stat-done-txt');
+    expect(els[1]!['containerId']).toBe('stat-done');
+    expect((els[3]!['startBinding'] as { elementId: string }).elementId).toBe('stat-done');
+    expect((els[3]!['endBinding'] as { elementId: string }).elementId).toBe('stat-done-2');
+    const doc = renderExcalidrawDocument({ elements: [{ id: 'a_b', type: 'text', x: 0, y: 0, width: 1, height: 1, text: 'hi' }] });
+    expect(doc).toContain('hi ^a-b');
+    expect(doc).not.toContain('a_b');
   });
 });

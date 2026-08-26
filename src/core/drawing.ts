@@ -80,6 +80,34 @@ export interface ExcalidrawElement {
   [k: string]: unknown;
 }
 
+/**
+ * Obsidian block ids allow only letters, digits and dashes, and the Excalidraw
+ * plugin keys its `## Text Elements` on `^<element id>` — an id like
+ * `stat_done` breaks that mapping. Rewrite ids to be block-id safe and unique,
+ * and follow every reference to them.
+ */
+export function sanitiseElementIds(elements: ExcalidrawElement[]): ExcalidrawElement[] {
+  const map = new Map<string, string>();
+  const used = new Set<string>();
+  for (const e of elements) {
+    let base = e.id.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'el';
+    let id = base;
+    for (let i = 2; used.has(id); i++) id = `${base}-${i}`;
+    used.add(id); map.set(e.id, id);
+  }
+  if ([...map].every(([a, b]) => a === b)) return elements;
+  const re = (id: unknown): unknown => (typeof id === 'string' && map.has(id) ? map.get(id) : id);
+  return elements.map((e) => {
+    const out: ExcalidrawElement = { ...e, id: map.get(e.id)! };
+    if (typeof out['containerId'] === 'string') out['containerId'] = re(out['containerId']);
+    if (typeof out['frameId'] === 'string') out['frameId'] = re(out['frameId']);
+    if (Array.isArray(out['boundElements'])) out['boundElements'] = (out['boundElements'] as { id: unknown; type: unknown }[]).map((b) => ({ ...b, id: re(b.id) }));
+    for (const k of ['startBinding', 'endBinding']) { const b = out[k] as { elementId?: unknown } | null | undefined; if (b && typeof b === 'object' && typeof b.elementId === 'string') out[k] = { ...b, elementId: re(b.elementId) }; }
+    if (Array.isArray(out['groupIds'])) out['groupIds'] = (out['groupIds'] as unknown[]).map((g) => (typeof g === 'string' ? g.replace(/[^A-Za-z0-9-]+/g, '-') : g));
+    return out;
+  });
+}
+
 /** A minimal, valid Excalidraw markdown file (uncompressed JSON; the plugin re-saves it its own way). */
 export function renderExcalidrawDocument(opts: { elements?: ExcalidrawElement[]; frontmatter?: Record<string, string | string[] | boolean>; background?: string; extra?: string }): string {
   const fm: string[] = ['---'];
@@ -88,7 +116,7 @@ export function renderExcalidrawDocument(opts: { elements?: ExcalidrawElement[];
     else fm.push(`${k}: ${typeof v === 'boolean' ? String(v) : v}`);
   }
   fm.push('excalidraw-plugin: parsed', 'tags: [excalidraw]', '---');
-  const elements = opts.elements ?? [];
+  const elements = sanitiseElementIds(opts.elements ?? []);
   // The plugin reads this section back as the source of text: one entry per element, entries separated by a blank line.
   const texts = elements.filter((e) => e.type === 'text').flatMap((e) => [`${String(e['text'] ?? '')} ^${e.id}`, '']);
   const scene = { type: 'excalidraw', version: 2, source: 'https://github.com/zsviczian/obsidian-excalidraw-plugin', elements, appState: { theme: 'light', viewBackgroundColor: opts.background ?? '#ffffff', currentItemFontFamily: 1, gridSize: null }, files: {} };
