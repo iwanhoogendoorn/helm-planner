@@ -429,3 +429,19 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-year-month:hover { background: var(--background-modifier-hover); }
 .helm-year-month.is-current { background: rgba(var(--color-blue-rgb), 0.06); }
 .helm-year-month-head { display: flex; justify-content: space-between; font-size: var(--font-ui-smaller); font-weight: 600; margin-bottom: 3px; }
+
+/* Breadcrumbs */
+.helm-crumbs { display: inline-flex; align-items: center; gap: 2px; font-size: var(--font-ui-small); flex-wrap: wrap; }
+.helm-crumbs-top { padding: var(--size-4-2) 0 0; }
+.helm-crumb.is-static { background: transparent; padding: 2px 6px; color: var(--text-muted); }
+.helm-crumb.is-static.is-active { color: var(--text-normal); font-weight: 600; }
+/* Week parts */
+.helm-week-part { border-radius: var(--radius-s); padding: 2px 2px 4px; margin-bottom: 4px; border: 1px dashed transparent; }
+.helm-week-part.is-empty { min-height: 26px; }
+.helm-week-part.is-dropping { border-color: var(--color-blue); background: rgba(var(--color-blue-rgb), 0.08); }
+.helm-week-part-head { display: flex; align-items: center; gap: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); padding: 2px 4px; }
+.helm-week-part-head .helm-icon svg { width: 11px; height: 11px; }
+.helm-week-part.part-morning .helm-week-part-head { color: var(--color-orange); }
+.helm-week-part.part-afternoon .helm-week-part-head { color: var(--color-yellow); }
+.helm-week-part.part-evening .helm-week-part-head { color: var(--color-purple); }
+.helm-week-part .helm-count { min-width: 16px; padding: 0 5px; }

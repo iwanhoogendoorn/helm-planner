@@ -99,7 +99,7 @@ describe('Week tab', () => {
     expect(root.querySelectorAll('.helm-week-day')).toHaveLength(7);
     expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('Week 35');
     expect(root.querySelector('.helm-week-day.is-today .helm-week-dom')!.textContent).toBe('26');
-    expect(texts(root, '.helm-week-day:nth-child(2) .helm-task-text')).toEqual(['Start with OIB', 'Chapter 1', 'Fix router config']);
+    expect(texts(root, '.helm-week-day:nth-child(2) .helm-task-text')).toEqual(['Start with OIB', 'Fix router config', 'Chapter 1']); // morning · afternoon · anytime
     expect(texts(root, '.helm-week-side .helm-section-title')).toEqual(['Overdue']);
     // Drop tsk-0001 on Friday.
     const fri = root.querySelectorAll('.helm-week-day')[4]!;
@@ -382,12 +382,25 @@ describe('Calendar tab', () => {
     expect(texts(y, '.helm-goal-text')).toEqual(['Publish the book']);
     click(y.querySelectorAll('.helm-year-quarter-head')[3]);
     expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: '2026-10-01', scope: 'quarter' } });
-    expect(texts(y, '.helm-crumb')).toEqual(['2026', 'Q3', 'Aug', 'W35']);
+    expect(texts(y, '.helm-crumb')).toEqual(['Calendar', '2026', 'Q3', 'Aug', 'W35']);
   });
-  it('week scope still renders the week grid', async () => {
-    const { ctx } = await cal();
+  it('week scope renders the grid split into parts of the day, with breadcrumbs', async () => {
+    const { ctx, nav } = await cal();
     const w = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: TODAY, collapsed: new Map() }));
     expect(w.querySelectorAll('.helm-week-day')).toHaveLength(7);
+    expect(texts(w, '.helm-crumb')).toEqual(['Calendar', '2026', 'Q3', 'Aug', 'W35']);
+    const tue = w.querySelectorAll('.helm-week-day')[1]!;
+    expect([...tue.querySelectorAll('.helm-week-part')].map((p) => p.className.match(/part-(\w+)/)![1])).toEqual(['morning', 'afternoon', 'anytime']);
+    expect(texts(tue as HTMLElement, '.helm-week-part.part-afternoon .helm-task-text')).toEqual(['Fix router config']);
+    click(w.querySelectorAll('.helm-crumb')[2]);
+    expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: TODAY, scope: 'quarter' } });
+  });
+  it('project detail shows the full umbrella chain as breadcrumbs', async () => {
+    const { ctx } = await ctxFor();
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-cert', filter: '', showClosed: false, collapsed: new Map(), showDone: false }));
+    expect(texts(root, '.helm-crumb')).toEqual(['Projects', 'Oracle', 'OCI Certification']);
+    const today = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    expect(texts(today, '.helm-crumb')).toEqual(['Today', '2026', 'Q3', 'Aug', 'W35', 'Today']);
   });
 });
 

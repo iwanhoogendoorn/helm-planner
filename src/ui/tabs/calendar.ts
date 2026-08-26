@@ -13,6 +13,7 @@ import { openPlanDay } from '../modals/planDay';
 import { openProjectForm } from '../modals/projectForm';
 import { pickProject } from '../menus';
 import { barChart } from '../charts';
+import { breadcrumbs, dateCrumbs } from '../crumbs';
 
 export type CalendarScope = 'week' | 'month' | 'quarter' | 'year';
 export interface CalendarState { scope: CalendarScope; anchor: IsoDate; collapsed: Map<string, boolean> }
@@ -29,7 +30,7 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
   root.appendChild(h('div', { cls: 'helm-cal-bar' },
     h('div', { cls: 'helm-segmented' }, ...SCOPES.map((s) => h('button', { cls: ['helm-seg', state.scope === s.id && 'is-active'], text: s.label, onClick: () => go(s.id, state.anchor) }))),
     h('span', { cls: 'helm-spacer' }),
-    h('div', { cls: 'helm-cal-crumbs' }, ...crumbs(ctx, state.anchor, state.scope, today)),
+    breadcrumbs([{ label: 'Calendar', onClick: () => go(state.scope, today), title: 'Back to today' }, ...dateCrumbs(ctx, state.anchor, state.scope, { day: false }), ...(state.anchor !== today ? [{ label: 'today', onClick: () => go(state.scope, today) }] : [])]),
   ));
 
   if (state.scope === 'week') { renderWeek(ctx, root, { anchor: state.anchor, collapsed: state.collapsed }); return; }
@@ -71,18 +72,7 @@ function stat(value: string | number, label: string, cls: string): HTMLElement {
   return h('div', { cls: ['helm-stat', cls] }, h('div', { cls: 'helm-stat-value', text: String(value) }), h('div', { cls: 'helm-stat-label', text: label }));
 }
 
-function crumbs(ctx: UiContext, anchor: IsoDate, scope: CalendarScope, today: IsoDate): HTMLElement[] {
-  const y = periodOf(anchor, 'year');
-  const q = periodOf(anchor, 'quarter');
-  const m = periodOf(anchor, 'month');
-  const w = periodOf(anchor, 'week');
-  const link = (label: string, s: CalendarScope, active: boolean): HTMLElement => h('button', { cls: ['helm-crumb', active && 'is-active'], text: label, onClick: () => ctx.navigate('week', { date: anchor, scope: s }) });
-  const out = [link(y.label, 'year', scope === 'year'), sep(), link(`Q${q.quarter}`, 'quarter', scope === 'quarter'), sep(), link(MONTH_SHORT[(m.month ?? 1) - 1]!, 'month', scope === 'month'), sep(), link(`W${w.week}`, 'week', scope === 'week')];
-  if (anchor !== today) out.push(sep(), h('button', { cls: 'helm-crumb', text: 'today', onClick: () => ctx.navigate('week', { date: today, scope }) }));
-  return out;
-}
 
-function sep(): HTMLElement { return h('span', { cls: 'helm-crumb-sep', text: '›' }); }
 
 /* ── Month ──────────────────────────────────────────────────────────────── */
 

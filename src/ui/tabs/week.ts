@@ -1,7 +1,8 @@
 /** Seven columns; drag a task onto a day to plan it. */
 import type { IsoDate, Task } from '../../core/types';
 import { addDays, humanDate, isoWeek, isoWeekday, minutesToHuman, WEEKDAY_SHORT } from '../../core/dates';
-import { weekView } from '../../data/planner';
+import { weekView, type DayPart, DAY_PARTS } from '../../data/planner';
+import { PART_LABEL } from '../../core/dailyNote';
 import { button, chip, h, icon, iconButton, section } from '../dom';
 import type { UiContext } from '../context';
 import { taskRow } from '../taskRow';
@@ -71,11 +72,7 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
         d.minutes > 0 ? chip(minutesToHuman(d.minutes), d.minutes > settings.dailyCapacityMinutes ? 'effort is-over' : 'effort') : null,
         iconButton('list-plus', 'Plan this day', (ev) => { ev.stopPropagation(); openPlanDay(ctx, d.date); }),
       ),
-      h('div', { cls: 'helm-week-day-body' },
-        ...d.open.map((t) => taskRow(ctx, t, { draggable: true, showDate: 'due', showProject: true })),
-        d.done.length > 0 ? h('div', { cls: 'helm-week-done', text: `${d.done.length} done` }) : null,
-        d.open.length === 0 && d.done.length === 0 ? h('div', { cls: 'helm-week-empty', text: isPast ? '' : 'drop tasks here' }) : null,
-      ),
+      weekDayBody(ctx, d.date, d.open, d.done.length, isPast),
     );
     grid.appendChild(col);
   }
@@ -87,4 +84,41 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
   if (w.unscheduledDue.length > 0) side.appendChild(section('Due this week, not planned', { count: w.unscheduledDue.length, store: state.collapsed, key: 'unscheduled' }, ...w.unscheduledDue.map(dragRow)));
   if (side.childElementCount > 0) root.appendChild(side);
   else root.appendChild(h('div', { cls: 'helm-hint helm-week-hint', text: 'Drag a task from any list onto a day. Nothing is overdue and everything due this week is planned.' }));
+}
+
+const PART_ICON: Record<DayPart, string> = { morning: 'sunrise', afternoon: 'sun', evening: 'moon', anytime: 'clock' };
+
+/** A day column split into parts; each part is a drop zone for that part of that day. */
+function weekDayBody(ctx: UiContext, date: string, open: Task[], doneCount: number, isPast: boolean): HTMLElement {
+  const settings = ctx.settings();
+  const partOf = (t: Task): DayPart => t.part ?? (t.time ? (t.time.start < settings.morningEnds ? 'morning' : t.time.start < settings.afternoonEnds ? 'afternoon' : 'evening') : 'anytime');
+  const groups: Record<DayPart, Task[]> = { morning: [], afternoon: [], evening: [], anytime: [] };
+  for (const t of open) groups[partOf(t)].push(t);
+  const body = h('div', { cls: 'helm-week-day-body' });
+  for (const part of DAY_PARTS) {
+    const items = groups[part];
+    if (items.length === 0 && (isPast || part === 'anytime')) continue;
+    const block = h('div', { cls: ['helm-week-part', `part-${part}`, items.length === 0 && 'is-empty'] },
+      h('div', { cls: 'helm-week-part-head' }, icon(PART_ICON[part]), h('span', { text: PART_LABEL[part] }), items.length > 0 ? h('span', { cls: 'helm-count', text: String(items.length) }) : null),
+      ...items.map((t) => taskRow(ctx, t, { draggable: true, showDate: 'due', showProject: true })),
+    );
+    block.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task')) { ev.preventDefault(); ev.stopPropagation(); block.classList.add('is-dropping'); } });
+    block.addEventListener('dragleave', (ev) => { if (!block.contains(ev.relatedTarget as Node | null)) block.classList.remove('is-dropping'); });
+    block.addEventListener('drop', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      block.classList.remove('is-dropping');
+      const key = ev.dataTransfer?.getData('text/helm-task');
+      if (!key) return;
+      const t = ctx.index.task(key);
+      const onThisDay = t && (t.noteDate === date || t.scheduled === date);
+      void ctx.run('Move', () => (onThisDay ? ctx.mutations.setPart(key, part) : ctx.mutations.schedule(key, date, part)));
+    });
+    body.appendChild(block);
+  }
+  if (groups.anytime.length > 0 || (!isPast && open.length === 0)) {
+    // (anytime is rendered above when it has items; the column itself accepts drops as "anytime")
+  }
+  if (doneCount > 0) body.appendChild(h('div', { cls: 'helm-week-done', text: `${doneCount} done` }));
+  if (open.length === 0 && doneCount === 0 && isPast) body.appendChild(h('div', { cls: 'helm-week-empty', text: '' }));
+  return body;
 }
