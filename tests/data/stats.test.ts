@@ -22,7 +22,7 @@ describe('dashboard stats', () => {
     expect(s.byProject[0]!.velocity).toBe(2);
     expect(s.ageBuckets.find((b) => b.key === 'unknown')!.value).toBeGreaterThan(0);
     expect(s.habits.map((h) => h.habit.id).sort()).toEqual(['hab-read', 'hab-workout']);
-    expect(s.streak.current).toBe(1);
+    expect(s.streak.current).toBe(2); // yesterday and today both had completions
     // Filters narrow the population.
     const k = computeStats(index.snapshot, { from: '2026-08-20', to: TODAY, projectId: 'prj-kitchen' }, TODAY, settings);
     expect(k.totals.done).toBe(0);
