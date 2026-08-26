@@ -3,7 +3,7 @@ import { h } from './dom';
 import type { IsoDate } from '../core/types';
 import { humanDate, MONTH_SHORT } from '../core/dates';
 import { periodOf } from '../core/periods';
-import type { UiContext } from './context';
+import type { TabId, UiContext } from './context';
 
 export interface Crumb { label: string; onClick?: () => void; active?: boolean; title?: string }
 
@@ -33,4 +33,18 @@ export function dateCrumbs(ctx: UiContext, date: IsoDate, active: 'year' | 'quar
   ];
   if (opts.day) out.push({ label: humanDate(date, ctx.today()), onClick: () => ctx.navigate('today', { date }), active: active === 'day', title: date });
   return out;
+}
+
+const HOME: Record<TabId, string> = { today: 'Today', week: 'Calendar', projects: 'Projects', inbox: 'Inbox', review: 'Review', horizons: 'Horizons', dashboard: 'Dashboard' };
+
+/**
+ * The bar every tab starts with: `<Tab> › trail…`. Same class, same spot (first
+ * child of the tab), same first crumb (the tab's name, which jumps to its home
+ * state). With an empty trail the tab name is the active crumb.
+ */
+export function crumbBar(ctx: UiContext, tab: TabId, trail: Crumb[], opts: { homeClick?: () => void; homeTitle?: string } = {}): HTMLElement {
+  const home: Crumb = trail.length === 0
+    ? { label: HOME[tab], active: true }
+    : { label: HOME[tab], onClick: opts.homeClick ?? (() => ctx.navigate(tab)), title: opts.homeTitle ?? `Back to ${HOME[tab]}` };
+  return breadcrumbs([home, ...trail], 'helm-crumbs-top');
 }

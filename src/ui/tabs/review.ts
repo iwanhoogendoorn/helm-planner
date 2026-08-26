@@ -4,6 +4,7 @@ import { review, type ProjectHealth } from '../../data/planner';
 import { habitStats } from '../../data/habits';
 import { button, chip, empty, h, icon, section } from '../dom';
 import type { UiContext } from '../context';
+import { crumbBar, dateCrumbs } from '../crumbs';
 import { taskRow } from '../taskRow';
 import { openHabitForm } from '../modals/habitForm';
 import { openCapture } from '../modals/capture';
@@ -22,6 +23,7 @@ export function renderReview(ctx: UiContext, root: HTMLElement, state: ReviewSta
   const snap = ctx.index.snapshot;
   const r = review(snap, today, settings);
   const store = state.collapsed;
+  root.appendChild(crumbBar(ctx, 'review', dateCrumbs(ctx, today, 'week', { day: false }).map((c) => ({ ...c, active: false }))));
 
   const stat = (value: string | number, label: string, cls = '', onClick?: () => void): HTMLElement => h('button', { cls: ['helm-stat', cls, onClick && 'is-clickable'], onClick }, h('div', { cls: 'helm-stat-value', text: String(value) }), h('div', { cls: 'helm-stat-label', text: label }));
   root.appendChild(h('div', { cls: 'helm-stats' },

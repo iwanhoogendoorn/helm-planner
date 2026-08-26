@@ -9,7 +9,7 @@ import { pickProject } from '../menus';
 import { openTaskEditor } from '../modals/taskEditor';
 import { openProjectForm } from '../modals/projectForm';
 import { Menu } from 'obsidian';
-import { breadcrumbs } from '../crumbs';
+import { crumbBar } from '../crumbs';
 
 export interface HorizonsState { year: number; selected?: string; collapsed: Map<string, boolean> }
 
@@ -21,12 +21,11 @@ export function renderHorizons(ctx: UiContext, root: HTMLElement, state: Horizon
   const thisYear = Number(today.slice(0, 4));
 
   const selP = state.selected ? parsePeriod(state.selected) : undefined;
-  root.appendChild(breadcrumbs([
-    { label: 'Horizons', onClick: () => { state.selected = undefined; state.year = thisYear; ctx.refresh(); } },
+  root.appendChild(crumbBar(ctx, 'horizons', [
     { label: String(state.year), onClick: () => { state.selected = undefined; ctx.refresh(); }, active: !selP },
     ...(selP && selP.kind !== 'year' && selP.kind !== 'quarter' ? [{ label: `Q${selP.quarter}`, onClick: () => { state.selected = `${selP.year}-Q${selP.quarter}`; ctx.refresh(); } }] : []),
     ...(selP && selP.kind !== 'year' ? [{ label: selP.kind === 'quarter' ? `Q${selP.quarter}` : selP.label.split(' ')[0]!, active: true }] : []),
-  ], 'helm-crumbs-top'));
+  ], { homeClick: () => { state.selected = undefined; state.year = thisYear; ctx.refresh(); }, homeTitle: 'Back to this year' }));
   root.appendChild(h('div', { cls: 'helm-day-head' },
     h('div', { cls: 'helm-day-nav' },
       iconButton('chevron-left', 'Previous year', () => { state.year--; state.selected = undefined; ctx.refresh(); }),

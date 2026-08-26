@@ -11,7 +11,7 @@ import { openPlanDay } from '../modals/planDay';
 import { openWrapUp } from '../modals/wrapUp';
 import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
-import { breadcrumbs, dateCrumbs } from '../crumbs';
+import { crumbBar, dateCrumbs } from '../crumbs';
 import { habitBadge } from '../fields';
 
 export interface TodayState { date: IsoDate; collapsed: Map<string, boolean> }
@@ -29,7 +29,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   const note = snap.dailyNotes.get(date);
 
   const cap = settings.dailyCapacityMinutes;
-  root.appendChild(breadcrumbs([{ label: 'Today', onClick: () => ctx.navigate('today', { date: today }), title: 'Jump to today' }, ...dateCrumbs(ctx, date, 'day', { day: true })], 'helm-crumbs-top'));
+  root.appendChild(crumbBar(ctx, 'today', dateCrumbs(ctx, date, 'day', { day: true }), { homeClick: () => ctx.navigate('today', { date: today }), homeTitle: 'Jump to today' }));
   root.append(h('div', { cls: 'helm-day-head' },
     h('div', { cls: 'helm-day-nav' },
       iconButton('chevron-left', 'Previous day', () => ctx.navigate('today', { date: addDays(date, -1) })),

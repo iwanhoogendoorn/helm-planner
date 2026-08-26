@@ -5,6 +5,7 @@ import { parseCapture } from '../../core/nlp';
 import { inboxItems } from '../../data/planner';
 import { button, empty, h, icon, section } from '../dom';
 import type { UiContext } from '../context';
+import { crumbBar } from '../crumbs';
 import { taskRow } from '../taskRow';
 import { pickProject } from '../menus';
 import { minutesToHuman } from '../../core/dates';
@@ -15,6 +16,7 @@ export function renderInbox(ctx: UiContext, root: HTMLElement, state: InboxState
   const today = ctx.today();
   const snap = ctx.index.snapshot;
   const items = inboxItems(snap);
+  root.appendChild(crumbBar(ctx, 'inbox', []));
 
   const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Capture: Call the plumber tomorrow !high #home @Kitchen ~30m' } });
   input.addEventListener('keydown', (ev) => {

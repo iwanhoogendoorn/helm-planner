@@ -558,3 +558,28 @@ describe('Habit form modal', () => {
     expect(chip.querySelector('img.helm-habit-img')?.getAttribute('src')).toBe('app://02 PROJECTS/Habits/icons/Hydrate.png');
   });
 });
+
+describe('Breadcrumbs are consistent across tabs', () => {
+  it('every tab starts with the same crumb bar, first crumb = the tab name', async () => {
+    const { ctx } = await ctxFor();
+    const tabs: [string, (r: HTMLElement) => void][] = [
+      ['Today', (r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })],
+      ['Calendar', (r) => renderCalendar(ctx, r, { anchor: TODAY, scope: 'month', collapsed: new Map() } as CalendarState)],
+      ['Projects', (r) => renderProjects(ctx, r, { filter: '', showClosed: false, showDone: false, collapsed: new Map() })],
+      ['Inbox', (r) => renderInbox(ctx, r, { collapsed: new Map() })],
+      ['Review', (r) => renderReview(ctx, r, { collapsed: new Map(), checks: new Set() })],
+      ['Horizons', (r) => renderHorizons(ctx, r, { year: 2026, collapsed: new Map() })],
+      ['Dashboard', (r) => renderDashboard(ctx, r, defaultDashboardState())],
+    ];
+    for (const [name, fn] of tabs) {
+      const root = render(fn);
+      const bar = root.firstElementChild as HTMLElement;
+      expect(bar.classList.contains('helm-crumbs-top'), `${name}: crumb bar is the first thing rendered`).toBe(true);
+      expect(texts(bar, '.helm-crumb')[0], `${name}: first crumb`).toBe(name);
+    }
+    // Trails: Review shows this week's time trail, Dashboard its range, Calendar the anchor's period.
+    expect(texts(render(tabs[4]![1]), '.helm-crumb')).toEqual(['Review', '2026', 'Q3', 'Aug', 'W35']);
+    expect(texts(render(tabs[6]![1]), '.helm-crumb')).toEqual(['Dashboard', '30 days']);
+    expect(texts(render(tabs[1]![1]), '.helm-crumb')).toEqual(['Calendar', '2026', 'Q3', 'Aug', 'W35']);
+  });
+});

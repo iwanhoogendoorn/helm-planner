@@ -7,6 +7,7 @@ import { PART_LABEL } from '../../core/dailyNote';
 import { barChart, donut, gauge, legend, lineChart } from '../charts';
 import { button, chip, h, icon, section } from '../dom';
 import type { UiContext } from '../context';
+import { crumbBar } from '../crumbs';
 import { openDrilldown } from '../modals/drilldown';
 
 export type RangePreset = '7d' | '14d' | '30d' | '90d' | 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom';
@@ -53,6 +54,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   const opts = filterOptions(snap);
   const refresh = (): void => ctx.refresh();
   const drill = (title: string, tasks: Task[]): void => openDrilldown(ctx, title, tasks);
+  root.appendChild(crumbBar(ctx, 'dashboard', [{ label: PRESETS.find(([k]) => k === state.preset)?.[1] ?? 'Custom range', active: true, title: `${range.from} – ${range.to}` }], { homeClick: () => { Object.assign(state, defaultDashboardState()); ctx.refresh(); }, homeTitle: 'Reset filters' }));
 
   // Filter bar.
   const presetSel = h('select', { cls: 'helm-select-inline', onChange: (ev) => { state.preset = (ev.target as HTMLSelectElement).value as RangePreset; refresh(); } });

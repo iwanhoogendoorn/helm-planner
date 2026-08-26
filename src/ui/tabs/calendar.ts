@@ -13,7 +13,7 @@ import { openPlanDay } from '../modals/planDay';
 import { openProjectForm } from '../modals/projectForm';
 import { pickProject } from '../menus';
 import { barChart } from '../charts';
-import { breadcrumbs, dateCrumbs } from '../crumbs';
+import { crumbBar, dateCrumbs } from '../crumbs';
 
 export type CalendarScope = 'week' | 'month' | 'quarter' | 'year';
 export interface CalendarState { scope: CalendarScope; anchor: IsoDate; collapsed: Map<string, boolean> }
@@ -27,10 +27,10 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
   const step = (n: number): IsoDate => state.scope === 'week' ? addDays(state.anchor, 7 * n) : state.scope === 'month' ? addMonths(period.start, n) : state.scope === 'quarter' ? addMonths(period.start, 3 * n) : addYears(period.start, n);
   const go = (scope: CalendarScope, date: IsoDate): void => ctx.navigate('week', { date, scope });
 
+  root.appendChild(crumbBar(ctx, 'week', [...dateCrumbs(ctx, state.anchor, state.scope, { day: false }), ...(state.anchor !== today ? [{ label: 'today', onClick: () => go(state.scope, today), title: 'Back to today' }] : [])], { homeClick: () => go(state.scope, today), homeTitle: 'Back to today' }));
   root.appendChild(h('div', { cls: 'helm-cal-bar' },
     h('div', { cls: 'helm-segmented' }, ...SCOPES.map((s) => h('button', { cls: ['helm-seg', state.scope === s.id && 'is-active'], text: s.label, onClick: () => go(s.id, state.anchor) }))),
     h('span', { cls: 'helm-spacer' }),
-    breadcrumbs([{ label: 'Calendar', onClick: () => go(state.scope, today), title: 'Back to today' }, ...dateCrumbs(ctx, state.anchor, state.scope, { day: false }), ...(state.anchor !== today ? [{ label: 'today', onClick: () => go(state.scope, today) }] : [])]),
   ));
 
   if (state.scope === 'week') { renderWeek(ctx, root, { anchor: state.anchor, collapsed: state.collapsed }); return; }

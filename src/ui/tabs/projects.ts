@@ -13,7 +13,7 @@ import { openCapture } from '../modals/capture';
 import { openDatePicker } from '../modals/datePicker';
 import { minutesToHuman } from '../../core/dates';
 import { periodChoices, projectPeriodLabel } from './horizons';
-import { breadcrumbs } from '../crumbs';
+import { crumbBar } from '../crumbs';
 
 export interface ProjectsState { projectId?: string; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
 
@@ -37,7 +37,7 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
   const filter = h('input', { attr: { type: 'search', placeholder: 'Filter projects…', value: state.filter }, onInput: (ev) => { state.filter = (ev.target as HTMLInputElement).value; ctx.refresh(); } });
   const q = state.filter.trim().toLowerCase();
   const visible = all.filter((hh) => !q || `${hh.project.title} ${hh.project.area ?? ''} ${hh.project.tags.join(' ')}`.toLowerCase().includes(q));
-  root.appendChild(breadcrumbs([{ label: 'Projects', active: true }], 'helm-crumbs-top'));
+  root.appendChild(crumbBar(ctx, 'projects', []));
   root.appendChild(h('div', { cls: 'helm-toolbar' },
     filter,
     h('label', { cls: 'helm-toggle' }, h('input', { attr: { type: 'checkbox', checked: state.showClosed }, onChange: (ev) => { state.showClosed = (ev.target as HTMLInputElement).checked; ctx.refresh(); } }), h('span', { text: 'Show closed' })),
@@ -132,11 +132,10 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   const chain: Project[] = [];
   for (let cur: Project | undefined = parent, guard = 0; cur && guard < 10; cur = cur.parentId ? ctx.index.project(cur.parentId) : undefined, guard++) chain.unshift(cur);
   root.appendChild(h('div', { cls: 'helm-detail-head' },
-    breadcrumbs([
-      { label: 'Projects', onClick: () => ctx.navigate('projects') },
+    crumbBar(ctx, 'projects', [
       ...chain.map((c) => ({ label: c.title, onClick: () => ctx.navigate('projects', { projectId: c.id }), title: c.path })),
       { label: p.title, active: true, title: p.path },
-    ], 'helm-crumbs-top'),
+    ]),
     h('div', { cls: 'helm-detail-title' },
       h('h2', { text: p.title }),
       h('span', { cls: 'helm-spacer' }),
