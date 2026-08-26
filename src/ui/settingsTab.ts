@@ -3,6 +3,10 @@
  * Watch, Read and Learn use. Each panel has an icon, a subtitle and a status
  * chip so its state is legible without reading every row; paths are picked
  * from a suggester rather than typed; lists are chips, not comma strings.
+ *
+ * NB: Obsidian's SettingTab base class owns `navEl` (the tab's sidebar entry).
+ * Reusing that name for our section nav made Obsidian hoist it into the
+ * sidebar on the first open after startup — hence `sectionNavEl`.
  */
 import { AbstractInputSuggest, PluginSettingTab, Setting, setIcon, TFile, TFolder, type App, type Plugin, type TextComponent } from 'obsidian';
 import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
@@ -53,7 +57,7 @@ class PathSuggest extends AbstractInputSuggest<string> {
 
 export class HelmSettingTab extends PluginSettingTab {
   private active = 'folders';
-  private navEl!: HTMLElement;
+  private sectionNavEl!: HTMLElement;
   private bodyEl!: HTMLElement;
 
   constructor(app: App, private host: SettingsHost) { super(app, host); }
@@ -132,8 +136,9 @@ export class HelmSettingTab extends PluginSettingTab {
   private slider(parent: HTMLElement, key: NumKey, name: string, desc: string, min: number, max: number, step: number, unit: string): void {
     const s = this.host.settings;
     const st = new Setting(parent).setName(name).setDesc(desc);
-    const val = st.controlEl.createSpan({ cls: 'helm-slider-value', text: `${s[key]} ${unit}` });
-    st.addSlider((sl) => sl.setLimits(min, max, step).setValue(s[key]).setDynamicTooltip().onChange((v) => { (s as Record<NumKey, number>)[key] = v; val.setText(`${v} ${unit}`); void this.save(); }));
+    const wrap = st.controlEl.createDiv({ cls: 'helm-slider-wrap' });
+    st.addSlider((sl) => { sl.setLimits(min, max, step).setValue(s[key]).setDynamicTooltip().onChange((v) => { (s as Record<NumKey, number>)[key] = v; void this.save(); }); wrap.appendChild(sl.sliderEl); });
+    void unit;
   }
   private dropdown<K extends StrKey | 'weekStartsOn'>(parent: HTMLElement, key: K, name: string, desc: string, options: Record<string, string>, after?: () => void): void {
     const s = this.host.settings as unknown as Record<string, unknown>;
@@ -175,16 +180,16 @@ export class HelmSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.addClass('helm-settings');
-    this.navEl = containerEl.createDiv({ cls: 'helm-settings-nav' });
+    this.sectionNavEl = containerEl.createDiv({ cls: 'helm-settings-nav' });
     this.bodyEl = containerEl.createDiv({ cls: 'helm-settings-body' });
     for (const section of NAV_SECTIONS) {
-      const btn = this.navEl.createEl('button', { cls: 'helm-settings-nav-item' });
+      const btn = this.sectionNavEl.createEl('button', { cls: 'helm-settings-nav-item' });
       setIcon(btn.createSpan({ cls: 'helm-settings-nav-icon' }), section.icon);
       btn.createSpan({ text: section.label });
       btn.toggleClass('is-active', section.id === this.active);
       btn.onclick = () => {
         this.active = section.id;
-        for (const el of Array.from(this.navEl.querySelectorAll('.helm-settings-nav-item'))) el.removeClass('is-active');
+        for (const el of Array.from(this.sectionNavEl.querySelectorAll('.helm-settings-nav-item'))) el.removeClass('is-active');
         btn.addClass('is-active');
         this.renderBody();
       };

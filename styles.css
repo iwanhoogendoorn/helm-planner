@@ -487,8 +487,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-settings { display: flex; gap: 20px; align-items: flex-start; }
 .helm-settings-nav { flex: 0 0 150px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; }
 .helm-settings .helm-settings-nav-item, .modal .helm-settings .helm-settings-nav-item { display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 6px 10px; border: none; border-radius: 6px; background: transparent; box-shadow: none; color: var(--text-muted); font-size: 13px; text-align: left; cursor: pointer; height: auto; }
-.helm-settings .helm-settings-nav-item:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
-.helm-settings .helm-settings-nav-item.is-active, .modal .helm-settings .helm-settings-nav-item.is-active { background: var(--background-secondary); color: var(--text-normal); font-weight: 600; }
+.helm-settings .helm-settings-nav-item:not(.is-active) { background: transparent !important; box-shadow: none !important; border: none !important; }
+.helm-settings .helm-settings-nav-item:not(.is-active):hover { background: var(--background-modifier-hover) !important; color: var(--text-normal); }
+.helm-settings .helm-settings-nav-item.is-active, .modal .helm-settings .helm-settings-nav-item.is-active { background: var(--background-secondary) !important; box-shadow: none !important; border: none !important; color: var(--text-normal); font-weight: 600; }
 .helm-settings-nav-item.is-active .helm-settings-nav-icon svg { color: var(--interactive-accent); }
 .helm-settings-nav-icon { display: flex; }
 .helm-settings-nav-icon svg { width: 15px; height: 15px; }
@@ -500,7 +501,16 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-sgroup-titles { flex: 1 1 auto; min-width: 0; }
 .helm-sgroup-title { font-weight: 600; }
 .helm-sgroup-sub { font-size: 12px; color: var(--text-muted); }
-.helm-sgroup-body .setting-item { border-top: none; padding: 10px 0; }
+.helm-sgroup-body .setting-item { display: flex; align-items: center; gap: 16px; border-top: none; padding: 10px 0; }
+.helm-sgroup-body .setting-item-info { flex: 1 1 45%; min-width: 0; margin-right: 0; }
+/* Every control sits in a two-column grid: the control, then a reserved slot for the ? button — so right edges line up whether a row has help or not. */
+.helm-sgroup-body .setting-item:not(.helm-setting-list) .setting-item-control { flex: 0 0 55%; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; justify-items: end; column-gap: 6px; }
+.helm-sgroup-body .setting-item-control > input[type="text"], .helm-sgroup-body .setting-item-control > select, .helm-sgroup-body .setting-item-control > .helm-slider-wrap, .helm-sgroup-body .setting-item-control > button { width: 100%; min-width: 0; grid-column: 1; justify-self: stretch; }
+.helm-sgroup-body .setting-item-control > input[type="time"] { grid-column: 1; justify-self: end; width: auto; }
+.helm-sgroup-body .setting-item-control > .checkbox-container { grid-column: 1; justify-self: end; }
+.helm-sgroup-body .setting-item-control > .extra-setting-button { grid-column: 2; justify-self: center; margin: 0; }
+.helm-slider-wrap { display: flex; align-items: center; gap: 10px; }
+.helm-slider-wrap input[type="range"] { flex: 1 1 auto; min-width: 0; }
 .helm-sgroup-body .setting-item:last-child { padding-bottom: 0; }
 .helm-sgroup-label { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
 .helm-schip { flex: none; padding: 2px 8px; border-radius: 10px; background: var(--background-modifier-hover); color: var(--text-muted); font-size: 11px; white-space: nowrap; }
@@ -509,10 +519,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-schip-pending { color: var(--text-muted); }
 .helm-setting-help { margin: 4px 0 8px; padding: 8px 10px; border-radius: 6px; background: var(--background-modifier-hover); font-size: 12px; color: var(--text-muted); }
 .helm-setting-note { margin: 6px 0 2px; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
-.helm-settings .helm-path-input { min-width: 260px; }
-.helm-slider-value { font-size: var(--font-ui-smaller); color: var(--text-muted); min-width: 60px; text-align: right; }
-.helm-setting-list { flex-direction: column; align-items: stretch; }
-.helm-setting-list .setting-item-control { flex-direction: column; align-items: stretch; gap: 6px; width: 100%; margin-top: 6px; }
+.helm-settings .helm-path-input { min-width: 0; }
+.helm-sgroup-body .setting-item.helm-setting-list { flex-direction: column; align-items: stretch; gap: 0; }
+.helm-setting-list .setting-item-control { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; margin-top: 6px; }
 .helm-slist { display: flex; flex-wrap: wrap; gap: 6px; }
 .helm-slist-empty { font-size: var(--font-ui-smaller); color: var(--text-faint); }
 .helm-slist-item { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--background-primary); border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-smaller); }
