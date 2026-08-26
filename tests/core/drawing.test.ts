@@ -133,6 +133,10 @@ describe('diagram kinds', () => {
     const els = layoutDiagram(parseDiagramSpec(JSON.stringify({ kind: 'flow', title: 'Get certified', summary: 'passed exam', before: ['Partner email'], steps: [{ title: 'Book exam', effort: '15m', verify: 'confirmation mail' }, { title: 'Study', effort: '10h' }, { title: 'Sit exam' }, { title: 'Renew' }, { title: 'Brag' }], stalls: ['No slots → try another centre'] }))!);
     expect(texts(els)).toEqual(expect.arrayContaining(['Done = passed exam', 'Before you start', 'Partner email', '1. Book exam\n⏱ 15m\n✓ confirmation mail', '5. Brag', 'Where it stalls']));
     expect(arrows(els)).toBe(4);
+    // The arrow that wraps from the end of row one to the start of row two is routed with elbows, not a diagonal.
+    const wrapArrow = (els.filter((e) => e.type === 'arrow') as unknown as { points: number[][] }[])[3]!;
+    expect(wrapArrow.points).toHaveLength(4);
+    expect(wrapArrow.points[1]![0]).toBe(0);
   });
   it('matrix: options across, criteria down, cells, the pick highlighted', () => {
     const els = layoutDiagram(parseDiagramSpec(JSON.stringify({ kind: 'matrix', title: 'Which cert first', options: ['NCA-AIIO', 'NCA-GENL'], criteria: ['cost', 'time'], cells: [['$125', '$125'], ['60 min', '60 min']], pick: { option: 'NCA-GENL', why: 'closest to daily work' }, next: ['Check voucher'] }))!);

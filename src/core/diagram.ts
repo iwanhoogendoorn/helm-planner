@@ -96,11 +96,15 @@ function arrow(from: ExcalidrawElement, to: ExcalidrawElement, color = '#868e96'
   // From the nearest edge midpoints, so it reads as a connection rather than a diagonal through the boxes.
   const fx = from.x + from.width / 2, fy = from.y + from.height / 2, tx = to.x + to.width / 2, ty = to.y + to.height / 2;
   const horizontal = Math.abs(tx - fx) >= Math.abs(ty - fy);
-  const x1 = horizontal ? (tx > fx ? from.x + from.width : from.x) : fx;
-  const y1 = horizontal ? fy : (ty > fy ? from.y + from.height : from.y);
-  const x2 = horizontal ? (tx > fx ? to.x : to.x + to.width) : tx;
-  const y2 = horizontal ? ty : (ty > fy ? to.y : to.y + to.height);
-  const a: ExcalidrawElement = { ...base(), id: nid(), type: 'arrow', x: x1, y: y1, width: Math.abs(x2 - x1), height: Math.abs(y2 - y1), points: [[0, 0], [x2 - x1, y2 - y1]], strokeColor: color, backgroundColor: 'transparent', roundness: { type: 2 }, startArrowhead: null, endArrowhead: 'arrow', elbowed: false,
+  // A row wrap (target below and to the left) routes down, across the gap and down again, instead of slashing over the boxes.
+  const wrap = ty > from.y + from.height && tx < fx;
+  const x1 = wrap ? fx : horizontal ? (tx > fx ? from.x + from.width : from.x) : fx;
+  const y1 = wrap ? from.y + from.height : horizontal ? fy : (ty > fy ? from.y + from.height : from.y);
+  const x2 = wrap ? tx : horizontal ? (tx > fx ? to.x : to.x + to.width) : tx;
+  const y2 = wrap ? to.y : horizontal ? ty : (ty > fy ? to.y : to.y + to.height);
+  const midY = (y1 + y2) / 2 - y1;
+  const points: [number, number][] = wrap ? [[0, 0], [0, midY], [x2 - x1, midY], [x2 - x1, y2 - y1]] : [[0, 0], [x2 - x1, y2 - y1]];
+  const a: ExcalidrawElement = { ...base(), id: nid(), type: 'arrow', x: x1, y: y1, width: Math.abs(x2 - x1), height: Math.abs(y2 - y1), points, strokeColor: color, backgroundColor: 'transparent', roundness: wrap ? null : { type: 2 }, startArrowhead: null, endArrowhead: 'arrow', elbowed: false,
     startBinding: { elementId: from.id, focus: 0, gap: 4 }, endBinding: { elementId: to.id, focus: 0, gap: 4 } } as ExcalidrawElement;
   for (const el of [from, to]) { const b = (el['boundElements'] as { type: string; id: string }[] | null) ?? []; el['boundElements'] = [...b, { type: 'arrow', id: a.id }]; }
   return a;
