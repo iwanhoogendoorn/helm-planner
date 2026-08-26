@@ -738,16 +738,27 @@ export class Mutations {
     });
   }
 
-  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string }): Promise<void> {
+  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string }): Promise<void> {
     const folder = this.settings.habitsFolder.replace(/\/+$/, '');
     const title = spec.title.trim().replace(/[\\/:*?"<>|]/g, '-');
     const path = `${folder ? folder + '/' : ''}${title}.md`;
     if (await this.d.vault.exists(path)) throw new Error(`A note already exists at ${path}`);
     const id = uniqueId('hab', (x) => this.index.snapshot.habits.has(x), this.d.rng);
-    await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}) }));
+    await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}), ...(spec.iconImage ? { iconImage: spec.iconImage } : {}) }));
   }
 
-  async setHabitFields(id: string, fields: { active?: boolean; schedule?: string; title?: string; targetPerWeek?: number | null; graceDays?: number; icon?: string }): Promise<void> {
+  /** Store an uploaded icon next to the habit notes: `<habitsFolder>/icons/<name>.png`. Returns the vault path. */
+  async saveHabitIcon(name: string, data: ArrayBuffer, ext = 'png'): Promise<string> {
+    if (!this.d.vault.writeBinary) throw new Error('This vault cannot store images');
+    const folder = `${this.settings.habitsFolder.replace(/\/+$/, '')}/icons`;
+    const base = name.trim().replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ') || 'habit';
+    let path = `${folder}/${base}.${ext}`;
+    for (let i = 2; await this.d.vault.exists(path); i++) path = `${folder}/${base} ${i}.${ext}`;
+    await this.d.vault.writeBinary(path, data);
+    return path;
+  }
+
+  async setHabitFields(id: string, fields: { active?: boolean; schedule?: string; title?: string; targetPerWeek?: number | null; graceDays?: number; icon?: string; iconImage?: string | null }): Promise<void> {
     const h = this.index.snapshot.habits.get(id);
     if (!h) throw new Error('Habit not found');
     const u: Record<string, string | null> = {};
@@ -757,6 +768,7 @@ export class Mutations {
     if (fields.targetPerWeek !== undefined) u['target_per_week'] = fields.targetPerWeek === null ? '' : String(fields.targetPerWeek);
     if (fields.graceDays !== undefined) u['grace_days'] = String(fields.graceDays);
     if (fields.icon !== undefined) u['icon'] = fields.icon;
+    if (fields.iconImage !== undefined) u['icon_image'] = fields.iconImage ?? '';
     await this.editFile(h.path, (lines) => setFrontmatter(lines, u));
   }
 

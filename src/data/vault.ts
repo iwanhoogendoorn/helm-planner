@@ -12,6 +12,8 @@ export interface VaultAdapter {
   delete?(path: string): Promise<void>;
   /** Move a file or folder to the trash (recoverable). */
   trash?(path: string): Promise<void>;
+  /** Write a binary file (icons). */
+  writeBinary?(path: string, data: ArrayBuffer): Promise<void>;
 }
 
 export class MemoryVault implements VaultAdapter {
@@ -42,6 +44,8 @@ export class MemoryVault implements VaultAdapter {
     }
   }
   async delete(path: string): Promise<void> { this.files.delete(path); }
+  binaries = new Map<string, ArrayBuffer>();
+  async writeBinary(path: string, data: ArrayBuffer): Promise<void> { this.binaries.set(path, data); }
   trashed: string[] = [];
   async trash(path: string): Promise<void> {
     for (const p of [...this.files.keys()]) if (p === path || p.startsWith(path + '/')) { this.files.delete(p); this.trashed.push(p); }

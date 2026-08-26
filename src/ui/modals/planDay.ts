@@ -11,6 +11,7 @@ import { habitDue } from '../../data/habits';
 import { button, chip, h, icon, progressBar, richText } from '../dom';
 import type { UiContext } from '../context';
 import { taskLabel } from '../context';
+import { habitBadge } from '../fields';
 
 const REASON_LABEL: Record<Candidate['reason'], string> = {
   overdue: 'Overdue', 'due-soon': 'Due soon', 'scheduled-past': 'Carried over', 'in-progress': 'In progress', 'next-action': 'Next actions', inbox: 'Inbox', unblocked: 'Unblocked',
@@ -80,7 +81,7 @@ export function openPlanDay(ctx: UiContext, date: IsoDate): void {
         progressBar(total / cap, total > cap ? 'is-over' : ''),
       ),
     );
-    if (habits.length > 0) right.appendChild(h('div', { cls: 'helm-plan-group' }, h('div', { cls: 'helm-plan-group-title', text: 'Habits' }), h('div', { cls: 'helm-habit-chips' }, ...habits.map((hb) => chip(`${hb.icon ? hb.icon + ' ' : ''}${hb.title}`, 'habit')))));
+    if (habits.length > 0) right.appendChild(h('div', { cls: 'helm-plan-group' }, h('div', { cls: 'helm-plan-group-title', text: 'Habits' }), h('div', { cls: 'helm-habit-chips' }, ...habits.map((hb) => { const c = chip(hb.title, 'habit'); const b = habitBadge(ctx, hb); if (b) c.prepend(b); return c; }))));
     const dayItems = h('div', { cls: 'helm-plan-group' }, h('div', { cls: 'helm-plan-group-title', text: 'Already on the day' }));
     if (existing.length === 0) dayItems.appendChild(h('div', { cls: 'helm-hint', text: 'Nothing yet.' }));
     for (const t of existing) {

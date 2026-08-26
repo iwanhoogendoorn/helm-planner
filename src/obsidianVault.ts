@@ -45,6 +45,20 @@ export class ObsidianVault implements VaultAdapter {
     return f instanceof TFile ? f.stat.mtime : undefined;
   }
 
+  async writeBinary(path: string, data: ArrayBuffer): Promise<void> {
+    const p = normalizePath(path);
+    const f = this.app.vault.getAbstractFileByPath(p);
+    if (f instanceof TFile) { await this.app.vault.modifyBinary(f, data); return; }
+    const folder = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
+    if (folder && !this.app.vault.getAbstractFileByPath(folder)) await this.mkdirp(folder);
+    await this.app.vault.createBinary(p, data);
+  }
+
+  resourceUrl(path: string): string | undefined {
+    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    return f instanceof TFile ? this.app.vault.getResourcePath(f) : undefined;
+  }
+
   async trash(path: string): Promise<void> {
     const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
     if (!f) throw new Error(`Not in the vault: ${path}`);

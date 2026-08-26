@@ -148,7 +148,10 @@ export interface Habit {
   active: boolean;
   targetPerWeek?: number;
   graceDays: number;
+  /** Emoji shown before the habit name. */
   icon?: string;
+  /** Vault path of an image icon (e.g. a 256×256 PNG). */
+  iconImage?: string;
 }
 
 export interface HabitCompletion {

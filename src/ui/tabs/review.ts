@@ -10,6 +10,7 @@ import { openCapture } from '../modals/capture';
 import { effortOf, goalProgress } from '../../data/planner';
 import { periodOf } from '../../core/periods';
 import { progressBar, richText } from '../dom';
+import { habitBadge } from '../fields';
 
 export interface ReviewState { collapsed: Map<string, boolean>; checks: Set<string> }
 
@@ -95,7 +96,7 @@ export function renderReview(ctx: UiContext, root: HTMLElement, state: ReviewSta
       const st = habitStats(hb, snap.completions, today, settings.weekStartsOn, 84);
       return h('div', { cls: 'helm-habit-row', onClick: () => openHabitForm(ctx, hb) },
         h('div', { cls: 'helm-habit-row-head' },
-          h('span', { cls: 'helm-habit-name', text: `${hb.icon ? hb.icon + ' ' : ''}${hb.title}` }),
+          h('span', { cls: 'helm-habit-name' }, habitBadge(ctx, hb), h('span', { text: hb.title })),
           chip(`🔥 ${st.streak}`, 'streak', `Best ${st.bestStreak}`),
           chip(`${Math.round(st.rate30 * 100)}% / 30d`, st.rate30 >= 0.8 ? 'rate is-good' : st.rate30 >= 0.5 ? 'rate' : 'rate is-bad'),
           chip(`${st.doneThisWeek}/${st.scheduledThisWeek} this week`, 'rate'),

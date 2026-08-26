@@ -162,11 +162,11 @@ export function renderProjectNote(p: {
   const body: string[] = [`# ${p.title}`, '', '## Objective', '', p.objective ?? 'This project is successful when…', ''];
   for (const ph of p.phases ?? []) {
     body.push(`## Phase: ${ph.title}${ph.due ? ` 📅 ${ph.due}` : ''}`, '');
-    for (const t of ph.tasks ?? []) body.push(`- [ ] ${t}`);
+    for (const t of ph.tasks ?? []) body.push(t.startsWith('- [') ? t : `- [ ] ${t}`);
     body.push('');
   }
   body.push('## Tasks', '');
-  for (const t of p.tasks ?? []) body.push(`- [ ] ${t}`);
+  for (const t of p.tasks ?? []) body.push(t.startsWith('- [') ? t : `- [ ] ${t}`);
   body.push('', '## Log', '');
   return [...fm, ...body].join('\n');
 }

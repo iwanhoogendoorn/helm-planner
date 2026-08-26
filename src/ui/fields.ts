@@ -72,3 +72,9 @@ export function linkTimes(start: HTMLInputElement, end: HTMLInputElement, effort
 }
 
 export function effortRaw(minutes: number): string { return minutesToHuman(minutes); }
+
+/** A habit's icon: its uploaded image when it has one, else its emoji, else nothing. */
+export function habitBadge(ctx: { resourceUrl: (p: string) => string | undefined }, hb: { icon?: string; iconImage?: string }): HTMLElement | null {
+  if (hb.iconImage) { const url = ctx.resourceUrl(hb.iconImage); if (url) return h('img', { cls: 'helm-habit-img', attr: { src: url, alt: '' } }); }
+  return hb.icon ? h('span', { cls: 'helm-habit-emoji', text: hb.icon }) : null;
+}

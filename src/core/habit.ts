@@ -44,14 +44,17 @@ export function parseHabit(path: string, content: string, fallbackId?: string): 
   if (tpw && Number(tpw) > 0) habit.targetPerWeek = Number(tpw);
   const icon = scalar(fm['icon']);
   if (icon) habit.icon = icon;
+  const img = scalar(fm['icon_image']) ?? scalar(fm['image']);
+  if (img) habit.iconImage = img.replace(/^\[\[|\]\]$/g, '').replace(/^!\[\[|\]\]$/g, '');
   return habit;
 }
 
-export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; today: string }): string {
+export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; today: string }): string {
   const fm = ['---', `title: ${h.title}`, 'type: habit', `id: ${h.id}`, `schedule: ${h.schedule}`, 'active: true'];
   if (h.targetPerWeek) fm.push(`target_per_week: ${h.targetPerWeek}`);
   fm.push(`grace_days: ${h.graceDays ?? 0}`);
   if (h.icon) fm.push(`icon: ${h.icon}`);
+  if (h.iconImage) fm.push(`icon_image: ${h.iconImage}`);
   fm.push(`creation_date: ${h.today}`, '---', '', `# ${h.title}`, '', 'Why this habit matters:', '', '');
   return fm.join('\n');
 }

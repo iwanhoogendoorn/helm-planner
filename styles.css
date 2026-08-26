@@ -447,3 +447,38 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-week-part.part-afternoon .helm-week-part-head { color: var(--color-yellow); }
 .helm-week-part.part-evening .helm-week-part-head { color: var(--color-purple); }
 .helm-week-part .helm-count { min-width: 16px; padding: 0 5px; }
+
+/* Habit form */
+.helm-habit-icon-row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.helm-habit-icon-preview { width: 56px; height: 56px; border-radius: 12px; background: var(--background-secondary); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
+.helm-habit-icon-preview img, .helm-habit-img { width: 100%; height: 100%; object-fit: contain; }
+.helm-habit .helm-habit-img, .helm-habit-name .helm-habit-img, .helm-chip.habit .helm-habit-img { width: 18px; height: 18px; border-radius: 4px; margin-right: 4px; vertical-align: middle; }
+.helm-habit-emoji { margin-right: 2px; }
+.helm-habit-emoji-big { font-size: 30px; }
+.helm-habit-icon-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.helm-emoji-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.helm-emoji { width: 34px; height: 34px; padding: 0; font-size: 18px; background: var(--background-secondary); border: 1px solid transparent; box-shadow: none; border-radius: 8px; cursor: pointer; }
+.helm-emoji:hover { border-color: var(--background-modifier-border-hover); }
+.helm-emoji.is-active { border-color: var(--interactive-accent); background: rgba(var(--color-blue-rgb), 0.12); }
+.helm-segmented.helm-wrap { flex-wrap: wrap; }
+.helm-weekday-toggles { display: flex; gap: 4px; margin-top: 6px; }
+.helm-weekday { width: 42px; padding: 4px 0; font-size: var(--font-ui-small); background: var(--background-secondary); border: 1px solid transparent; box-shadow: none; border-radius: 8px; cursor: pointer; height: auto; }
+.helm-weekday.is-active { background: var(--interactive-accent); color: var(--text-on-accent); }
+.helm-habit-n { margin-top: 6px; gap: 4px; }
+.helm-habit-n > * { flex: none; }
+/* Project builder */
+.helm-builder { display: flex; flex-direction: column; gap: 8px; }
+.helm-builder-phase { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); padding: 6px 8px; }
+.helm-builder-phase-head { display: flex; align-items: center; gap: 6px; }
+.helm-builder-phase-head .helm-icon { color: var(--text-accent); }
+.helm-builder-phase-name { flex: 1; }
+.helm-builder-phase-head input[type="date"] { width: auto; }
+.helm-builder-tasks { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.helm-builder-task { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: var(--radius-s); }
+.helm-builder-task:hover { background: var(--background-modifier-hover); }
+.helm-builder-bullet { color: var(--text-faint); }
+.helm-builder-bullet svg { width: 12px; height: 12px; }
+.helm-builder-task-text { font-size: var(--font-ui-small); }
+.helm-builder-loose { border: 1px dashed var(--background-modifier-border); border-radius: var(--radius-m); padding: 6px 8px; }
+.helm-builder-actions { display: flex; justify-content: flex-start; }
+.modal:has(.helm-habit-form) { width: min(640px, 95vw); }

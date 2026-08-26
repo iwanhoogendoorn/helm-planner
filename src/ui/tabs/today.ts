@@ -12,6 +12,7 @@ import { openWrapUp } from '../modals/wrapUp';
 import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
 import { breadcrumbs, dateCrumbs } from '../crumbs';
+import { habitBadge } from '../fields';
 
 export interface TodayState { date: IsoDate; collapsed: Map<string, boolean> }
 
@@ -79,7 +80,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
         cls: ['helm-habit', `is-${hstate}`],
         title: `${hb.title}: streak ${st.streak} · ${Math.round(st.rate30 * 100)}% last 30 days. Click to toggle, shift-click to skip.`,
         onClick: (ev) => { const next = ev.shiftKey ? (hstate === 'skipped' ? 'missed' : 'skipped') : hstate === 'done' ? 'missed' : 'done'; void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, next)); },
-      }, icon(hstate === 'done' ? 'check' : hstate === 'skipped' ? 'minus' : 'circle'), h('span', { text: `${hb.icon ? hb.icon + ' ' : ''}${hb.title}` }), st.streak > 1 ? h('span', { cls: 'helm-streak', text: `🔥${st.streak}` }) : null));
+      }, icon(hstate === 'done' ? 'check' : hstate === 'skipped' ? 'minus' : 'circle'), habitBadge(ctx, hb), h('span', { text: hb.title }), st.streak > 1 ? h('span', { cls: 'helm-streak', text: `🔥${st.streak}` }) : null));
     }
     root.appendChild(section('Habits', { count: `${habits.filter((hb) => snap.completions.some((c) => c.habitId === hb.id && c.date === date && c.state === 'done')).length}/${habits.length}`, store, key: 'habits', actions: [iconButton('plus', 'New habit', () => openHabitForm(ctx))] },
       habits.length === 0 ? empty('No habits yet.', button('Create one', { onClick: () => openHabitForm(ctx) })) : chips));

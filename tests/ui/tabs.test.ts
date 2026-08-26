@@ -13,7 +13,8 @@ import { openPlanDay } from '../../src/ui/modals/planDay';
 import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { taskRow } from '../../src/ui/taskRow';
-import { parsePhases } from '../../src/ui/modals/projectForm';
+import { openProjectForm, parsePhases } from '../../src/ui/modals/projectForm';
+import { openHabitForm } from '../../src/ui/modals/habitForm';
 import { effortField, linkTimes } from '../../src/ui/fields';
 import { renderHorizons } from '../../src/ui/tabs/horizons';
 import { renderDashboard, defaultDashboardState } from '../../src/ui/tabs/dashboard';
@@ -38,6 +39,7 @@ async function ctxFor() {
     navigate: (tab, opts) => { nav.push({ tab, opts }); },
     run: async (_l, fn) => { await fn(); },
     trackModal: () => undefined,
+    resourceUrl: (p) => `app://${p}`,
   };
   return { ...s, ctx, nav, opened };
 }
@@ -454,5 +456,105 @@ describe('effort field and time linking', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     await flush(); await flush();
     expect(await vault.read(dailyPath(TODAY))).toContain('- [ ] 09:00 - 10:00: Deep work ⏱️ 1h');
+  });
+});
+
+describe('Project builder modal', () => {
+  it('builds phases and tasks by clicking, and writes the project note with task metadata', async () => {
+    const { ctx, vault } = await ctxFor();
+    openProjectForm(ctx);
+    const m = Modal.last!;
+    const root = m.contentEl;
+    root.querySelector<HTMLInputElement>('input[placeholder="Project name"]')!.value = 'Garden shed';
+    // Add a phase, name it, give it a target date, add two tasks via Enter.
+    click([...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Add phase')));
+    const phaseName = root.querySelector<HTMLInputElement>('.helm-builder-phase-name')!;
+    phaseName.value = 'Design'; phaseName.dispatchEvent(new Event('input'));
+    const phaseDue = root.querySelector<HTMLInputElement>('.helm-builder-phase input[type="date"]')!;
+    phaseDue.value = '2026-09-30'; phaseDue.dispatchEvent(new Event('change'));
+    const addTo = (idx: number, text: string): void => {
+      const input = root.querySelectorAll<HTMLInputElement>('.helm-quickadd-input')[idx]!;
+      input.value = text; input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    };
+    addTo(0, 'Sketch layout due friday !high ~1h');
+    addTo(0, 'Order timber next week');
+    expect(texts(root, '.helm-builder-task-text')).toEqual(['Sketch layout', 'Order timber']);
+    expect(root.querySelector('.helm-builder-task')!.textContent).toContain('1h');
+    // Reorder the second task above the first, then add a loose task.
+    click(root.querySelectorAll('.helm-builder-task')[1]!.querySelector('button[aria-label="Move up"]'));
+    expect(texts(root, '.helm-builder-task-text')).toEqual(['Order timber', 'Sketch layout']);
+    addTo(1, 'Get permit');
+    click([...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Create project')));
+    await flush(); await flush();
+    const note = await vault.read('02 PROJECTS/Garden shed/Garden shed.md');
+    expect(note).toContain('## Phase: Design 📅 2026-09-30');
+    expect(note).toMatch(/- \[ \] Order timber ⏳ 2026-\d{2}-\d{2}/);
+    expect(note).toContain('- [ ] Sketch layout 📅 2026-08-28 ⏫ ⏱️ 1h');
+    expect(note.indexOf('Order timber')).toBeLessThan(note.indexOf('Sketch layout'));
+    expect(note).toMatch(/## Tasks\n+- \[ \] Get permit/);
+  });
+
+  it('refuses unnamed phases', async () => {
+    const { ctx } = await ctxFor();
+    openProjectForm(ctx);
+    const root = Modal.last!.contentEl;
+    root.querySelector<HTMLInputElement>('input[placeholder="Project name"]')!.value = 'X';
+    click([...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Add phase')));
+    click([...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Create project')));
+    await flush();
+    expect(Notice.messages).toContain('Every phase needs a name.');
+  });
+});
+
+describe('Habit form modal', () => {
+  it('creates a habit from clicks only: emoji, pick-days schedule, target, grace', async () => {
+    const { ctx, vault } = await ctxFor();
+    openHabitForm(ctx);
+    const root = Modal.last!.contentEl;
+    root.querySelector<HTMLInputElement>('input[type="text"]')!.value = 'Spanish practice';
+    click([...root.querySelectorAll('.helm-emoji')].find((b) => b.textContent === '🇪🇸'));
+    expect(root.querySelector('.helm-habit-icon-preview')!.textContent).toBe('🇪🇸');
+    click([...root.querySelectorAll('.helm-seg')].find((b) => b.textContent === 'Pick days'));
+    const wd = (n: string) => [...root.querySelectorAll('.helm-weekday')].find((b) => b.textContent === n);
+    click(wd('Mon')); // default Mon/Wed/Fri → toggles Monday off
+    click(wd('Tue'));
+    expect(root.textContent).toContain('Understood as: every week on tuesday, wednesday, friday');
+    click([...root.querySelectorAll('.helm-seg')].find((b) => b.textContent === '3×'));
+    click([...root.querySelectorAll('.helm-seg')].find((b) => b.textContent === '1 day'));
+    click([...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Create habit')));
+    await flush(); await flush();
+    const note = await vault.read('02 PROJECTS/Habits/Spanish practice.md');
+    expect(note).toContain('schedule: every week on tuesday, wednesday, friday');
+    expect(note).toContain('target_per_week: 3');
+    expect(note).toContain('grace_days: 1');
+    expect(note).toContain('icon: 🇪🇸');
+  });
+
+  it('stores an uploaded PNG under the habits icons folder and links it from the note', async () => {
+    const { ctx, vault, index } = await ctxFor();
+    openHabitForm(ctx);
+    const root = Modal.last!.contentEl;
+    root.querySelector<HTMLInputElement>('input[type="text"]')!.value = 'Hydrate';
+    const file = root.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const png = new File([new Uint8Array([137, 80, 78, 71])], 'water-drop.png', { type: 'image/png' });
+    Object.defineProperty(file, 'files', { value: [png] });
+    file.dispatchEvent(new Event('change'));
+    await flush(); await flush();
+    expect(root.querySelector('.helm-habit-icon-preview img')).not.toBeNull();
+    click([...root.querySelectorAll('.helm-seg')].find((b) => b.textContent === 'Every N days'));
+    click([...root.querySelectorAll('.helm-seg')].find((b) => b.textContent === '3'));
+    click([...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Create habit')));
+    await flush(); await flush(); await flush();
+    expect([...vault.binaries.keys()]).toEqual(['02 PROJECTS/Habits/icons/Hydrate.png']);
+    const note = await vault.read('02 PROJECTS/Habits/Hydrate.md');
+    expect(note).toContain('icon_image: 02 PROJECTS/Habits/icons/Hydrate.png');
+    expect(note).toContain('schedule: every 3 days');
+    await index.rebuild();
+    const hb = index.allHabits().find((x) => x.title === 'Hydrate')!;
+    expect(hb.iconImage).toBe('02 PROJECTS/Habits/icons/Hydrate.png');
+    // The Today tab shows the image instead of an emoji.
+    const today = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const chip = [...today.querySelectorAll('.helm-habit')].find((c) => c.textContent?.includes('Hydrate'))!;
+    expect(chip.querySelector('img.helm-habit-img')?.getAttribute('src')).toBe('app://02 PROJECTS/Habits/icons/Hydrate.png');
   });
 });

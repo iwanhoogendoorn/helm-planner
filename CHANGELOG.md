@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0 — 2026-08-26
+
+- New project form is a builder: add phases as cards (name, target date,
+  reorder, remove) and tasks per phase or loose, one per row. Task rows use
+  the capture grammar (`due friday !high ~1h`, `every week`…) and preview
+  their chips before anything is written.
+- New habit form is click-driven: emoji grid or an uploaded PNG icon
+  (stored under `<habits folder>/icons/`, linked as `icon_image`), schedule
+  presets (every day, weekdays, weekends, pick days, every N days, monthly),
+  weekday toggles, target-per-week and grace as segmented buttons.
+- Habit icons (image or emoji) show in Today, Plan day and Review.
+- Since 0.4.2: breadcrumbs across Today, Calendar, Projects and Horizons;
+  week columns split by part of the day; dashboard drill-downs open in a
+  popup; capture time inputs with an effort dropdown linked to the end time
+  and a default start of the current hour; archive and delete actions on
+  projects; vault events batched into one re-link (fixes the rapid-refresh
+  freeze); modals closed on plugin unload; weekday titles spelled out.
+
 ## 0.4.2 — 2026-08-26
 
 - Recurring tasks: a daily line dated later than its note (the next

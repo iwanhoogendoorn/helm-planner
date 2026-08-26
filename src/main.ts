@@ -164,6 +164,7 @@ export default class HelmPlugin extends Plugin {
       navigate: (tab, opts) => { void this.openView().then(() => (view ?? this.activeView())?.navigate(tab, opts)); },
       run: (label, fn) => this.run(label, fn),
       trackModal: (m) => { this.openModals.add(m); },
+      resourceUrl: (path) => this.vault.resourceUrl(path),
     };
   }
 

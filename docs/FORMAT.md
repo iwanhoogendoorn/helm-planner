@@ -138,8 +138,12 @@ schedule: every weekday      # Obsidian Tasks phrasing or RRULE:FREQ=…;BYDAY=�
 active: true
 target_per_week: 4           # optional
 grace_days: 1                # misses tolerated before a streak breaks
-icon: 🏃                     # optional
+icon: 🏃                     # optional emoji
+icon_image: 02 PROJECTS/Habits/icons/Morning workout.png   # optional; uploaded PNGs land here
 ```
+
+When both are set the image wins. Uploads are stored as-is (a 256×256 PNG
+from flaticon works nicely) under `<habits folder>/icons/`.
 
 Completions are lines in `### Habits` carrying the habit id: `[x]` done,
 `[-]` skipped (neutral), anything else a miss. The completion date is the
