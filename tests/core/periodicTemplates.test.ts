@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest';
+import { bundledTemplate } from '../../src/core/periodicTemplates';
+import { renderDailyTemplate } from '../../src/data/mutations';
+import { setup, TODAY } from '../data/fixture';
+
+const CFG = { formats: { year: 'YYYY', quarter: 'YYYY-[Q]Q', month: 'YYYY-MM', week: 'gggg-[W]ww' }, dailyTitleFormat: 'DD, dddd, MMM, YYYY', goalsHeading: '## Goals' };
+
+describe('built-in periodic templates', () => {
+  it('weekly: title, year/quarter/month by the ISO Thursday, neighbours, seven day links', () => {
+    const out = renderDailyTemplate(bundledTemplate('week', CFG), '2026-08-24', '2026-W35');
+    expect(out).toContain('Type: Weekly Note');
+    expect(out).toContain('# Week 35, 2026');
+    expect(out).toContain('Year: [[2026|2026]] · Quarter: [[2026-Q3|Q3]] · Month: [[2026-08|August]]');
+    expect(out).toContain('◀ [[2026-W34|Previous week]] · [[2026-W36|Next week]] ▶');
+    expect(out).toContain('[[24, Monday, Aug, 2026|Mon 24]] · [[25, Tuesday, Aug, 2026|Tue 25]]');
+    expect(out).toContain('[[30, Sunday, Aug, 2026|Sun 30]]');
+    expect(out).toContain('## Goals\n\n## Review');
+    expect(out).not.toContain('<%');
+  });
+  it('monthly: neighbours, quarter, year; the weeks script is left to Templater', () => {
+    const out = renderDailyTemplate(bundledTemplate('month', CFG), '2026-08-01', '2026-08');
+    expect(out).toContain('# August 2026');
+    expect(out).toContain('Year: [[2026|2026]] · Quarter: [[2026-Q3|Q3]] · ◀ [[2026-07|July]] · [[2026-09|September]] ▶');
+    expect(out).toContain('Weeks: \n');
+    expect(bundledTemplate('month', CFG)).toContain("startOf('isoWeek')");
+  });
+  it('quarterly: months and neighbours; yearly: quarters and neighbours', () => {
+    const q = renderDailyTemplate(bundledTemplate('quarter', CFG), '2026-07-01', '2026-Q3');
+    expect(q).toContain('# Q3 2026');
+    expect(q).toContain('◀ [[2026-Q2|Previous quarter]] · [[2026-Q4|Next quarter]] ▶');
+    expect(q).toContain('Months: [[2026-07|July]] · [[2026-08|August]] · [[2026-09|September]]');
+    const y = renderDailyTemplate(bundledTemplate('year', CFG), '2026-01-01', '2026');
+    expect(y).toContain('◀ [[2025|Previous year]] · [[2027|Next year]] ▶');
+    expect(y).toContain('Quarters: [[2026-Q1|Q1]] · [[2026-Q2|Q2]] · [[2026-Q3|Q3]] · [[2026-Q4|Q4]]');
+  });
+  it('year boundary: the first ISO week of 2027 belongs to 2027 by its Thursday and links to 2026-W53', () => {
+    const out = renderDailyTemplate(bundledTemplate('week', CFG), '2027-01-04', '2027-W01');
+    expect(out).toContain('# Week 1, 2027');
+    expect(out).toContain('[[2026-W53|Previous week]]');
+    expect(out).toContain('Month: [[2027-01|January]]');
+  });
+});
+
+describe('periodic notes from templates', () => {
+  it('ensureCurrentPeriodicNotes creates the four missing notes once, and goals land under the heading', async () => {
+    const { m, vault, index } = await setup();
+    const created = await m.ensureCurrentPeriodicNotes(TODAY);
+    expect(created).toEqual(['Yearly Notes/2026.md', 'Quarterly Notes/2026-Q3.md', 'Monthly Notes/2026-08.md', 'Weekly Notes/2026-W35.md']);
+    expect(await m.ensureCurrentPeriodicNotes(TODAY)).toEqual([]);
+    await m.addGoal('2026-W35', 'Ship the templates');
+    const week = await vault.read('Weekly Notes/2026-W35.md');
+    expect(week).toMatch(/## Goals\n\n- \[ \] Ship the templates 🆔 gol-\w+/);
+    expect(index.allGoals().some((g) => g.text === 'Ship the templates' && g.periodKey === '2026-W35')).toBe(true);
+  });
+  it('writeTemplateNote skips an existing note unless told to replace it', async () => {
+    const { m, vault } = await setup({ 'Templates/WEEKLY NOTE TEMPLATE.md': '# old' });
+    expect(await m.writeTemplateNote('week', 'Templates/WEEKLY NOTE TEMPLATE.md')).toBe('skipped');
+    expect(await vault.read('Templates/WEEKLY NOTE TEMPLATE.md')).toBe('# old');
+    expect(await m.writeTemplateNote('month', 'Templates/MONTHLY NOTE TEMPLATE.md')).toBe('created');
+    expect(await vault.read('Templates/MONTHLY NOTE TEMPLATE.md')).toContain("moment(tp.file.title, 'YYYY-MM')");
+    expect(await m.writeTemplateNote('week', 'Templates/WEEKLY NOTE TEMPLATE.md', { replace: true })).toBe('replaced');
+    expect(await vault.read('Templates/WEEKLY NOTE TEMPLATE.md')).toContain('Type: Weekly Note');
+    expect(await vault.read('Templates/WEEKLY NOTE TEMPLATE.md')).toContain("format('DD, dddd, MMM, YYYY')");
+  });
+});

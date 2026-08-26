@@ -214,6 +214,13 @@ export interface HelmSettings {
   /** Weekly notes (Periodic Notes overrides). */
   weeklyFolder: string;
   weeklyFormat: string;
+  /** Template notes for periodic notes; empty → Periodic Notes' template, else Helm's built-in one. */
+  yearlyTemplate: string;
+  quarterlyTemplate: string;
+  monthlyTemplate: string;
+  weeklyTemplate: string;
+  /** Create this week's / month's / quarter's / year's notes when Helm starts. */
+  autoCreatePeriodicNotes: boolean;
   extraFolders: string[];
   /** Path prefixes never indexed (archives). */
   excludePaths: string[];
@@ -257,6 +264,11 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   autoMoveRecurring: true,
   weeklyFolder: '',
   weeklyFormat: '',
+  yearlyTemplate: '',
+  quarterlyTemplate: '',
+  monthlyTemplate: '',
+  weeklyTemplate: '',
+  autoCreatePeriodicNotes: true,
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
   archiveFolder: '02 PROJECTS/ZZZ. Project Archive',

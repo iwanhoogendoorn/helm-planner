@@ -162,6 +162,7 @@ export function formatDate(d: IsoDate, pattern: string): string {
     WW: p2(wk.week),
     w: String(wk.week),
     W: String(wk.week),
+    Q: String(Math.floor(mo / 3) + 1),
   };
   let out = '';
   let i = 0;
@@ -175,7 +176,7 @@ export function formatDate(d: IsoDate, pattern: string): string {
       continue;
     }
     let matched = false;
-    for (const tok of ['YYYY', 'yyyy', 'MMMM', 'dddd', 'gggg', 'GGGG', 'MMM', 'ddd', 'YY', 'MM', 'DD', 'ww', 'WW', 'M', 'D', 'w', 'W']) {
+    for (const tok of ['YYYY', 'yyyy', 'MMMM', 'dddd', 'gggg', 'GGGG', 'MMM', 'ddd', 'YY', 'MM', 'DD', 'ww', 'WW', 'M', 'D', 'w', 'W', 'Q']) {
       if (pattern.startsWith(tok, i)) {
         out += tokens[tok === 'yyyy' ? 'YYYY' : tok];
         i += tok.length;

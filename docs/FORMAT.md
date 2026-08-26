@@ -207,3 +207,19 @@ keyed by a hash of (path, line, text) that changes when the line moves.
 | HELM-M01 | mirror line points at an unknown task |
 | HELM-P07 | project `period` not understood |
 | HELM-G01 | project `goal` matches no goal line |
+
+## 6. Periodic note templates
+
+Helm creates yearly / quarterly / monthly / weekly notes from a template:
+your `…Template` override in Settings → Horizons, else the Periodic Notes
+template for that kind, else Helm's built-in one. The built-in templates are
+Templater-flavoured and derive every link from the note title, so they render
+the same from Templater, from Periodic Notes, or from Helm's fallback renderer
+(which handles `tp.file.title`, `tp.date.now`, `moment(tp.file.title, fmt)`
+with `add` / `subtract` / `startOf` / `endOf` chains, and drops `<%* %>`
+script blocks). A weekly note links its year, quarter and month by the ISO
+Thursday, its neighbours, and its seven daily notes; monthly and quarterly
+notes link up and sideways; goals live under the goals heading.
+
+With *Create this period's notes on startup* on, Helm makes sure this week's,
+month's, quarter's and year's notes exist every time it loads.

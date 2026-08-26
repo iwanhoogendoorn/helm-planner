@@ -16,6 +16,10 @@ function make(over: Partial<HelmSettings> = {}) {
     dailyConfig: () => ({ folder: '70 OBSIDIAN/70-06 Daily Notes', format: 'YYYY/MM - MMMM/WW/DD, dddd, MMM, YYYY', template: '70 OBSIDIAN/70-07 Templates/DAILY NOTE TEMPLATE.md' }),
     periodicConfigFor: () => ({ folder: '', format: '', template: '' }),
     onSettingsChanged: vi.fn(),
+    templateInfo: async () => ({ source: 'built-in', exists: false }),
+    templateTargetPath: (k: string) => `Templates/${k.toUpperCase()} NOTE TEMPLATE.md`,
+    writeTemplate: vi.fn(async () => 'created'),
+    createCurrentPeriodicNotes: vi.fn(async () => []),
     manifest: { version: '0.5.0', description: 'Plan the day from your notes.' },
   } as unknown as SettingsHost;
   const tab = new HelmSettingTab(app as never, host);

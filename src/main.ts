@@ -15,6 +15,9 @@ import { openProjectForm } from './ui/modals/projectForm';
 import { openHabitForm } from './ui/modals/habitForm';
 import { pickProject } from './ui/menus';
 import { runSelfTest } from './selftest';
+import { TEMPLATE_FILE_NAMES } from './core/periodicTemplates';
+import type { PeriodKind } from './core/periods';
+import { PERIOD_LABELS } from './ui/settingsTab';
 
 export default class HelmPlugin extends Plugin {
   override settings: HelmSettings = { ...DEFAULT_SETTINGS };
@@ -47,7 +50,7 @@ export default class HelmPlugin extends Plugin {
       today: () => this.today(),
       notify: (m) => { new Notice(m); },
       dailyTemplate: () => this.readDailyTemplate(),
-      periodicTemplate: (kind) => this.readTemplate(this.periodic[kind].template),
+      periodicTemplate: (kind) => this.readTemplate(this.periodicTemplatePath(kind) ?? ''),
       processTemplate: (path) => this.runTemplater(path),
     });
     this.index.onChange(() => this.refreshViews());
@@ -67,7 +70,16 @@ export default class HelmPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       // Vault events are wired only now: Obsidian replays a `create` for every file while it loads,
       // and treating those as edits meant re-linking 8,000 tasks and re-rendering 800 times at startup.
-      void this.index.rebuild().then(() => { this.registerVaultEvents(); this.reconcileSoon(); });
+      void this.index.rebuild().then(async () => {
+        this.registerVaultEvents();
+        this.reconcileSoon();
+        if (this.settings.autoCreatePeriodicNotes) {
+          try {
+            const created = await this.mutations.ensureCurrentPeriodicNotes();
+            if (created.length > 0) new Notice(`Helm created ${created.map((c) => c.slice(c.lastIndexOf('/') + 1).replace(/\.md$/, '')).join(', ')}.`);
+          } catch (err) { console.error('[helm] could not create periodic notes', err); }
+        }
+      });
       if (this.settings.openOnStartup) void this.openView();
     });
   }
@@ -116,6 +128,36 @@ export default class HelmPlugin extends Plugin {
   }
 
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string } { return this.periodic[kind]; }
+
+  /* ── Periodic note templates: Helm override → Periodic Notes → built-in ── */
+
+  private templateOverride(kind: PeriodKind): string {
+    const key = { year: 'yearlyTemplate', quarter: 'quarterlyTemplate', month: 'monthlyTemplate', week: 'weeklyTemplate' }[kind] as 'yearlyTemplate' | 'quarterlyTemplate' | 'monthlyTemplate' | 'weeklyTemplate';
+    return this.settings[key].trim();
+  }
+  private periodicTemplatePath(kind: PeriodKind): string | undefined {
+    const p = this.templateOverride(kind) || this.periodic[kind].template;
+    return p ? (p.endsWith('.md') ? p : `${p}.md`) : undefined;
+  }
+  /** Which template a kind resolves to, and whether that note exists. */
+  async templateInfo(kind: PeriodKind): Promise<{ source: 'custom' | 'periodic-notes' | 'built-in'; path?: string; exists: boolean }> {
+    const path = this.periodicTemplatePath(kind);
+    const exists = path ? await this.vault.exists(path) : false;
+    const source = this.templateOverride(kind) ? 'custom' : this.periodic[kind].template ? 'periodic-notes' : 'built-in';
+    return { source, ...(path ? { path } : {}), exists: exists && source !== 'built-in' };
+  }
+  /** Where "Create template note" writes for a kind: the configured path, else <templates folder>/<KIND> NOTE TEMPLATE.md. */
+  templateTargetPath(kind: PeriodKind): string {
+    const configured = this.periodicTemplatePath(kind);
+    if (configured) return configured;
+    const anyTemplate = this.daily.template || this.periodic.year.template || this.periodic.quarter.template || this.periodic.month.template || this.periodic.week.template;
+    const folder = anyTemplate && anyTemplate.includes('/') ? anyTemplate.slice(0, anyTemplate.lastIndexOf('/')) : 'Templates';
+    return `${folder}/${TEMPLATE_FILE_NAMES[kind]}`;
+  }
+  async writeTemplate(kind: PeriodKind, replace: boolean): Promise<'created' | 'replaced' | 'skipped'> {
+    return this.mutations.writeTemplateNote(kind, this.templateTargetPath(kind), { replace });
+  }
+  async createCurrentPeriodicNotes(): Promise<string[]> { return this.mutations.ensureCurrentPeriodicNotes(); }
 
   /**
    * Hand a freshly created note (holding the raw template) to Templater, so the
@@ -288,6 +330,8 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'open-daily-note', name: 'Open today’s daily note (create if missing)', callback: () => void this.run('Open daily note', async () => { const p = await this.mutations.ensureDailyNote(this.today()); await this.openFile(p); }) });
     this.addCommand({ id: 'new-project', name: 'New project', callback: () => openProjectForm(ctx(), { onCreated: (p) => ctx().navigate('projects', { projectId: p.id }) }) });
     this.addCommand({ id: 'new-habit', name: 'New habit', callback: () => openHabitForm(ctx()) });
+    this.addCommand({ id: 'create-periodic-notes', name: 'Create this week’s, month’s, quarter’s and year’s notes', callback: () => void this.run('Periodic notes', async () => { const c = await this.mutations.ensureCurrentPeriodicNotes(); new Notice(c.length === 0 ? 'This week, month, quarter and year already have notes.' : `Created ${c.length} note${c.length === 1 ? '' : 's'}: ${c.map((x) => x.slice(x.lastIndexOf('/') + 1).replace(/\.md$/, '')).join(', ')}.`); }) });
+    this.addCommand({ id: 'write-periodic-templates', name: 'Write Helm’s periodic note templates (keeps existing ones)', callback: () => void this.run('Templates', async () => { const out: string[] = []; for (const k of ['year', 'quarter', 'month', 'week'] as PeriodKind[]) out.push(`${PERIOD_LABELS[k]}: ${await this.writeTemplate(k, false)}`); new Notice(out.join(' · ')); }) });
     this.addCommand({ id: 'rebuild-index', name: 'Rebuild index', callback: () => void this.run('Rebuild index', () => this.index.rebuild()) });
     this.addCommand({ id: 'move-recurring', name: 'Move recurring tasks to their next date', callback: () => void this.run('Move recurring', async () => { const n = await this.mutations.moveMisfiled(); new Notice(n === 0 ? 'Every dated task is already in the right note.' : `Moved ${n} task${n === 1 ? '' : 's'} to the note of its date.`); }) });
     this.addCommand({ id: 'sync-habits-today', name: 'Add today’s habits to the daily note', callback: () => void this.run('Habits', () => this.mutations.syncHabitsForDay(this.today())) });

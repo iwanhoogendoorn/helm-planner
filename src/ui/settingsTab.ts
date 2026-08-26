@@ -10,6 +10,9 @@
  */
 import { AbstractInputSuggest, PluginSettingTab, Setting, setIcon, TFile, TFolder, type App, type Plugin, type TextComponent } from 'obsidian';
 import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
+import type { PeriodKind } from '../core/periods';
+
+export const PERIOD_LABELS: Record<PeriodKind, string> = { year: 'Yearly', quarter: 'Quarterly', month: 'Monthly', week: 'Weekly' };
 
 export interface SettingsHost extends Plugin {
   settings: HelmSettings;
@@ -18,6 +21,10 @@ export interface SettingsHost extends Plugin {
   dailyConfig(): { folder: string; format: string; template: string };
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string };
   onSettingsChanged(): void;
+  templateInfo(kind: PeriodKind): Promise<{ source: 'custom' | 'periodic-notes' | 'built-in'; path?: string; exists: boolean }>;
+  templateTargetPath(kind: PeriodKind): string;
+  writeTemplate(kind: PeriodKind, replace: boolean): Promise<'created' | 'replaced' | 'skipped'>;
+  createCurrentPeriodicNotes(): Promise<string[]>;
 }
 
 type ChipTone = 'ok' | 'warn' | 'pending';
@@ -270,13 +277,37 @@ export class HelmSettingTab extends PluginSettingTab {
     const custom = (): boolean => kinds.some(([, , fk, fmk]) => s[fk] !== '' || s[fmk] !== '');
     const per = this.group(body, { icon: 'calendar-range', title: 'Periodic notes', subtitle: 'Leave empty to follow the Periodic Notes plugin.', chip: custom() ? { text: 'custom', tone: 'ok' } : { text: 'follows Periodic Notes', tone: 'pending' } });
     const chip = (): void => per.setChip(custom() ? 'custom' : 'follows Periodic Notes', custom() ? 'ok' : 'pending');
+    const tplKeys: Record<PeriodKind, 'yearlyTemplate' | 'quarterlyTemplate' | 'monthlyTemplate' | 'weeklyTemplate'> = { year: 'yearlyTemplate', quarter: 'quarterlyTemplate', month: 'monthlyTemplate', week: 'weeklyTemplate' };
     for (const [kind, label, fk, fmk, fallbackFmt] of kinds) {
       const pc = this.host.periodicConfigFor(kind);
       per.content.createDiv({ cls: 'helm-sgroup-label', text: label });
       this.note(per.content, `Periodic Notes says: ${pc.folder ? `“${pc.folder}”` : 'no folder'} · ${pc.format || fallbackFmt}${pc.template ? ` · template “${pc.template}”` : ''}.`);
       this.text(per.content, fk, { name: 'Folder', placeholder: pc.folder || 'follows Periodic Notes', pick: 'folder', after: chip });
       this.text(per.content, fmk, { name: 'Date format', placeholder: pc.format || fallbackFmt, after: chip });
+      const tplRow = this.text(per.content, tplKeys[kind], { name: 'Template', placeholder: pc.template || 'Helm’s built-in template', pick: 'note', after: () => { chip(); void describe(); } });
+      const describe = async (): Promise<void> => { const i = await this.host.templateInfo(kind); tplRow.setDesc(i.source === 'built-in' ? 'Using Helm’s built-in template.' : `${i.source === 'custom' ? 'Your template' : 'Periodic Notes’ template'}${i.exists ? '' : ' — note not found, Helm’s built-in one is used until it exists'}.`); };
+      void describe();
     }
+
+    const tpl = this.group(body, { icon: 'file-plus-2', title: 'Template notes', subtitle: 'Helm ships a template for each kind: navigation links, a Goals section, focus and review. Write them into your vault to edit them.' });
+    for (const [kind, label] of kinds) {
+      const target = this.host.templateTargetPath(kind);
+      const row = new Setting(tpl.content).setName(`${label.replace(' notes', '')} template`).setDesc(target);
+      row.settingEl.addClass('helm-setting-template');
+      void this.host.templateInfo(kind).then((i) => {
+        const exists = i.exists && i.path === target;
+        row.addButton((b) => b.setButtonText(exists ? 'Replace…' : 'Create').setCta().onClick(async () => {
+          if (exists && !window.confirm(`Replace “${target}” with Helm’s built-in ${label.toLowerCase().replace(' notes', '')} template? The current note is overwritten.`)) return;
+          const r = await this.host.writeTemplate(kind, exists);
+          row.setDesc(`${target} — ${r}`);
+          this.renderBody();
+        }));
+      });
+    }
+
+    const auto = this.group(body, { icon: 'wand-sparkles', title: 'Automation', subtitle: 'Periodic notes that create themselves.', chip: s.autoCreatePeriodicNotes ? { text: 'on', tone: 'ok' } : { text: 'off', tone: 'pending' } });
+    this.toggle(auto.content, 'autoCreatePeriodicNotes', 'Create this period’s notes on startup', 'When Helm loads it makes sure this week’s, month’s, quarter’s and year’s notes exist, from the templates above.');
+    new Setting(auto.content).setName('Create them now').setDesc('This week, this month, this quarter and this year — only the ones missing.').addButton((b) => b.setButtonText('Create now').onClick(async () => { const c = await this.host.createCurrentPeriodicNotes(); b.setButtonText(c.length === 0 ? 'All present' : `Created ${c.length}`); }));
   }
 
   // ── planning ──────────────────────────────────────────────────────────

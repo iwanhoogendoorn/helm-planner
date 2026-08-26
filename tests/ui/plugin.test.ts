@@ -21,6 +21,7 @@ async function boot(): Promise<{ plugin: HelmPlugin; app: FakeApp }> {
   await plugin.onload();
   app.workspace.fireLayoutReady();
   await plugin.index.rebuild();
+  await tick(20); // let the startup auto-create of periodic notes finish
   return { plugin, app };
 }
 
@@ -103,6 +104,18 @@ describe('HelmPlugin', () => {
     cmd.editorCheckCallback!(false, editor as never, view as never);
     await tick(10);
     expect(await app.vault.read(new FakeTFile(dailyPath(TODAY)))).toContain('- [ ] Call the plumber');
+  });
+
+  it('creates this week’s, month’s, quarter’s and year’s notes on startup from the built-in templates', async () => {
+    const { app } = await boot();
+    await tick(20);
+    const week = await app.vault.read(new FakeTFile('Weekly Notes/2026-W35.md'));
+    expect(week).toContain('# Week 35, 2026');
+    expect(week).toContain('[[2026-08|August]]');
+    expect(week).toContain('[[2026-W34|Previous week]]');
+    expect(week).toContain('[[24, Monday, Aug, 2026|Mon 24]]');
+    expect(week).toContain('## Goals');
+    for (const p of ['Monthly Notes/2026-08.md', 'Quarterly Notes/2026-Q3.md', 'Yearly Notes/2026.md']) expect(await app.vault.read(new FakeTFile(p))).toContain('## Goals');
   });
 
   it('the self-test passes against the fixture vault', async () => {

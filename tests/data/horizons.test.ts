@@ -82,7 +82,9 @@ describe('goal mutations', () => {
     const id = await m.addGoal('2026-Q4', 'Ship Helm 1.0');
     expect(id).toMatch(/^gol-/);
     const note = await vault.read('Quarterly Notes/2026-Q4.md');
-    expect(note).toBe(`---\ntitle: 2026-Q4\nperiod: 2026-Q4\n---\n\n# Q4 2026\n\n## Goals\n\n- [ ] Ship Helm 1.0 🆔 ${id} ➕ 2026-08-26\n`);
+    expect(note).toContain('title: 2026-Q4\nType: Quarterly Note\nperiod: 2026-Q4');
+    expect(note).toContain('# Q4 2026');
+    expect(note).toContain(`## Goals\n\n- [ ] Ship Helm 1.0 🆔 ${id} ➕ 2026-08-26\n`);
     await m.addGoal('2026-Q4', 'Second goal');
     expect((await vault.read('Quarterly Notes/2026-Q4.md')).split('\n').filter((l) => l.startsWith('- [ ]'))).toHaveLength(2);
     const goal = index.allGoals().find((g) => g.id === id)!;

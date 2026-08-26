@@ -23,7 +23,8 @@ import type { HelmIndex } from './index';
 import { baseName, type VaultAdapter } from './vault';
 import { habitDue } from './habits';
 import { misfiledDate } from './planner';
-import { parsePeriod, type Period, type PeriodKind } from '../core/periods';
+import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
+import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates';
 
 export interface MutationDeps {
   vault: VaultAdapter;
@@ -774,14 +775,48 @@ export class Mutations {
 
   /* ── Horizons: goals in yearly / quarterly / monthly notes ───────────── */
 
+  /** What the built-in templates need to know about this vault. */
+  templateConfig(): TemplateConfig {
+    const df = this.index.dailyFormat();
+    return {
+      formats: { year: this.index.periodicConfig('year').format, quarter: this.index.periodicConfig('quarter').format, month: this.index.periodicConfig('month').format, week: this.index.periodicConfig('week').format },
+      dailyTitleFormat: df.slice(df.lastIndexOf('/') + 1),
+      goalsHeading: this.settings.goalsHeading,
+    };
+  }
+
+  /** The template text used for a kind: the configured one, else Helm's built-in. */
+  async periodicTemplate(kind: PeriodKind): Promise<string> {
+    const configured = this.d.periodicTemplate ? await this.d.periodicTemplate(kind) : undefined;
+    return configured ?? bundledTemplate(kind, this.templateConfig());
+  }
+
   async ensurePeriodicNote(period: Period): Promise<string> {
     const path = this.index.periodicPath(period);
     if (await this.d.vault.exists(path)) return path;
-    const tpl = this.d.periodicTemplate ? await this.d.periodicTemplate(period.kind) : undefined;
-    const title = baseName(path);
-    if (!tpl) { await this.createFile(path, `---\ntitle: ${title}\nperiod: ${period.key}\n---\n\n# ${period.label}\n\n${this.settings.goalsHeading}\n\n`); return path; }
-    await this.createFromTemplate(path, tpl, period.start, title);
+    await this.createFromTemplate(path, await this.periodicTemplate(period.kind), period.start, baseName(path));
     return path;
+  }
+
+  /** Make sure the notes for today's week, month, quarter and year exist. Returns the paths created. */
+  async ensureCurrentPeriodicNotes(date: IsoDate = this.today): Promise<string[]> {
+    const created: string[] = [];
+    for (const kind of ['year', 'quarter', 'month', 'week'] as PeriodKind[]) {
+      const p = periodOf(date, kind);
+      const path = this.index.periodicPath(p);
+      if (await this.d.vault.exists(path)) continue;
+      await this.ensurePeriodicNote(p);
+      created.push(path);
+    }
+    return created;
+  }
+
+  /** Write Helm's built-in template for a kind to a note. Skips an existing note unless told to replace it. */
+  async writeTemplateNote(kind: PeriodKind, path: string, opts: { replace?: boolean } = {}): Promise<'created' | 'replaced' | 'skipped'> {
+    const exists = await this.d.vault.exists(path);
+    if (exists && !opts.replace) return 'skipped';
+    await this.d.vault.write(path, bundledTemplate(kind, this.templateConfig()));
+    return exists ? 'replaced' : 'created';
   }
 
   /** Append a goal line under the Goals heading of the period's note (created when missing). */
@@ -894,9 +929,14 @@ export function renderDailyTemplate(template: string | undefined, date: IsoDate,
   out = out.replace(/\{\{\s*time\s*\}\}/g, '');
   out = out.replace(/<%[-*_]?\s*tp\.file\.title\s*%>/g, title);
   // moment(tp.file.title, 'FMT').add(1, 'd').subtract(2, 'weeks').format('FMT') — with or without an assignment in front.
-  out = out.replace(/<%[-*_]?\s*(?:[\w$]+\s*=\s*)?moment\((?:\s*tp\.file\.title\s*,\s*["'][^"']*["']\s*)?\)((?:\s*\.(?:add|subtract)\(\s*-?\d+\s*,\s*["'][A-Za-z]+["']\s*\))*)\s*\.format\(\s*["']([^"']*)["']\s*\)\s*%>/g, (_, chain: string, fmt: string) => {
+  // Script blocks (<%* … %>) need a real Templater; they are dropped here.
+  out = out.replace(/<%\*[\s\S]*?%>/g, '');
+  out = out.replace(/<%[-_]?\s*(?:[\w$]+\s*=\s*)?moment\((?:\s*tp\.file\.title\s*,\s*["'][^"']*["']\s*)?\)((?:\s*\.(?:add|subtract|startOf|endOf)\((?:\s*-?\d+\s*,)?\s*["'][A-Za-z]+["']\s*\))*)\s*\.format\(\s*["']([^"']*)["']\s*\)\s*%>/g, (_, chain: string, fmt: string) => {
     let d = date;
-    for (const m of chain.matchAll(/\.(add|subtract)\(\s*(-?\d+)\s*,\s*["']([A-Za-z]+)["']\s*\)/g)) { const n = Number(m[2]) * (m[1] === 'subtract' ? -1 : 1); d = shiftDate(d, n, m[3]!); }
+    for (const m of chain.matchAll(/\.(add|subtract|startOf|endOf)\((?:\s*(-?\d+)\s*,)?\s*["']([A-Za-z]+)["']\s*\)/g)) {
+      if (m[1] === 'startOf' || m[1] === 'endOf') d = boundaryOf(d, m[3]!, m[1] === 'endOf');
+      else { const n = Number(m[2] ?? 0) * (m[1] === 'subtract' ? -1 : 1); d = shiftDate(d, n, m[3]!); }
+    }
     return formatDate(d, fmt);
   });
   out = out.replace(/<%[-*_]?\s*tp\.date\.now\(\s*["']([^"']*)["']\s*(?:,\s*(-?\d+)\s*)?[^)]*\)\s*%>/g, (_, f: string, off?: string) => formatDate(off ? addDays(date, Number(off)) : date, f));
@@ -912,8 +952,23 @@ function shiftDate(d: IsoDate, n: number, unit: string): IsoDate {
   const u = unit.toLowerCase();
   if (u.startsWith('d')) return addDays(d, n);
   if (u.startsWith('w')) return addDays(d, 7 * n);
+  if (u === 'q' || u.startsWith('quarter')) return addMonths(d, 3 * n);
   if (u === 'm' || u.startsWith('month')) return addMonths(d, n);
   if (u.startsWith('y')) return addMonths(d, 12 * n);
+  return d;
+}
+
+/** moment().startOf / endOf for the units the templates use (week = ISO week, Monday first). */
+function boundaryOf(d: IsoDate, unit: string, end: boolean): IsoDate {
+  const u = unit.toLowerCase();
+  const y = Number(d.slice(0, 4));
+  const mo = Number(d.slice(5, 7));
+  const p2 = (n: number): string => String(n).padStart(2, '0');
+  const lastDay = (yy: number, mm: number): string => `${yy}-${p2(mm)}-${p2(new Date(Date.UTC(yy, mm, 0)).getUTCDate())}`;
+  if (u.startsWith('isoweek') || u.startsWith('week')) { const monday = addDays(d, -((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7)); return end ? addDays(monday, 6) : monday; }
+  if (u.startsWith('month')) return end ? lastDay(y, mo) : `${y}-${p2(mo)}-01`;
+  if (u.startsWith('quarter')) { const q0 = Math.floor((mo - 1) / 3) * 3 + 1; return end ? lastDay(y, q0 + 2) : `${y}-${p2(q0)}-01`; }
+  if (u.startsWith('year')) return end ? `${y}-12-31` : `${y}-01-01`;
   return d;
 }
 

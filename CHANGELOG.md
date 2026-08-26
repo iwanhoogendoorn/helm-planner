@@ -2,6 +2,18 @@
 
 ## 0.5.0 — 2026-08-26
 
+- Built-in yearly, quarterly, monthly and weekly note templates (Templater
+  flavour: navigation links derived from the title, a Goals section, focus
+  and review). Helm uses your override, else the Periodic Notes template,
+  else the built-in one. Settings → Horizons lets you pick a template per
+  kind, write the built-in ones into the vault (Create / Replace…), and turn
+  on *Create this period’s notes on startup* (default on): this week’s,
+  month’s, quarter’s and year’s notes are created when Helm loads. Commands:
+  *Create this week’s, month’s, quarter’s and year’s notes* and *Write Helm’s
+  periodic note templates*.
+- Template renderer understands `startOf`/`endOf` (isoWeek, month, quarter,
+  year), quarter arithmetic and the `Q` token; `<%* … %>` script blocks are
+  left to Templater.
 - Settings redesigned in the AWTY / Food Spot / WRL shell: a left nav
   (Folders · Daily notes · Horizons · Planning · View · About) over grouped
   panels with an icon, a subtitle and a status chip (found / not found /
