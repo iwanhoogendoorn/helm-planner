@@ -280,6 +280,7 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'new-project', name: 'New project', callback: () => openProjectForm(ctx(), { onCreated: (p) => ctx().navigate('projects', { projectId: p.id }) }) });
     this.addCommand({ id: 'new-habit', name: 'New habit', callback: () => openHabitForm(ctx()) });
     this.addCommand({ id: 'rebuild-index', name: 'Rebuild index', callback: () => void this.run('Rebuild index', () => this.index.rebuild()) });
+    this.addCommand({ id: 'move-recurring', name: 'Move recurring tasks to their next date', callback: () => void this.run('Move recurring', async () => { const n = await this.mutations.moveMisfiled(); new Notice(n === 0 ? 'Every dated task is already in the right note.' : `Moved ${n} task${n === 1 ? '' : 's'} to the note of its date.`); }) });
     this.addCommand({ id: 'sync-habits-today', name: 'Add today’s habits to the daily note', callback: () => void this.run('Habits', () => this.mutations.syncHabitsForDay(this.today())) });
     this.addCommand({
       id: 'task-under-cursor-today', name: 'Plan the task under the cursor for today', editorCheckCallback: (checking, editor, view) => {

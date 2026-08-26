@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2 — 2026-08-26
+
+- Recurring tasks: a daily line dated later than its note (the next
+  occurrence Obsidian Tasks spawns) is planned on its own date, is never
+  "carried over", is skipped by wrap-up, and is moved into the right daily
+  note automatically (or with the new *Move recurring tasks to their next
+  date* command).
+
 ## 0.4.1 — 2026-08-26
 
 - Helm now plans **inside the daily note's own sections** (`# Day planner ›

@@ -159,6 +159,13 @@ siblings. No markers, no hidden syntax:
 Only a note with none of those headings gets a small `## Plan` block of its
 own (heading configurable).
 
+**Recurring tasks.** When you tick a recurring task, Obsidian Tasks writes
+the next occurrence right above it — dated next week, but sitting in this
+week's note. Helm treats such a line as planned on *its* date (never
+"overdue" or "carried over"), and moves it into that day's note, same part
+of the day, as soon as it sees it (setting *Move spawned recurrences to
+their date*; or run *Move recurring tasks to their next date* by hand).
+
 A line with `🔗 [[Project]]` is a **mirror** of the task in the project note:
 same id, same text. Tick it in either place and the other follows. Edit the
 text in the project and the mirror is rewritten. Past daily notes are never

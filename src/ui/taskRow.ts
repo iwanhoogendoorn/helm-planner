@@ -87,6 +87,7 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   const showDate = opts.showDate ?? 'both';
   if ((showDate === 'due' || showDate === 'both') && t.due) meta.appendChild(chip(`due ${humanDate(t.due, today)}`, overdue ? 'due is-overdue' : 'due', t.due));
   if ((showDate === 'scheduled' || showDate === 'both') && t.scheduled && t.origin !== 'daily') meta.appendChild(chip(humanDate(t.scheduled, today), 'scheduled', `Planned for ${t.scheduled}`));
+  if (t.origin === 'daily' && t.noteDate && t.due && t.due > t.noteDate && open) meta.appendChild(chip(`in ${humanDate(t.noteDate, today)}'s note`, 'note', 'Dated later than the note it sits in — Helm moves it to the right note'));
   if (t.effortMinutes !== undefined) meta.appendChild(chip(minutesToHuman(t.effortMinutes), 'effort'));
   if (t.recurrence) meta.appendChild(chip(formatRecurrence(t.recurrence), 'recurrence', t.recurrence.parsed ? '' : 'Unrecognised rule'));
   if (blocked) meta.appendChild(chip('blocked', 'blocked', `Waiting on ${t.blockedBy.join(', ')}`));

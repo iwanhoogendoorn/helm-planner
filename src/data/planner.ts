@@ -16,9 +16,22 @@ export function isBlocked(t: Task, snap: Snapshot): boolean {
   return t.blockedBy.some((id) => { const b = snap.tasks.get(id); return b !== undefined && isOpen(b); });
 }
 
-/** The day a task is planned for: scheduled, else the daily note it lives in. */
+/**
+ * The day a task is planned for: scheduled, else the daily note it lives in —
+ * unless the line is dated later than its note (a recurrence spawned in an
+ * old note), in which case that later date is the plan.
+ */
 export function plannedDate(t: Task): IsoDate | undefined {
-  return t.scheduled ?? (t.origin === 'daily' ? t.noteDate : undefined);
+  if (t.scheduled) return t.scheduled;
+  if (t.origin !== 'daily' || !t.noteDate) return undefined;
+  return t.due !== undefined && t.due > t.noteDate ? t.due : t.noteDate;
+}
+
+/** A daily line that belongs in another day's note (dated later than the note it sits in). */
+export function misfiledDate(t: Task): IsoDate | undefined {
+  if (t.origin !== 'daily' || !t.noteDate || t.depth > 0 || t.status === 'done' || t.status === 'cancelled') return undefined;
+  const d = t.scheduled ?? t.due;
+  return d !== undefined && d > t.noteDate ? d : undefined;
 }
 
 export function effortOf(t: Task, settings: HelmSettings): number {
@@ -85,7 +98,7 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
   }
   for (const t of snap.tasks.values()) {
     if (t.depth > 0) continue;
-    if (t.origin === 'daily' && t.noteDate === date) {
+    if (t.origin === 'daily' && plannedDate(t) === date) {
       if (t.time && settings.showTimeBlocks && t.section === 'outside') plan.timeBlocks.push(t);
       else plan.today.push(t);
     } else if (t.origin === 'project' && t.scheduled === date && !mirroredSources.has(t.key)) plan.unmirrored.push(t);
@@ -273,7 +286,7 @@ export function tasksByDay(snap: Snapshot, from: IsoDate, to: IsoDate, settings:
     if (t.origin === 'goal' || t.depth > 0) continue;
     let d: IsoDate | undefined;
     if (t.origin === 'daily-mirror') { d = t.noteDate; if (t.mirrorOf && snap.tasks.has(t.mirrorOf)) continue; }
-    else if (t.origin === 'daily') { if (t.section === 'outside' && (!t.time || !settings.showTimeBlocks)) continue; d = t.noteDate; }
+    else if (t.origin === 'daily') { if (t.section === 'outside' && (!t.time || !settings.showTimeBlocks)) continue; d = plannedDate(t); }
     else d = t.scheduled;
     const doneOn = t.status === 'done' ? (t.done ?? t.noteDate) : undefined;
     if (doneOn && days.has(doneOn)) days.get(doneOn)!.done.push(t);
@@ -300,7 +313,7 @@ export function weekView(snap: Snapshot, anchor: IsoDate, settings: HelmSettings
   for (const t of snap.tasks.values()) {
     let d: IsoDate | undefined;
     if (t.origin === 'daily-mirror') { d = t.noteDate; if (t.mirrorOf && snap.tasks.has(t.mirrorOf)) continue; }
-    else if (t.origin === 'daily') { if (t.section === 'outside' && t.time && !settings.showTimeBlocks) continue; d = t.noteDate; }
+    else if (t.origin === 'daily') { if (t.section === 'outside' && t.time && !settings.showTimeBlocks) continue; d = plannedDate(t); }
     else d = t.scheduled ?? undefined;
     if (d === undefined) continue;
     const i = idx.get(d);

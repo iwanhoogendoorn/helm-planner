@@ -22,6 +22,7 @@ import { columnWidth } from '../core/tree';
 import type { HelmIndex } from './index';
 import { baseName, type VaultAdapter } from './vault';
 import { habitDue } from './habits';
+import { misfiledDate } from './planner';
 import { parsePeriod, type Period, type PeriodKind } from '../core/periods';
 
 export interface MutationDeps {
@@ -599,7 +600,7 @@ export class Mutations {
   /** Carry unfinished work from `from` to `to` (or off the calendar). */
   async rollover(from: IsoDate, to: IsoDate | undefined): Promise<{ moved: number; unscheduled: number }> {
     const snap = this.index.snapshot;
-    const open = [...snap.tasks.values()].filter((t) => (t.origin === 'daily' || t.origin === 'daily-mirror') && t.noteDate === from && !['done', 'cancelled', 'forwarded'].includes(t.status) && t.depth === 0 && t.section !== 'outside');
+    const open = [...snap.tasks.values()].filter((t) => (t.origin === 'daily' || t.origin === 'daily-mirror') && t.noteDate === from && !['done', 'cancelled', 'forwarded'].includes(t.status) && t.depth === 0 && t.section !== 'outside' && misfiledDate(t) === undefined);
     let moved = 0;
     let unscheduled = 0;
     for (const t of open) {
@@ -766,6 +767,36 @@ export class Mutations {
     await this.setProjectFields(projectId, { goal: g.id, ...(p.period ? {} : { period: g.periodKey }) });
   }
 
+  /**
+   * Move every daily line that is dated later than its note — the next
+   * occurrence Obsidian Tasks spawns when a recurring task is ticked — into
+   * the note of that date, same part of the day, text untouched. Returns the
+   * number of lines moved.
+   */
+  async moveMisfiled(): Promise<number> {
+    let moved = 0;
+    for (const t0 of this.index.allTasks()) {
+      const target = misfiledDate(t0);
+      if (!target) continue;
+      const t = this.index.task(t0.key);
+      if (!t || misfiledDate(t) !== target) continue;
+      const part: DayPart = t.part ?? (t.time ? this.partOfTime(t.time.start) : 'anytime');
+      let carried: TaskLine[] = [];
+      await this.editFile(t.path, (lines) => {
+        const { start, end } = this.subtreeRange(lines, t);
+        carried = lines.slice(start, end).map((l) => parseTaskLine(l)).filter((x): x is TaskLine => x !== undefined);
+        lines.splice(start, end - start);
+        return true;
+      });
+      if (carried.length === 0) continue;
+      const baseIndent = carried[0]!.raw.indent;
+      const rebased = carried.map((l) => ({ ...l, raw: { ...l.raw, indent: l.raw.indent.slice(baseIndent.length), eol: '' } }));
+      await this.editRegion(target, (rc) => ({ ...rc, [part]: [...rc[part], ...rebased] }));
+      moved++;
+    }
+    return moved;
+  }
+
   /* ── Reconcile: mirrors vs sources after outside edits ──────────────── */
 
   /**
@@ -776,6 +807,7 @@ export class Mutations {
   async reconcile(): Promise<number> {
     const today = this.today;
     let writes = 0;
+    if (this.settings.autoMoveRecurring) writes += await this.moveMisfiled();
     const mirrors = this.index.allTasks().filter((t) => t.origin === 'daily-mirror' && t.mirrorOf);
     for (const m0 of mirrors) {
       const m = this.index.task(m0.key);

@@ -411,3 +411,28 @@ describe('stray lines', () => {
     expect(await vault.read(dailyPath(TODAY))).toBe(`---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n## Plan\n### Afternoon\n\n# Day planner\n\n### A. Morning\n\n- [ ] 07:00 - 08:00: \n\n### B. Afternoon\n\n- [ ] 15:00 - 16:00: Search for a plumber\n- [ ] Close the original task\n`);
   });
 });
+
+describe('recurring tasks spawned in old notes', () => {
+  const MONDAY = `---\ntitle: 24, Monday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] 07:00 - 08:00: Infuus vervangen 📅 2026-08-31 🔁 every week on monday\n- [x] 07:00 - 08:00: Infuus vervangen 📅 2026-08-24 🔁 every week on monday ✅ 2026-08-24\n- [ ] 09:00 - 10:00: Something left undone\n`;
+  it('are planned on their date, not carried over, and get moved to that note', async () => {
+    const { m, vault, index, settings } = await setup({ [dailyPath('2026-08-24')]: MONDAY });
+    const next = index.allTasks().find((t) => t.text === 'Infuus vervangen' && t.status === 'todo')!;
+    const { candidates, plannedDate, dayPlan } = await import('../../src/data/planner');
+    expect(plannedDate(next)).toBe('2026-08-31');
+    expect(candidates(index.snapshot, TODAY, settings, TODAY).some((c) => c.task.key === next.key)).toBe(false);
+    expect(candidates(index.snapshot, TODAY, settings, TODAY).some((c) => c.task.text === 'Something left undone' && c.reason === 'scheduled-past')).toBe(true);
+    expect(dayPlan(index.snapshot, '2026-08-24', settings).today.filter((t) => t.status === 'todo').map((t) => t.text)).toEqual(['Something left undone']);
+    expect(dayPlan(index.snapshot, '2026-08-31', settings).today.map((t) => t.text)).toEqual(['Infuus vervangen']);
+    const r = await m.rollover('2026-08-24', TODAY);
+    expect(r.moved).toBe(1);
+    const moved = await m.moveMisfiled();
+    expect(moved).toBe(1);
+    const monday = await vault.read(dailyPath('2026-08-24'));
+    expect(monday).not.toContain('📅 2026-08-31');
+    expect(monday).toContain('- [x] 07:00 - 08:00: Infuus vervangen 📅 2026-08-24');
+    const nextMonday = await vault.read('70 OBSIDIAN/70-06 Daily Notes/2026/08 - August/36/31, Monday, Aug, 2026.md');
+    expect(nextMonday).toContain('### Morning\n- [ ] 07:00 - 08:00: Infuus vervangen 📅 2026-08-31 🔁 every week on monday');
+    expect(await m.moveMisfiled()).toBe(0);
+    expect(await m.reconcile()).toBe(0);
+  });
+});
