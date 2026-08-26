@@ -72,7 +72,7 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     }
   });
   menu.addItem((i) => {
-    i.setTitle('Notes').setIcon('file-text');
+    i.setTitle('Notes').setIcon('sticky-note');
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
     addNoteItems(sub, ctx, targetForTask(task));
   });

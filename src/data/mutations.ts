@@ -797,6 +797,34 @@ export class Mutations {
     }
   }
 
+  /** The note a target is, or lives in, as a wikilink for a `related` property: the daily note, the periodic note, the project note, or the note holding the task. */
+  relatedLink(target: DrawingTarget): string | undefined {
+    if (target.kind === 'date') return `[[${formatDate(target.date, this.templateConfig().dailyTitleFormat)}]]`;
+    if (target.kind === 'period') { const p = parsePeriod(target.key); return p ? `[[${baseName(this.index.periodicPath(p))}]]` : undefined; }
+    if (target.kind === 'project') { const p = this.index.project(target.id); return p ? `[[${baseName(p.path)}]]` : undefined; }
+    const t = this.index.task(target.key) ?? (target.id ? [...this.index.snapshot.tasks.values()].find((x) => x.id === target.id && x.origin !== 'daily-mirror') : undefined);
+    return t ? `[[${baseName(t.path)}]]` : undefined;
+  }
+
+  /** Frontmatter for a new attachment: the helm-* key plus `related` pointing back at the target's note. */
+  private attachmentFrontmatter(target: DrawingTarget, id?: string): Record<string, string> {
+    const fm = Object.fromEntries(Object.entries(this.drawingFrontmatter(target, id)).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]));
+    const rel = this.relatedLink(target);
+    return rel ? { ...fm, related: `"${rel}"` } : fm;
+  }
+
+  /** Add or remove a `related` wikilink on a note's frontmatter (a quoted link, or a list of them, as Obsidian expects). */
+  private relatedUpdate(lines: string[], doc: Document, link: string | undefined, add: boolean): boolean {
+    if (!link) return false;
+    // A wikilink starts with `[[`, which must not be read as an inline YAML list.
+    const raw = doc.frontmatter.values['related'];
+    const cur = (Array.isArray(raw) ? raw.map(String) : typeof raw === 'string' && raw.trim() !== '' ? [raw] : []).map((x) => x.trim().replace(/^"|"$/g, ''));
+    const next = add ? (cur.includes(link) ? cur : [...cur, link]) : cur.filter((x) => x !== link);
+    if (next.length === cur.length) return false;
+    lines.splice(0, lines.length, ...setFrontmatter(lines, { related: next.length === 0 ? undefined : next.length === 1 ? next[0]! : next }));
+    return true;
+  }
+
   /** Folder and default file name for a new drawing attached to a target. */
   drawingPathFor(target: DrawingTarget, name?: string): string {
     const s = this.settings;
@@ -819,13 +847,13 @@ export class Mutations {
     let id: string | undefined;
     if (target.kind === 'task') id = await this.ensureId(target.key);
     const path = await this.uniquePath(this.drawingPathFor(target, opts.name));
-    const frontmatter = this.drawingFrontmatter(target, id);
+    const frontmatter: Record<string, string> = this.attachmentFrontmatter(target, id);
     const tplPath = this.settings.drawingTemplate.trim();
     let content: string | undefined;
     if (tplPath) {
       const p = tplPath.endsWith('.md') ? tplPath : `${tplPath}.md`;
       const tpl = await this.d.vault.read(p).catch(() => undefined);
-      if (tpl !== undefined) content = setFrontmatter(tpl.split('\n'), Object.fromEntries(Object.entries(frontmatter).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]))).join('\n');
+      if (tpl !== undefined) content = setFrontmatter(tpl.split('\n'), Object.fromEntries(Object.entries(frontmatter).map(([k, v]) => [k, v.replace(/^"|"$/g, '')]))).join('\n');
     }
     content ??= renderExcalidrawDocument({ frontmatter });
     await this.d.vault.write(path, content);
@@ -900,6 +928,7 @@ export class Mutations {
       if (have.includes(value)) return false;
       const next = [...have, value];
       lines.splice(0, lines.length, ...setFrontmatter(lines, { [key]: next.length === 1 ? next[0]! : next }));
+      this.relatedUpdate(lines, parseDocument(lines.join('\n')), this.relatedLink(target), true);
       return true;
     });
     await this.embedDrawing(target, drawingPath);
@@ -917,6 +946,7 @@ export class Mutations {
         const next = have.filter((x) => x !== value && x !== own);
         if (next.length === have.length) return false;
         lines.splice(0, lines.length, ...setFrontmatter(lines, { [key]: next.length === 0 ? undefined : next.length === 1 ? next[0]! : next }));
+        this.relatedUpdate(lines, parseDocument(lines.join('\n')), this.relatedLink(target), false);
         return true;
       });
     }
@@ -956,7 +986,7 @@ export class Mutations {
     let id: string | undefined;
     if (target.kind === 'task') { id = await this.ensureId(target.key); target = { ...target, key: this.index.task(id)?.key ?? id, id }; }
     const path = await this.uniqueNotePath(this.notePathFor(target, opts.name));
-    const fm = Object.fromEntries(Object.entries(this.drawingFrontmatter(target, id)).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]));
+    const fm = this.attachmentFrontmatter(target, id);
     const content = renderNewNote({ title: noteTitle(path), target: fm, forLabel: await this.forLabel(target), today: this.today });
     await this.d.vault.write(path, content);
     this.index.update(path, content);
@@ -1009,6 +1039,7 @@ export class Mutations {
       if (have.includes(value)) return false;
       const next = [...have, value];
       lines.splice(0, lines.length, ...setFrontmatter(lines, { [key]: next.length === 1 ? next[0]! : next }));
+      this.relatedUpdate(lines, parseDocument(lines.join('\n')), this.relatedLink(target), true);
       return true;
     });
     await this.linkInTargetNote(target, notePath);
@@ -1024,6 +1055,7 @@ export class Mutations {
       const next = have.filter((x) => x !== value && x !== own);
       if (next.length === have.length) return false;
       lines.splice(0, lines.length, ...setFrontmatter(lines, { [key]: next.length === 0 ? undefined : next.length === 1 ? next[0]! : next }));
+      this.relatedUpdate(lines, parseDocument(lines.join('\n')), this.relatedLink(target), false);
       return true;
     });
     const host = await this.noteOf(target);

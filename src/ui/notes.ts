@@ -61,7 +61,7 @@ export function linkExistingNote(ctx: UiContext, target: DrawingTarget): void {
 export function addNoteItems(menu: Menu, ctx: UiContext, target: DrawingTarget): void {
   const today = ctx.today();
   const list = ctx.index.notesFor(target);
-  for (const n of list.slice(0, 12)) menu.addItem((i) => i.setTitle(`${n.title}${n.mtime ? ` · ${when(n, today)}` : ''}`).setIcon('file-text').onClick(() => void ctx.openFile(n.path)));
+  for (const n of list.slice(0, 12)) menu.addItem((i) => i.setTitle(`${n.title}${n.mtime ? ` · ${when(n, today)}` : ''}`).setIcon('sticky-note').onClick(() => void ctx.openFile(n.path)));
   if (list.length > 12) menu.addItem((i) => i.setTitle(`… ${list.length - 12} more`).setIcon('more-horizontal').setDisabled(true));
   if (list.length > 0) menu.addSeparator();
   menu.addItem((i) => i.setTitle('New note…').setIcon('file-plus').onClick(() => newNote(ctx, target)));
@@ -77,7 +77,7 @@ export function notesMenu(ctx: UiContext, target: DrawingTarget, ev: MouseEvent)
 
 export function notesButton(ctx: UiContext, target: DrawingTarget): HTMLElement {
   const n = ctx.index.notesFor(target).length;
-  const b = button('', { icon: 'file-text', title: n === 0 ? 'Notes: none yet — create or link one' : `${n} note${n === 1 ? '' : 's'}`, onClick: (ev) => notesMenu(ctx, target, ev) });
+  const b = button('', { icon: 'sticky-note', title: n === 0 ? 'Notes: none yet — create or link one' : `${n} note${n === 1 ? '' : 's'}`, onClick: (ev) => notesMenu(ctx, target, ev) });
   b.addClass('helm-notes-btn');
   if (n > 0) b.appendChild(h('span', { cls: 'helm-badge', text: String(n) }));
   return b;
@@ -87,7 +87,7 @@ export function notesIndicator(ctx: UiContext, t: Task): HTMLElement | null {
   const target = targetForTask(t);
   const n = ctx.index.notesFor(target).length;
   if (n === 0) return null;
-  const el = iconButton('file-text', `${n} note${n === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); notesMenu(ctx, target, ev); }, 'helm-task-notes');
+  const el = iconButton('sticky-note', `${n} note${n === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); notesMenu(ctx, target, ev); }, 'helm-task-notes');
   el.appendChild(h('span', { cls: 'helm-badge', text: String(n) }));
   return el;
 }
@@ -99,7 +99,7 @@ export function notesSection(ctx: UiContext, target: DrawingTarget): HTMLElement
   for (const n of list) {
     const card = h('button', { cls: 'helm-drawing-card', title: n.path, onClick: () => void ctx.openFile(n.path) },
       h('span', { cls: 'helm-drawing-card-icon' }), h('span', { cls: 'helm-drawing-card-title', text: n.title }), h('span', { cls: 'helm-drawing-card-meta', text: when(n, today) }));
-    setIcon(card.querySelector('.helm-drawing-card-icon') as HTMLElement, 'file-text');
+    setIcon(card.querySelector('.helm-drawing-card-icon') as HTMLElement, 'sticky-note');
     card.appendChild(iconButton('trash', 'Move to trash', (ev) => { ev.stopPropagation(); if (window.confirm(`Move “${n.title}” to the trash?`)) void ctx.run('Delete note', () => ctx.mutations.deleteNote(n.path)); }, 'helm-drawing-card-delete'));
     cards.appendChild(card);
   }
@@ -121,7 +121,7 @@ export function manageNotesModal(ctx: UiContext, target: DrawingTarget): void {
     const notes = ctx.index.notesFor(target);
     const rows = h('div', { cls: 'helm-manage-list' });
     if (notes.length === 0) m.contentEl.appendChild(h('div', { cls: 'helm-hint', text: 'No notes attached.' }));
-    for (const n of notes) rows.appendChild(h('div', { cls: 'helm-manage-row' }, icon('file-text'), h('span', { cls: 'helm-manage-title', text: n.title }), h('span', { cls: 'helm-hint', text: when(n, today) }), h('span', { cls: 'helm-spacer' }),
+    for (const n of notes) rows.appendChild(h('div', { cls: 'helm-manage-row' }, icon('sticky-note'), h('span', { cls: 'helm-manage-title', text: n.title }), h('span', { cls: 'helm-hint', text: when(n, today) }), h('span', { cls: 'helm-spacer' }),
       button('Open', { icon: 'external-link', cls: 'helm-btn-quiet', onClick: () => { m.close(); void ctx.openFile(n.path); } }),
       button('Unlink', { icon: 'unlink', cls: 'helm-btn-quiet', title: 'Detach from this item; the note itself stays', onClick: () => void ctx.run('Unlink note', async () => { await ctx.mutations.unlinkNote(target, n.path); if (ctx.index.notesFor(target).some((x) => x.path === n.path)) ctx.notify(`“${n.title}” is still attached — the task’s text or a Notes list links it.`); draw(); }) }),
       iconButton('trash', 'Move to trash', () => { if (window.confirm(`Move “${n.title}” to the trash? Its link lines are removed from the notes that carry them.`)) void ctx.run('Delete note', async () => { await ctx.mutations.deleteNote(n.path); draw(); }); })));

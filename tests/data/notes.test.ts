@@ -38,7 +38,7 @@ describe('creating, linking, unlinking and deleting notes', () => {
     const p = await m.createNote({ kind: 'period', key: '2026-W35', title: '2026-W35' }, { name: 'retro' });
     expect(p).toBe('Notes/2026-W35 — retro.md');
     const c = await vault.read(p);
-    expect(c).toMatch(/^---\nhelm-period: 2026-W35\ncreated: 2026-08-26\n---\n\n# 2026-W35 — retro\n\n> For: \[\[2026-W35\]\]/);
+    expect(c).toMatch(/^---\nhelm-period: 2026-W35\nrelated: "\[\[2026-W35\]\]"\ncreated: 2026-08-26\n---\n\n# 2026-W35 — retro\n\n> For: \[\[2026-W35\]\]/);
     expect(await vault.read('Weekly Notes/2026-W35.md')).toMatch(/## Notes\n\n- \[\[2026-W35 — retro\]\]/);
     expect(index.notesFor({ kind: 'period', key: '2026-W35', title: '' }).map((n) => n.title)).toEqual(['2026-W35 — retro']);
     const q = await m.createNote({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Decisions' });
@@ -55,7 +55,7 @@ describe('creating, linking, unlinking and deleting notes', () => {
     const { m, vault, index } = await setup({ '10 PERSONAL/Reading list.md': '# Reading list\n\n- a book\n' });
     const w = { kind: 'period' as const, key: '2026-W35', title: '2026-W35' };
     await m.linkNote(w, '10 PERSONAL/Reading list.md');
-    expect(await vault.read('10 PERSONAL/Reading list.md')).toMatch(/^---\nhelm-period: 2026-W35\n---\n# Reading list/);
+    expect(await vault.read('10 PERSONAL/Reading list.md')).toMatch(/^---\nhelm-period: 2026-W35\nrelated: "\[\[2026-W35\]\]"\n---\n# Reading list/);
     expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('- [[Reading list]]');
     expect(index.notesFor(w).map((n) => n.title)).toEqual(['Reading list']);
     await m.linkNote({ kind: 'date', date: TODAY, title: TODAY }, '10 PERSONAL/Reading list.md');
@@ -75,5 +75,34 @@ describe('creating, linking, unlinking and deleting notes', () => {
     expect(vault.trashed).toContain('10 PERSONAL/Reading list.md');
     expect(await vault.read(dailyPath(TODAY))).not.toContain('Reading list');
     expect(index.notesFor({ kind: 'date', date: TODAY, title: '' })).toEqual([]);
+  });
+});
+
+describe('related back-links', () => {
+  it('a created note or drawing points back at the daily / periodic / project note or the note holding the task; linking adds, unlinking removes', async () => {
+    const { m, vault, index } = await setup();
+    const d = await m.createDrawing({ kind: 'date', date: TODAY, title: TODAY }, { name: 'sketch' });
+    expect(await vault.read(d)).toContain('related: "[[26, Wednesday, Aug, 2026]]"');
+    const n = await m.createNote({ kind: 'period', key: '2026-W35', title: '2026-W35' }, { name: 'retro' });
+    expect(await vault.read(n)).toContain('related: "[[2026-W35]]"');
+    const pn = await m.createNote({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Decisions' });
+    expect(await vault.read(pn)).toContain('related: "[[Kitchen Remodel]]"');
+    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId === 'prj-kitchen' && x.status !== 'done')!;
+    const tn = await m.createNote({ kind: 'task', key: t.key, title: t.text });
+    expect(await vault.read(tn)).toContain('related: "[[Kitchen Remodel]]"');
+    // Linking a second target makes a list; unlinking one leaves the other.
+    await m.linkNote({ kind: 'period', key: '2026-08', title: '2026-08' }, n);
+    expect(await vault.read(n)).toContain('related:\n  - "[[2026-W35]]"\n  - "[[2026-08]]"');
+    await m.unlinkNote({ kind: 'period', key: '2026-W35', title: '2026-W35' }, n);
+    const c = (await vault.read(n)).split('---')[1]!;
+    expect(c).toContain('related: "[[2026-08]]"');
+    expect(c).not.toContain('2026-W35');
+    // Drawings too, and a bare note gets both keys on link.
+    await vault.write('10 PERSONAL/Reading list.md', '# Reading list\n');
+    index.update('10 PERSONAL/Reading list.md', '# Reading list\n');
+    await m.linkNote({ kind: 'date', date: TODAY, title: TODAY }, '10 PERSONAL/Reading list.md');
+    expect(await vault.read('10 PERSONAL/Reading list.md')).toMatch(/^---\nhelm-date: 2026-08-26\nrelated: "\[\[26, Wednesday, Aug, 2026\]\]"\n---/);
+    await m.linkDrawing({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, d);
+    expect(await vault.read(d)).toContain('related:\n  - "[[26, Wednesday, Aug, 2026]]"\n  - "[[Kitchen Remodel]]"');
   });
 });

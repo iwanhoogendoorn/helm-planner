@@ -342,7 +342,7 @@ export class HelmSettingTab extends PluginSettingTab {
     this.text(where.content, 'drawingTemplate', { name: 'Drawing template', desc: 'An Excalidraw note to copy for new drawings (grid, colours, frames). Empty = blank.', placeholder: 'Excalidraw/Templates/Grid enabled.excalidraw', pick: 'note' });
     this.toggle(where.content, 'embedDrawings', 'Embed new drawings in the note', 'A `![[…excalidraw]]` line under a Diagrams heading in the daily, periodic or project note, so the drawing shows up inside the note too.');
 
-    const notes = this.group(body, { icon: 'file-text', title: 'Notes', subtitle: 'Plain notes attached to tasks, days, periods and projects — created or linked the same way as drawings.', chip: this.pathChip(s.notesFolder) });
+    const notes = this.group(body, { icon: 'sticky-note', title: 'Notes', subtitle: 'Plain notes attached to tasks, days, periods and projects — created or linked the same way as drawings.', chip: this.pathChip(s.notesFolder) });
     this.text(notes.content, 'notesFolder', { name: 'Notes folder', desc: 'For new notes attached to tasks, days and periods.', placeholder: 'Notes', pick: 'folder', fallback: 'Notes', after: (v) => notes.setChip(this.pathChip(v).text, this.pathChip(v).tone) });
     this.toggle(notes.content, 'projectNotesInProjectFolder', 'Project notes live in the project folder', 'Next to the project note.');
     this.toggle(notes.content, 'linkNotes', 'List linked notes in the note', 'A `- [[Note]]` line under a Notes heading in the daily, periodic or project note.');
