@@ -56,7 +56,6 @@ export default class HelmPlugin extends Plugin {
     this.addRibbonIcon('compass', 'Open Helm', () => void this.openView());
     this.addSettingTab(new HelmSettingTab(this.app, this));
     this.registerCommands();
-    this.registerVaultEvents();
     this.registerObsidianProtocolHandler('helm', (params) => {
       const tab = (params['tab'] as TabId | undefined) ?? 'today';
       const date = params['date'];
@@ -66,7 +65,9 @@ export default class HelmPlugin extends Plugin {
     });
 
     this.app.workspace.onLayoutReady(() => {
-      void this.index.rebuild().then(() => void this.reconcileSoon());
+      // Vault events are wired only now: Obsidian replays a `create` for every file while it loads,
+      // and treating those as edits meant re-linking 8,000 tasks and re-rendering 800 times at startup.
+      void this.index.rebuild().then(() => { this.registerVaultEvents(); this.reconcileSoon(); });
       if (this.settings.openOnStartup) void this.openView();
     });
   }
@@ -234,12 +235,14 @@ export default class HelmPlugin extends Plugin {
     this.updateTimer = undefined;
     const paths = [...this.pendingPaths];
     this.pendingPaths.clear();
+    const entries: { path: string; content?: string }[] = [];
     for (const p of paths) {
       const f = this.app.vault.getAbstractFileByPath(p);
-      if (!(f instanceof TFile)) { this.index.update(p, undefined); continue; }
-      try { this.index.update(p, await this.app.vault.read(f)); } catch (e) { console.warn('[helm] could not read', p, e); }
+      if (!(f instanceof TFile)) { entries.push({ path: p }); continue; }
+      try { entries.push({ path: p, content: await this.app.vault.read(f) }); } catch (e) { console.warn('[helm] could not read', p, e); }
     }
-    this.reconcileSoon();
+    // One re-link and one render for the whole batch; unchanged files are skipped.
+    if (this.index.updateMany(entries) > 0) this.reconcileSoon();
   }
 
   private reconcileSoon(): void {

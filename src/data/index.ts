@@ -9,7 +9,7 @@ import { parseDocument } from '../core/document';
 import { isProjectNote, parseProject } from '../core/project';
 import { parseHabit } from '../core/habit';
 import { findRegion, partOfLine, type Section } from '../core/dailyNote';
-import { derivedKey } from '../core/ids';
+import { derivedKey, hash } from '../core/ids';
 import { formatDate, parseDateFromPath } from '../core/dates';
 import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
 
@@ -23,6 +23,8 @@ export const PERIODIC_FALLBACK: PeriodicConfig = { year: { folder: 'Yearly Notes
 interface FileEntry {
   path: string;
   kind: FileKind;
+  /** Content hash, so an event that changed nothing is a no-op. */
+  hash: string;
   tasks: Task[];
   project?: Project;
   habit?: Habit;
@@ -136,23 +138,38 @@ export class HelmIndex {
     this.emit();
   }
 
-  /** Re-parse one file (or drop it when content is undefined). Returns false when nothing was in scope. */
+  /** Re-parse one file (or drop it when content is undefined). Returns false when nothing changed. */
   update(path: string, content?: string): boolean {
-    const wasKnown = this.files.has(path);
-    if (!this.inScope(path) || content === undefined) {
-      if (!wasKnown) return false;
-      this.files.delete(path);
-    } else {
-      this.files.set(path, this.parseFile(path, content));
-    }
+    if (!this.applyOne(path, content)) return false;
     this.link();
     this.emit();
     return true;
   }
 
+  /** Re-parse many files with a single re-link and a single change event. Returns how many changed. */
+  updateMany(entries: { path: string; content?: string }[]): number {
+    let changed = 0;
+    for (const e of entries) if (this.applyOne(e.path, e.content)) changed++;
+    if (changed > 0) { this.link(); this.emit(); }
+    return changed;
+  }
+
+  private applyOne(path: string, content: string | undefined): boolean {
+    const known = this.files.get(path);
+    if (!this.inScope(path) || content === undefined) {
+      if (!known) return false;
+      this.files.delete(path);
+      return true;
+    }
+    const h = hash(content);
+    if (known && known.hash === h) return false;
+    this.files.set(path, this.parseFile(path, content));
+    return true;
+  }
+
   private parseFile(path: string, content: string): FileEntry {
     const s = this.settings;
-    const entry: FileEntry = { path, kind: 'note', tasks: [], hasRegion: false, completions: [], diagnostics: [] };
+    const entry: FileEntry = { path, kind: 'note', hash: hash(content), tasks: [], hasRegion: false, completions: [], diagnostics: [] };
     const mtime = this.vault.mtime(path);
     const date = this.dateOfPath(path);
 

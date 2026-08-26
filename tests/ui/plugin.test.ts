@@ -55,6 +55,22 @@ describe('HelmPlugin', () => {
     expect(await app.vault.read(new FakeTFile('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md'))).toContain('- [x] Draft chapter list 🆔 tsk-0001 ⏳ 2026-08-26 ⏫ ✅ 2026-08-26');
   });
 
+  it('a burst of events with unchanged content causes no re-render; a batch re-links once', async () => {
+    const { plugin, app } = await boot();
+    let emits = 0;
+    plugin.index.onChange(() => { emits++; });
+    for (const p of app.vault.files.files.keys()) app.vault.emit('create', new FakeTFile(p));
+    await tick(400);
+    expect(emits).toBe(0);
+    app.vault.files.files.set('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md', app.vault.files.files.get('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')! + '- [ ] Pick tiles\n');
+    app.vault.files.files.set('01 INBOX/Inbox.md', app.vault.files.files.get('01 INBOX/Inbox.md')! + '- [ ] Another\n');
+    app.vault.emit('modify', new FakeTFile('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md'));
+    app.vault.emit('modify', new FakeTFile('01 INBOX/Inbox.md'));
+    await tick(400);
+    expect(emits).toBe(1);
+    expect(plugin.index.project('prj-kitchen')!.looseTaskKeys).toHaveLength(2);
+  });
+
   it('delete and rename events drop and re-add files', async () => {
     const { plugin, app } = await boot();
     const p = '02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md';
