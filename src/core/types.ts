@@ -240,6 +240,12 @@ export interface HelmSettings {
   aiModel: string;
   aiTimeoutSec: number;
   aiInstructions: string;
+  /** Which engine draws AI diagrams: Helm's structured layout, or coleam00's excalidraw-diagram skill through the CLI. */
+  aiEngine: 'helm' | 'skill';
+  skillPath: string;
+  skillBackground: 'white' | 'dark';
+  skillRender: boolean;
+  skillTimeoutSec: number;
   extraFolders: string[];
   /** Path prefixes never indexed (archives). */
   excludePaths: string[];
@@ -297,6 +303,11 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   aiModel: '',
   aiTimeoutSec: 180,
   aiInstructions: '',
+  aiEngine: 'helm',
+  skillPath: '~/.claude/skills/excalidraw-diagram',
+  skillBackground: 'white',
+  skillRender: true,
+  skillTimeoutSec: 600,
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
   archiveFolder: '02 PROJECTS/ZZZ. Project Archive',

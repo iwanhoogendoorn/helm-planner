@@ -18,7 +18,7 @@ import { runSelfTest } from './selftest';
 import { TEMPLATE_FILE_NAMES } from './core/periodicTemplates';
 import type { PeriodKind } from './core/periods';
 import { PERIOD_LABELS } from './ui/settingsTab';
-import { aiAvailable, runClaude } from './ai';
+import { aiAvailable, runClaude, makeWorkDir, readTextFile, expandHome } from './ai';
 import { aiDiagram, newDrawing, targetForDate, targetForPeriod } from './ui/drawings';
 import { periodOf } from './core/periods';
 
@@ -57,6 +57,12 @@ export default class HelmPlugin extends Plugin {
       periodicTemplate: (kind) => this.readTemplate(this.periodicTemplatePath(kind) ?? ''),
       processTemplate: (path) => this.runTemplater(path),
       excalidrawFolder: () => this.excalidrawFolder,
+      skill: {
+        run: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: o.timeoutSec, cwd: o.cwd, extraArgs: ['--permission-mode', 'acceptEdits', '--allowedTools', 'Read,Write,Edit,Glob,Grep,Skill,Bash(uv *),Bash(cd *),Bash(ls *),Bash(cat *)', '--add-dir', ...o.extraDirs] }),
+        readFile: (p) => readTextFile(p),
+        workDir: () => makeWorkDir(),
+        expandHome,
+      },
       ai: (prompt) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: Math.max(30, this.settings.aiTimeoutSec || 180), ...(this.vaultBasePath() ? { cwd: this.vaultBasePath()! } : {}) }),
     });
     this.index.onChange(() => this.refreshViews());

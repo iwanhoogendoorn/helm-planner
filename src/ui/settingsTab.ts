@@ -34,7 +34,7 @@ type ChipTone = 'ok' | 'warn' | 'pending';
 interface GroupHandle { content: HTMLElement; setChip(text: string, tone: ChipTone): void }
 type StrKey = { [K in keyof HelmSettings]: HelmSettings[K] extends string ? K : never }[keyof HelmSettings];
 type BoolKey = { [K in keyof HelmSettings]: HelmSettings[K] extends boolean ? K : never }[keyof HelmSettings];
-type NumKey = 'dailyCapacityMinutes' | 'defaultEffortMinutes' | 'staleProjectDays' | 'aiTimeoutSec';
+type NumKey = 'dailyCapacityMinutes' | 'defaultEffortMinutes' | 'staleProjectDays' | 'aiTimeoutSec' | 'skillTimeoutSec';
 
 export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
   { id: 'folders', label: 'Folders', icon: 'folder' },
@@ -349,6 +349,14 @@ export class HelmSettingTab extends PluginSettingTab {
 
     const ai = this.group(body, { icon: 'sparkles', title: 'AI overview diagrams', subtitle: 'One-page visual overviews of a day, week, month, quarter, year or project, drawn from your notes through the Claude CLI on your subscription.', chip: !this.host.aiAvailable() ? { text: 'desktop only', tone: 'warn' } : s.aiEnabled ? { text: 'on', tone: 'ok' } : { text: 'off', tone: 'pending' } });
     this.toggle(ai.content, 'aiEnabled', 'Offer AI overview diagrams', 'Adds “AI overview diagram” to the drawing menus and the command palette.');
+    this.dropdown(ai.content, 'aiEngine', 'Engine', 'Helm: the model returns a short structure and Helm lays it out — fast (~15 s), always tidy, same look every time. Skill: coleam00’s excalidraw-diagram skill designs a free-form “visual argument”, section by section, and can render-and-fix it — slower (minutes), richer, different every time.', { helm: 'Helm layout (structured)', skill: 'excalidraw-diagram skill (coleam00)' }, () => this.renderBody());
+    if (s.aiEngine === 'skill') {
+      this.text(ai.content, 'skillPath', { name: 'Skill folder', desc: 'Where the excalidraw-diagram skill is installed (SKILL.md and references/ inside).', placeholder: '~/.claude/skills/excalidraw-diagram', fallback: '~/.claude/skills/excalidraw-diagram' });
+      this.dropdown(ai.content, 'skillBackground', 'Background', 'The skill asks black or white before drawing; this answers for you.', { white: 'White', dark: 'Black' });
+      this.toggle(ai.content, 'skillRender', 'Render and validate', 'Let the skill render the diagram to PNG and fix what it sees (needs uv and Playwright set up in the skill’s references folder). Slower, better.');
+      this.slider(ai.content, 'skillTimeoutSec', 'Skill time limit', 'Seconds to wait for the skill run.', 120, 1800, 60, 's');
+      this.note(ai.content, 'The run happens in a scratch folder outside the vault with file edits auto-accepted and only uv / cd / ls / cat allowed as commands. Helm imports the finished scene into the vault as a normal drawing with its helm-* frontmatter; the PNG stays in the scratch folder.');
+    }
     this.text(ai.content, 'aiCommand', { name: 'Command', desc: 'The Claude Code CLI. A bare name is looked up in the usual places (~/.local/bin, Homebrew).', placeholder: 'claude', fallback: 'claude' });
     this.text(ai.content, 'aiModel', { name: 'Model', desc: 'Empty uses the CLI’s default.', placeholder: 'e.g. sonnet, opus' });
     this.slider(ai.content, 'aiTimeoutSec', 'Time limit', 'Seconds to wait for a reply.', 30, 600, 30, 's');

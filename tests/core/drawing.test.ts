@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDrawing, renderExcalidrawDocument, drawingTitle, isDrawingPath } from '../../src/core/drawing';
+import { parseDrawing, renderExcalidrawDocument, drawingTitle, isDrawingPath, parseExcalidrawScene } from '../../src/core/drawing';
 import { layoutDiagram, parseDiagramSpec } from '../../src/core/diagram';
 import { extractResult } from '../../src/ai';
 
@@ -78,5 +78,15 @@ describe('drawings', () => {
     expect(extractResult('{"type":"result","result":"{\\"title\\":\\"x\\"}","cost":1}')).toBe('{"title":"x"}');
     expect(extractResult('{"type":"system"}\n{"type":"result","result":"hi"}')).toBe('hi');
     expect(extractResult('plain')).toBe('plain');
+  });
+});
+
+describe('scene import', () => {
+  it('accepts a .excalidraw file or a fenced reply, drops deleted elements, keeps the background', () => {
+    const sc = parseExcalidrawScene('```json\n{"type":"excalidraw","elements":[{"id":"a","type":"rectangle","x":0,"y":0,"width":1,"height":1},{"id":"b","type":"text","isDeleted":true,"x":0,"y":0,"width":1,"height":1}],"appState":{"viewBackgroundColor":"#1e1e1e"}}\n```')!;
+    expect(sc.elements.map((e) => e.id)).toEqual(['a']);
+    expect(sc.background).toBe('#1e1e1e');
+    expect(parseExcalidrawScene('{"elements":[]}')).toBeUndefined();
+    expect(parseExcalidrawScene('nope')).toBeUndefined();
   });
 });

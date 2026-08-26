@@ -99,3 +99,42 @@ describe('AI overview diagrams', () => {
     expect(m.diagramPrompt({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' })).toContain('# Project: Kitchen Remodel');
   });
 });
+
+describe('excalidraw-diagram skill engine', () => {
+  it('runs the skill in a scratch folder, imports the file it wrote, tags the engine, and embeds the drawing', async () => {
+    const { vault, index, settings } = await setup();
+    const s = { ...settings, aiEngine: 'skill' as const, skillBackground: 'dark' as const, skillRender: false };
+    const runs: { prompt: string; cwd: string; extraDirs: string[] }[] = [];
+    const files = new Map<string, string>();
+    const m = new Mutations({ vault, index, settings: () => s, today: () => TODAY, notify: () => undefined, skill: {
+      workDir: () => '/tmp/helm-x',
+      expandHome: (p) => p.replace('~', '/Users/me'),
+      run: async (prompt, o) => { runs.push({ prompt, cwd: o.cwd, extraDirs: o.extraDirs }); files.set('/tmp/helm-x/diagram.excalidraw', JSON.stringify({ type: 'excalidraw', version: 2, elements: [{ id: 'r1', type: 'rectangle', x: 0, y: 0, width: 200, height: 80 }, { id: 't1', type: 'text', x: 10, y: 10, width: 100, height: 20, text: 'Kitchen', containerId: 'r1' }, { id: 'gone', type: 'text', x: 0, y: 0, width: 1, height: 1, text: 'x', isDeleted: true }], appState: { viewBackgroundColor: '#1e1e1e' } })); return '/tmp/helm-x/diagram.excalidraw'; },
+      readFile: async (p) => { const c = files.get(p); if (c === undefined) throw new Error('ENOENT'); return c; },
+    } });
+    const p = await m.generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' });
+    expect(p).toBe('Excalidraw/2026-W35 — diagram.excalidraw.md');
+    expect(runs[0]!.cwd).toBe('/tmp/helm-x');
+    expect(runs[0]!.extraDirs).toEqual(['/Users/me/.claude/skills/excalidraw-diagram']);
+    expect(runs[0]!.prompt).toContain('/Users/me/.claude/skills/excalidraw-diagram');
+    expect(runs[0]!.prompt).toContain('Background: black (#1e1e1e)');
+    expect(runs[0]!.prompt).toContain('Skip the render-and-validate loop');
+    expect(runs[0]!.prompt).toContain('/tmp/helm-x/diagram.excalidraw');
+    expect(runs[0]!.prompt).toContain('Week 35, 2026');
+    const c = await vault.read(p);
+    expect(c).toContain('helm-engine: excalidraw-diagram skill');
+    expect(c).toContain('"viewBackgroundColor":"#1e1e1e"');
+    expect(c).toContain('Kitchen ^t1');
+    expect(c).not.toContain('"gone"');
+    expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('![[2026-W35 — diagram.excalidraw]]');
+  });
+  it('falls back to a path in the reply, and fails clearly when nothing usable comes back', async () => {
+    const { vault, index, settings } = await setup();
+    const s = { ...settings, aiEngine: 'skill' as const };
+    const mk = (run: () => Promise<string>, file?: string) => new Mutations({ vault, index, settings: () => s, today: () => TODAY, notify: () => undefined, skill: { workDir: () => '/tmp/w', expandHome: (p) => p, run, readFile: async (p) => { if (file !== undefined && p === '/tmp/w/other.excalidraw') return file; throw new Error('ENOENT'); } } });
+    const ok = mk(async () => 'Done: /tmp/w/other.excalidraw', JSON.stringify({ type: 'excalidraw', elements: [{ id: 'a', type: 'ellipse', x: 0, y: 0, width: 10, height: 10 }] }));
+    expect(await ok.generateDiagram({ kind: 'date', date: TODAY, title: TODAY })).toBe('Excalidraw/26, Wednesday, Aug, 2026 — diagram.excalidraw.md');
+    const bad = mk(async () => 'I could not do that.');
+    await expect(bad.generateDiagram({ kind: 'date', date: TODAY, title: TODAY })).rejects.toThrow(/did not produce an Excalidraw file/);
+  });
+});

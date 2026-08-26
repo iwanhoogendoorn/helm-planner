@@ -13,7 +13,11 @@
   quarter / year / project. Helm sends a compact digest to the Claude CLI on
   your subscription, gets back a short structure, and lays it out itself as
   editable Excalidraw elements (themes, items, highlights, next). Commands
-  *AI overview diagram of this week/month/quarter/year/today*.
+  *AI overview diagram of this week/month/quarter/year/today*. A second
+  engine, **coleam00's excalidraw-diagram skill**, can be chosen in Settings →
+  Drawings: the CLI runs the skill in a scratch folder (edits auto-accepted,
+  only uv allowed), optionally with its render-and-fix loop, and Helm imports
+  the finished scene into the vault as a normal drawing.
 - Built-in yearly, quarterly, monthly and weekly note templates (Templater
   flavour: navigation links derived from the title, a Goals section, focus
   and review). Helm uses your override, else the Periodic Notes template,

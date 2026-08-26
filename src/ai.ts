@@ -3,7 +3,7 @@
  * question: prompt in on stdin, `--output-format json` out. Desktop only —
  * Obsidian on mobile has no child processes.
  */
-export interface AiOptions { command: string; model?: string; timeoutSec: number; cwd?: string }
+export interface AiOptions { command: string; model?: string; timeoutSec: number; cwd?: string; /** Extra CLI flags (permissions, allowed tools, extra dirs). */ extraArgs?: string[] }
 
 type ChildProcess = { spawn: (cmd: string, args: string[], opts: Record<string, unknown>) => { stdin: { write: (s: string) => void; end: () => void }; stdout: { on: (ev: string, fn: (d: Buffer) => void) => void }; stderr: { on: (ev: string, fn: (d: Buffer) => void) => void }; on: (ev: string, fn: (...a: unknown[]) => void) => void; kill: (sig?: string) => void } };
 
@@ -26,7 +26,7 @@ export function aiAvailable(): boolean {
 
 export function runClaude(prompt: string, o: AiOptions): Promise<string> {
   const cp = nodeRequire('child_process') as ChildProcess;
-  const args = ['-p', '--output-format', 'json', ...(o.model ? ['--model', o.model] : [])];
+  const args = ['-p', '--output-format', 'json', ...(o.model ? ['--model', o.model] : []), ...(o.extraArgs ?? [])];
   return new Promise((resolve, reject) => {
     let out = '', err = '';
     let done = false;
@@ -60,4 +60,25 @@ export function extractResult(raw: string): string {
   // stream-json: last line with a result.
   for (const line of t.split('\n').reverse()) { try { const j = JSON.parse(line) as Record<string, unknown>; if (typeof j['result'] === 'string') return j['result']; } catch { /* skip */ } }
   return t;
+}
+
+/* ── Small file helpers for engines that work through files on disk ─────── */
+
+export function homeDir(): string { return (globalThis as unknown as { process?: { env?: Record<string, string> } }).process?.env?.['HOME'] ?? ''; }
+export function expandHome(p: string): string { return p.startsWith('~') ? homeDir() + p.slice(1) : p; }
+
+/** A fresh scratch directory for one diagram run. */
+export function makeWorkDir(prefix = 'helm-diagram'): string {
+  const fs = nodeRequire('fs') as { mkdtempSync: (p: string) => string };
+  const os = nodeRequire('os') as { tmpdir: () => string };
+  const path = nodeRequire('path') as { join: (...a: string[]) => string };
+  return fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-`));
+}
+export function readTextFile(p: string): Promise<string> {
+  const fs = nodeRequire('fs') as { promises: { readFile: (p: string, enc: string) => Promise<string> } };
+  return fs.promises.readFile(p, 'utf8');
+}
+export function fileExists(p: string): boolean {
+  const fs = nodeRequire('fs') as { existsSync: (p: string) => boolean };
+  return fs.existsSync(p);
 }

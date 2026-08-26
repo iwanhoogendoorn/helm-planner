@@ -25,7 +25,7 @@ import { habitDue } from './habits';
 import { misfiledDate } from './planner';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
 import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates';
-import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
+import { drawingTitle, parseExcalidrawScene, renderExcalidrawDocument, type Drawing, type ExcalidrawElement } from '../core/drawing';
 import { layoutDiagram, parseDiagramSpec, type DiagramSpec } from '../core/diagram';
 import { digestFor } from './digest';
 import type { DrawingTarget } from '../core/types';
@@ -44,6 +44,8 @@ export interface MutationDeps {
   templateSettleMs?: number;
   /** Ask the AI (Claude CLI) a question; resolves with the raw reply. */
   ai?: (prompt: string) => Promise<string>;
+  /** Run the CLI with tools so a skill can build a file: returns the reply; `readFile` fetches what it wrote. */
+  skill?: { run: (prompt: string, opts: { cwd: string; timeoutSec: number; extraDirs: string[] }) => Promise<string>; readFile: (path: string) => Promise<string>; workDir: () => string; expandHome: (p: string) => string };
   /** The Excalidraw plugin's own folder for new drawings, when it is installed. */
   excalidrawFolder?: () => string | undefined;
   /**
@@ -870,13 +872,65 @@ export class Mutations {
     ].join('\n');
   }
 
+  /** The prompt for coleam00's excalidraw-diagram skill: digest in, a `.excalidraw` file out at `outPath`. */
+  skillPrompt(target: DrawingTarget, outPath: string, skillDir: string): string {
+    const s = this.settings;
+    const digest = digestFor(this.index.snapshot, target, this.today, s);
+    const what = target.kind === 'project' ? `the project “${target.title}”` : target.kind === 'date' ? `the day ${target.title}` : `${parsePeriod(target.key)?.label ?? target.key}`;
+    return [
+      `Use the excalidraw-diagram skill installed at ${skillDir} — read its SKILL.md and the files under references/ first and follow its methodology (visual argument, concrete content, container discipline, tight text widths).`,
+      `Task: a one-page Excalidraw overview of ${what} for a personal planning vault. The audience is the vault's owner; the point is to SEE the shape of the period: what moved, what is stuck, what is next. Group by what matters (projects, goals, areas, days), show progress and relationships, keep every label short.`,
+      `Background: ${s.skillBackground === 'dark' ? 'black (#1e1e1e)' : 'white (#ffffff)'} — already chosen, do not ask.`,
+      'Do not research anything on the web; use only the digest below. Do not invent items that are not in it.',
+      `Write the finished diagram as a single JSON file to exactly this path: ${outPath}`,
+      s.skillRender ? `Then run the skill's render step (uv is installed; the references folder has its environment) to view the PNG and fix layout problems, as the skill requires. Write the PNG next to the JSON, not anywhere else.` : 'Skip the render-and-validate loop; do not run any commands.',
+      'Do not create any other files. When done, reply with only the absolute path of the JSON file.',
+      ...(s.aiInstructions.trim() ? [`Extra instructions from the user: ${s.aiInstructions.trim()}`] : []),
+      '', 'DIGEST:', digest,
+    ].join('\n');
+  }
+
   /** Ask the AI for a visual overview of a target and draw it. Returns the drawing path. */
   async generateDiagram(target: DrawingTarget, opts: { name?: string; replacePath?: string } = {}): Promise<string> {
+    if (this.settings.aiEngine === 'skill') return this.generateWithSkill(target, opts);
     if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
     const raw = await this.d.ai(this.diagramPrompt(target));
     const spec = parseDiagramSpec(raw);
     if (!spec) throw new Error('The AI reply was not a diagram (expected JSON with title and themes)');
     return this.drawSpec(target, spec, opts.name, opts.replacePath);
+  }
+
+  /** The skill engine: the CLI builds a `.excalidraw` file in a scratch folder; Helm imports it into the vault. */
+  private async generateWithSkill(target: DrawingTarget, opts: { name?: string; replacePath?: string }): Promise<string> {
+    const sk = this.d.skill;
+    if (!sk) throw new Error('The skill engine needs the desktop app and the Claude CLI');
+    const skillDir = sk.expandHome(this.settings.skillPath.trim() || '~/.claude/skills/excalidraw-diagram');
+    const work = sk.workDir();
+    const outPath = `${work}/diagram.excalidraw`;
+    const reply = await sk.run(this.skillPrompt(target, outPath, skillDir), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 600), extraDirs: [skillDir] });
+    let raw: string | undefined;
+    try { raw = await sk.readFile(outPath); } catch { raw = undefined; }
+    if (raw === undefined) {
+      // The skill may have chosen its own file name inside the work dir, or answered with the path.
+      const m = /(\/[^\s"']+\.excalidraw(?:\.json)?)/.exec(reply);
+      if (m) { try { raw = await sk.readFile(m[1]!); } catch { raw = undefined; } }
+    }
+    const scene = raw !== undefined ? parseExcalidrawScene(raw) : parseExcalidrawScene(reply);
+    if (!scene) throw new Error(`The skill did not produce an Excalidraw file (${reply.trim().slice(0, 120) || 'no reply'})`);
+    return this.importScene(target, scene.elements, { ...(scene.background ? { background: scene.background } : {}), ...(opts.name ? { name: opts.name } : {}), ...(opts.replacePath ? { replacePath: opts.replacePath } : {}), engine: 'excalidraw-diagram skill' });
+  }
+
+  /** Write a scene into the vault as a drawing attached to a target. */
+  async importScene(target: DrawingTarget, elements: ExcalidrawElement[], opts: { background?: string; name?: string; replacePath?: string; engine?: string } = {}): Promise<string> {
+    let id: string | undefined;
+    if (target.kind === 'task') id = await this.ensureId(target.key);
+    const path = opts.replacePath ?? await this.uniquePath(this.drawingPathFor(target, opts.name ?? 'diagram'));
+    const frontmatter = { ...this.drawingFrontmatter(target, id), 'helm-generated': true, 'helm-generated-on': this.today, ...(opts.engine ? { 'helm-engine': opts.engine } : {}) };
+    const content = renderExcalidrawDocument({ elements, frontmatter, ...(opts.background ? { background: opts.background } : {}) });
+    await this.d.vault.write(path, content);
+    this.index.update(path, content);
+    await this.embedDrawing(target, path);
+    return path;
   }
 
   /** Draw a spec for a target without any AI involved (also what the AI path ends in). */
