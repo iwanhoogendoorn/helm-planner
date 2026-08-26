@@ -59,6 +59,7 @@ import { Plugin as StubPlugin } from './obsidian';
 const P = StubPlugin.prototype as unknown as Record<string, unknown>;
 P['addCommand'] = function (this: { app: FakeApp }, c: Cmd) { this.app.commands.push(c); };
 P['registerView'] = function (this: { app: FakeApp }, t: string, f: unknown) { this.app.views.set(t, f); };
+P['addStatusBarItem'] = function () { return document.createElement('div'); };
 P['addRibbonIcon'] = function (this: { app: FakeApp }, icon: string, title: string) { this.app.ribbons.push({ icon, title }); return document.createElement('div'); };
 P['addSettingTab'] = function () {};
 P['registerEvent'] = function () {};

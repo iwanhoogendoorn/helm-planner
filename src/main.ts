@@ -1,9 +1,9 @@
 /** Helm — plugin entry point. Wires the index, mutations and views to Obsidian. */
-import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Notice, Plugin, TFile, setIcon, type WorkspaceLeaf } from 'obsidian';
 import { DEFAULT_SETTINGS, type HelmSettings, type IsoDate } from './core/types';
 import { todayLocal } from './core/dates';
 import { HelmIndex, DAILY_FALLBACK } from './data/index';
-import { Mutations } from './data/mutations';
+import { Mutations, type JobState } from './data/mutations';
 import { ObsidianVault } from './obsidianVault';
 import { HelmView, VIEW_TYPE } from './ui/view';
 import type { TabId, UiContext } from './ui/context';
@@ -29,6 +29,9 @@ export default class HelmPlugin extends Plugin {
   mutations!: Mutations;
   private daily = { folder: '', format: '', template: '' };
   private excalidrawFolder: string | undefined;
+  private job: JobState | null = null;
+  private jobTimer: number | undefined;
+  private statusEl: HTMLElement | undefined;
   private periodic: Record<'year' | 'quarter' | 'month' | 'week', { folder: string; format: string; template: string }> = { year: { folder: '', format: '', template: '' }, quarter: { folder: '', format: '', template: '' }, month: { folder: '', format: '', template: '' }, week: { folder: '', format: '', template: '' } };
   private reconcileTimer: number | undefined;
   private pendingPaths = new Set<string>();
@@ -58,18 +61,23 @@ export default class HelmPlugin extends Plugin {
       processTemplate: (path) => this.runTemplater(path),
       excalidrawFolder: () => this.excalidrawFolder,
       skill: {
-        run: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: o.timeoutSec, cwd: o.cwd, extraArgs: ['--permission-mode', 'acceptEdits', '--allowedTools', `Read,Write,Edit,Glob,Grep,Skill,Bash(uv *),Bash(cd *),Bash(ls *),Bash(cat *)${o.research ? ',WebSearch,WebFetch' : ''}`, '--add-dir', ...o.extraDirs] }),
+        run: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: o.timeoutSec, cwd: o.cwd, extraArgs: ['--permission-mode', 'acceptEdits', '--allowedTools', `Read,Write,Edit,Glob,Grep,Skill,Bash(uv *),Bash(cd *),Bash(ls *),Bash(cat *)${o.research ? ',WebSearch,WebFetch' : ''}`, '--add-dir', ...o.extraDirs], ...(o.signal ? { signal: o.signal } : {}) }),
         readFile: (p) => readTextFile(p),
         workDir: () => makeWorkDir(),
         expandHome,
       },
-      ai: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: Math.max(30, o?.research ? Math.max(600, this.settings.aiTimeoutSec) : this.settings.aiTimeoutSec || 180), ...(this.vaultBasePath() ? { cwd: this.vaultBasePath()! } : {}), ...(o?.research ? { extraArgs: ['--allowedTools', 'WebSearch,WebFetch'] } : {}) }),
+      progress: (job) => this.setJob(job),
+      ai: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: Math.max(30, o?.research ? Math.max(600, this.settings.aiTimeoutSec) : this.settings.aiTimeoutSec || 180), ...(this.vaultBasePath() ? { cwd: this.vaultBasePath()! } : {}), ...(o?.research ? { extraArgs: ['--allowedTools', 'WebSearch,WebFetch'] } : {}), ...(o?.signal ? { signal: o.signal } : {}) }),
     });
     this.index.onChange(() => this.refreshViews());
 
     this.registerView(VIEW_TYPE, (leaf) => new HelmView(leaf, (view) => this.uiContext(view)));
     this.addRibbonIcon('compass', 'Open Helm', () => void this.openView());
     this.addSettingTab(new HelmSettingTab(this.app, this));
+    this.statusEl = this.addStatusBarItem();
+    this.statusEl.addClass('helm-statusbar');
+    this.statusEl.style.display = 'none';
+    this.statusEl.addEventListener('click', () => { if (this.job && window.confirm(`Cancel “${this.job.label}”?`)) this.job.cancel(); });
     this.registerCommands();
     this.registerObsidianProtocolHandler('helm', (params) => {
       const tab = (params['tab'] as TabId | undefined) ?? 'today';
@@ -96,7 +104,36 @@ export default class HelmPlugin extends Plugin {
     });
   }
 
+  /* ── Long-running jobs: status bar + banner ───────────────────────── */
+
+  currentJob(): JobState | null { return this.job; }
+
+  private setJob(job: JobState | null): void {
+    const was = this.job;
+    this.job = job;
+    if (this.jobTimer) { window.clearInterval(this.jobTimer); this.jobTimer = undefined; }
+    if (job) this.jobTimer = window.setInterval(() => this.paintJob(), 1000);
+    this.paintJob();
+    if ((was === null) !== (job === null) || was?.phase !== job?.phase) this.refreshViews();
+  }
+
+  private paintJob(): void {
+    const el = this.statusEl;
+    if (!el) return;
+    if (!this.job) { el.style.display = 'none'; el.empty(); return; }
+    const secs = Math.floor((Date.now() - this.job.startedAt) / 1000);
+    const elapsed = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    el.style.display = '';
+    el.setAttribute('aria-label', `${this.job.label} — ${this.job.phase}. Click to cancel.`);
+    el.empty();
+    const spin = el.createSpan({ cls: 'helm-statusbar-spin' });
+    setIcon(spin, 'loader-circle');
+    el.createSpan({ cls: 'helm-statusbar-text', text: `Helm · ${this.job.label} · ${this.job.phase} · ${elapsed}` });
+    for (const e of Array.from(document.querySelectorAll<HTMLElement>('.helm-job-elapsed'))) e.textContent = elapsed;
+  }
+
   override onunload(): void {
+    if (this.jobTimer) window.clearInterval(this.jobTimer);
     for (const m of this.openModals) { try { m.close(); } catch { /* already gone */ } }
     this.openModals.clear();
     if (this.reconcileTimer) window.clearTimeout(this.reconcileTimer);
@@ -234,6 +271,7 @@ export default class HelmPlugin extends Plugin {
       trackModal: (m) => { this.openModals.add(m); const orig = m.onClose?.bind(m); m.onClose = () => { orig?.(); this.openModals.delete(m); }; },
       resourceUrl: (path) => this.vault.resourceUrl(path),
       aiAvailable: aiAvailable(),
+      currentJob: () => this.job,
     };
   }
 

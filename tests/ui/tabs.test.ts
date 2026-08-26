@@ -41,6 +41,7 @@ async function ctxFor() {
     trackModal: () => undefined,
     resourceUrl: (p) => `app://${p}`,
     aiAvailable: true,
+    currentJob: () => null,
   };
   return { ...s, ctx, nav, opened };
 }

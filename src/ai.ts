@@ -3,7 +3,7 @@
  * question: prompt in on stdin, `--output-format json` out. Desktop only —
  * Obsidian on mobile has no child processes.
  */
-export interface AiOptions { command: string; model?: string; timeoutSec: number; cwd?: string; /** Extra CLI flags (permissions, allowed tools, extra dirs). */ extraArgs?: string[] }
+export interface AiOptions { command: string; model?: string; timeoutSec: number; cwd?: string; /** Extra CLI flags (permissions, allowed tools, extra dirs). */ extraArgs?: string[]; /** Abort → the CLI is killed and the promise rejects with “Cancelled”. */ signal?: AbortSignal }
 
 type ChildProcess = { spawn: (cmd: string, args: string[], opts: Record<string, unknown>) => { stdin: { write: (s: string) => void; end: () => void }; stdout: { on: (ev: string, fn: (d: Buffer) => void) => void }; stderr: { on: (ev: string, fn: (d: Buffer) => void) => void }; on: (ev: string, fn: (...a: unknown[]) => void) => void; kill: (sig?: string) => void } };
 
@@ -34,6 +34,7 @@ export function runClaude(prompt: string, o: AiOptions): Promise<string> {
     let child: ReturnType<ChildProcess['spawn']>;
     try { child = cp.spawn(o.command || 'claude', args, { env, ...(o.cwd ? { cwd: o.cwd } : {}) }); } catch (e) { reject(e); return; }
     const timer = setTimeout(() => { if (!done) { done = true; try { child.kill('SIGTERM'); } catch { /* gone */ } reject(new Error(`The AI took longer than ${o.timeoutSec}s`)); } }, o.timeoutSec * 1000);
+    o.signal?.addEventListener('abort', () => { if (!done) { done = true; clearTimeout(timer); try { child.kill('SIGTERM'); } catch { /* gone */ } reject(new Error('Cancelled')); } });
     child.stdout.on('data', (d) => { out += d.toString(); });
     child.stderr.on('data', (d) => { err += d.toString(); });
     child.on('error', (e) => { if (done) return; done = true; clearTimeout(timer); reject(new Error(`Could not run "${o.command}": ${(e as Error).message}`)); });

@@ -556,3 +556,13 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-drawing-card-meta { font-size: var(--font-ui-smaller); color: var(--text-muted); }
 .helm-drawing-actions { display: flex; gap: 6px; }
 .modal:has(.helm-name-modal) { width: min(480px, 95vw); }
+
+/* Long-running jobs: status bar + banner */
+.helm-statusbar { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.helm-statusbar:hover { color: var(--text-normal); }
+.helm-statusbar-spin { display: inline-flex; }
+.helm-statusbar-spin svg { width: 14px; height: 14px; animation: helm-spin 1.2s linear infinite; }
+@keyframes helm-spin { to { transform: rotate(360deg); } }
+.helm-job-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: var(--size-4-2) 0; border-radius: var(--radius-m); background: var(--background-secondary); border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-small); }
+.helm-job-banner .helm-statusbar-spin { color: var(--text-accent); }
+.helm-job-label { font-weight: 600; }

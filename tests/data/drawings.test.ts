@@ -176,3 +176,19 @@ describe('research diagrams', () => {
     expect(calls[2]!.prompt).toContain('DIGEST:');
   });
 });
+
+describe('job progress and cancellation', () => {
+  it('reports phases while a diagram is made and clears when done; cancelling aborts the CLI call', async () => {
+    const { vault, index, settings } = await setup();
+    const seen: (string | null)[] = [];
+    const m = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, progress: (j) => seen.push(j ? `${j.label} · ${j.phase}` : null), ai: async () => '{"title":"W35","themes":[{"name":"A","items":["x"]}]}' });
+    await m.generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' });
+    expect(seen).toEqual(['Overview of “Week 35” · preparing', 'Overview of “Week 35” · asking the AI', 'Overview of “Week 35” · drawing', null]);
+    let cancel: (() => void) | undefined;
+    const slow = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, progress: (j) => { if (j) cancel = j.cancel; }, ai: (_p, o) => new Promise((_res, rej) => { o?.signal?.addEventListener('abort', () => rej(new Error('Cancelled'))); }) });
+    const run = slow.generateDiagram({ kind: 'period', key: '2026-W36', title: 'Week 36' });
+    await new Promise((r) => setTimeout(r, 0));
+    cancel!();
+    await expect(run).rejects.toThrow('Cancelled');
+  });
+});

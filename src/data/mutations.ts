@@ -32,6 +32,9 @@ import type { DrawingTarget } from '../core/types';
 
 export type DiagramMode = 'overview' | 'research';
 
+/** A running piece of work, for a status bar or a banner. */
+export interface JobState { label: string; phase: string; startedAt: number; cancel: () => void }
+
 export interface MutationDeps {
   vault: VaultAdapter;
   index: HelmIndex;
@@ -45,9 +48,11 @@ export interface MutationDeps {
   /** How long a template engine gets to react to a new file before Helm re-asserts a template note's content (ms). */
   templateSettleMs?: number;
   /** Ask the AI (Claude CLI) a question; resolves with the raw reply. */
-  ai?: (prompt: string, opts?: { research?: boolean }) => Promise<string>;
+  ai?: (prompt: string, opts?: { research?: boolean; signal?: AbortSignal }) => Promise<string>;
+  /** Long-running work reports here: a job while it runs, null when it is over. */
+  progress?: (job: JobState | null) => void;
   /** Run the CLI with tools so a skill can build a file: returns the reply; `readFile` fetches what it wrote. */
-  skill?: { run: (prompt: string, opts: { cwd: string; timeoutSec: number; extraDirs: string[]; research?: boolean }) => Promise<string>; readFile: (path: string) => Promise<string>; workDir: () => string; expandHome: (p: string) => string };
+  skill?: { run: (prompt: string, opts: { cwd: string; timeoutSec: number; extraDirs: string[]; research?: boolean; signal?: AbortSignal }) => Promise<string>; readFile: (path: string) => Promise<string>; workDir: () => string; expandHome: (p: string) => string };
   /** The Excalidraw plugin's own folder for new drawings, when it is installed. */
   excalidrawFolder?: () => string | undefined;
   /**
@@ -946,16 +951,26 @@ export class Mutations {
   /** Ask the AI for a visual overview of a target and draw it. Returns the drawing path. */
   async generateDiagram(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode } = {}): Promise<string> {
     const mode = this.diagramMode(target, opts.mode);
-    if (this.settings.aiEngine === 'skill') return this.generateWithSkill(target, { ...opts, mode });
-    if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
-    const raw = await this.d.ai(this.diagramPrompt(target, mode), { research: mode === 'research' && this.settings.aiResearch });
-    const spec = parseDiagramSpec(raw);
-    if (!spec) throw new Error('The AI reply was not a diagram (expected JSON with title and themes)');
-    return this.drawSpec(target, spec, opts.name ?? (mode === 'research' ? 'research' : undefined), opts.replacePath);
+    const skill = this.settings.aiEngine === 'skill';
+    const ac = new AbortController();
+    const label = `${mode === 'research' ? 'Researching' : 'Overview of'} “${target.title}”`;
+    const job: JobState = { label, phase: skill ? 'preparing the skill run' : 'preparing', startedAt: Date.now(), cancel: () => ac.abort() };
+    const phase = (p: string): void => { job.phase = p; this.d.progress?.({ ...job }); };
+    phase(job.phase);
+    try {
+      if (skill) return await this.generateWithSkill(target, { ...opts, mode }, ac.signal, phase);
+      if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
+      phase(mode === 'research' && this.settings.aiResearch ? 'researching (web allowed)' : 'asking the AI');
+      const raw = await this.d.ai(this.diagramPrompt(target, mode), { research: mode === 'research' && this.settings.aiResearch, signal: ac.signal });
+      const spec = parseDiagramSpec(raw);
+      if (!spec) throw new Error('The AI reply was not a diagram (expected JSON with title and themes)');
+      phase('drawing');
+      return await this.drawSpec(target, spec, opts.name ?? (mode === 'research' ? 'research' : undefined), opts.replacePath);
+    } finally { this.d.progress?.(null); }
   }
 
   /** The skill engine: the CLI builds a `.excalidraw` file in a scratch folder; Helm imports it into the vault. */
-  private async generateWithSkill(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode }): Promise<string> {
+  private async generateWithSkill(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode }, signal?: AbortSignal, phase: (p: string) => void = () => undefined): Promise<string> {
     const mode = this.diagramMode(target, opts.mode);
     const sk = this.d.skill;
     if (!sk) throw new Error('The skill engine needs the desktop app and the Claude CLI');
@@ -964,8 +979,10 @@ export class Mutations {
     const outPath = `${work}/diagram.excalidraw`;
     let reply = '';
     let timedOut: Error | undefined;
-    try { reply = await sk.run(this.skillPrompt(target, outPath, skillDir, mode), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 900), extraDirs: [skillDir], research: mode === 'research' && this.settings.aiResearch }); }
-    catch (e) { timedOut = e as Error; }
+    phase(this.settings.skillRender ? 'skill is designing, drawing and rendering' : 'skill is designing and drawing');
+    try { reply = await sk.run(this.skillPrompt(target, outPath, skillDir, mode), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 900), extraDirs: [skillDir], research: mode === 'research' && this.settings.aiResearch, ...(signal ? { signal } : {}) }); }
+    catch (e) { if (signal?.aborted) throw e; timedOut = e as Error; }
+    phase('importing');
     let raw: string | undefined;
     try { raw = await sk.readFile(outPath); } catch { raw = undefined; }
     // The skill writes the whole file before its render-and-fix loop; if the clock ran out during that loop, what is on disk is still a finished diagram.
