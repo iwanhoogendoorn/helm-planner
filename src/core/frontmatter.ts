@@ -125,11 +125,18 @@ export function setFrontmatter(lines: string[], updates: Record<string, string |
     return [`${key}: ${yamlScalar(v)}`];
   };
   for (const [key, v] of Object.entries(updates)) {
-    if (v === undefined) continue;
     let idx = -1;
     for (let i = 0; i < body.length; i++) {
       const m = KEY_RE.exec(body[i]!);
       if (m && !/^\s/.test(body[i]!) && m[1] === key) { idx = i; break; }
+    }
+    // `undefined` removes the key (and its list items); `null` keeps it with an empty value.
+    if (v === undefined) {
+      if (idx === -1) continue;
+      let end = idx + 1;
+      while (end < body.length && /^\s+-\s*/.test(body[end]!)) end++;
+      body.splice(idx, end - idx);
+      continue;
     }
     if (idx === -1) { body.push(...render(key, v)); continue; }
     let end = idx + 1;

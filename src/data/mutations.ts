@@ -25,25 +25,8 @@ import { habitDue } from './habits';
 import { misfiledDate } from './planner';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
 import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates';
-import { drawingTitle, parseExcalidrawScene, renderExcalidrawDocument, type Drawing, type ExcalidrawElement } from '../core/drawing';
-import { layoutDiagram, parseDiagramSpec, KIND_SCHEMAS, type DiagramSpec, type DiagramKind } from '../core/diagram';
-import { digestFor } from './digest';
-import { buildPrompt, renderPromptNote, PROMPT_ANGLES, type Prompt, type PromptAngle } from '../core/prompts';
+import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
 import type { DrawingTarget } from '../core/types';
-
-export type DiagramMode = 'overview' | 'research';
-
-const KIND_HINTS: Record<DiagramKind, string> = {
-  columns: 'themes as columns with items, highlights and next steps',
-  hub: 'the subject in the centre, key concepts around it with a line each, a how-it-works flow, and the best sources',
-  flow: 'prerequisites, then the steps in order with effort and a verification for each, then where it stalls',
-  matrix: 'options across, criteria down, one cell per pair, the recommended option highlighted with the reason',
-  checklist: 'Before / During / After columns of checkbox items, pitfalls marked on the During steps, the common mistakes',
-  lesson: 'a worked example step by step, a glossary of terms, quiz cards with answers, and a summary',
-};
-
-/** A running piece of work, for a status bar or a banner. */
-export interface JobState { label: string; phase: string; startedAt: number; cancel: () => void }
 
 export interface MutationDeps {
   vault: VaultAdapter;
@@ -57,12 +40,6 @@ export interface MutationDeps {
   periodicTemplate?: (kind: PeriodKind) => Promise<string | undefined>;
   /** How long a template engine gets to react to a new file before Helm re-asserts a template note's content (ms). */
   templateSettleMs?: number;
-  /** Ask the AI (Claude CLI) a question; resolves with the raw reply. */
-  ai?: (prompt: string, opts?: { research?: boolean; signal?: AbortSignal }) => Promise<string>;
-  /** Long-running work reports here: a job while it runs, null when it is over. */
-  progress?: (job: JobState | null) => void;
-  /** Run the CLI with tools so a skill can build a file: returns the reply; `readFile` fetches what it wrote. */
-  skill?: { run: (prompt: string, opts: { cwd: string; timeoutSec: number; extraDirs: string[]; research?: boolean; signal?: AbortSignal }) => Promise<string>; readFile: (path: string) => Promise<string>; workDir: () => string; expandHome: (p: string) => string };
   /** The Excalidraw plugin's own folder for new drawings, when it is installed. */
   excalidrawFolder?: () => string | undefined;
   /**
@@ -876,261 +853,74 @@ export class Mutations {
     });
   }
 
-  /** Which kind of diagram a target gets by default: tasks are subjects to research, the rest are periods to overview. */
-  diagramMode(target: DrawingTarget, mode?: DiagramMode): DiagramMode { return mode ?? (target.kind === 'task' ? 'research' : 'overview'); }
-
-  /** What the AI needs to know about a research subject: the task or project text plus its context. */
-  subjectBrief(target: DrawingTarget): string {
-    const snap = this.index.snapshot;
-    if (target.kind === 'task') {
-      const t = snap.tasks.get(target.key) ?? (target.id ? [...snap.tasks.values()].find((x) => x.id === target.id && x.origin !== 'daily-mirror') : undefined) ?? [...snap.tasks.values()].find((x) => x.id !== undefined && x.id === target.key);
-      if (!t) return `Task: ${target.title}`;
-      const proj = t.projectId ? snap.projects.get(t.projectId) : undefined;
-      const phase = proj?.phases.find((ph) => ph.id === t.phaseId);
-      const subs = t.childKeys.map((k) => snap.tasks.get(k)?.text).filter((x): x is string => !!x);
-      return [
-        `Task: ${t.text}`,
-        proj ? `Project: ${proj.title}${phase ? ` › ${phase.title}` : ''}${proj.area ? ` (area: ${proj.area})` : ''}` : '',
-        t.tags.length ? `Tags: ${t.tags.map((x) => `#${x}`).join(' ')}` : '',
-        t.due ? `Due: ${t.due}` : '', t.scheduled ? `Planned for: ${t.scheduled}` : '',
-        subs.length ? `Subtasks:\n${subs.map((x) => `- ${x}`).join('\n')}` : '',
-      ].filter(Boolean).join('\n');
-    }
-    if (target.kind === 'project') {
-      const p = snap.projects.get(target.id);
-      if (!p) return `Project: ${target.title}`;
-      const tasks = [...snap.tasks.values()].filter((t) => t.projectId === p.id && t.origin === 'project');
-      return [`Project: ${p.title}${p.area ? ` (area: ${p.area})` : ''}`, p.phases.length ? `Phases: ${p.phases.map((ph) => ph.title).join(' → ')}` : '', tasks.length ? `Tasks:\n${tasks.slice(0, 40).map((t) => `- [${t.status === 'done' ? 'x' : ' '}] ${t.text}`).join('\n')}` : ''].filter(Boolean).join('\n');
-    }
-    return target.title;
-  }
-
-  /** The prompt Helm sends for an AI diagram of a target. */
-  diagramPrompt(target: DrawingTarget, mode?: DiagramMode): string {
-    if (this.diagramMode(target, mode) === 'research') return this.researchPrompt(target);
-    return this.overviewPrompt(target);
-  }
-
-  /** Research mode: the task or project is a subject; the diagram carries real knowledge about it, never a restatement. */
-  researchPrompt(target: DrawingTarget): string {
-    const s = this.settings;
-    return [
-      `You are a domain expert asked to turn a subject into a one-page knowledge diagram for a personal knowledge base. The subject comes from the user's ${target.kind === 'task' ? 'task' : 'project'} below. Do the actual work the subject implies: ${s.aiResearch ? 'research it (web search and fetching pages are allowed and expected — use current, primary sources such as the vendor\'s own pages)' : 'use what you know'}, then distil it.`,
-      'Reply with ONLY a JSON object, no prose, no code fence, with this exact shape:',
-      `{"title": string (≤ 60 chars), "summary": string (one sentence, ≤ 160 chars, the key takeaway), "themes": [{"name": string (≤ 28 chars), "color": one of blue|green|yellow|purple|orange|teal|pink|red|grey, "items": [string (≤ 48 chars each)]}], "highlights": [string (≤ 48 chars)], "next": [string (≤ 48 chars)]}`,
-      'Rules: themes are the real structure of the subject (for certifications: one theme per vendor or track, items are the actual certifications in progression order with level, code or cost in the label — e.g. "NCA-GENL · Associate · $135"); for a technology: components, flows, options; for a decision: the alternatives with their trade-offs. 3 to 6 themes, 2 to 8 items each. Highlights are the 2–4 facts worth remembering (prerequisites, validity, prices, gotchas). Next is the recommended path for this user in 2–4 concrete steps. Every item must be true and specific. NEVER restate the task, describe the request, or comment on how much information you were given — the diagram is about the subject, not about the task.',
-      ...(s.aiInstructions.trim() ? [`Extra instructions from the user: ${s.aiInstructions.trim()}`] : []),
-      '', 'SUBJECT:', this.subjectBrief(target),
-    ].join('\n');
-  }
-
-  /** Overview mode: a factual picture of a period, day or project from the digest. */
-  overviewPrompt(target: DrawingTarget): string {
-    const digest = digestFor(this.index.snapshot, target, this.today, this.settings);
-    const what = target.kind === 'project' ? 'this project' : target.kind === 'date' ? 'this day' : `this ${parsePeriod(target.key)?.kind ?? 'period'}`;
-    return [
-      `You are turning a personal planning digest into a one-page visual overview of ${what}. Reply with ONLY a JSON object, no prose, no code fence, with this exact shape:`,
-      `{"title": string (≤ 60 chars), "summary": string (one sentence, ≤ 160 chars, factual), "themes": [{"name": string (≤ 28 chars), "color": one of blue|green|yellow|purple|orange|teal|pink|red|grey, "items": [string (≤ 48 chars each)]}], "highlights": [string (≤ 48 chars)], "next": [string (≤ 48 chars)]}`,
-      'Rules: 3 to 6 themes, 2 to 6 items each; group by what actually matters (projects, goals, areas, days), not by list headings. Items are concrete things from the digest, never invented. Highlights are the 2–4 wins or facts worth remembering; next are the 2–4 things that clearly need attention (overdue, stale, due soon, open goals). Keep every string short: this is drawn on a canvas, not read as a report.',
-      ...(this.settings.aiInstructions.trim() ? [`Extra instructions from the user: ${this.settings.aiInstructions.trim()}`] : []),
-      '', 'DIGEST:', digest,
-    ].join('\n');
-  }
-
-  /** The prompt for coleam00's excalidraw-diagram skill: digest in, a `.excalidraw` file out at `outPath`. */
-  skillPrompt(target: DrawingTarget, outPath: string, skillDir: string, mode: DiagramMode = 'overview', brief?: string): string {
-    const s = this.settings;
-    const research = mode === 'research';
-    const digest = brief ?? (research ? this.subjectBrief(target) : digestFor(this.index.snapshot, target, this.today, s));
-    const what = target.kind === 'project' ? `the project “${target.title}”` : target.kind === 'date' ? `the day ${target.title}` : target.kind === 'task' ? `the task “${target.title}”` : `${parsePeriod(target.key)?.label ?? target.key}`;
-    return [
-      `Use the excalidraw-diagram skill installed at ${skillDir} — read its SKILL.md and the files under references/ first and follow its methodology (visual argument, concrete content, container discipline, tight text widths).`,
-      research
-        ? `Task: a one-page Excalidraw knowledge diagram about the SUBJECT of ${what} for a personal knowledge base. Do the actual work the subject implies — ${s.aiResearch ? 'research it on the web with current primary sources (vendor pages), then' : 'from what you know,'} lay out the real structure: tracks, levels, prerequisites, options, trade-offs, costs, order. Never restate the task or describe the request; the diagram is about the subject.`
-        : `Task: a one-page Excalidraw overview of ${what} for a personal planning vault. The audience is the vault's owner; the point is to SEE the shape of the period: what moved, what is stuck, what is next. Group by what matters (projects, goals, areas, days), show progress and relationships, keep every label short.`,
-      `Background: ${s.skillBackground === 'dark' ? 'black (#1e1e1e)' : 'white (#ffffff)'} — already chosen, do not ask.`,
-      research ? (s.aiResearch ? 'Web research is allowed and expected; cite nothing, just draw what is true.' : 'Do not use the web; use what you know.') : 'Do not research anything on the web; use only the digest below. Do not invent items that are not in it.',
-      `Write the finished diagram as a single JSON file to exactly this path: ${outPath}`,
-      s.skillRender ? `Then run the skill's render step (uv is installed; the references folder has its environment) to view the PNG and fix layout problems, as the skill requires. Write the PNG next to the JSON, not anywhere else.` : 'Skip the render-and-validate loop; do not run any commands.',
-      'Do not create any other files. When done, reply with only the absolute path of the JSON file.',
-      ...(s.aiInstructions.trim() ? [`Extra instructions from the user: ${s.aiInstructions.trim()}`] : []),
-      '', research ? 'SUBJECT:' : 'DIGEST:', digest,
-    ].join('\n');
-  }
-
-  /** Ask the AI for a visual overview of a target and draw it. Returns the drawing path. */
-  async generateDiagram(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode } = {}): Promise<string> {
-    const mode = this.diagramMode(target, opts.mode);
-    const skill = this.settings.aiEngine === 'skill';
-    const ac = new AbortController();
-    const label = `${mode === 'research' ? 'Researching' : 'Overview of'} “${target.title}”`;
-    const job: JobState = { label, phase: skill ? 'preparing the skill run' : 'preparing', startedAt: Date.now(), cancel: () => ac.abort() };
-    const phase = (p: string): void => { job.phase = p; this.d.progress?.({ ...job }); };
-    phase(job.phase);
-    try {
-      if (skill) return await this.generateWithSkill(target, { ...opts, mode }, ac.signal, phase);
-      if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
-      phase(mode === 'research' && this.settings.aiResearch ? 'researching (web allowed)' : 'asking the AI');
-      const raw = await this.d.ai(this.diagramPrompt(target, mode), { research: mode === 'research' && this.settings.aiResearch, signal: ac.signal });
-      const spec = parseDiagramSpec(raw);
-      if (!spec) throw new Error('The AI reply was not a diagram (expected JSON with title and themes)');
-      phase('drawing');
-      return await this.drawSpec(target, spec, opts.name ?? (mode === 'research' ? 'research' : undefined), opts.replacePath);
-    } finally { this.d.progress?.(null); }
-  }
-
-  /** The skill engine: the CLI builds a `.excalidraw` file in a scratch folder; Helm imports it into the vault. */
-  private async generateWithSkill(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode; brief?: string }, signal?: AbortSignal, phase: (p: string) => void = () => undefined): Promise<string> {
-    const mode = this.diagramMode(target, opts.mode);
-    const sk = this.d.skill;
-    if (!sk) throw new Error('The skill engine needs the desktop app and the Claude CLI');
-    const skillDir = sk.expandHome(this.settings.skillPath.trim() || '~/.claude/skills/excalidraw-diagram');
-    const work = sk.workDir();
-    const outPath = `${work}/diagram.excalidraw`;
-    let reply = '';
-    let timedOut: Error | undefined;
-    phase(this.settings.skillRender ? 'skill is designing, drawing and rendering' : 'skill is designing and drawing');
-    try { reply = await sk.run(this.skillPrompt(target, outPath, skillDir, mode, opts.brief), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 900), extraDirs: [skillDir], research: mode === 'research' && this.settings.aiResearch, ...(signal ? { signal } : {}) }); }
-    catch (e) { if (signal?.aborted) throw e; timedOut = e as Error; }
-    phase('importing');
-    let raw: string | undefined;
-    try { raw = await sk.readFile(outPath); } catch { raw = undefined; }
-    // The skill writes the whole file before its render-and-fix loop; if the clock ran out during that loop, what is on disk is still a finished diagram.
-    if (timedOut && raw === undefined) throw timedOut;
-    if (timedOut) this.d.notify(`${timedOut.message} — imported the diagram it had already written.`);
-    if (raw === undefined) {
-      // The skill may have chosen its own file name inside the work dir, or answered with the path.
-      const m = /(\/[^\s"']+\.excalidraw(?:\.json)?)/.exec(reply);
-      if (m) { try { raw = await sk.readFile(m[1]!); } catch { raw = undefined; } }
-    }
-    const scene = raw !== undefined ? parseExcalidrawScene(raw) : parseExcalidrawScene(reply);
-    if (!scene) throw new Error(`The skill did not produce an Excalidraw file (${reply.trim().slice(0, 120) || 'no reply'})`);
-    return this.importScene(target, scene.elements, { ...(scene.background ? { background: scene.background } : {}), name: opts.name ?? (mode === 'research' ? 'research' : 'diagram'), ...(opts.replacePath ? { replacePath: opts.replacePath } : {}), engine: 'excalidraw-diagram skill' });
-  }
-
-  /** Write a scene into the vault as a drawing attached to a target. */
-  async importScene(target: DrawingTarget, elements: ExcalidrawElement[], opts: { background?: string; name?: string; replacePath?: string; engine?: string } = {}): Promise<string> {
-    let id: string | undefined;
-    if (target.kind === 'task') id = await this.ensureId(target.key);
-    const path = opts.replacePath ?? await this.uniquePath(this.drawingPathFor(target, opts.name ?? 'diagram'));
-    const frontmatter = { ...this.drawingFrontmatter(target, id), 'helm-generated': true, 'helm-generated-on': this.today, ...(opts.engine ? { 'helm-engine': opts.engine } : {}) };
-    const content = renderExcalidrawDocument({ elements, frontmatter, ...(opts.background ? { background: opts.background } : {}) });
-    await this.d.vault.write(path, content);
-    this.index.update(path, content);
-    await this.embedDrawing(target, path);
-    return path;
-  }
-
-  /** Which diagram shape fits a prompt's angle. */
-  static kindForAngle(angle: PromptAngle): DiagramKind { return ({ 'deep-dive': 'hub', plan: 'flow', options: 'matrix', learn: 'lesson', checklist: 'checklist' } as Record<PromptAngle, DiagramKind>)[angle]; }
-
-  static readonly KIND_LABELS: Record<DiagramKind, string> = { columns: 'overview', hub: 'knowledge map', flow: 'roadmap', matrix: 'comparison matrix', checklist: 'checklist board', lesson: 'illustrated lesson' };
-
-  /** The prompt that answers a saved prompt and returns the answer in a diagram shape. */
-  promptDiagramPrompt(prompt: Prompt, kind: DiagramKind): string {
-    const s = this.settings;
-    return [
-      `Below is a brief the user wrote for you. Do exactly what it asks — ${s.aiResearch ? 'research with web search and page fetching where facts matter; use current, primary sources' : 'from what you know'} — and then, instead of prose, express your complete answer as a diagram specification.`,
-      `Reply with ONLY a JSON object, no prose, no code fence, with this exact shape (a ${Mutations.KIND_LABELS[kind]}):`,
-      KIND_SCHEMAS[kind],
-      'Every string must be short enough to sit in a box (respect the limits), concrete and true for this subject; no placeholders, no restating the brief. Fill every field the shape has.',
-      ...(s.aiInstructions.trim() ? [`Extra instructions from the user: ${s.aiInstructions.trim()}`] : []),
-      '', 'THE BRIEF:', prompt.text,
-    ].join('\n');
-  }
-
-  /** Answer a saved prompt with the AI and draw the answer in the shape that fits its angle. */
-  async generateFromPrompt(target: DrawingTarget, prompt: Prompt, opts: { kind?: DiagramKind; replacePath?: string } = {}): Promise<string> {
-    const kind = opts.kind ?? Mutations.kindForAngle(prompt.angle);
-    const skill = this.settings.aiEngine === 'skill';
-    const ac = new AbortController();
-    const label = `Prompt ${prompt.n} → ${Mutations.KIND_LABELS[kind]} for “${target.title}”`;
-    const job: JobState = { label, phase: 'preparing', startedAt: Date.now(), cancel: () => ac.abort() };
-    const phase = (p: string): void => { job.phase = p; this.d.progress?.({ ...job }); };
-    phase(job.phase);
-    try {
-      const name = `prompt ${prompt.n} ${Mutations.KIND_LABELS[kind]}`;
-      if (skill) return await this.generateWithSkill(target, { name, ...(opts.replacePath ? { replacePath: opts.replacePath } : {}), mode: 'research', brief: `${prompt.text}\n\nShape it as a ${Mutations.KIND_LABELS[kind]}: ${KIND_HINTS[kind]}` }, ac.signal, phase);
-      if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
-      phase(this.settings.aiResearch ? 'answering the prompt (web allowed)' : 'answering the prompt');
-      const raw = await this.d.ai(this.promptDiagramPrompt(prompt, kind), { research: this.settings.aiResearch, signal: ac.signal });
-      const spec = parseDiagramSpec(raw);
-      if (!spec) throw new Error('The AI reply was not a diagram (expected JSON for the requested shape)');
-      spec.kind = kind;
-      phase('drawing');
-      return await this.drawSpec(target, spec, name, opts.replacePath);
-    } finally { this.d.progress?.(null); }
-  }
-
-  /** Draw a spec for a target without any AI involved (also what the AI path ends in). */
-  async drawSpec(target: DrawingTarget, spec: DiagramSpec, name?: string, replacePath?: string): Promise<string> {
-    let id: string | undefined;
-    if (target.kind === 'task') id = await this.ensureId(target.key);
-    const path = replacePath ?? await this.uniquePath(this.drawingPathFor(target, name ?? 'overview'));
-    const frontmatter = { ...this.drawingFrontmatter(target, id), 'helm-generated': true, 'helm-generated-on': this.today };
-    const content = renderExcalidrawDocument({ elements: layoutDiagram(spec), frontmatter, extra: spec.summary ? `> ${spec.summary}` : undefined });
-    await this.d.vault.write(path, content);
-    this.index.update(path, content);
-    await this.embedDrawing(target, path);
-    return path;
-  }
-
   drawingsFor(target: DrawingTarget): Drawing[] { return this.index.drawingsFor(target); }
+
+  /** Take a drawing's embed line (and a Diagrams heading left empty) out of a note. */
+  private async removeEmbed(notePath: string, drawingPath: string): Promise<void> {
+    const needle = `[[${drawingTitle(drawingPath)}.excalidraw`;
+    await this.editFile(notePath, (lines) => {
+      let changed = false;
+      for (let i = lines.length - 1; i >= 0; i--) { if (lines[i]!.includes(needle)) { lines.splice(i, 1); changed = true; } }
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (/^#{1,6}\s+diagrams?\s*$/i.test(lines[i]!)) {
+          let j = i + 1; while (j < lines.length && lines[j]!.trim() === '') j++;
+          if (j >= lines.length || /^#{1,6}\s/.test(lines[j]!)) { lines.splice(i, j - i); changed = true; }
+        }
+      }
+      return changed;
+    });
+  }
 
   /** Trash a drawing and take its embed lines out of the notes that carried them. */
   async deleteDrawing(path: string): Promise<void> {
     if (!this.d.vault.trash) throw new Error('This vault cannot trash files');
-    const title = drawingTitle(path);
-    const needle = `[[${title}.excalidraw`;
-    const carriers = this.index.filesEmbedding(title);
-    for (const notePath of carriers) {
-      await this.editFile(notePath, (lines) => {
-        let changed = false;
-        for (let i = lines.length - 1; i >= 0; i--) { if (lines[i]!.includes(needle)) { lines.splice(i, 1); changed = true; } }
-        // Drop a Diagrams heading left with nothing under it.
-        for (let i = lines.length - 1; i >= 0; i--) {
-          if (/^#{1,6}\s+diagrams?\s*$/i.test(lines[i]!)) {
-            let j = i + 1; while (j < lines.length && lines[j]!.trim() === '') j++;
-            if (j >= lines.length || /^#{1,6}\s/.test(lines[j]!)) { lines.splice(i, j - i); changed = true; }
-          }
-        }
-        return changed;
+    for (const notePath of this.index.filesEmbedding(drawingTitle(path))) await this.removeEmbed(notePath, path);
+    await this.d.vault.trash(path);
+    this.index.update(path, undefined);
+  }
+
+  /** The note a target lives in (project note, daily note, periodic note); tasks have none of their own. */
+  private async noteOf(target: DrawingTarget): Promise<string | undefined> {
+    if (target.kind === 'project') return this.index.project(target.id)?.path;
+    if (target.kind === 'date') return this.index.dailyPath(target.date);
+    if (target.kind === 'period') { const p = parsePeriod(target.key); return p ? this.index.periodicPath(p) : undefined; }
+    return undefined;
+  }
+
+  /** Attach an existing drawing to a target: a helm-* frontmatter key on the drawing, plus the embed in the target's note. */
+  async linkDrawing(target: DrawingTarget, drawingPath: string): Promise<void> {
+    if (!drawingPath.endsWith('.md')) throw new Error('Only Excalidraw drawings (.excalidraw.md) can be linked; a canvas is attached by its folder or name');
+    let id: string | undefined;
+    if (target.kind === 'task') id = await this.ensureId(target.key);
+    const [key, value] = Object.entries(this.drawingFrontmatter(target, id))[0]! as [string, string];
+    await this.editFile(drawingPath, (lines, doc) => {
+      const cur = doc.frontmatter.values[key];
+      const have = Array.isArray(cur) ? cur.map(String) : typeof cur === 'string' && cur.trim() !== '' ? cur.replace(/^\[|\]$/g, '').split(',').map((x) => x.trim()).filter(Boolean) : [];
+      if (have.includes(value)) return false;
+      const next = [...have, value];
+      lines.splice(0, lines.length, ...setFrontmatter(lines, { [key]: next.length === 1 ? next[0]! : next }));
+      return true;
+    });
+    await this.embedDrawing(target, drawingPath);
+  }
+
+  /** Detach a drawing from a target: drop the helm-* key value and the embed line. Attachments by folder or name stay. */
+  async unlinkDrawing(target: DrawingTarget, drawingPath: string): Promise<void> {
+    const id = target.kind === 'task' ? (target.id ?? this.index.task(target.key)?.id) : undefined;
+    const [key, value] = Object.entries(this.drawingFrontmatter(target, id))[0]! as [string, string];
+    if (drawingPath.endsWith('.md')) {
+      await this.editFile(drawingPath, (lines, doc) => {
+        const cur = doc.frontmatter.values[key];
+        const have = Array.isArray(cur) ? cur.map(String) : typeof cur === 'string' && cur.trim() !== '' ? cur.replace(/^\[|\]$/g, '').split(',').map((x) => x.trim()).filter(Boolean) : [];
+        const own = 'key' in target ? target.key : '';
+        const next = have.filter((x) => x !== value && x !== own);
+        if (next.length === have.length) return false;
+        lines.splice(0, lines.length, ...setFrontmatter(lines, { [key]: next.length === 0 ? undefined : next.length === 1 ? next[0]! : next }));
+        return true;
       });
     }
-    await this.d.vault.trash(path);
-    this.index.update(path, undefined);
-  }
-
-  /* ── Prompts ───────────────────────────────────────────────────────── */
-
-  /** Create the next prompt for a target with the given angle (or the next angle in rotation), save it as a note, return it. */
-  async createPrompt(target: DrawingTarget, angle?: PromptAngle): Promise<Prompt> {
-    let id: string | undefined;
-    if (target.kind === 'task') { id = await this.ensureId(target.key); target = { ...target, key: this.index.task(id)?.key ?? id, id }; }
-    const existing = this.index.promptsFor(target);
-    const n = existing.length === 0 ? 1 : Math.max(...existing.map((p) => p.n)) + 1;
-    const a = angle ?? PROMPT_ANGLES[(n - 1) % PROMPT_ANGLES.length]!.id;
-    const text = buildPrompt(a, this.subjectBrief(target), { extra: this.settings.aiInstructions });
-    const folder = (this.settings.promptsFolder.trim() || 'Prompts').replace(/\/+$/, '');
-    const base = this.safeName(target.kind === 'date' ? formatDate(target.date, this.templateConfig().dailyTitleFormat) : target.kind === 'period' ? target.key : target.title).slice(0, 80);
-    const path = await this.uniqueMd(`${folder}/${base} — prompt ${n}.md`);
-    const fmTarget = Object.fromEntries(Object.entries(this.drawingFrontmatter(target, id)).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]));
-    const content = renderPromptNote({ n, angle: a, text, target: fmTarget, today: this.today, subject: target.title });
-    await this.d.vault.write(path, content);
-    this.index.update(path, content);
-    return this.index.snapshot.prompts.get(path) ?? { path, title: baseName(path), n, angle: a, text, taskIds: [], projectRefs: [], dates: [], periodKeys: [] };
-  }
-
-  private async uniqueMd(path: string): Promise<string> {
-    if (!(await this.d.vault.exists(path))) return path;
-    const stem = path.replace(/\.md$/, '');
-    for (let i = 2; ; i++) { const p = `${stem} (${i}).md`; if (!(await this.d.vault.exists(p))) return p; }
-  }
-
-  async deletePrompt(path: string): Promise<void> {
-    if (!this.d.vault.trash) throw new Error('This vault cannot trash files');
-    await this.d.vault.trash(path);
-    this.index.update(path, undefined);
+    const note = await this.noteOf(target);
+    if (note && (await this.d.vault.exists(note))) await this.removeEmbed(note, drawingPath);
   }
 
   /* ── Horizons: goals in yearly / quarterly / monthly notes ───────────── */

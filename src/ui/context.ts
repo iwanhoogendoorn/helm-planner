@@ -25,12 +25,6 @@ export interface UiContext {
   navigate: (tab: TabId, opts?: { date?: IsoDate; projectId?: string; periodKey?: string; scope?: 'week' | 'month' | 'quarter' | 'year' }) => void;
   /** Run a mutation with error handling and a refresh afterwards. */
   run: (label: string, fn: () => Promise<unknown>) => Promise<void>;
-  /** Whether an AI command can be run here (desktop with the Claude CLI). */
-  aiAvailable: boolean;
-  /** Put text on the clipboard. */
-  copy: (text: string) => Promise<void>;
-  /** The long-running job in progress, if any (AI diagrams). */
-  currentJob: () => { label: string; phase: string; startedAt: number; cancel: () => void } | null;
   /** A URL the renderer can load a vault image from. */
   resourceUrl: (path: string) => string | undefined;
   /** Register an open modal so the plugin can close it on unload (a reload must never leave a dead overlay). */

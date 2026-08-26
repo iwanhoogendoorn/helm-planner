@@ -21,8 +21,6 @@ function make(over: Partial<HelmSettings> = {}) {
     writeTemplate: vi.fn(async () => 'created'),
     createCurrentPeriodicNotes: vi.fn(async () => []),
     excalidrawFolderPath: () => '70 OBSIDIAN/70-02 Excalidraw',
-    aiAvailable: () => true,
-    aiPing: async () => 'OK',
     manifest: { version: '0.5.0', description: 'Plan the day from your notes.' },
   } as unknown as SettingsHost;
   const tab = new HelmSettingTab(app as never, host);

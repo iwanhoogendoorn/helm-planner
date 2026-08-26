@@ -9,28 +9,6 @@
   starts with the note's title, or by links in their text. Every task row,
   day, period and project shows what exists (open with a click) and offers
   *New drawing…* (named, placed and embedded for you). Settings → Drawings.
-- AI overview diagrams: one-page visual overviews of a day / week / month /
-  quarter / year / project. Helm sends a compact digest to the Claude CLI on
-  your subscription, gets back a short structure, and lays it out itself as
-  editable Excalidraw elements (themes, items, highlights, next). Commands
-  *AI overview diagram of this week/month/quarter/year/today*. A second
-  engine, **coleam00's excalidraw-diagram skill**, can be chosen in Settings →
-  Drawings: the CLI runs the skill in a scratch folder (edits auto-accepted,
-  only uv allowed), optionally with its render-and-fix loop, and Helm imports
-  the finished scene into the vault as a normal drawing.
-- Prompts: from any task (or project, day, period) → *Prompts* → *New prompt*
-  builds a ready-to-paste brief about the subject, copies it to the clipboard
-  at once, saves it as a numbered note in the prompts folder and shows it.
-  Five angles rotate (deep dive, action plan, options & trade-offs, learn it,
-  checklist & pitfalls) or pick one. Existing prompts are listed as Prompt 1,
-  2, … — select to copy and view. *Manage drawings & prompts…* trashes either
-  (drawing embeds are removed from the notes that carried them).
-- Two diagram modes: *overview* (a period, day or project seen through its
-  digest) and *research* (a task — or a project's subject — treated as a
-  topic: the model researches it on the web when allowed and draws the
-  actual knowledge: tracks, levels, prerequisites, prices, options; never a
-  restatement of the task). Tasks get research by default; projects offer
-  both. Settings → Drawings → *Allow web research*.
 - Built-in yearly, quarterly, monthly and weekly note templates (Templater
   flavour: navigation links derived from the title, a Goals section, focus
   and review). Helm uses your override, else the Periodic Notes template,

@@ -24,7 +24,6 @@ async function ctxFor() {
   const s = await setup();
   const nav: { tab: TabId; opts?: unknown }[] = [];
   const opened: string[] = [];
-  const copied: string[] = [];
   const ctx: UiContext = {
     app: { vault: { adapter: { exists: async () => true } } } as never,
     index: s.index,
@@ -41,11 +40,8 @@ async function ctxFor() {
     run: async (_l, fn) => { await fn(); },
     trackModal: () => undefined,
     resourceUrl: (p) => `app://${p}`,
-    aiAvailable: true,
-    currentJob: () => null,
-    copy: async (t) => { copied.push(t); },
   };
-  return { ...s, ctx, nav, opened, copied };
+  return { ...s, ctx, nav, opened };
 }
 
 const render = (fn: (root: HTMLElement) => void): HTMLElement => { const root = document.createElement('div'); fn(root); document.body.appendChild(root); return root; };
@@ -596,7 +592,7 @@ describe('Drawings in the UI', () => {
     const btn = today.querySelector('.helm-day-actions .helm-drawings-btn')!;
     expect(btn.querySelector('.helm-badge')!.textContent).toBe('1');
     click(btn);
-    expect(Menu.last!.items.map((i) => i.title)).toEqual([expect.stringContaining('26, Wednesday, Aug, 2026 — sketch'), 'New drawing…', 'Manage drawings & prompts…', 'AI overview diagram', 'New prompt (Deep dive)', 'New prompt with angle…']);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual([expect.stringContaining('26, Wednesday, Aug, 2026 — sketch'), 'New drawing…', 'Link existing drawing…', 'Manage drawings…']);
     const cal = render((r) => renderCalendar(ctx, r, { anchor: TODAY, scope: 'week', collapsed: new Map() } as CalendarState));
     expect(cal.querySelector('.helm-day-actions .helm-drawings-btn .helm-badge')).toBeNull();
     const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Call the plumber' && x.origin !== 'daily-mirror')!;
@@ -610,31 +606,24 @@ describe('Drawings in the UI', () => {
     await m.createDrawing({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Architecture' });
     const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
     expect(texts(root, '.helm-drawing-card-title')).toEqual(['Architecture']);
-    expect(texts(root, '.helm-drawing-actions button')).toEqual(['New drawing', 'AI overview', 'AI research']);
+    expect(texts(root, '.helm-drawing-actions button')).toEqual(['New drawing', 'Link existing', 'Manage']);
   });
 });
 
-describe('Prompts in the UI', () => {
-  it('the task menu offers prompts: a new one is created, copied and shown; an existing one copies and shows on select', async () => {
-    const { ctx, index, copied } = await ctxFor();
-    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
-    const row = taskRow(ctx, t);
-    click(row.querySelector('button[aria-label="More…"]'));
-    const prompts = Menu.last!.items.find((i) => i.title === 'Prompts')!.sub!;
-    expect(prompts.items.map((i) => i.title)).toEqual(['New prompt (Deep dive)', 'New prompt with angle…']);
-    prompts.items[0]!.click!();
-    await flush(); await flush(); await flush();
-    expect(copied).toHaveLength(1);
-    expect(copied[0]).toContain('I want to properly understand the subject below');
-    expect(Modal.last!.titleEl.textContent).toBe('Prompt 1 · Deep dive');
-    expect(Modal.last!.contentEl.querySelector('.helm-prompt-text')!.textContent).toBe(copied[0]);
-    const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === t.text && x.origin === 'project')!;
-    click(taskRow(ctx, t2).querySelector('button[aria-label="More…"]'));
-    const prompts2 = Menu.last!.items.find((i) => i.title === 'Prompts')!.sub!;
-    expect(prompts2.items.map((i) => i.title)).toEqual(['Prompt 1 · Deep dive', 'Draw a prompt with AI', 'New prompt (Action plan)', 'New prompt with angle…']);
-    prompts2.items[0]!.click!();
-    await flush();
-    expect(copied).toHaveLength(2);
-    expect(Modal.last!.titleEl.textContent).toBe('Prompt 1 · Deep dive');
+describe('Linking drawings in the UI', () => {
+  it('Link existing drawing… lists unattached drawings; picking one attaches it and it shows in the menu', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await vault.write('Excalidraw/loose.excalidraw.md', '---\nexcalidraw-plugin: parsed\n---\n# Excalidraw Data\n\n## Text Elements\n\n%%\n## Drawing\n```json\n{"type":"excalidraw","elements":[]}\n```\n%%\n');
+    index.update('Excalidraw/loose.excalidraw.md', await vault.read('Excalidraw/loose.excalidraw.md'));
+    const today = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    click(today.querySelector('.helm-day-actions .helm-drawings-btn'));
+    Menu.last!.items.find((i) => i.title === 'Link existing drawing…')!.click!();
+    const picker = Modal.last as unknown as { getItems: () => { path: string }[]; onChooseItem: (d: { path: string }) => void };
+    expect(picker.getItems().map((d) => d.path)).toContain('Excalidraw/loose.excalidraw.md');
+    picker.onChooseItem(picker.getItems().find((d) => d.path === 'Excalidraw/loose.excalidraw.md')!);
+    await flush(); await flush();
+    expect(index.drawingsFor({ kind: 'date', date: TODAY, title: '' }).map((d) => d.title)).toEqual(['loose']);
+    expect(await vault.read('Excalidraw/loose.excalidraw.md')).toContain('helm-date: 2026-08-26');
+    expect(await vault.read(dailyPath(TODAY))).toContain('![[loose.excalidraw]]');
   });
 });

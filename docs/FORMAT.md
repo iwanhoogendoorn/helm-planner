@@ -240,21 +240,7 @@ to a task, project, day or period when:
 - its text links such a note, or mentions a task's 🆔.
 
 Drawings Helm creates are named `<note title> — <name>` (projects: `<name>`,
-inside the project folder), get an embed under `## Diagrams` in the note, and
-AI overviews carry `helm-generated: true` with the summary as a quote above the
-scene.
-
-AI diagrams come in two modes. *Overview* draws the digest of a period, day
-or project (what moved, what is stuck, what is next). *Research* treats a task
-or a project's subject as a topic: the model may search the web and read pages
-(`Allow web research`), and the drawing carries the knowledge itself. Research
-drawings are named `<subject> — research`, overviews `<note> — overview`, skill
-drawings `<note> — diagram`.
-
-## 8. Prompts
-
-A prompt note lives in the prompts folder (`Prompts` by default), named
-`<subject> — prompt <n>.md`, with `helm-prompt: <n>`, `helm-prompt-angle`,
-the target key (`helm-task` …) and the prompt text in a code block. Helm lists
-them per target in number order; deleting moves the note to the trash.
-
+inside the project folder) and get an embed under `## Diagrams` in the note.
+Linking an existing drawing adds the `helm-*` key (a list when it serves
+several targets) and the embed; unlinking removes both, and deleting moves the
+file to the trash and strips its embeds.

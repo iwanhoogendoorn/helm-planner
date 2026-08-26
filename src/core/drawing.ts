@@ -126,18 +126,3 @@ export function renderExcalidrawDocument(opts: { elements?: ExcalidrawElement[];
   ].join('\n');
 }
 
-/** Read an Excalidraw scene (a `.excalidraw` file or a JSON reply, fences tolerated). */
-export function parseExcalidrawScene(raw: string): { elements: ExcalidrawElement[]; background?: string } | undefined {
-  const t = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-  const start = t.indexOf('{');
-  if (start === -1) return undefined;
-  let obj: unknown;
-  try { obj = JSON.parse(t.slice(start, t.lastIndexOf('}') + 1)); } catch { return undefined; }
-  if (!obj || typeof obj !== 'object') return undefined;
-  const o = obj as { type?: unknown; elements?: unknown; appState?: { viewBackgroundColor?: unknown } };
-  if (!Array.isArray(o.elements)) return undefined;
-  const elements = (o.elements as unknown[]).filter((e): e is ExcalidrawElement => !!e && typeof e === 'object' && typeof (e as { id?: unknown }).id === 'string' && typeof (e as { type?: unknown }).type === 'string' && !(e as { isDeleted?: boolean }).isDeleted);
-  if (elements.length === 0) return undefined;
-  const bg = o.appState?.viewBackgroundColor;
-  return { elements, ...(typeof bg === 'string' ? { background: bg } : {}) };
-}

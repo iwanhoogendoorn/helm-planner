@@ -13,12 +13,11 @@ import { findRegion, partOfLine, type Section } from '../core/dailyNote';
 import { derivedKey, hash } from '../core/ids';
 import { formatDate, parseDateFromPath } from '../core/dates';
 import { isDrawingPath, parseDrawing, type Drawing } from '../core/drawing';
-import { isPromptNote, parsePromptNote, type Prompt } from '../core/prompts';
 import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
 
 export const DAILY_FALLBACK = { folder: 'Daily Notes', format: 'YYYY-MM-DD' };
 
-export type FileKind = 'project' | 'habit' | 'daily' | 'inbox' | 'note' | 'periodic' | 'drawing' | 'prompt';
+export type FileKind = 'project' | 'habit' | 'daily' | 'inbox' | 'note' | 'periodic' | 'drawing';
 
 export type PeriodicConfig = Record<PeriodKind, { folder: string; format: string }>;
 export const PERIODIC_FALLBACK: PeriodicConfig = { year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' }, week: { folder: 'Weekly Notes', format: 'gggg-[W]ww' } };
@@ -32,7 +31,6 @@ interface FileEntry {
   project?: Project;
   habit?: Habit;
   drawing?: Drawing;
-  prompt?: Prompt;
   /** Basenames of drawings this note embeds or links (`![[X.excalidraw]]`). */
   drawingLinks?: string[];
   date?: IsoDate;
@@ -123,7 +121,6 @@ export class HelmIndex {
     if (s.excludePaths.some((x) => x.trim() !== '' && isUnder(path, x.trim()))) return false;
     if (isDrawingPath(path)) return true;
     if (!path.endsWith('.md')) return false;
-    if (isUnder(path, s.promptsFolder)) return true;
     if (path === s.inboxNote) return true;
     if (isUnder(path, s.projectsFolder) || isUnder(path, s.habitsFolder)) return true;
     if (this.dateOfPath(path) !== undefined) return true;
@@ -181,7 +178,6 @@ export class HelmIndex {
     const entry: FileEntry = { path, kind: 'note', hash: hash(content), tasks: [], hasRegion: false, completions: [], diagnostics: [] };
     const mtime = this.vault.mtime(path);
     if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
-    if (isPromptNote(content)) { const pr = parsePromptNote(path, content, mtime); if (pr) { entry.kind = 'prompt'; entry.prompt = pr; return entry; } }
     const date = this.dateOfPath(path);
     const dl = [...content.matchAll(/!?\[\[([^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]/g)].map((m) => m[1]!.trim()).filter((t) => /\.(excalidraw|canvas)$/i.test(t)).map((t) => t.slice(t.lastIndexOf('/') + 1).replace(/\.(excalidraw|canvas)$/i, ''));
     if (dl.length > 0) entry.drawingLinks = [...new Set(dl)];
@@ -359,9 +355,8 @@ export class HelmIndex {
     for (const p of projects.values()) p.childIds.sort((a, b) => projects.get(a)!.title.localeCompare(projects.get(b)!.title));
 
     const drawings = new Map<string, Drawing>();
-    const prompts = new Map<string, Prompt>();
-    for (const e of this.files.values()) { if (e.drawing) drawings.set(e.path, e.drawing); if (e.prompt) prompts.set(e.path, e.prompt); }
-    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath, drawings, prompts };
+    for (const e of this.files.values()) if (e.drawing) drawings.set(e.path, e.drawing);
+    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath, drawings };
     this.attachDrawings();
   }
 
@@ -424,20 +419,6 @@ export class HelmIndex {
     }
   }
 
-  /** Prompts attached to a target (explicit frontmatter only), numbered order. */
-  promptsFor(target: DrawingTarget): Prompt[] {
-    const snap = this.snapshot;
-    const out: Prompt[] = [];
-    for (const pr of snap.prompts.values()) {
-      const hit = target.kind === 'task' ? pr.taskIds.some((id) => id === target.id || id === target.key || snap.tasks.get(target.key)?.id === id)
-        : target.kind === 'project' ? pr.projectRefs.includes(target.id)
-        : target.kind === 'date' ? pr.dates.includes(target.date)
-        : pr.periodKeys.some((k) => k.toUpperCase() === target.key.toUpperCase());
-      if (hit) out.push(pr);
-    }
-    return out.sort((a, b) => a.n - b.n);
-  }
-
   /** Paths of notes that embed or link a drawing by title. */
   filesEmbedding(title: string): string[] {
     const t = title.toLowerCase();
@@ -483,5 +464,5 @@ export class HelmIndex {
 }
 
 export function emptySnapshot(): Snapshot {
-  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map(), drawings: new Map(), prompts: new Map() };
+  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map(), drawings: new Map() };
 }

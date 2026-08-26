@@ -198,8 +198,6 @@ export interface Snapshot {
   tasksByPath: Map<string, string[]>;
   /** Excalidraw / canvas drawings by path. */
   drawings: Map<string, import('./drawing').Drawing>;
-  /** Saved prompts by path. */
-  prompts: Map<string, import('./prompts').Prompt>;
 }
 
 export interface HelmSettings {
@@ -237,21 +235,6 @@ export interface HelmSettings {
   drawingTemplate: string;
   projectDrawingsInProjectFolder: boolean;
   embedDrawings: boolean;
-  aiEnabled: boolean;
-  aiCommand: string;
-  aiModel: string;
-  aiTimeoutSec: number;
-  aiInstructions: string;
-  /** Which engine draws AI diagrams: Helm's structured layout, or coleam00's excalidraw-diagram skill through the CLI. */
-  aiEngine: 'helm' | 'skill';
-  /** Let research diagrams use web search and page fetching. */
-  aiResearch: boolean;
-  skillPath: string;
-  skillBackground: 'white' | 'dark';
-  skillRender: boolean;
-  skillTimeoutSec: number;
-  /** Where generated prompt notes go. */
-  promptsFolder: string;
   extraFolders: string[];
   /** Path prefixes never indexed (archives). */
   excludePaths: string[];
@@ -304,18 +287,6 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   drawingTemplate: '',
   projectDrawingsInProjectFolder: true,
   embedDrawings: true,
-  aiEnabled: true,
-  aiCommand: 'claude',
-  aiModel: '',
-  aiTimeoutSec: 180,
-  aiInstructions: '',
-  aiEngine: 'helm',
-  aiResearch: true,
-  skillPath: '~/.claude/skills/excalidraw-diagram',
-  skillBackground: 'white',
-  skillRender: true,
-  skillTimeoutSec: 900,
-  promptsFolder: 'Prompts',
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
   archiveFolder: '02 PROJECTS/ZZZ. Project Archive',

@@ -26,15 +26,13 @@ export interface SettingsHost extends Plugin {
   writeTemplate(kind: PeriodKind, replace: boolean): Promise<'created' | 'replaced' | 'skipped'>;
   createCurrentPeriodicNotes(): Promise<string[]>;
   excalidrawFolderPath(): string | undefined;
-  aiAvailable(): boolean;
-  aiPing(): Promise<string>;
 }
 
 type ChipTone = 'ok' | 'warn' | 'pending';
 interface GroupHandle { content: HTMLElement; setChip(text: string, tone: ChipTone): void }
 type StrKey = { [K in keyof HelmSettings]: HelmSettings[K] extends string ? K : never }[keyof HelmSettings];
 type BoolKey = { [K in keyof HelmSettings]: HelmSettings[K] extends boolean ? K : never }[keyof HelmSettings];
-type NumKey = 'dailyCapacityMinutes' | 'defaultEffortMinutes' | 'staleProjectDays' | 'aiTimeoutSec' | 'skillTimeoutSec';
+type NumKey = 'dailyCapacityMinutes' | 'defaultEffortMinutes' | 'staleProjectDays';
 
 export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
   { id: 'folders', label: 'Folders', icon: 'folder' },
@@ -337,40 +335,15 @@ export class HelmSettingTab extends PluginSettingTab {
   private renderDrawings(body: HTMLElement): void {
     const s = this.host.settings;
     const exFolder = this.host.excalidrawFolderPath();
-    const where = this.group(body, { icon: 'pen-tool', title: 'Where drawings live', subtitle: 'Excalidraw drawings Helm creates for tasks, days, weeks, months, quarters, years and projects.', chip: s.drawingsFolder ? this.pathChip(s.drawingsFolder) : exFolder ? { text: 'follows Excalidraw', tone: 'pending' } : { text: 'Excalidraw not found', tone: 'warn' } });
+    const where = this.group(body, { icon: 'pen-tool', title: 'Where drawings live', subtitle: 'Excalidraw drawings Helm creates or links for tasks, days, weeks, months, quarters, years and projects.', chip: s.drawingsFolder ? this.pathChip(s.drawingsFolder) : exFolder ? { text: 'follows Excalidraw', tone: 'pending' } : { text: 'Excalidraw not found', tone: 'warn' } });
     this.note(where.content, exFolder ? `The Excalidraw plugin keeps new drawings in “${exFolder}”; Helm follows it unless you set a folder here.` : 'The Excalidraw plugin is not installed or has no folder set; Helm uses “Excalidraw” unless you set a folder here.');
     this.text(where.content, 'drawingsFolder', { name: 'Folder', desc: 'For drawings attached to days, periods and tasks.', placeholder: exFolder ?? 'Excalidraw', pick: 'folder', after: (v) => where.setChip(v ? this.pathChip(v).text : 'follows Excalidraw', v ? this.pathChip(v).tone : 'pending') });
     this.toggle(where.content, 'projectDrawingsInProjectFolder', 'Project drawings live in the project folder', 'Next to the project note, like the drawings you already keep there.');
     this.text(where.content, 'drawingTemplate', { name: 'Drawing template', desc: 'An Excalidraw note to copy for new drawings (grid, colours, frames). Empty = blank.', placeholder: 'Excalidraw/Templates/Grid enabled.excalidraw', pick: 'note' });
     this.toggle(where.content, 'embedDrawings', 'Embed new drawings in the note', 'A `![[…excalidraw]]` line under a Diagrams heading in the daily, periodic or project note, so the drawing shows up inside the note too.');
 
-    const pr = this.group(body, { icon: 'clipboard-copy', title: 'Prompts', subtitle: 'Ready-to-paste briefs about a task’s subject, saved as notes and numbered per task.', chip: this.pathChip(s.promptsFolder) });
-    this.text(pr.content, 'promptsFolder', { name: 'Prompts folder', desc: 'Prompt notes are small: frontmatter linking the task, the prompt in a code block.', placeholder: 'Prompts', pick: 'folder', fallback: 'Prompts', after: (v) => pr.setChip(this.pathChip(v).text, this.pathChip(v).tone) });
-
     const how = this.group(body, { icon: 'link', title: 'How drawings are found', subtitle: 'Nothing to configure — this is what Helm looks at.' });
     this.note(how.content, 'A drawing belongs to a project when it sits in the project’s folder, when the project note embeds it, or when it links the project. It belongs to a day or a period when its name starts with that note’s title (“26, Wednesday, Aug, 2026 — flow”, “2026-W35 map”), when that note embeds it, or when its text links the note. It belongs to a task when Helm made it for that task or its text mentions the task’s 🆔. Drawings Helm creates carry helm-task / helm-project / helm-date / helm-period frontmatter, which always wins.');
-
-    const ai = this.group(body, { icon: 'sparkles', title: 'AI overview diagrams', subtitle: 'One-page visual overviews of a day, week, month, quarter, year or project, drawn from your notes through the Claude CLI on your subscription.', chip: !this.host.aiAvailable() ? { text: 'desktop only', tone: 'warn' } : s.aiEnabled ? { text: 'on', tone: 'ok' } : { text: 'off', tone: 'pending' } });
-    this.toggle(ai.content, 'aiEnabled', 'Offer AI overview diagrams', 'Adds “AI overview diagram” to the drawing menus and the command palette.');
-    this.toggle(ai.content, 'aiResearch', 'Allow web research', 'Research diagrams (for a task or a project’s subject) may search the web and read pages, so the drawing carries current facts — certification tracks, prices, versions — instead of a restatement of the task.');
-    this.dropdown(ai.content, 'aiEngine', 'Engine', 'Helm: the model returns a short structure and Helm lays it out — fast (~15 s), always tidy, same look every time. Skill: coleam00’s excalidraw-diagram skill designs a free-form “visual argument”, section by section, and can render-and-fix it — slower (minutes), richer, different every time.', { helm: 'Helm layout (structured)', skill: 'excalidraw-diagram skill (coleam00)' }, () => this.renderBody());
-    if (s.aiEngine === 'skill') {
-      this.text(ai.content, 'skillPath', { name: 'Skill folder', desc: 'Where the excalidraw-diagram skill is installed (SKILL.md and references/ inside).', placeholder: '~/.claude/skills/excalidraw-diagram', fallback: '~/.claude/skills/excalidraw-diagram' });
-      this.dropdown(ai.content, 'skillBackground', 'Background', 'The skill asks black or white before drawing; this answers for you.', { white: 'White', dark: 'Black' });
-      this.toggle(ai.content, 'skillRender', 'Render and validate', 'Let the skill render the diagram to PNG and fix what it sees (needs uv and Playwright set up in the skill’s references folder). Slower, better.');
-      this.slider(ai.content, 'skillTimeoutSec', 'Skill time limit', 'A run takes 5–10 minutes, more with rendering. If the clock runs out after the file was written, Helm imports it anyway.', 120, 1800, 60, 's');
-      this.note(ai.content, 'The run happens in a scratch folder outside the vault with file edits auto-accepted and only uv / cd / ls / cat allowed as commands. Helm imports the finished scene into the vault as a normal drawing with its helm-* frontmatter; the PNG stays in the scratch folder.');
-    }
-    this.text(ai.content, 'aiCommand', { name: 'Command', desc: 'The Claude Code CLI. A bare name is looked up in the usual places (~/.local/bin, Homebrew).', placeholder: 'claude', fallback: 'claude' });
-    this.text(ai.content, 'aiModel', { name: 'Model', desc: 'Empty uses the CLI’s default.', placeholder: 'e.g. sonnet, opus' });
-    this.slider(ai.content, 'aiTimeoutSec', 'Time limit', 'Seconds to wait for a reply.', 30, 600, 30, 's');
-    const instr = new Setting(ai.content).setName('Extra instructions').setDesc('Added to every diagram request — tone, language, what to emphasise.');
-    instr.settingEl.addClass('helm-setting-list');
-    const ta = instr.controlEl.createEl('textarea', { cls: 'helm-input-wide', attr: { rows: '3', placeholder: 'e.g. Write in Dutch. Group by project, not by day.' } });
-    ta.value = s.aiInstructions;
-    ta.addEventListener('change', () => { s.aiInstructions = ta.value.trim(); void this.save(); });
-    new Setting(ai.content).setName('Test the command').setDesc('Sends “Reply with exactly: OK” and shows what comes back.').addButton((b) => b.setButtonText('Test').onClick(async () => { b.setButtonText('Running…'); try { const r = await this.host.aiPing(); b.setButtonText(/\bOK\b/.test(r) ? 'Works' : `Replied: ${r.slice(0, 30)}`); } catch (e) { b.setButtonText('Failed'); ai.setChip(String((e as Error).message).slice(0, 60), 'warn'); } }));
-    this.note(ai.content, 'What is sent: a compact digest of the goals, projects, completed / planned / overdue tasks and habits of the period — not your notes verbatim. The reply is a short JSON structure that Helm lays out itself, so the drawing is always tidy and editable.');
   }
 
   // ── view ──────────────────────────────────────────────────────────────

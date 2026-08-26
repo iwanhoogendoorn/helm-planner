@@ -1,7 +1,7 @@
 /** The Helm leaf: a tab bar and one tab body, re-rendered from the index. */
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import type { IsoDate } from '../core/types';
-import { button, clear, h, icon, iconButton } from './dom';
+import { clear, h, icon, iconButton } from './dom';
 import type { TabId, UiContext } from './context';
 import { renderToday, type TodayState } from './tabs/today';
 import { renderCalendar, type CalendarState } from './tabs/calendar';
@@ -122,11 +122,6 @@ export class HelmView extends ItemView {
     this.scrollTop.set(this.scrollKey(), this.body.scrollTop);
     clear(this.body);
     this.body.setAttribute('data-tab', this.tab);
-    const job = ctx.currentJob();
-    if (job) {
-      const secs = Math.floor((Date.now() - job.startedAt) / 1000);
-      this.body.appendChild(h('div', { cls: 'helm-job-banner' }, icon('loader-circle', 'helm-statusbar-spin'), h('span', { cls: 'helm-job-label', text: job.label }), h('span', { cls: 'helm-hint', text: `· ${job.phase} ·` }), h('span', { cls: 'helm-job-elapsed helm-hint', text: `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` }), h('span', { cls: 'helm-spacer' }), button('Cancel', { icon: 'x', onClick: () => job.cancel() })));
-    }
     try {
       switch (this.tab) {
         case 'today': renderToday(ctx, this.body, this.todayState); break;

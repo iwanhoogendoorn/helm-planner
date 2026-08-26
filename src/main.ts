@@ -1,9 +1,9 @@
 /** Helm — plugin entry point. Wires the index, mutations and views to Obsidian. */
-import { MarkdownView, Notice, Plugin, TFile, setIcon, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
 import { DEFAULT_SETTINGS, type HelmSettings, type IsoDate } from './core/types';
 import { todayLocal } from './core/dates';
 import { HelmIndex, DAILY_FALLBACK } from './data/index';
-import { Mutations, type JobState } from './data/mutations';
+import { Mutations } from './data/mutations';
 import { ObsidianVault } from './obsidianVault';
 import { HelmView, VIEW_TYPE } from './ui/view';
 import type { TabId, UiContext } from './ui/context';
@@ -18,8 +18,7 @@ import { runSelfTest } from './selftest';
 import { TEMPLATE_FILE_NAMES } from './core/periodicTemplates';
 import type { PeriodKind } from './core/periods';
 import { PERIOD_LABELS } from './ui/settingsTab';
-import { aiAvailable, runClaude, makeWorkDir, readTextFile, expandHome } from './ai';
-import { aiDiagram, newDrawing, targetForDate, targetForPeriod } from './ui/drawings';
+import { newDrawing, targetForDate, targetForPeriod } from './ui/drawings';
 import { periodOf } from './core/periods';
 
 export default class HelmPlugin extends Plugin {
@@ -29,9 +28,6 @@ export default class HelmPlugin extends Plugin {
   mutations!: Mutations;
   private daily = { folder: '', format: '', template: '' };
   private excalidrawFolder: string | undefined;
-  private job: JobState | null = null;
-  private jobTimer: number | undefined;
-  private statusEl: HTMLElement | undefined;
   private periodic: Record<'year' | 'quarter' | 'month' | 'week', { folder: string; format: string; template: string }> = { year: { folder: '', format: '', template: '' }, quarter: { folder: '', format: '', template: '' }, month: { folder: '', format: '', template: '' }, week: { folder: '', format: '', template: '' } };
   private reconcileTimer: number | undefined;
   private pendingPaths = new Set<string>();
@@ -60,24 +56,12 @@ export default class HelmPlugin extends Plugin {
       periodicTemplate: (kind) => this.readTemplate(this.periodicTemplatePath(kind) ?? ''),
       processTemplate: (path) => this.runTemplater(path),
       excalidrawFolder: () => this.excalidrawFolder,
-      skill: {
-        run: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: o.timeoutSec, cwd: o.cwd, extraArgs: ['--permission-mode', 'acceptEdits', '--allowedTools', `Read,Write,Edit,Glob,Grep,Skill,Bash(uv *),Bash(cd *),Bash(ls *),Bash(cat *)${o.research ? ',WebSearch,WebFetch' : ''}`, '--add-dir', ...o.extraDirs], ...(o.signal ? { signal: o.signal } : {}) }),
-        readFile: (p) => readTextFile(p),
-        workDir: () => makeWorkDir(),
-        expandHome,
-      },
-      progress: (job) => this.setJob(job),
-      ai: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: Math.max(30, o?.research ? Math.max(600, this.settings.aiTimeoutSec) : this.settings.aiTimeoutSec || 180), ...(this.vaultBasePath() ? { cwd: this.vaultBasePath()! } : {}), ...(o?.research ? { extraArgs: ['--allowedTools', 'WebSearch,WebFetch'] } : {}), ...(o?.signal ? { signal: o.signal } : {}) }),
     });
     this.index.onChange(() => this.refreshViews());
 
     this.registerView(VIEW_TYPE, (leaf) => new HelmView(leaf, (view) => this.uiContext(view)));
     this.addRibbonIcon('compass', 'Open Helm', () => void this.openView());
     this.addSettingTab(new HelmSettingTab(this.app, this));
-    this.statusEl = this.addStatusBarItem();
-    this.statusEl.addClass('helm-statusbar');
-    this.statusEl.style.display = 'none';
-    this.statusEl.addEventListener('click', () => { if (this.job && window.confirm(`Cancel “${this.job.label}”?`)) this.job.cancel(); });
     this.registerCommands();
     this.registerObsidianProtocolHandler('helm', (params) => {
       const tab = (params['tab'] as TabId | undefined) ?? 'today';
@@ -104,36 +88,7 @@ export default class HelmPlugin extends Plugin {
     });
   }
 
-  /* ── Long-running jobs: status bar + banner ───────────────────────── */
-
-  currentJob(): JobState | null { return this.job; }
-
-  private setJob(job: JobState | null): void {
-    const was = this.job;
-    this.job = job;
-    if (this.jobTimer) { window.clearInterval(this.jobTimer); this.jobTimer = undefined; }
-    if (job) this.jobTimer = window.setInterval(() => this.paintJob(), 1000);
-    this.paintJob();
-    if ((was === null) !== (job === null) || was?.phase !== job?.phase) this.refreshViews();
-  }
-
-  private paintJob(): void {
-    const el = this.statusEl;
-    if (!el) return;
-    if (!this.job) { el.style.display = 'none'; el.empty(); return; }
-    const secs = Math.floor((Date.now() - this.job.startedAt) / 1000);
-    const elapsed = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-    el.style.display = '';
-    el.setAttribute('aria-label', `${this.job.label} — ${this.job.phase}. Click to cancel.`);
-    el.empty();
-    const spin = el.createSpan({ cls: 'helm-statusbar-spin' });
-    setIcon(spin, 'loader-circle');
-    el.createSpan({ cls: 'helm-statusbar-text', text: `Helm · ${this.job.label} · ${this.job.phase} · ${elapsed}` });
-    for (const e of Array.from(document.querySelectorAll<HTMLElement>('.helm-job-elapsed'))) e.textContent = elapsed;
-  }
-
   override onunload(): void {
-    if (this.jobTimer) window.clearInterval(this.jobTimer);
     for (const m of this.openModals) { try { m.close(); } catch { /* already gone */ } }
     this.openModals.clear();
     if (this.reconcileTimer) window.clearTimeout(this.reconcileTimer);
@@ -180,16 +135,6 @@ export default class HelmPlugin extends Plugin {
 
   excalidrawFolderPath(): string | undefined { return this.excalidrawFolder; }
   private excalidrawInstalled(): boolean { return !!(this.app as unknown as { plugins?: { plugins?: Record<string, unknown> } }).plugins?.plugins?.['obsidian-excalidraw-plugin']; }
-  aiAvailable(): boolean { return aiAvailable(); }
-  /** Absolute path of the vault on disk (desktop), so the AI command runs inside it. */
-  private vaultBasePath(): string | undefined {
-    const a = this.app.vault.adapter as unknown as { getBasePath?: () => string };
-    return typeof a.getBasePath === 'function' ? a.getBasePath() : undefined;
-  }
-  /** Ask the AI something small, to check the command works. */
-  async aiPing(): Promise<string> {
-    return runClaude('Reply with exactly: OK', { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: 60 });
-  }
 
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string } { return this.periodic[kind]; }
 
@@ -271,9 +216,6 @@ export default class HelmPlugin extends Plugin {
       run: (label, fn) => this.run(label, fn),
       trackModal: (m) => { this.openModals.add(m); const orig = m.onClose?.bind(m); m.onClose = () => { orig?.(); this.openModals.delete(m); }; },
       resourceUrl: (path) => this.vault.resourceUrl(path),
-      aiAvailable: aiAvailable(),
-      currentJob: () => this.job,
-      copy: async (text) => { await navigator.clipboard.writeText(text); },
     };
   }
 
@@ -408,10 +350,6 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'write-periodic-templates', name: 'Write Helm’s periodic note templates (keeps existing ones)', callback: () => void this.run('Templates', async () => { const out: string[] = []; for (const k of ['year', 'quarter', 'month', 'week'] as PeriodKind[]) out.push(`${PERIOD_LABELS[k]}: ${await this.writeTemplate(k, false)}`); new Notice(out.join(' · ')); }) });
     this.addCommand({ id: 'drawing-today', name: 'New drawing for today', callback: () => newDrawing(ctx(), targetForDate(this.today())) });
     this.addCommand({ id: 'drawing-week', name: 'New drawing for this week', callback: () => newDrawing(ctx(), targetForPeriod(periodOf(this.today(), 'week'))) });
-    for (const [kind, label] of [['week', 'week'], ['month', 'month'], ['quarter', 'quarter'], ['year', 'year']] as const) {
-      this.addCommand({ id: `ai-diagram-${kind}`, name: `AI overview diagram of this ${label}`, checkCallback: (checking) => { if (!this.settings.aiEnabled || !aiAvailable()) return false; if (!checking) aiDiagram(ctx(), targetForPeriod(periodOf(this.today(), kind))); return true; } });
-    }
-    this.addCommand({ id: 'ai-diagram-today', name: 'AI overview diagram of today', checkCallback: (checking) => { if (!this.settings.aiEnabled || !aiAvailable()) return false; if (!checking) aiDiagram(ctx(), targetForDate(this.today())); return true; } });
     this.addCommand({ id: 'rebuild-index', name: 'Rebuild index', callback: () => void this.run('Rebuild index', () => this.index.rebuild()) });
     this.addCommand({ id: 'move-recurring', name: 'Move recurring tasks to their next date', callback: () => void this.run('Move recurring', async () => { const n = await this.mutations.moveMisfiled(); new Notice(n === 0 ? 'Every dated task is already in the right note.' : `Moved ${n} task${n === 1 ? '' : 's'} to the note of its date.`); }) });
     this.addCommand({ id: 'sync-habits-today', name: 'Add today’s habits to the daily note', callback: () => void this.run('Habits', () => this.mutations.syncHabitsForDay(this.today())) });

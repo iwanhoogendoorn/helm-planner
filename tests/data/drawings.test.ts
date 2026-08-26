@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { setup, TODAY, dailyPath } from './fixture';
 import { HelmIndex } from '../../src/data/index';
 import { Mutations } from '../../src/data/mutations';
-import { buildPrompt } from '../../src/core/prompts';
 import { SETTINGS, DAILY_FOLDER, DAILY_FORMAT, makeVault } from './fixture';
 
 const DRAW = (fm: string, text = ''): string => `---\n${fm}\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n---\n# Excalidraw Data\n\n## Text Elements\n${text}\n\n%%\n## Drawing\n\`\`\`json\n{"type":"excalidraw","elements":[]}\n\`\`\`\n%%\n`;
@@ -78,152 +77,12 @@ describe('creating drawings', () => {
   });
 });
 
-describe('AI overview diagrams', () => {
-  it('sends a digest, draws the reply, marks it generated and embeds it', async () => {
-    const { vault, index, settings } = await setup();
-    const prompts: string[] = [];
-    const m = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, ai: async (prompt) => { prompts.push(prompt); return '{"title":"Week 35 — Kitchen week","summary":"Tiles and plumbing moved.","themes":[{"name":"Kitchen Remodel","color":"blue","items":["Pick tiles","Call the plumber"]},{"name":"Book","items":["Draft chapter list"]}],"highlights":["Plumber booked"],"next":["Order tiles"]}'; } });
-    const p = await m.generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' });
-    expect(p).toBe('Excalidraw/2026-W35 — overview.excalidraw.md');
-    expect(prompts[0]).toContain('Reply with ONLY a JSON object');
-    expect(prompts[0]).toContain('Week 35, 2026');
-    expect(prompts[0]).toContain('Kitchen Remodel');
-    const c = await vault.read(p);
-    expect(c).toContain('helm-generated: true');
-    expect(c).toContain('> Tiles and plumbing moved.');
-    expect(c).toContain('Week 35 — Kitchen week ^');
-    expect(index.drawingsFor({ kind: 'period', key: '2026-W35', title: '' })[0]?.generated).toBe(true);
-    expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('![[2026-W35 — overview.excalidraw]]');
-    // Project digest works too and refuses a non-diagram reply.
-    const bad = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, ai: async () => 'I cannot do that.' });
-    await expect(bad.generateDiagram({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' })).rejects.toThrow(/not a diagram/);
-    expect(m.diagramPrompt({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' })).toContain('# Project: Kitchen Remodel');
-  });
-});
 
-describe('excalidraw-diagram skill engine', () => {
-  it('runs the skill in a scratch folder, imports the file it wrote, tags the engine, and embeds the drawing', async () => {
-    const { vault, index, settings } = await setup();
-    const s = { ...settings, aiEngine: 'skill' as const, skillBackground: 'dark' as const, skillRender: false };
-    const runs: { prompt: string; cwd: string; extraDirs: string[] }[] = [];
-    const files = new Map<string, string>();
-    const m = new Mutations({ vault, index, settings: () => s, today: () => TODAY, notify: () => undefined, skill: {
-      workDir: () => '/tmp/helm-x',
-      expandHome: (p) => p.replace('~', '/Users/me'),
-      run: async (prompt, o) => { runs.push({ prompt, cwd: o.cwd, extraDirs: o.extraDirs }); files.set('/tmp/helm-x/diagram.excalidraw', JSON.stringify({ type: 'excalidraw', version: 2, elements: [{ id: 'r1', type: 'rectangle', x: 0, y: 0, width: 200, height: 80 }, { id: 't1', type: 'text', x: 10, y: 10, width: 100, height: 20, text: 'Kitchen', containerId: 'r1' }, { id: 'gone', type: 'text', x: 0, y: 0, width: 1, height: 1, text: 'x', isDeleted: true }], appState: { viewBackgroundColor: '#1e1e1e' } })); return '/tmp/helm-x/diagram.excalidraw'; },
-      readFile: async (p) => { const c = files.get(p); if (c === undefined) throw new Error('ENOENT'); return c; },
-    } });
-    const p = await m.generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' });
-    expect(p).toBe('Excalidraw/2026-W35 — diagram.excalidraw.md');
-    expect(runs[0]!.cwd).toBe('/tmp/helm-x');
-    expect(runs[0]!.extraDirs).toEqual(['/Users/me/.claude/skills/excalidraw-diagram']);
-    expect(runs[0]!.prompt).toContain('/Users/me/.claude/skills/excalidraw-diagram');
-    expect(runs[0]!.prompt).toContain('Background: black (#1e1e1e)');
-    expect(runs[0]!.prompt).toContain('Skip the render-and-validate loop');
-    expect(runs[0]!.prompt).toContain('/tmp/helm-x/diagram.excalidraw');
-    expect(runs[0]!.prompt).toContain('Week 35, 2026');
-    const c = await vault.read(p);
-    expect(c).toContain('helm-engine: excalidraw-diagram skill');
-    expect(c).toContain('"viewBackgroundColor":"#1e1e1e"');
-    expect(c).toMatch(/Kitchen \^h[a-z0-9]{9}/);
-    expect(c).not.toContain('"gone"');
-    expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('![[2026-W35 — diagram.excalidraw]]');
-  });
-  it('falls back to a path in the reply, and fails clearly when nothing usable comes back', async () => {
-    const { vault, index, settings } = await setup();
-    const s = { ...settings, aiEngine: 'skill' as const };
-    const mk = (run: () => Promise<string>, file?: string) => new Mutations({ vault, index, settings: () => s, today: () => TODAY, notify: () => undefined, skill: { workDir: () => '/tmp/w', expandHome: (p) => p, run, readFile: async (p) => { if (file !== undefined && p === '/tmp/w/other.excalidraw') return file; throw new Error('ENOENT'); } } });
-    const ok = mk(async () => 'Done: /tmp/w/other.excalidraw', JSON.stringify({ type: 'excalidraw', elements: [{ id: 'a', type: 'ellipse', x: 0, y: 0, width: 10, height: 10 }] }));
-    expect(await ok.generateDiagram({ kind: 'date', date: TODAY, title: TODAY })).toBe('Excalidraw/26, Wednesday, Aug, 2026 — diagram.excalidraw.md');
-    const bad = mk(async () => 'I could not do that.');
-    await expect(bad.generateDiagram({ kind: 'date', date: TODAY, title: TODAY })).rejects.toThrow(/did not produce an Excalidraw file/);
-  });
-});
 
-describe('skill engine when the clock runs out', () => {
-  it('imports the file the skill already wrote, and only fails when there is none', async () => {
-    const { vault, index, settings } = await setup();
-    const s = { ...settings, aiEngine: 'skill' as const };
-    const notices: string[] = [];
-    const scene = JSON.stringify({ type: 'excalidraw', elements: [{ id: 'a', type: 'rectangle', x: 0, y: 0, width: 10, height: 10 }] });
-    const mk = (file?: string) => new Mutations({ vault, index, settings: () => s, today: () => TODAY, notify: (m) => notices.push(m), skill: { workDir: () => '/tmp/w', expandHome: (p) => p, run: async () => { throw new Error('The AI took longer than 900s'); }, readFile: async (p) => { if (file !== undefined && p === '/tmp/w/diagram.excalidraw') return file; throw new Error('ENOENT'); } } });
-    expect(await mk(scene).generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' })).toBe('Excalidraw/2026-W35 — diagram.excalidraw.md');
-    expect(notices[0]).toMatch(/longer than 900s — imported the diagram it had already written/);
-    await expect(mk().generateDiagram({ kind: 'period', key: '2026-W36', title: 'Week 36' })).rejects.toThrow(/longer than 900s/);
-  });
-});
 
-describe('research diagrams', () => {
-  it('a task is a subject: the prompt carries the task and its context, asks for real knowledge, allows research, and never sends the digest', async () => {
-    const { vault, index, settings } = await setup();
-    const calls: { prompt: string; research?: boolean }[] = [];
-    const m = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, ai: async (prompt, o) => { calls.push({ prompt, ...(o?.research !== undefined ? { research: o.research } : {}) }); return '{"title":"NVIDIA & Anthropic certification tracks","summary":"Two ladders.","themes":[{"name":"NVIDIA","items":["NCA-GENL · Associate"]},{"name":"Anthropic","items":["Claude Certified Architect"]}],"highlights":["NCA exams cost $135"],"next":["Start with NCA-GENL"]}'; } });
-    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
-    const proj = index.project(t.projectId!)!;
-    const p = await m.generateDiagram({ kind: 'task', key: t.key, title: t.text });
-    expect(p).toBe(`Excalidraw/${t.text} — research.excalidraw.md`);
-    expect(calls[0]!.research).toBe(true);
-    expect(calls[0]!.prompt).toContain(`SUBJECT:\nTask: ${t.text}`);
-    expect(calls[0]!.prompt).toContain(`Project: ${proj.title}`);
-    expect(calls[0]!.prompt).toContain('NEVER restate the task');
-    expect(calls[0]!.prompt).not.toContain('DIGEST:');
-    expect(await vault.read(p)).toContain('NCA-GENL · Associate');
-    // A project can be researched too; an overview of a period never is.
-    await m.generateDiagram({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { mode: 'research' });
-    expect(calls[1]!.prompt).toContain('SUBJECT:\nProject: Kitchen Remodel');
-    expect(calls[1]!.prompt).toMatch(/Tasks:\n- \[ \]/);
-    await m.generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' });
-    expect(calls[2]!.research).toBe(false);
-    expect(calls[2]!.prompt).toContain('DIGEST:');
-  });
-});
 
-describe('job progress and cancellation', () => {
-  it('reports phases while a diagram is made and clears when done; cancelling aborts the CLI call', async () => {
-    const { vault, index, settings } = await setup();
-    const seen: (string | null)[] = [];
-    const m = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, progress: (j) => seen.push(j ? `${j.label} · ${j.phase}` : null), ai: async () => '{"title":"W35","themes":[{"name":"A","items":["x"]}]}' });
-    await m.generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' });
-    expect(seen).toEqual(['Overview of “Week 35” · preparing', 'Overview of “Week 35” · asking the AI', 'Overview of “Week 35” · drawing', null]);
-    let cancel: (() => void) | undefined;
-    const slow = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, progress: (j) => { if (j) cancel = j.cancel; }, ai: (_p, o) => new Promise((_res, rej) => { o?.signal?.addEventListener('abort', () => rej(new Error('Cancelled'))); }) });
-    const run = slow.generateDiagram({ kind: 'period', key: '2026-W36', title: 'Week 36' });
-    await new Promise((r) => setTimeout(r, 0));
-    cancel!();
-    await expect(run).rejects.toThrow('Cancelled');
-  });
-});
 
-describe('prompts', () => {
-  it('numbers prompts per task, rotates the angle, saves a note tied to the task, and lists them in order', async () => {
-    const { m, vault, index } = await setup();
-    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
-    const target = { kind: 'task' as const, key: t.key, title: t.text };
-    const p1 = await m.createPrompt(target);
-    expect(p1.n).toBe(1); expect(p1.angle).toBe('deep-dive');
-    expect(p1.path).toBe(`Prompts/${t.text} — prompt 1.md`);
-    expect(p1.text).toContain('I want to properly understand the subject below');
-    expect(p1.text).toContain(`SUBJECT\nTask: ${t.text}`);
-    const note = await vault.read(p1.path);
-    expect(note).toMatch(/helm-prompt: 1\nhelm-prompt-angle: deep-dive\nhelm-task: tsk-\w+/);
-    const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === t.text && x.origin === 'project')!;
-    const target2 = { kind: 'task' as const, key: t2.key, id: t2.id, title: t2.text };
-    const p2 = await m.createPrompt(target2);
-    expect(p2.n).toBe(2); expect(p2.angle).toBe('plan');
-    const p3 = await m.createPrompt(target2, 'checklist');
-    expect(p3.n).toBe(3); expect(p3.angle).toBe('checklist');
-    expect(index.promptsFor(target2).map((p) => `${p.n}:${p.angle}`)).toEqual(['1:deep-dive', '2:plan', '3:checklist']);
-    await m.deletePrompt(p2.path);
-    expect(vault.trashed).toContain(p2.path);
-    expect(index.promptsFor(target2).map((p) => p.n)).toEqual([1, 3]);
-    const p4 = await m.createPrompt(target2);
-    expect(p4.n).toBe(4);
-  });
-  it('every angle builds a distinct, complete prompt', () => {
-    const texts = (['deep-dive', 'plan', 'options', 'learn', 'checklist'] as const).map((a) => buildPrompt(a, 'Task: X'));
-    expect(new Set(texts).size).toBe(5);
-    for (const t of texts) { expect(t).toContain('SUBJECT\nTask: X'); expect(t).toContain('Be concrete and specific'); }
-  });
+describe('deleting and linking drawings', () => {
   it('deleting a drawing trashes it and removes its embed (and an emptied Diagrams heading) from the note', async () => {
     const { m, vault, index } = await setup();
     const p = await m.createDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, { name: 'map' });
@@ -235,27 +94,36 @@ describe('prompts', () => {
     expect(week).not.toMatch(/## Diagrams/);
     expect(index.drawingsFor({ kind: 'period', key: '2026-W35', title: '' })).toEqual([]);
   });
-});
-
-describe('drawing a saved prompt', () => {
-  it('sends the prompt as the brief with the shape for its angle, draws that shape, names the file after the prompt', async () => {
-    const { vault, index, settings } = await setup();
-    const calls: { prompt: string; research?: boolean }[] = [];
-    const m = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, ai: async (prompt, o) => { calls.push({ prompt, ...(o?.research !== undefined ? { research: o.research } : {}) }); return JSON.stringify({ kind: 'flow', title: 'Plan', summary: 'done', steps: [{ title: 'A', effort: '1h' }, { title: 'B' }], stalls: ['x'] }); } });
+  it('linking an existing drawing to a task writes helm-task on the drawing; to a period adds the key and the embed; unlinking reverses both', async () => {
+    const { m, vault, index } = await setup(EXTRA);
     const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
-    const pr = await m.createPrompt({ kind: 'task', key: t.key, title: t.text }, 'plan');
+    await m.linkDrawing({ kind: 'task', key: t.key, title: t.text }, 'Excalidraw/random.excalidraw.md');
     const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === t.text && x.origin === 'project')!;
-    const path = await m.generateFromPrompt({ kind: 'task', key: t2.key, id: t2.id, title: t2.text }, pr);
-    expect(path).toBe(`Excalidraw/${t.text} — prompt 1 roadmap.excalidraw.md`);
-    expect(calls[0]!.research).toBe(true);
-    expect(calls[0]!.prompt).toContain('THE BRIEF:\nTurn the subject below into a plan I can execute.');
-    expect(calls[0]!.prompt).toContain('"kind":"flow"');
-    expect(calls[0]!.prompt).toContain('a roadmap');
-    const c = await vault.read(path);
-    expect(c).toContain('helm-generated: true');
-    expect(c).toContain('1. A\n⏱ 1h ^');
-    expect(index.drawingsFor({ kind: 'task', key: t2.key, id: t2.id, title: '' }).map((d) => d.title)).toEqual([`${t.text} — prompt 1 roadmap`]);
-    expect(Mutations.kindForAngle('deep-dive')).toBe('hub');
-    expect(Mutations.kindForAngle('learn')).toBe('lesson');
+    expect(t2.id).toMatch(/^tsk-/);
+    expect(await vault.read('Excalidraw/random.excalidraw.md')).toContain(`helm-task: ${t2.id}`);
+    expect(index.drawingsFor({ kind: 'task', key: t2.key, id: t2.id, title: '' }).map((d) => d.title)).toEqual(['random']);
+    // A second target on the same drawing becomes a list; the period's note gets the embed.
+    await m.linkDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, 'Excalidraw/random.excalidraw.md');
+    await m.linkDrawing({ kind: 'period', key: '2026-08', title: '2026-08' }, 'Excalidraw/random.excalidraw.md');
+    const c = await vault.read('Excalidraw/random.excalidraw.md');
+    expect(c).toContain('helm-period:\n  - 2026-W35\n  - 2026-08');
+    expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('![[random.excalidraw]]');
+    expect(index.drawingsFor({ kind: 'period', key: '2026-W35', title: '' }).map((d) => d.title)).toContain('random');
+    // Linking twice is a no-op.
+    const before = vault.writes.length;
+    await m.linkDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, 'Excalidraw/random.excalidraw.md');
+    expect(vault.writes.length).toBe(before);
+    // Unlink from the week: key value and embed gone; the month and the task stay; the quarter link in its text still holds.
+    await m.unlinkDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, 'Excalidraw/random.excalidraw.md');
+    const c2 = await vault.read('Excalidraw/random.excalidraw.md');
+    expect(c2).toContain('helm-period: 2026-08');
+    expect(c2).not.toContain('2026-W35');
+    expect(await vault.read('Weekly Notes/2026-W35.md')).not.toContain('random.excalidraw');
+    expect(index.drawingsFor({ kind: 'period', key: '2026-W35', title: '' }).map((d) => d.title)).not.toContain('random');
+    expect(index.drawingsFor({ kind: 'period', key: '2026-Q3', title: '' }).map((d) => d.title)).toEqual(['random']);
+    await m.unlinkDrawing({ kind: 'task', key: t2.key, id: t2.id, title: '' }, 'Excalidraw/random.excalidraw.md');
+    expect(await vault.read('Excalidraw/random.excalidraw.md')).not.toContain('helm-task');
+    await expect(m.linkDrawing({ kind: 'date', date: TODAY, title: TODAY }, 'Excalidraw/board.canvas')).rejects.toThrow(/canvas/);
   });
 });
+
