@@ -67,6 +67,10 @@ describe('creating, linking, unlinking and deleting notes', () => {
     expect(await vault.read('Weekly Notes/2026-W35.md')).not.toContain('Reading list');
     expect(index.notesFor(w)).toEqual([]);
     expect(index.notesFor({ kind: 'date', date: TODAY, title: '' }).map((n) => n.title)).toEqual(['Reading list']);
+    // Removing the last key removes the frontmatter block altogether.
+    await m.unlinkNote({ kind: 'date', date: TODAY, title: TODAY }, '10 PERSONAL/Reading list.md');
+    expect(await vault.read('10 PERSONAL/Reading list.md')).toBe('# Reading list\n\n- a book\n');
+    await m.linkNote({ kind: 'date', date: TODAY, title: TODAY }, '10 PERSONAL/Reading list.md');
     await m.deleteNote('10 PERSONAL/Reading list.md');
     expect(vault.trashed).toContain('10 PERSONAL/Reading list.md');
     expect(await vault.read(dailyPath(TODAY))).not.toContain('Reading list');

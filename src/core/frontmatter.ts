@@ -143,6 +143,8 @@ export function setFrontmatter(lines: string[], updates: Record<string, string |
     while (end < body.length && /^\s+-\s*/.test(body[end]!)) end++;
     body.splice(idx, end - idx, ...render(key, v));
   }
+  // Nothing left in the block: drop it rather than leave an empty `---` pair behind.
+  if (body.every((l) => l.trim() === '')) { const rest = fm.present ? lines.slice(fm.endLine) : lines; while (rest.length > 0 && rest[0]!.trim() === '') rest.shift(); return rest; }
   if (fm.present) return ['---', ...body, '---', ...lines.slice(fm.endLine)];
   return ['---', ...body, '---', ...lines];
 }
