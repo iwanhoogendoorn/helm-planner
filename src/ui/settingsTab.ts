@@ -5,7 +5,7 @@ export interface SettingsHost extends Plugin {
   settings: HelmSettings;
   saveSettings(): Promise<void>;
   dailyConfig(): { folder: string; format: string; template: string };
-  periodicConfigFor(kind: 'year' | 'quarter' | 'month'): { folder: string; format: string; template: string };
+  periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string };
   onSettingsChanged(): void;
 }
 
@@ -33,13 +33,16 @@ export class HelmSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Daily note folder').setDesc(`Leave empty to follow the Daily Notes / Periodic Notes plugin (currently: ${dc.folder || 'not configured'}).`).addText((t) => t.setPlaceholder(dc.folder).setValue(s.dailyNoteFolder).onChange(async (v) => { s.dailyNoteFolder = v.trim(); await save(); }));
     new Setting(containerEl).setName('Daily note format').setDesc(`Moment-style date format of the note path inside the folder. Leave empty to follow Obsidian (currently: ${dc.format || 'YYYY-MM-DD'}).`).addText((t) => t.setPlaceholder(dc.format).setValue(s.dailyNoteFormat).onChange(async (v) => { s.dailyNoteFormat = v.trim(); await save(); }));
     new Setting(containerEl).setName('Daily note template').setDesc(`Used when Helm has to create a daily note. Leave empty to follow Obsidian (currently: ${dc.template || 'none'}). {{date:FORMAT}}, {{title}} and the common Templater tags are filled in.`).addText((t) => t.setPlaceholder(dc.template).setValue(s.dailyNoteTemplate).onChange(async (v) => { s.dailyNoteTemplate = v.trim(); await save(); }));
-    new Setting(containerEl).setName('Where the plan goes in a new daily note').setDesc('Helm keeps its plan between “%% helm:start %%” and “%% helm:end %%” markers. Once the markers exist they are never moved.').addDropdown((d) => d.addOptions({ 'before-first-heading': 'Before the first heading', 'after-anchor': 'After a heading of my choosing', end: 'At the end of the note' }).setValue(s.regionPlacement).onChange(async (v) => { s.regionPlacement = v as HelmSettings['regionPlacement']; await save(); this.display(); }));
+    new Setting(containerEl).setName('Plan heading').setDesc('The heading whose section Helm owns in a daily note. Sub-headings Habits / Morning / Afternoon / Evening / Anytime live under it. Nothing outside that section is touched.').addText((t) => t.setValue(s.planHeading).onChange(async (v) => { s.planHeading = v.trim() || '## Plan'; await save(); }));
+    new Setting(containerEl).setName('Parts of the day').setDesc('When the morning ends and when the afternoon ends (HH:MM). Time-blocked lines fall into a part by their start time.').addText((t) => t.setPlaceholder('12:00').setValue(s.morningEnds).onChange(async (v) => { if (/^\d{2}:\d{2}$/.test(v.trim())) { s.morningEnds = v.trim(); await save(); } })).addText((t) => t.setPlaceholder('18:00').setValue(s.afternoonEnds).onChange(async (v) => { if (/^\d{2}:\d{2}$/.test(v.trim())) { s.afternoonEnds = v.trim(); await save(); } }));
+    new Setting(containerEl).setName('Stamp ➕ created date on new tasks').setDesc('Off keeps daily notes clean; on gives every captured task an Obsidian-Tasks created date.').addToggle((t) => t.setValue(s.writeCreatedDate).onChange(async (v) => { s.writeCreatedDate = v; await save(); }));
+    new Setting(containerEl).setName('Where the plan goes in a new daily note').setDesc('Only matters for a note that has no plan heading yet.').addDropdown((d) => d.addOptions({ 'before-first-heading': 'Before the first heading', 'after-anchor': 'After a heading of my choosing', end: 'At the end of the note' }).setValue(s.regionPlacement).onChange(async (v) => { s.regionPlacement = v as HelmSettings['regionPlacement']; await save(); this.display(); }));
     if (s.regionPlacement === 'after-anchor') text('Anchor heading', 'Exact heading text, e.g. “## Tasks”. Falls back to “before the first heading” when it is missing.', 'regionAnchor', '## Helm');
     new Setting(containerEl).setName('Show day-planner time blocks').setDesc('Checkbox lines like “- [ ] 08:00 - 09:00: …” outside the Helm region are shown on the Today tab as time blocks.').addToggle((t) => t.setValue(s.showTimeBlocks).onChange(async (v) => { s.showTimeBlocks = v; await save(); }));
 
     new Setting(containerEl).setName('Horizons — yearly, quarterly, monthly goals').setHeading();
     new Setting(containerEl).setName('Goals heading').setDesc('Heading in a yearly / quarterly / monthly note under which goals live as checkbox lines.').addText((t) => t.setValue(s.goalsHeading).onChange(async (v) => { s.goalsHeading = v.trim() || '## Goals'; await save(); }));
-    for (const [kind, label, fk, fmk] of [['year', 'Yearly notes', 'yearlyFolder', 'yearlyFormat'], ['quarter', 'Quarterly notes', 'quarterlyFolder', 'quarterlyFormat'], ['month', 'Monthly notes', 'monthlyFolder', 'monthlyFormat']] as const) {
+    for (const [kind, label, fk, fmk] of [['year', 'Yearly notes', 'yearlyFolder', 'yearlyFormat'], ['quarter', 'Quarterly notes', 'quarterlyFolder', 'quarterlyFormat'], ['month', 'Monthly notes', 'monthlyFolder', 'monthlyFormat'], ['week', 'Weekly notes', 'weeklyFolder', 'weeklyFormat']] as const) {
       const pc = this.host.periodicConfigFor(kind);
       new Setting(containerEl).setName(label).setDesc(`Folder and moment format. Leave empty to follow the Periodic Notes plugin (currently: ${pc.folder || 'not configured'} · ${pc.format || 'default'}).`)
         .addText((t) => t.setPlaceholder(pc.folder || 'folder').setValue(s[fk]).onChange(async (v) => { s[fk] = v.trim(); await save(); }))
@@ -55,7 +58,7 @@ export class HelmSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Indent for new subtasks').addDropdown((d) => d.addOptions({ '\t': 'Tab', '  ': 'Two spaces', '    ': 'Four spaces' }).setValue(s.indentUnit).onChange(async (v) => { s.indentUnit = v; await save(); }));
 
     new Setting(containerEl).setName('View').setHeading();
-    new Setting(containerEl).setName('Tab to open on').addDropdown((d) => d.addOptions({ today: 'Today', week: 'Week', projects: 'Projects', inbox: 'Inbox', review: 'Review', horizons: 'Horizons' }).setValue(s.defaultTab).onChange(async (v) => { s.defaultTab = v as HelmSettings['defaultTab']; await save(); }));
+    new Setting(containerEl).setName('Tab to open on').addDropdown((d) => d.addOptions({ today: 'Today', week: 'Week', projects: 'Projects', inbox: 'Inbox', review: 'Review', horizons: 'Horizons', dashboard: 'Dashboard' }).setValue(s.defaultTab).onChange(async (v) => { s.defaultTab = v as HelmSettings['defaultTab']; await save(); }));
     new Setting(containerEl).setName('Open Helm on startup').addToggle((t) => t.setValue(s.openOnStartup).onChange(async (v) => { s.openOnStartup = v; await save(); }));
     new Setting(containerEl).setName('Developer actions').setDesc('Adds the “Run self-test” command, which writes a report note into the vault. Off unless you are testing Helm.').addToggle((t) => t.setValue(s.developerActions).onChange(async (v) => { s.developerActions = v; await save(); }));
   }

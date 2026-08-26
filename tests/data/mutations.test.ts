@@ -11,7 +11,8 @@ describe('scheduling', () => {
     const src = await vault.read(BOOK);
     expect(src).toContain('- [ ] Draft chapter list 🆔 tsk-0001 ⏳ 2026-08-26 ⏫');
     const daily = await vault.read(dailyPath(TODAY));
-    expect(daily).toContain('%% helm:start %%\n## Plan\n### From projects\n- [ ] Draft chapter list 🆔 tsk-0001 ⏫ 🔗 [[Oracle Book Writing]]\n%% helm:end %%');
+    expect(daily).toContain('## Plan\n### Anytime\n- [ ] Draft chapter list 🆔 tsk-0001 ⏫ 🔗 [[Oracle Book Writing]]\n\n# ');
+    expect(daily).not.toContain('%%');
     expect(index.task('tsk-0001')!.scheduled).toBe(TODAY);
     expect(index.mirrorsOf('tsk-0001')).toHaveLength(1);
     // Idempotent.
@@ -55,7 +56,7 @@ describe('scheduling', () => {
     await m.schedule(t.key, TODAY);
     expect(await vault.read('01 INBOX/Inbox.md')).toBe('# Inbox\n\n- [ ] Call the plumber\n');
     const daily = await vault.read(dailyPath(TODAY));
-    expect(daily).toContain('### Today\n- [ ] Renew passport 📅 2026-08-20\n\t- [ ] Find photo\n');
+    expect(daily).toContain('### Anytime\n- [ ] Renew passport 📅 2026-08-20\n\t- [ ] Find photo\n');
     const moved = index.allTasks().find((x) => x.text === 'Renew passport')!;
     expect(moved.origin).toBe('daily');
     await m.schedule(moved.key, undefined);
@@ -70,9 +71,9 @@ describe('scheduling', () => {
     const t = index.allTasks().find((x) => x.text === 'Only one')!;
     await m.schedule(t.key, '2026-08-27');
     const today = await vault.read(dailyPath(TODAY));
-    expect(today).not.toContain('### Today');
-    expect(today).toContain('%% helm:start %%\n## Plan\n%% helm:end %%'); // markers stay, sections go
-    expect(await vault.read(dailyPath('2026-08-27'))).toContain('### Today\n- [ ] Only one ➕ 2026-08-26\n\t- [ ] Its child ➕ 2026-08-26\n');
+    expect(today).not.toContain('### Anytime');
+    expect(today).toContain('## Plan\n'); // heading stays, sections go
+    expect(await vault.read(dailyPath('2026-08-27'))).toContain('### Anytime\n- [ ] Only one\n\t- [ ] Its child\n');
   });
 
   it('moves a daily task from a past day: leaves a forwarded record', async () => {
@@ -80,7 +81,7 @@ describe('scheduling', () => {
     const t = index.allTasks().find((x) => x.text === 'Fix router config')!;
     await m.schedule(t.key, TODAY);
     expect(await vault.read(dailyPath('2026-08-25'))).toContain('- [>] Fix router config ⏱️ 30m');
-    expect(await vault.read(dailyPath(TODAY))).toContain('### Today\n- [ ] Fix router config ⏱️ 30m\n');
+    expect(await vault.read(dailyPath(TODAY))).toContain('### Afternoon\n- [ ] Fix router config ⏱️ 30m\n'); // keeps its part of the day
   });
 
   it('a note task gets ⏳ and a mirror linking the note', async () => {
@@ -117,7 +118,7 @@ describe('status', () => {
     await m.addTask({ text: 'Water plants', date: TODAY, fields: { recurrence: { raw: 'every 2 days', parsed: true, frequency: 'daily', interval: 2 } } });
     const t = index.allTasks().find((x) => x.text === 'Water plants')!;
     await m.setStatus(t.key, 'done');
-    expect(await vault.read(dailyPath(TODAY))).toContain('- [x] Water plants ➕ 2026-08-26 🔁 every 2 days ✅ 2026-08-26');
+    expect(await vault.read(dailyPath(TODAY))).toContain('- [x] Water plants 🔁 every 2 days ✅ 2026-08-26');
     expect(await vault.read(dailyPath('2026-08-28'))).toContain('- [ ] Water plants 🔁 every 2 days');
   });
 
@@ -134,21 +135,21 @@ describe('adding tasks', () => {
     const { m, vault, index } = await setup();
     const book = index.project('prj-book')!;
     await m.addTask({ text: 'Chapter 3', projectId: 'prj-book', phaseId: book.phases[1]!.id });
-    expect(await vault.read(BOOK)).toContain('- [ ] Chapter 2 🆔 tsk-0002 🔁 every week\n- [ ] Chapter 3 ➕ 2026-08-26\n\n## Tasks');
+    expect(await vault.read(BOOK)).toContain('- [ ] Chapter 2 🆔 tsk-0002 🔁 every week\n- [ ] Chapter 3\n\n## Tasks');
     await m.addTask({ text: 'Order paper', projectId: 'prj-book' });
-    expect(await vault.read(BOOK)).toContain('- [ ] Buy reference books ⏱️ 45m\n- [ ] Order paper ➕ 2026-08-26\n');
+    expect(await vault.read(BOOK)).toContain('- [ ] Buy reference books ⏱️ 45m\n- [ ] Order paper\n');
     await m.addTask({ text: 'Quick one', date: TODAY, fields: { priority: 'high' } });
-    expect(await vault.read(dailyPath(TODAY))).toContain('### Today\n- [ ] Quick one ➕ 2026-08-26 ⏫');
+    expect(await vault.read(dailyPath(TODAY))).toContain('### Anytime\n- [ ] Quick one ⏫');
     await m.addTask({ text: 'Someday' });
-    expect(await vault.read('01 INBOX/Inbox.md')).toContain('\t- [ ] Find photo\n- [ ] Someday ➕ 2026-08-26\n');
+    expect(await vault.read('01 INBOX/Inbox.md')).toContain('\t- [ ] Find photo\n- [ ] Someday\n');
     await m.addTask({ text: 'Sub', parentKey: 'tsk-0001' });
-    expect(await vault.read(BOOK)).toContain('\t- [x] Collect diagrams ✅ 2026-08-20\n\t- [ ] Sub ➕ 2026-08-26\n- [ ] Review with editor');
+    expect(await vault.read(BOOK)).toContain('\t- [x] Collect diagrams ✅ 2026-08-20\n\t- [ ] Sub\n- [ ] Review with editor');
     // Project task with a date: mirrored immediately.
     await m.addTask({ text: 'Planned one', projectId: 'prj-kitchen', date: TODAY });
     expect(await vault.read(dailyPath(TODAY))).toMatch(/- \[ \] Planned one 🆔 tsk-\w+ 🔗 \[\[Kitchen Remodel\]\]/);
     // Project without a Tasks heading gets one.
     await m.addTask({ text: 'First task', projectId: 'prj-oracle' });
-    expect(await vault.read('02 PROJECTS/⮕ Oracle/⮕ Oracle.md')).toBe('---\ntitle: Oracle\ntype: project\nstatus: active\npriority: normal\nid: prj-oracle\n---\n# Oracle\n\n## Tasks\n\n- [ ] First task ➕ 2026-08-26\n');
+    expect(await vault.read('02 PROJECTS/⮕ Oracle/⮕ Oracle.md')).toBe('---\ntitle: Oracle\ntype: project\nstatus: active\npriority: normal\nid: prj-oracle\n---\n# Oracle\n\n## Tasks\n\n- [ ] First task\n');
   });
 });
 
@@ -187,8 +188,8 @@ describe('editing', () => {
     await m.moveToProject(moved.key, 'prj-kitchen');
     expect(await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')).toMatch(/- \[ \] Get three quotes\n- \[ \] Call the plumber 🆔 tsk-\w+ ⏳ 2026-08-26\n/);
     const daily = await vault.read(dailyPath(TODAY));
-    expect(daily).not.toContain('### Today');
-    expect(daily).toMatch(/### From projects\n- \[ \] Call the plumber 🆔 tsk-\w+ 🔗 \[\[Kitchen Remodel\]\]/);
+    expect(daily.split('Call the plumber')).toHaveLength(2);
+    expect(daily).toMatch(/### Anytime\n- \[ \] Call the plumber 🆔 tsk-\w+ 🔗 \[\[Kitchen Remodel\]\]/);
   });
 
   it('moves a task between phases', async () => {
@@ -205,7 +206,7 @@ describe('day rituals', () => {
     const { m, vault } = await setup();
     await m.planDay(TODAY, ['tsk-0001']);
     const daily = await vault.read(dailyPath(TODAY));
-    expect(daily).toContain('### Habits\n- [ ] Evening reading 🆔 hab-read\n- [ ] 🏃 Morning workout 🆔 hab-workout\n### From projects\n- [ ] Draft chapter list 🆔 tsk-0001 ⏫ 🔗 [[Oracle Book Writing]]');
+    expect(daily).toContain('### Habits\n- [ ] Evening reading 🆔 hab-read\n- [ ] 🏃 Morning workout 🆔 hab-workout\n### Anytime\n- [ ] Draft chapter list 🆔 tsk-0001 ⏫ 🔗 [[Oracle Book Writing]]');
     await m.setHabitState('hab-workout', TODAY, 'done');
     expect(await vault.read(dailyPath(TODAY))).toContain('- [x] 🏃 Morning workout 🆔 hab-workout ✅ 2026-08-26');
   });
@@ -220,7 +221,7 @@ describe('day rituals', () => {
     expect(y).toContain('- [x] Pay invoice ✅ 2026-08-25');
     expect(y).toContain('- [>] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
     const t = await vault.read(dailyPath(TODAY));
-    expect(t).toContain('### Today\n- [ ] Fix router config ⏱️ 30m\n### From projects\n- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
+    expect(t).toContain('### Afternoon\n- [ ] Fix router config ⏱️ 30m\n### Anytime\n- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
     expect(index.task('tsk-0003')!.scheduled).toBe(TODAY);
   });
 });

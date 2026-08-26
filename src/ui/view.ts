@@ -10,6 +10,7 @@ import { renderProjects, type ProjectsState } from './tabs/projects';
 import { renderInbox, type InboxState } from './tabs/inbox';
 import { renderReview, type ReviewState } from './tabs/review';
 import { renderHorizons, type HorizonsState } from './tabs/horizons';
+import { renderDashboard, type DashboardState, defaultDashboardState } from './tabs/dashboard';
 import { openCapture } from './modals/capture';
 
 export const VIEW_TYPE = 'helm-view';
@@ -21,6 +22,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'inbox', label: 'Inbox', icon: 'inbox' },
   { id: 'review', label: 'Review', icon: 'clipboard-check' },
   { id: 'horizons', label: 'Horizons', icon: 'mountain' },
+  { id: 'dashboard', label: 'Dashboard', icon: 'bar-chart-3' },
 ];
 
 interface ViewState { tab: TabId; date?: IsoDate; weekAnchor?: IsoDate; projectId?: string; year?: number; periodKey?: string }
@@ -33,6 +35,7 @@ export class HelmView extends ItemView {
   private inboxState: InboxState = { collapsed: new Map() };
   private reviewState: ReviewState = { collapsed: new Map(), checks: new Set() };
   private horizonsState: HorizonsState;
+  private dashboardState: DashboardState = defaultDashboardState();
   private body!: HTMLElement;
   private tabBar!: HTMLElement;
   private scrollTop = new Map<string, number>();
@@ -127,6 +130,7 @@ export class HelmView extends ItemView {
         case 'inbox': renderInbox(ctx, this.body, this.inboxState); break;
         case 'review': renderReview(ctx, this.body, this.reviewState); break;
         case 'horizons': renderHorizons(ctx, this.body, this.horizonsState); break;
+        case 'dashboard': renderDashboard(ctx, this.body, this.dashboardState); break;
       }
     } catch (e) {
       console.error('[helm] render failed', e);

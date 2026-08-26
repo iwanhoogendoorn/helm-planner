@@ -15,6 +15,7 @@ import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { taskRow } from '../../src/ui/taskRow';
 import { parsePhases } from '../../src/ui/modals/projectForm';
 import { renderHorizons } from '../../src/ui/tabs/horizons';
+import { renderDashboard, defaultDashboardState } from '../../src/ui/tabs/dashboard';
 
 async function ctxFor() {
   const s = await setup();
@@ -49,7 +50,8 @@ describe('Today tab', () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderToday(ctx, r, { date: '2026-08-25', collapsed: new Map() }));
     expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('Yesterday');
-    expect(texts(root, '.helm-section-title')).toEqual(['Habits', 'Day planner', 'Today', 'From projects', 'Done']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime', 'Done']);
+    expect(texts(root, '.helm-section:nth-of-type(2) .helm-task-text')).toEqual(['Start with OIB']);
     expect(texts(root, '.helm-section:nth-of-type(3) .helm-task-text')).toEqual(['Fix router config']);
     expect(root.querySelector('.helm-habit.is-done')!.textContent).toContain('Morning workout');
     expect(root.querySelector('.helm-capacity-label')!.textContent).toContain('3 open · 1 done');
@@ -132,7 +134,7 @@ describe('Projects tab', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await flush();
     const src = await vault.read('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md');
-    expect(src).toMatch(/- \[ \] Chapter 3 🆔 tsk-\w+ ➕ 2026-08-26 ⏳ 2026-08-27 ⏫\n\n## Tasks/);
+    expect(src).toMatch(/- \[ \] Chapter 3 🆔 tsk-\w+ ⏳ 2026-08-27 ⏫\n\n## Tasks/);
     expect(await vault.read(dailyPath('2026-08-27'))).toContain('Chapter 3');
   });
 });
@@ -146,7 +148,7 @@ describe('Inbox tab', () => {
     input.value = 'Buy milk !! ~10m';
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await flush();
-    expect(await vault.read('01 INBOX/Inbox.md')).toContain('- [ ] Buy milk ➕ 2026-08-26 🔼 ⏱️ 10m');
+    expect(await vault.read('01 INBOX/Inbox.md')).toContain('- [ ] Buy milk 🔼 ⏱️ 10m');
     const row = [...root.querySelectorAll('.helm-task')].find((r) => r.textContent?.includes('Call the plumber'))!;
     click(row.querySelector('.helm-task-actions button'));
     await flush();
@@ -178,7 +180,7 @@ describe('Modals', () => {
     await flush();
     await flush();
     const k = await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md');
-    expect(k).toMatch(/- \[ \] Call the plumber 🆔 tsk-\w+ ➕ 2026-08-26 ⏳ 2026-08-27 ⏫ ⏱️ 30m/);
+    expect(k).toMatch(/- \[ \] Call the plumber 🆔 tsk-\w+ ⏳ 2026-08-27 ⏫ ⏱️ 30m/);
     expect(await vault.read(dailyPath('2026-08-27'))).toContain('Call the plumber');
   });
 
@@ -196,8 +198,9 @@ describe('Modals', () => {
     await flush();
     const daily = await vault.read(dailyPath(TODAY));
     expect(daily).toContain('### Habits');
-    expect(daily).toContain('### Today\n- [ ] Call the plumber');
-    expect(daily).toContain('### From projects\n- [ ] Draft chapter list 🆔 tsk-0001 ⏫ 🔗 [[Oracle Book Writing]]');
+    expect(daily).toContain('- [ ] Call the plumber');
+    expect(daily).toContain('### Anytime');
+    expect(daily).toContain('- [ ] Draft chapter list 🆔 tsk-0001 ⏫ 🔗 [[Oracle Book Writing]]');
   });
 
   it('wrap up moves open items to tomorrow', async () => {
@@ -291,5 +294,37 @@ describe('Horizons tab', () => {
     selects[1]!.dispatchEvent(new Event('change'));
     await flush();
     expect(s.index.project('prj-book')!.goalId).toBe('gol-book26');
+  });
+});
+
+describe('Dashboard tab', () => {
+  it('renders KPIs, charts, projects table and drills into a bar', async () => {
+    const { ctx, vault } = await ctxFor();
+    void vault;
+    const state = defaultDashboardState();
+    const root = render((r) => renderDashboard(ctx, r, state));
+    expect(root.querySelectorAll('.helm-stat')).toHaveLength(8);
+    expect(root.querySelectorAll('svg.helm-chart').length).toBeGreaterThanOrEqual(6);
+    expect(texts(root, '.helm-table tbody tr td:first-child')).toContain('Oracle Book Writing');
+    click([...root.querySelectorAll('.helm-bar-group')].find((g) => g.querySelector('title')?.textContent?.includes('Yesterday')));
+    expect(state.drill?.tasks.map((t) => t.text)).toEqual(['Pay invoice']);
+    const root2 = render((r) => renderDashboard(ctx, r, state));
+    expect(root2.querySelector('.helm-drill .helm-section-title')!.textContent).toBe('Done on Yesterday');
+  });
+
+  it('Today tab renders parts with drop zones and moves a task on drop', async () => {
+    const { ctx, vault } = await ctxFor();
+    await ctx.mutations.schedule('tsk-0001', TODAY, 'morning');
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    expect(texts(root, '.helm-section-title')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
+    expect(texts(root, '.helm-section.part-morning .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams']);
+    const evening = root.querySelector('.helm-section.part-evening')!;
+    const dt = { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? `tsk-0001@${TODAY}` : '') };
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: dt });
+    evening.dispatchEvent(ev);
+    await flush();
+    expect(await vault.read(dailyPath(TODAY))).toMatch(/### Evening\n- \[ \] Draft chapter list/);
+    expect(await vault.read(dailyPath(TODAY))).not.toContain('### Morning');
   });
 });

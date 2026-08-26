@@ -77,7 +77,9 @@ export interface Task extends TaskLine {
   /** For daily-note lines: the note's date. */
   noteDate?: IsoDate;
   /** For daily-note lines: which Helm section the line sits in. */
-  section?: 'habits' | 'today' | 'projects' | 'outside';
+  section?: 'habits' | 'morning' | 'afternoon' | 'evening' | 'anytime' | 'outside';
+  /** For lines on a day: the part of the day (by section, else by time block). */
+  part?: 'morning' | 'afternoon' | 'evening' | 'anytime';
   /** For a mirror line: the key of the source task if resolved. */
   mirrorOf?: string;
   /** For a goal line: the period key of the periodic note it lives in. */
@@ -195,6 +197,16 @@ export interface HelmSettings {
   dailyNoteTemplate: string;
   regionPlacement: 'before-first-heading' | 'after-anchor' | 'end';
   regionAnchor: string;
+  /** The heading whose section holds the day plan. */
+  planHeading: string;
+  /** Parts of the day: HH:MM boundaries. */
+  morningEnds: string;
+  afternoonEnds: string;
+  /** Stamp ➕ created on tasks Helm creates. */
+  writeCreatedDate: boolean;
+  /** Weekly notes (Periodic Notes overrides). */
+  weeklyFolder: string;
+  weeklyFormat: string;
   extraFolders: string[];
   /** Path prefixes never indexed (archives). */
   excludePaths: string[];
@@ -212,7 +224,7 @@ export interface HelmSettings {
   rolloverTarget: 'tomorrow' | 'unschedule';
   staleProjectDays: number;
   weekStartsOn: 1 | 7;
-  defaultTab: 'today' | 'week' | 'projects' | 'inbox' | 'review' | 'horizons';
+  defaultTab: 'today' | 'week' | 'projects' | 'inbox' | 'review' | 'horizons' | 'dashboard';
   openOnStartup: boolean;
   showTimeBlocks: boolean;
   indentUnit: string;
@@ -228,6 +240,12 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   dailyNoteTemplate: '',
   regionPlacement: 'before-first-heading',
   regionAnchor: '## Helm',
+  planHeading: '## Plan',
+  morningEnds: '12:00',
+  afternoonEnds: '18:00',
+  writeCreatedDate: false,
+  weeklyFolder: '',
+  weeklyFormat: '',
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
   yearlyFolder: '',

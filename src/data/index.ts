@@ -8,7 +8,7 @@ import { sectionRange } from '../core/document';
 import { parseDocument } from '../core/document';
 import { isProjectNote, parseProject } from '../core/project';
 import { parseHabit } from '../core/habit';
-import { findRegion, type Section } from '../core/dailyNote';
+import { findRegion, partOfLine, type Section } from '../core/dailyNote';
 import { derivedKey } from '../core/ids';
 import { formatDate, parseDateFromPath } from '../core/dates';
 import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
@@ -18,7 +18,7 @@ export const DAILY_FALLBACK = { folder: 'Daily Notes', format: 'YYYY-MM-DD' };
 export type FileKind = 'project' | 'habit' | 'daily' | 'inbox' | 'note' | 'periodic';
 
 export type PeriodicConfig = Record<PeriodKind, { folder: string; format: string }>;
-export const PERIODIC_FALLBACK: PeriodicConfig = { year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' } };
+export const PERIODIC_FALLBACK: PeriodicConfig = { year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' }, week: { folder: 'Weekly Notes', format: 'gggg-[W]ww' } };
 
 interface FileEntry {
   path: string;
@@ -86,7 +86,7 @@ export class HelmIndex {
   /** Folder + format for yearly / quarterly / monthly notes: settings override, else the Periodic Notes plugin, else a fallback. */
   periodicConfig(kind: PeriodKind): { folder: string; format: string } {
     const s = this.settings;
-    const ov = kind === 'year' ? { folder: s.yearlyFolder, format: s.yearlyFormat } : kind === 'quarter' ? { folder: s.quarterlyFolder, format: s.quarterlyFormat } : { folder: s.monthlyFolder, format: s.monthlyFormat };
+    const ov = kind === 'year' ? { folder: s.yearlyFolder, format: s.yearlyFormat } : kind === 'quarter' ? { folder: s.quarterlyFolder, format: s.quarterlyFormat } : kind === 'month' ? { folder: s.monthlyFolder, format: s.monthlyFormat } : { folder: s.weeklyFolder, format: s.weeklyFormat };
     const ext = this.opts.periodicConfig?.()[kind];
     const folder = (ov.folder.trim() || ext?.folder || PERIODIC_FALLBACK[kind].folder).replace(/\/+$/, '');
     const format = ov.format.trim() || ext?.format || DEFAULT_PERIOD_FORMATS[kind];
@@ -100,7 +100,7 @@ export class HelmIndex {
 
   periodOfPath(path: string): Period | undefined {
     if (!path.endsWith('.md')) return undefined;
-    for (const kind of ['month', 'quarter', 'year'] as PeriodKind[]) {
+    for (const kind of ['week', 'month', 'quarter', 'year'] as PeriodKind[]) {
       const c = this.periodicConfig(kind);
       if (!isUnder(path, c.folder)) continue;
       const p = parsePeriodFromPath(path.replace(/\.md$/, ''), c.format, kind);
@@ -205,11 +205,11 @@ export class HelmIndex {
     const origin: TaskOrigin = date !== undefined ? 'daily' : path === s.inboxNote ? 'inbox' : 'note';
     entry.kind = date !== undefined ? 'daily' : origin === 'inbox' ? 'inbox' : 'note';
     if (date !== undefined) entry.date = date;
-    const scan = date !== undefined ? findRegion(doc.lines) : { broken: false };
+    const scan = date !== undefined ? findRegion(doc.lines, s) : { broken: false };
     if (scan.broken) entry.diagnostics.push({ severity: 'error', code: 'HELM-D01', message: 'Helm region has a start marker without an end marker; the note is read-only until fixed.', path });
     entry.hasRegion = scan.region !== undefined;
     const sectionOfLine = new Map<number, Section>();
-    if (scan.region) for (const sec of ['habits', 'today', 'projects'] as Section[]) for (const l of scan.region.sections[sec].taskLines) sectionOfLine.set(l, sec);
+    if (scan.region) for (const sec of ['habits', 'morning', 'afternoon', 'evening', 'anytime'] as Section[]) for (const l of scan.region.sections[sec].taskLines) sectionOfLine.set(l, sec);
 
     const keyOfLine = new Map<number, string>();
     for (const dt of doc.tasks) {
@@ -219,12 +219,12 @@ export class HelmIndex {
         continue;
       }
       if (dt.task.text.trim() === '' && dt.task.unknown.length === 0) continue; // empty planner slot
-      const isMirror = sec === 'projects' || (date !== undefined && dt.task.mirrorLink !== undefined);
+      const isMirror = date !== undefined && dt.task.mirrorLink !== undefined;
       let key = dt.task.id ?? derivedKey(path, dt.line, dt.task.text);
       if (isMirror) key = `${key}@${date}`;
       keyOfLine.set(dt.line, key);
       const task: Task = { ...dt.task, key, path, line: dt.line, depth: dt.depth, childKeys: [], origin: isMirror ? 'daily-mirror' : origin };
-      if (date !== undefined) { task.noteDate = date; task.section = sec ?? 'outside'; }
+      if (date !== undefined) { task.noteDate = date; task.section = sec ?? 'outside'; task.part = partOfLine(sec, dt.task.time, s); }
       if (isMirror && dt.task.id) task.mirrorOf = dt.task.id;
       if (dt.parentLine !== undefined) task.parentKey = keyOfLine.get(dt.parentLine);
       entry.tasks.push(task);

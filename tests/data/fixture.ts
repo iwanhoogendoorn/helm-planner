@@ -135,16 +135,14 @@ title: 25, Tuesday, Aug, 2026
 - [ ] 07:00 - 08:00:
 - [ ] 08:00 - 09:00: Start with OIB
 
-%% helm:start %%
 ## Plan
 ### Habits
 - [x] 🏃 Morning workout 🆔 hab-workout ✅ 2026-08-25
-### Today
+### Afternoon
 - [ ] Fix router config ⏱️ 30m
 - [x] Pay invoice ✅ 2026-08-25
-### From projects
+### Anytime
 - [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]
-%% helm:end %%
 `;
 
 export function makeVault(extra: Record<string, string> = {}): MemoryVault {
@@ -165,7 +163,7 @@ export function makeVault(extra: Record<string, string> = {}): MemoryVault {
 export async function setup(extra: Record<string, string> = {}, settings: Partial<HelmSettings> = {}) {
   const vault = makeVault(extra);
   const s = { ...SETTINGS, ...settings };
-  const index = new HelmIndex(vault, { settings: () => s, today: () => TODAY, dailyConfig: () => ({ folder: DAILY_FOLDER, format: DAILY_FORMAT }), periodicConfig: () => ({ year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' } }) });
+  const index = new HelmIndex(vault, { settings: () => s, today: () => TODAY, dailyConfig: () => ({ folder: DAILY_FOLDER, format: DAILY_FORMAT }), periodicConfig: () => ({ year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' }, week: { folder: 'Weekly Notes', format: 'gggg-[W]ww' } }) });
   await index.rebuild();
   let seed = 42;
   const rng = (): number => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };

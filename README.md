@@ -45,10 +45,12 @@ breaks — you keep a plain-text task system that other plugins can read.
 
 Screenshots are of the seeded test vault (`npm run seed`).
 
-## Horizons — goals by year, quarter, month
+## Horizons — goals by year, quarter, month, week
 
-Goals live where you already plan the long game: in your **yearly, quarterly
-and monthly notes** (Periodic Notes folders are read automatically). A goal is
+Goals live where you already plan the long game: in your **yearly, quarterly,
+monthly and weekly notes** (Periodic Notes folders are read automatically).
+The whole chain: year → quarter → month → week → day, and goal → project →
+phase → task → subtask (nesting is unlimited; it is indentation). A goal is
 a checkbox line under `## Goals`:
 
 ```markdown
@@ -62,7 +64,7 @@ A project is **bound to a horizon** and can **serve a goal** through two
 frontmatter keys:
 
 ```yaml
-period: 2026-Q3        # 2026 · 2026-Q3 · 2026-08 (also "Q3 2026", "Aug 2026")
+period: 2026-Q3        # 2026 · 2026-Q3 · 2026-08 · 2026-W35 (also "Q3 2026", "Aug 2026")
 goal: gol-book26       # the goal's 🆔, or its text
 ```
 
@@ -73,6 +75,16 @@ and the projects bound to each; add goals inline, bind a project with one
 click, or start a new project straight from a goal. Plan day gives a small
 boost to tasks from projects bound to the current month/quarter/year, and
 Review shows the goals in play.
+
+## Dashboard
+
+Filter by range (7/14/30/90 days, this week/month/quarter/year, custom),
+project, area, tag or horizon, then read: done per day and per week,
+cumulative flow (captured vs done), plan adherence (what you put on days vs
+what got done, and what was carried), done by part of the day, by weekday,
+by area, by tag, age of open tasks, projects with velocity and ETA, habit
+consistency, goal progress. Every bar, slice and row drills into the tasks
+behind it.
 
 ## How notes look
 
@@ -105,25 +117,30 @@ due_date: 2026-12-31
 - 2026-08-26 — Outline approved.
 ```
 
-**Daily note** — Helm owns one region between two invisible markers and
-never touches anything outside it:
+**Daily note** — Helm owns exactly one section, the one under `## Plan`
+(configurable), split into parts of the day, and never touches anything
+outside it. No markers, no hidden syntax:
 
 ```markdown
-%% helm:start %%
 ## Plan
 ### Habits
 - [x] 🏃 Morning workout 🆔 hab-0012 ✅ 2026-08-27
-### Today
-- [ ] Fix router config ⏱️ 30m
-### From projects
+### Morning
 - [ ] Chapter 1 🆔 tsk-8822 📅 2026-09-30 🔗 [[OCI Networking Book]]
-%% helm:end %%
+### Afternoon
+- [ ] Fix router config ⏱️ 30m
+### Evening
+### Anytime
+- [ ] Call the plumber
 ```
 
-A line under *From projects* is a **mirror** of the task in the project note:
+A line with `🔗 [[Project]]` is a **mirror** of the task in the project note:
 same id, same text. Tick it in either place and the other follows. Edit the
 text in the project and the mirror is rewritten. Past daily notes are never
-rewritten.
+rewritten. Which sub-heading a line sits under *is* its part of the day —
+drag it on the Today tab, use the context menu, or say "tomorrow evening"
+when capturing. Lines in your own day-planner slots (`08:00 - 09:00: …`)
+fall into a part by their start time (boundaries are settings).
 
 **Habit** — a note with `type: habit`, a schedule, and nothing else.
 Completions are the ticks in daily notes; streaks and rates are computed from
@@ -158,7 +175,7 @@ project (and also the day if dated). With neither, into the inbox note.
 
 | Command | |
 |---|---|
-| Open Helm / Today / Week / Projects / Inbox / Review / Horizons | the six tabs |
+| Open Helm / Today / Week / Projects / Inbox / Review / Horizons / Dashboard | the seven tabs |
 | Capture a task · Capture a task for today | |
 | Plan my day · Wrap up the day | the two rituals |
 | Open today’s daily note (create if missing) | |

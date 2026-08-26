@@ -17,7 +17,7 @@ describe('index', () => {
     expect(snap.projects.get('prj-oracle')!.childIds).toEqual(['prj-cert']);
     expect([...snap.habits.keys()].sort()).toEqual(['hab-read', 'hab-workout']);
     expect(snap.dailyNotes.get('2026-08-25')?.hasRegion).toBe(true);
-    expect(snap.completions).toEqual([{ habitId: 'hab-workout', date: '2026-08-25', path: dailyPath('2026-08-25'), line: 14, state: 'done' }]);
+    expect(snap.completions).toEqual([{ habitId: 'hab-workout', date: '2026-08-25', path: dailyPath('2026-08-25'), line: 13, state: 'done' }]);
   });
 
   it('classifies daily lines', async () => {
@@ -25,9 +25,9 @@ describe('index', () => {
     const tasks = index.tasksInFile(dailyPath('2026-08-25'));
     expect(tasks.map((t) => [t.text, t.origin, t.section])).toEqual([
       ['Start with OIB', 'daily', 'outside'],
-      ['Fix router config', 'daily', 'today'],
-      ['Pay invoice', 'daily', 'today'],
-      ['Chapter 1', 'daily-mirror', 'projects'],
+      ['Fix router config', 'daily', 'afternoon'],
+      ['Pay invoice', 'daily', 'afternoon'],
+      ['Chapter 1', 'daily-mirror', 'anytime'],
     ]);
     const mirror = tasks[3]!;
     expect(mirror.key).toBe('tsk-0003@2026-08-25');

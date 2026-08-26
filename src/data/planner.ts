@@ -38,8 +38,24 @@ export function compareTasks(a: Task, b: Task): number {
   return a.text.localeCompare(b.text);
 }
 
+export type DayPart = 'morning' | 'afternoon' | 'evening' | 'anytime';
+export const DAY_PARTS: DayPart[] = ['morning', 'afternoon', 'evening', 'anytime'];
+
+/** One row on a day: the line in the note (or a project task not yet mirrored) and what to display. */
+export interface DayItem {
+  /** The task to act on (the mirror line when there is one). */
+  task: Task;
+  /** The task to display (the source for a mirror). */
+  display: Task;
+  part: DayPart;
+  kind: 'daily' | 'mirror' | 'unmirrored' | 'elsewhere' | 'timeblock';
+}
+
 export interface DayPlan {
   date: IsoDate;
+  /** Every open or done item on the day, by part. */
+  byPart: Record<DayPart, DayItem[]>;
+  items: DayItem[];
   /** Standalone tasks owned by the daily note (Today section + outside-region lines with text). */
   today: Task[];
   /** Mirror lines in the note, with their sources when resolved. */
@@ -57,7 +73,7 @@ export interface DayPlan {
 }
 
 export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): DayPlan {
-  const plan: DayPlan = { date, today: [], mirrors: [], unmirrored: [], elsewhere: [], timeBlocks: [], done: [], openCount: 0, doneCount: 0, plannedMinutes: 0, doneMinutes: 0 };
+  const plan: DayPlan = { date, byPart: { morning: [], afternoon: [], evening: [], anytime: [] }, items: [], today: [], mirrors: [], unmirrored: [], elsewhere: [], timeBlocks: [], done: [], openCount: 0, doneCount: 0, plannedMinutes: 0, doneMinutes: 0 };
   const mirroredSources = new Set<string>();
   for (const t of snap.tasks.values()) {
     if (t.depth > 0) continue; // subtasks travel with their parent
@@ -85,6 +101,14 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
   plan.timeBlocks.sort(compareTasks);
   plan.mirrors.sort((a, b) => compareTasks(a.source ?? a.mirror, b.source ?? b.mirror));
   plan.unmirrored.sort(compareTasks);
+  const partOf = (t: Task): DayPart => t.part ?? (t.time ? (t.time.start < settings.morningEnds ? 'morning' : t.time.start < settings.afternoonEnds ? 'afternoon' : 'evening') : 'anytime');
+  const push = (task: Task, display: Task, kind: DayItem['kind']): void => { const part = partOf(task); const it = { task, display, part, kind }; plan.items.push(it); plan.byPart[part].push(it); };
+  for (const t of plan.timeBlocks) push(t, t, 'timeblock');
+  for (const t of plan.today) push(t, t, 'daily');
+  for (const m of plan.mirrors) push(m.mirror, m.source ?? m.mirror, 'mirror');
+  for (const t of plan.unmirrored) push(t, t, 'unmirrored');
+  for (const t of plan.elsewhere) push(t, t, 'elsewhere');
+  for (const p of DAY_PARTS) plan.byPart[p].sort((a, b) => compareTasks(a.display, b.display));
   return plan;
 }
 

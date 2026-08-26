@@ -243,9 +243,9 @@ for (let i = 21; i >= 1; i--) {
   const reading = i % 5 === 0 ? '- [ ]' : '- [x]';
   const habits = [workout ? `${workout} 🏃 Morning workout 🆔 hab-work01${workout === '- [x]' ? ` ✅ ${date}` : ''}` : null, `${reading} 📖 Evening reading 🆔 hab-read01${reading === '- [x]' ? ` ✅ ${date}` : ''}`].filter(Boolean).join('\n');
   const todayTasks = i === 1
-    ? `### Today\n- [ ] Fix the router config ⏱️ 30m\n- [x] Pay the electricity invoice ✅ ${date}\n- [ ] Reply to Marieke #work`
-    : i === 2 ? `### Today\n- [x] Clean the desk ✅ ${date}` : '';
-  const mirrors = i === 1 ? `### From projects\n- [ ] Chapter 5: create routing tables on the diagrams 🆔 tsk-bk0003 📅 ${d(-3)} 🔗 [[Oracle Book Writing]] ⏱️ 1h30m` : '';
+    ? `### Morning\n- [ ] Chapter 5: create routing tables on the diagrams 🆔 tsk-bk0003 📅 ${d(-3)} 🔗 [[Oracle Book Writing]] ⏱️ 1h30m\n### Afternoon\n- [ ] Fix the router config ⏱️ 30m\n- [x] Pay the electricity invoice ✅ ${date}\n### Evening\n- [ ] Reply to Marieke #work`
+    : i === 2 ? `### Anytime\n- [x] Clean the desk ✅ ${date}` : '';
+  const mirrors = '';
   put(dailyPath(date), `---
 title: ${title}
 Type: Daily Note
@@ -259,13 +259,11 @@ mood: 👍
 Previous day: [[${formatDate(d(-i - 1), 'DD, dddd, MMM, YYYY')}|Yesterday]]
 Next day: [[${formatDate(d(-i + 1), 'DD, dddd, MMM, YYYY')}|Tomorrow]]
 
-%% helm:start %%
 ## Plan
 ### Habits
 ${habits}
 ${todayTasks}
 ${mirrors}
-%% helm:end %%
 
 # Day planner
 
@@ -284,6 +282,18 @@ ${mirrors}
 // The mirrored task must exist in the project note with that id: patch it in.
 files.set('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md', files.get('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')!.replace(`- [ ] Chapter 5: create routing tables on the diagrams 📅 ${d(-3)} ⏱️ 1h30m`, `- [ ] Chapter 5: create routing tables on the diagrams 🆔 tsk-bk0003 ⏳ ${d(-1)} 📅 ${d(-3)} ⏱️ 1h30m`));
 
+put(`70 OBSIDIAN/70-12 Weekly Notes/${formatDate(today, 'gggg-[W]ww')}.md`, `---
+title: ${formatDate(today, 'gggg-[W]ww')}
+Type: Weekly Note
+---
+
+# Week ${formatDate(today, 'w')}
+
+## Goals
+
+- [ ] Chapter 5 routing tables finished 🆔 gol-w-ch5
+- [ ] Three workouts 🆔 gol-w-fit
+`);
 put(`70 OBSIDIAN/70-19 Yearly Notes/${year}.md`, `---
 title: ${year}
 Type: Yearly Note
@@ -357,7 +367,7 @@ put('.obsidian/app.json', '{}');
 put('.obsidian/appearance.json', '{ "accentColor": "" }');
 put('.obsidian/core-plugins.json', JSON.stringify(['file-explorer', 'global-search', 'switcher', 'command-palette', 'daily-notes', 'page-preview', 'outline', 'word-count', 'file-recovery'], null, 2));
 put('.obsidian/daily-notes.json', JSON.stringify({ folder: DAILY_FOLDER, template: '70 OBSIDIAN/70-07 Templates/DAILY NOTE TEMPLATE', format: DAILY_FORMAT, autorun: false }, null, 2));
-put('.obsidian/plugins/periodic-notes/data.json', JSON.stringify({ daily: { format: DAILY_FORMAT, folder: DAILY_FOLDER, template: '70 OBSIDIAN/70-07 Templates/DAILY NOTE TEMPLATE', enabled: true }, weekly: { format: '', folder: '70 OBSIDIAN/70-12 Weekly Notes', enabled: true }, monthly: { format: '', folder: '70 OBSIDIAN/70-17 Monthly Notes', enabled: true }, quarterly: { format: '', folder: '70 OBSIDIAN/70-18 Quarterly Notes', enabled: true }, yearly: { format: '', folder: '70 OBSIDIAN/70-19 Yearly Notes', enabled: true } }, null, 2));
+put('.obsidian/plugins/periodic-notes/data.json', JSON.stringify({ daily: { format: DAILY_FORMAT, folder: DAILY_FOLDER, template: '70 OBSIDIAN/70-07 Templates/DAILY NOTE TEMPLATE', enabled: true }, weekly: { format: 'gggg-[W]ww', folder: '70 OBSIDIAN/70-12 Weekly Notes', enabled: true }, monthly: { format: '', folder: '70 OBSIDIAN/70-17 Monthly Notes', enabled: true }, quarterly: { format: '', folder: '70 OBSIDIAN/70-18 Quarterly Notes', enabled: true }, yearly: { format: '', folder: '70 OBSIDIAN/70-19 Yearly Notes', enabled: true } }, null, 2));
 put('.obsidian/community-plugins.json', JSON.stringify(['helm-planner'], null, 2));
 put('.obsidian/plugins/helm-planner/data.json', JSON.stringify({ projectsFolder: '02 PROJECTS', habitsFolder: '02 PROJECTS/Habits', inboxNote: '01 INBOX/Inbox.md', developerActions: true, openOnStartup: true, dailyCapacityMinutes: 360 }, null, 2));
 

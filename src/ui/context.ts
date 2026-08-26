@@ -4,7 +4,7 @@ import type { HelmSettings, IsoDate, Task } from '../core/types';
 import type { HelmIndex } from '../data/index';
 import type { Mutations } from '../data/mutations';
 
-export type TabId = 'today' | 'week' | 'projects' | 'inbox' | 'review' | 'horizons';
+export type TabId = 'today' | 'week' | 'projects' | 'inbox' | 'review' | 'horizons' | 'dashboard';
 
 export interface UiContext {
   app: App;

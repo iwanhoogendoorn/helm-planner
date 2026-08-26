@@ -2,11 +2,14 @@
 import type { IsoDate, Task } from '../../core/types';
 import { addDays, humanDate, isoWeek, isoWeekday, minutesToHuman, WEEKDAY_SHORT } from '../../core/dates';
 import { weekView } from '../../data/planner';
-import { button, chip, h, iconButton, section } from '../dom';
+import { button, chip, h, icon, iconButton, section } from '../dom';
 import type { UiContext } from '../context';
 import { taskRow } from '../taskRow';
 import { openPlanDay } from '../modals/planDay';
 import { openCapture } from '../modals/capture';
+import { periodOf } from '../../core/periods';
+import { goalProgress } from '../../data/planner';
+import { progressBar, richText } from '../dom';
 
 export interface WeekState { anchor: IsoDate; collapsed: Map<string, boolean> }
 
@@ -32,6 +35,19 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
       h('span', { cls: 'helm-hint', text: `${totalOpen} open · ${totalDone} done` }),
       button('', { icon: 'plus', title: 'Capture', onClick: () => openCapture(ctx) }),
     ),
+  ));
+
+  // This week's goals, from the weekly note.
+  const wp = periodOf(w.start, 'week');
+  const goals = ctx.index.allGoals().filter((g) => g.periodKey === wp.key).map((g) => goalProgress(snap, g, today, settings));
+  const goalInput = h('input', { cls: 'helm-quickadd-input', attr: { type: 'text', placeholder: `Add a goal for week ${wk.week}…` } });
+  goalInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && goalInput.value.trim() !== '') { const v = goalInput.value; goalInput.value = ''; void ctx.run('Add goal', () => ctx.mutations.addGoal(wp.key, v)); } });
+  root.appendChild(section(`Goals for week ${wk.week}`, { count: goals.length, store: state.collapsed, key: 'goals', actions: [button('Open week note', { icon: 'file-text', onClick: () => void ctx.run('Open', async () => { const p = await ctx.mutations.ensurePeriodicNote(wp); await ctx.openFile(p); }) })] },
+    ...goals.map((g) => h('div', { cls: ['helm-goal', g.goal.status === 'done' && 'is-done'] },
+      h('button', { cls: ['helm-check', `mark-${g.goal.status}`], onClick: () => void ctx.run('Goal', () => ctx.mutations.setStatus(g.goal.key, g.goal.status === 'done' ? 'todo' : 'done')) }, g.goal.status === 'done' ? icon('check') : null),
+      h('div', { cls: 'helm-goal-main' }, h('div', { cls: 'helm-goal-text' }, richText(g.goal.text)), g.projects.length > 0 ? h('div', { cls: 'helm-goal-progress' }, progressBar(g.progress, 'is-thin'), h('span', { cls: 'helm-hint', text: `${g.taskDone}/${g.taskTotal} tasks` })) : null),
+    )),
+    h('div', { cls: 'helm-quickadd' }, icon('target'), goalInput),
   ));
 
   const grid = h('div', { cls: 'helm-week' });

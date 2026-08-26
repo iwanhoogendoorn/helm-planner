@@ -13,6 +13,7 @@ import { pickProject } from '../menus';
 
 export interface CaptureDefaults {
   date?: IsoDate;
+  part?: 'morning' | 'afternoon' | 'evening';
   projectId?: string;
   phaseId?: string;
   text?: string;
@@ -28,11 +29,13 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   let phaseId = defaults.phaseId;
   let date: IsoDate | undefined = defaults.date;
   let explicitDate = defaults.date !== undefined;
+  let part: 'morning' | 'afternoon' | 'evening' | undefined = defaults.part;
+  let explicitPart = defaults.part !== undefined;
 
   const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Call the plumber tomorrow !high #home @Kitchen ~30m', value: defaults.text ?? '' } });
   const preview = h('div', { cls: 'helm-capture-preview' });
   const dest = h('div', { cls: 'helm-capture-dest' });
-  const help = h('div', { cls: 'helm-hint', text: 'Dates: today, tomorrow, fri, next week, in 3 days, 1/9, due friday · Priority: !, !!, !!! · Project: @Name · Effort: ~45m · Time: 14:00-15:00 · Repeat: every week' });
+  const help = h('div', { cls: 'helm-hint', text: 'Dates: today, tomorrow, fri, next week, in 3 days, 1/9, due friday · Part: morning, afternoon, evening, tonight · Priority: !, !!, !!! · Project: @Name · Effort: ~45m · Time: 14:00-15:00 · Repeat: every week' });
 
   const render = (): void => {
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);
@@ -41,7 +44,8 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (c.priority !== 'normal') preview.appendChild(chip(c.priority, `prio prio-${c.priority}`));
     if (c.project && !project) { const p = ctx.index.projectByTitle(c.project); if (p) project = p; else preview.appendChild(chip(`@${c.project} (unknown project)`, 'warn')); }
     if (c.scheduled && !explicitDate) date = c.scheduled;
-    if (date) preview.appendChild(chip(`plan ${humanDate(date, today)}`, 'scheduled'));
+    if (c.part && !explicitPart) part = c.part;
+    if (date) preview.appendChild(chip(`plan ${humanDate(date, today)}${part ? ` · ${part}` : ''}`, 'scheduled'));
     if (c.due) preview.appendChild(chip(`due ${humanDate(c.due, today)}`, 'due'));
     if (c.effortMinutes) preview.appendChild(chip(minutesToHuman(c.effortMinutes), 'effort'));
     if (c.time) preview.appendChild(chip(c.time.end ? `${c.time.start}–${c.time.end}` : c.time.start, 'time'));
@@ -55,6 +59,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
       button(project ? 'Change project' : 'Project…', { icon: 'folder', onClick: () => pickProject(ctx, (p, ph) => { project = p; phaseId = ph; render(); }, { phases: true }) }),
       project ? button('', { icon: 'x', title: 'No project', onClick: () => { project = undefined; phaseId = undefined; render(); } }) : null,
       button(date ? 'Unplan' : 'Plan today', { icon: date ? 'calendar-x' : 'sun', title: date ? 'Keep it unplanned (inbox or project only)' : 'Plan it on today', onClick: () => { explicitDate = true; date = date ? undefined : today; render(); } }),
+      date ? h('span', { cls: 'helm-segmented' }, ...(['morning', 'afternoon', 'evening'] as const).map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: p, onClick: () => { explicitPart = true; part = part === p ? undefined : p; render(); } }))) : null,
     ]);
   };
   input.addEventListener('input', render);
@@ -74,7 +79,8 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     const d = date;
     const text = c.text;
     if (!keepOpen) m.close();
-    await ctx.run('Capture', () => ctx.mutations.addTask({ text, fields, ...(p ? { projectId: p.id } : {}), ...(phaseId ? { phaseId } : {}), ...(d ? { date: d } : {}) }));
+    const pt = part;
+    await ctx.run('Capture', () => ctx.mutations.addTask({ text, fields, ...(p ? { projectId: p.id } : {}), ...(phaseId ? { phaseId } : {}), ...(d ? { date: d } : {}), ...(d && pt ? { part: pt } : {}) }));
     if (keepOpen) { input.value = ''; render(); input.focus(); }
   }
 

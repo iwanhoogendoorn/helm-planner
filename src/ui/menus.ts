@@ -6,6 +6,7 @@ import type { UiContext } from './context';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
+import { DAY_PARTS, PART_LABEL } from '../core/dailyNote';
 
 export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): { label: string; date: IsoDate | undefined; icon: string }[] {
   const nextWeek = addDays(startOfWeek(today, weekStartsOn), 7);
@@ -45,6 +46,14 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   menu.addItem((i) => i.setTitle('Edit…').setIcon('pencil').onClick(() => opts.onEdit ? opts.onEdit() : openTaskEditor(ctx, task)));
   menu.addSeparator();
   addScheduleItems(menu, ctx, task);
+  const onADay = task.noteDate !== undefined || task.scheduled !== undefined;
+  if (onADay) {
+    menu.addItem((i) => {
+      i.setTitle('Part of the day').setIcon('sun');
+      const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+      for (const p of DAY_PARTS) sub.addItem((j) => j.setTitle(PART_LABEL[p]).setIcon(p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock').setChecked(task.part === p).onClick(() => void ctx.run('Part', () => ctx.mutations.setPart(task.key, p))));
+    });
+  }
   menu.addSeparator();
   menu.addItem((i) => {
     i.setTitle('Status').setIcon('list-checks');

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — 2026-08-26
+
+- **Clean daily notes**: no more `%% helm %%` markers. The plan is the
+  section under `## Plan`; legacy markers are read and dropped on the next
+  write. `➕` created dates are no longer stamped unless you turn it on.
+- **Parts of the day**: Morning / Afternoon / Evening / Anytime sub-sections
+  in the note; drop zones on the Today tab; "Part of the day" in the task
+  menu and editor; per-item part in Plan day; "tomorrow evening" in capture;
+  your planner time slots fall into a part by their start time.
+- **Week horizon**: goals in weekly notes (shown on the Week tab), projects
+  can bind to `2026-W35`.
+- **Dashboard** tab: filterable by range, project, area, tag, horizon —
+  done per day/week, cumulative flow, plan adherence, by part of day, by
+  weekday, by area, by tag, open-task age, project velocity and ETA, habit
+  consistency, goal progress; everything drills into its tasks.
+
 ## 0.2.0 — 2026-08-26
 
 - **Horizons**: yearly / quarterly / monthly goals in periodic notes; projects

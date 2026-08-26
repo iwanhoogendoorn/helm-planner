@@ -10,7 +10,7 @@
  */
 import type { HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus } from '../core/types';
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
-import { findRegion, isEmptyRegion, readRegion, writeRegion, type RegionContent } from '../core/dailyNote';
+import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, diffDays, formatDate } from '../core/dates';
 import { nextOccurrence } from '../core/recurrence';
@@ -43,6 +43,8 @@ export interface AddTaskSpec {
   projectId?: string;
   phaseId?: string;
   date?: IsoDate;
+  /** Part of the day when `date` is given. */
+  part?: DayPart;
   parentKey?: string;
   /** Force the inbox even when nothing else applies (default anyway). */
   toInbox?: boolean;
@@ -152,9 +154,9 @@ export class Mutations {
     const path = await this.ensureDailyNote(date);
     const content = await this.d.vault.read(path);
     const doc = parseDocument(content);
-    const scan = findRegion(doc.lines);
+    const scan = findRegion(doc.lines, this.settings);
     if (scan.broken) { this.d.notify(`Helm region in ${baseName(path)} is broken (no end marker) — not writing.`); return false; }
-    const current: RegionContent = scan.region ? readRegion(doc.lines, scan.region) : { habits: [], today: [], projects: [], extra: [] };
+    const current: RegionContent = scan.region ? readRegion(doc.lines, scan.region) : emptyContent();
     const next = fn(current);
     if (!next) return false;
     if (!scan.region && isEmptyRegion(next)) return false;
@@ -260,7 +262,8 @@ export class Mutations {
     if (t.time) fields.time = t.time;
     if (t.id) fields.id = this.newTaskId();
     if (t.origin === 'daily') {
-      await this.editRegion(next, (rc) => ({ ...rc, today: [...rc.today, newTaskLine(t.text, fields)] }));
+      const part = t.part ?? 'anytime';
+      await this.editRegion(next, (rc) => ({ ...rc, [part]: [...rc[part], newTaskLine(t.text, fields)] }));
       return;
     }
     if (t.scheduled) fields.scheduled = addDays(t.scheduled, shift);
@@ -272,17 +275,17 @@ export class Mutations {
 
   /* ── Scheduling: the heart of "plan my day" ──────────────────────────── */
 
-  /** Plan a task onto a day (or take it off every day when `date` is undefined). */
-  async schedule(key: string, date: IsoDate | undefined): Promise<void> {
+  /** Plan a task onto a day and, optionally, a part of it (or take it off every day when `date` is undefined). */
+  async schedule(key: string, date: IsoDate | undefined, part?: DayPart): Promise<void> {
     let t = this.fresh(key);
     const today = this.today;
     if (t.origin === 'daily-mirror' && t.mirrorOf) {
       const src = this.index.task(t.mirrorOf);
-      if (src) { await this.schedule(src.key, date); return; }
+      if (src) { await this.schedule(src.key, date, part ?? (date === t.noteDate ? undefined : t.part)); return; }
       // Orphan mirror: treat as a daily task.
     }
-    if (t.origin === 'daily') { await this.moveDailyTask(t, date); return; }
-    if (t.origin === 'inbox' && date !== undefined) { await this.moveLineToDay(t, date); return; }
+    if (t.origin === 'daily') { await this.moveDailyTask(t, date, part); return; }
+    if (t.origin === 'inbox' && date !== undefined) { await this.moveLineToDay(t, date, part); return; }
     if (t.origin === 'inbox' && date === undefined) {
       await this.editFile(t.path, (lines) => { const tl = this.lineOf(lines, t); delete tl.scheduled; lines[t.line] = serialiseTaskLine(tl, { force: true }); return true; });
       return;
@@ -296,25 +299,54 @@ export class Mutations {
       return true;
     });
     t = this.fresh(t.key);
-    // Remove mirrors on other days (today or later). Past days keep their record.
+    // Remove mirrors on other days (today or later). Past days keep their record; remember the part it sat in.
     const days = new Set<IsoDate>();
-    for (const m of this.index.mirrorsOf(t.key)) if (m.noteDate && m.noteDate !== date && m.noteDate >= today) days.add(m.noteDate);
-    for (const d of days) await this.editRegion(d, (rc) => ({ ...rc, projects: rc.projects.filter((l) => l.id !== t.id) }));
+    let previousPart: DayPart | undefined;
+    for (const m of this.index.mirrorsOf(t.key)) {
+      if (m.noteDate && m.noteDate !== date && m.noteDate >= today) { days.add(m.noteDate); previousPart ??= m.part; }
+    }
+    for (const d of days) await this.editRegion(d, (rc) => { removeLines(rc, (l) => l.id === t.id); return rc; });
     if (date !== undefined) {
       const src = t;
       await this.editRegion(date, (rc) => {
-        const idx = rc.projects.findIndex((l) => l.id === src.id);
-        const projects = [...rc.projects];
-        const line = this.mirrorLine(src, idx >= 0 ? projects[idx] : undefined);
-        if (idx >= 0) projects[idx] = line; else projects.push(line);
-        return { ...rc, projects };
+        const existingPart = DAY_PARTS.find((p) => rc[p].some((l) => l.id === src.id));
+        const existing = removeLines(rc, (l) => l.id === src.id);
+        const line = this.mirrorLine(src, existing[0]);
+        const target: DayPart = part ?? existingPart ?? previousPart ?? (src.time ? this.partOfTime(src.time.start) : 'anytime');
+        rc[target] = [...rc[target], line];
+        return rc;
       });
     }
   }
 
+  private partOfTime(hhmm: string): DayPart {
+    const s = this.settings;
+    return hhmm < s.morningEnds ? 'morning' : hhmm < s.afternoonEnds ? 'afternoon' : 'evening';
+  }
+
+  /** Move a line that already sits on a day to another part of that day. */
+  async setPart(key: string, part: DayPart): Promise<void> {
+    const t = this.fresh(key);
+    if ((t.origin === 'daily' || t.origin === 'daily-mirror') && t.noteDate !== undefined && t.section !== 'outside') {
+      const date = t.noteDate;
+      await this.editRegion(date, (rc) => {
+        const removed = removeLines(rc, (l) => (t.id ? l.id === t.id : l.text === t.text && l.id === undefined));
+        if (removed.length === 0) return undefined;
+        rc[part] = [...rc[part], ...removed];
+        return rc;
+      });
+      return;
+    }
+    if (t.origin === 'daily' && t.section === 'outside') { this.d.notify('That line lives in your day planner; its part of the day follows its time.'); return; }
+    if (t.scheduled) { await this.schedule(t.key, t.scheduled, part); return; }
+    const mirror = this.index.mirrorsOf(t.key).find((m) => m.noteDate !== undefined && m.noteDate >= this.today);
+    if (mirror) { await this.setPart(mirror.key, part); return; }
+    this.d.notify('Plan the task onto a day first, then pick a part of the day.');
+  }
+
   /** A daily-owned task moves between notes; leaving a past note marks it forwarded. */
-  private async moveDailyTask(t: Task, date: IsoDate | undefined): Promise<void> {
-    if (t.noteDate === date) return;
+  private async moveDailyTask(t: Task, date: IsoDate | undefined, part?: DayPart): Promise<void> {
+    if (t.noteDate === date) { if (part && part !== t.part) await this.setPart(t.key, part); return; }
     const today = this.today;
     let carried: TaskLine[] = [];
     await this.editFile(t.path, (lines) => {
@@ -332,14 +364,15 @@ export class Mutations {
     delete rebased[0]!.done;
     delete rebased[0]!.cancelled;
     if (date !== undefined) {
-      await this.editRegion(date, (rc) => ({ ...rc, today: [...rc.today, ...rebased] }));
+      const target: DayPart = part ?? (t.section && t.section !== 'outside' && t.section !== 'habits' ? t.section : 'anytime');
+      await this.editRegion(date, (rc) => ({ ...rc, [target]: [...rc[target], ...rebased] }));
     } else {
       await this.appendToInbox(rebased);
     }
   }
 
   /** An inbox line moves into the day's note. */
-  private async moveLineToDay(t: Task, date: IsoDate): Promise<void> {
+  private async moveLineToDay(t: Task, date: IsoDate, part: DayPart = 'anytime'): Promise<void> {
     let carried: TaskLine[] = [];
     await this.editFile(t.path, (lines) => {
       const { start, end } = this.subtreeRange(lines, t);
@@ -350,7 +383,7 @@ export class Mutations {
     const baseIndent = carried[0]?.raw.indent ?? '';
     const rebased = carried.map((l) => ({ ...l, raw: { ...l.raw, indent: l.raw.indent.slice(baseIndent.length), eol: '' } }));
     if (rebased[0]) delete rebased[0].scheduled;
-    await this.editRegion(date, (rc) => ({ ...rc, today: [...rc.today, ...rebased] }));
+    await this.editRegion(date, (rc) => ({ ...rc, [part]: [...rc[part], ...rebased] }));
   }
 
   private async appendToInbox(lines: TaskLine[]): Promise<void> {
@@ -367,7 +400,8 @@ export class Mutations {
   /* ── Creating tasks ─────────────────────────────────────────────────── */
 
   async addTask(spec: AddTaskSpec): Promise<void> {
-    const fields: Partial<TaskLine> = { created: this.today, ...spec.fields };
+    const fields: Partial<TaskLine> = { ...(this.settings.writeCreatedDate ? { created: this.today } : {}), ...spec.fields };
+    const part: DayPart = spec.part ?? (spec.fields?.time ? this.partOfTime(spec.fields.time.start) : 'anytime');
     const unit = this.settings.indentUnit || '\t';
     if (spec.parentKey) {
       const parent = this.fresh(spec.parentKey);
@@ -392,13 +426,13 @@ export class Mutations {
       });
       if (spec.date && id) {
         const src = this.index.task(id);
-        if (src) await this.editRegion(spec.date, (rc) => ({ ...rc, projects: [...rc.projects, this.mirrorLine(src)] }));
+        if (src) await this.editRegion(spec.date, (rc) => ({ ...rc, [part]: [...rc[part], this.mirrorLine(src)] }));
       }
       return;
     }
     if (spec.date) {
       delete fields.scheduled;
-      await this.editRegion(spec.date, (rc) => ({ ...rc, today: [...rc.today, newTaskLine(spec.text, fields)] }));
+      await this.editRegion(spec.date, (rc) => ({ ...rc, [part]: [...rc[part], newTaskLine(spec.text, fields)] }));
       return;
     }
     await this.appendToInbox([newTaskLine(spec.text, fields)]);
@@ -461,7 +495,7 @@ export class Mutations {
     const days = new Set<IsoDate>();
     for (const m of this.index.mirrorsOf(t.key)) if (m.noteDate && m.noteDate >= this.today) days.add(m.noteDate);
     await this.editFile(t.path, (lines) => { const r = this.subtreeRange(lines, t); lines.splice(r.start, r.end - r.start); return true; });
-    for (const d of days) await this.editRegion(d, (rc) => ({ ...rc, projects: rc.projects.filter((l) => l.id !== t.id) }));
+    for (const d of days) await this.editRegion(d, (rc) => { removeLines(rc, (l) => l.id === t.id); return rc; });
   }
 
   /** Move a task (with subtree) into a project phase. Keeps its plan date, adding a mirror. */
@@ -509,19 +543,26 @@ export class Mutations {
     if (planned && head.id) {
       const src = this.index.task(head.id);
       if (src) await this.editRegion(planned, (rc) => {
-        const projects = rc.projects.filter((l) => l.id !== head.id);
-        return { ...rc, today: rc.today.filter((l) => !(l.id && l.id === head.id) && l.text !== head.text), projects: [...projects, this.mirrorLine(src)] };
+        const wasIn = DAY_PARTS.find((p) => rc[p].some((l) => (l.id && l.id === head.id) || l.text === head.text));
+        removeLines(rc, (l) => (l.id !== undefined && l.id === head.id) || l.text === head.text);
+        const target = wasIn ?? 'anytime';
+        rc[target] = [...rc[target], this.mirrorLine(src)];
+        return rc;
       });
     }
   }
 
   /* ── Day rituals ────────────────────────────────────────────────────── */
 
-  /** Pull a set of tasks onto a day and sync the habits. */
-  async planDay(date: IsoDate, taskKeys: string[]): Promise<void> {
+  /** Pull a set of tasks onto a day (each into a part of it) and sync the habits. */
+  async planDay(date: IsoDate, items: (string | { key: string; part?: DayPart })[]): Promise<void> {
     await this.ensureDailyNote(date);
     await this.syncHabitsForDay(date);
-    for (const k of taskKeys) await this.schedule(k, date);
+    for (const it of items) {
+      const key = typeof it === 'string' ? it : it.key;
+      const part = typeof it === 'string' ? undefined : it.part;
+      await this.schedule(key, date, part);
+    }
   }
 
   /** Carry unfinished work from `from` to `to` (or off the calendar). */
@@ -536,9 +577,9 @@ export class Mutations {
       if (cur.origin === 'daily-mirror') {
         const src = cur.mirrorOf ? this.index.task(cur.mirrorOf) : undefined;
         if (from < this.today) await this.writeLineStatus(cur.path, cur.line, 'forwarded', from);
-        if (src) await this.schedule(src.key, to); else if (to) await this.moveDailyTask(this.fresh(cur.key), to);
+        if (src) await this.schedule(src.key, to, cur.part); else if (to) await this.moveDailyTask(this.fresh(cur.key), to, cur.part);
       } else {
-        await this.moveDailyTask(cur, to);
+        await this.moveDailyTask(cur, to, cur.part);
       }
       if (to) moved++; else unscheduled++;
     }

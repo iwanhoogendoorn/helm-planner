@@ -5,7 +5,8 @@
 import { Modal } from 'obsidian';
 import type { IsoDate, Task } from '../../core/types';
 import { humanDate, minutesToHuman } from '../../core/dates';
-import { candidates, dayPlan, effortOf, type Candidate } from '../../data/planner';
+import { candidates, dayPlan, effortOf, type Candidate, type DayPart } from '../../data/planner';
+import { PART_LABEL } from '../../core/dailyNote';
 import { habitDue } from '../../data/habits';
 import { button, chip, h, icon, progressBar, richText } from '../dom';
 import type { UiContext } from '../context';
@@ -23,6 +24,7 @@ export function openPlanDay(ctx: UiContext, date: IsoDate): void {
   const plan = dayPlan(snap, date, settings);
   const cands = candidates(snap, date, settings, today);
   const picked = new Set<string>();
+  const parts = new Map<string, DayPart>();
   const removed = new Set<string>();
   const m = new Modal(ctx.app);
   m.titleEl.setText(`Plan ${humanDate(date, today, { year: true })}`);
@@ -41,7 +43,7 @@ export function openPlanDay(ctx: UiContext, date: IsoDate): void {
   const candRow = (c: Candidate): HTMLElement => {
     const t = c.task;
     const on = picked.has(t.key);
-    return h('div', { cls: ['helm-plan-item', on && 'is-picked'], onClick: () => { if (on) picked.delete(t.key); else picked.add(t.key); render(); } },
+    return h('div', { cls: ['helm-plan-item', on && 'is-picked'], onClick: () => { if (on) { picked.delete(t.key); parts.delete(t.key); } else picked.add(t.key); render(); } },
       icon(on ? 'check-square' : 'square', 'helm-plan-check'),
       h('div', { cls: 'helm-plan-item-main' },
         h('div', { cls: 'helm-plan-item-text' }, richText(taskLabel(t))),
@@ -94,9 +96,11 @@ export function openPlanDay(ctx: UiContext, date: IsoDate): void {
     for (const k of picked) {
       const t = snap.tasks.get(k);
       if (!t) continue;
+      const cur = parts.get(k) ?? 'anytime';
       pickedItems.appendChild(h('div', { cls: 'helm-plan-item is-picked' },
-        h('div', { cls: 'helm-plan-item-main' }, h('div', { cls: 'helm-plan-item-text' }, richText(taskLabel(t))), h('div', { cls: 'helm-task-meta' }, t.projectTitle ? chip(t.projectTitle, 'project') : null, chip(minutesToHuman(effortOf(t, settings)), 'effort'))),
-        button('', { icon: 'x', title: 'Remove', onClick: () => { picked.delete(k); render(); } }),
+        h('div', { cls: 'helm-plan-item-main' }, h('div', { cls: 'helm-plan-item-text' }, richText(taskLabel(t))), h('div', { cls: 'helm-task-meta' }, t.projectTitle ? chip(t.projectTitle, 'project') : null, chip(minutesToHuman(effortOf(t, settings)), 'effort')),
+          h('div', { cls: 'helm-segmented helm-plan-parts' }, ...(['morning', 'afternoon', 'evening', 'anytime'] as DayPart[]).map((p) => h('button', { cls: ['helm-seg', cur === p && 'is-active'], text: PART_LABEL[p], onClick: (ev) => { ev.stopPropagation(); parts.set(k, p); render(); } })))),
+        button('', { icon: 'x', title: 'Remove', onClick: () => { picked.delete(k); parts.delete(k); render(); } }),
       ));
     }
     right.appendChild(pickedItems);
@@ -111,7 +115,7 @@ export function openPlanDay(ctx: UiContext, date: IsoDate): void {
 
   async function commit(): Promise<void> {
     m.close();
-    const add = [...picked];
+    const add = [...picked].map((key) => ({ key, ...(parts.get(key) ? { part: parts.get(key)! } : {}) }));
     const rem = [...removed];
     await ctx.run('Plan day', async () => {
       await ctx.mutations.planDay(date, add);

@@ -305,3 +305,60 @@
 .helm-goal .helm-task-actions { display: inline-flex; }
 .helm-horizon-controls { display: inline-flex; align-items: center; gap: 6px; }
 .helm-horizon-controls .helm-icon { color: var(--text-muted); }
+
+/* Parts of the day */
+.helm-part-icon { margin-right: 2px; color: var(--text-muted); }
+.helm-part-icon svg { width: 14px; height: 14px; }
+.helm-section.part-morning .helm-section-title { color: var(--color-orange); }
+.helm-section.part-afternoon .helm-section-title { color: var(--color-yellow); }
+.helm-section.part-evening .helm-section-title { color: var(--color-purple); }
+.helm-section.is-dropping { background: rgba(var(--color-blue-rgb), 0.06); border-radius: var(--radius-m); outline: 1px dashed var(--color-blue); }
+.helm-dropzone-hint { font-size: var(--font-ui-smaller); color: var(--text-faint); padding: 8px 6px; border: 1px dashed var(--background-modifier-border); border-radius: var(--radius-s); text-align: center; }
+.helm-plan-parts { margin-top: 4px; }
+
+/* Dashboard */
+.helm-dash-filters { gap: 6px; }
+.helm-dash-filters .helm-icon { color: var(--text-muted); }
+.helm-dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+@container (max-width: 760px) { .helm-dash-grid { grid-template-columns: 1fr; } }
+.helm-dash-card { padding: 6px 2px; }
+.helm-dash-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.helm-dash-facts { display: flex; flex-direction: column; gap: 4px; font-size: var(--font-ui-small); }
+.helm-chart { width: 100%; height: 140px; display: block; overflow: visible; }
+.helm-chart-hbars { height: auto; }
+.helm-chart-donut { flex: none; }
+.helm-bar { fill: var(--interactive-accent); opacity: 0.85; }
+.helm-bar-group.is-clickable { cursor: pointer; }
+.helm-bar-group:hover .helm-bar { opacity: 1; }
+.helm-bar-group.is-selected .helm-bar { opacity: 1; stroke: var(--text-normal); }
+.helm-bar-hit { fill: transparent; }
+.helm-chart-label { font-size: 9px; fill: var(--text-muted); font-family: var(--font-interface); }
+.helm-chart-value { font-size: 9px; fill: var(--text-muted); font-family: var(--font-interface); }
+.helm-chart-centre { font-size: 18px; font-weight: 700; fill: var(--text-normal); font-family: var(--font-interface); }
+.helm-chart-grid { stroke: var(--background-modifier-border); stroke-width: 1; }
+.helm-chart-line { fill: none; stroke: var(--interactive-accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.helm-chart-area { fill: var(--interactive-accent); opacity: 0.12; }
+.helm-donut-slice.is-clickable { cursor: pointer; }
+.helm-donut-slice:hover { opacity: 0.85; }
+.helm-legend { display: flex; flex-direction: column; gap: 3px; font-size: var(--font-ui-small); }
+.helm-legend-item { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; box-shadow: none; padding: 1px 4px; color: var(--text-normal); cursor: default; height: auto; text-align: left; }
+button.helm-legend-item { cursor: pointer; }
+button.helm-legend-item:hover { background: var(--background-modifier-hover); }
+.helm-legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.helm-gauge { flex: none; }
+.helm-gauge-track { fill: none; stroke: var(--background-modifier-border); stroke-width: 8; }
+.helm-gauge-fill { fill: none; stroke: var(--interactive-accent); stroke-width: 8; stroke-linecap: round; }
+.helm-gauge.is-good .helm-gauge-fill { stroke: var(--color-green); }
+.helm-gauge.is-warn .helm-gauge-fill { stroke: var(--color-orange); }
+.helm-gauge.is-bad .helm-gauge-fill { stroke: var(--color-red); }
+.helm-gauge-value { font-size: 18px; font-weight: 700; fill: var(--text-normal); font-family: var(--font-interface); }
+.helm-gauge-label { font-size: 9px; fill: var(--text-muted); font-family: var(--font-interface); }
+.helm-table-wrap { overflow-x: auto; }
+.helm-table { width: 100%; border-collapse: collapse; font-size: var(--font-ui-small); }
+.helm-table th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--background-modifier-border); }
+.helm-table td { padding: 5px 6px; border-bottom: 1px solid var(--background-modifier-border); vertical-align: middle; }
+.helm-table tr.is-clickable { cursor: pointer; }
+.helm-table tr.is-clickable:hover { background: var(--background-modifier-hover); }
+.helm-table td.is-bad { color: var(--color-red); }
+.helm-table-progress { display: inline-block; width: 90px; vertical-align: middle; }
+.helm-drill .helm-section-title { color: var(--text-accent); }

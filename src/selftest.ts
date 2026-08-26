@@ -10,7 +10,7 @@ import type { HelmIndex } from './data/index';
 import type { Mutations } from './data/mutations';
 import type { VaultAdapter } from './data/vault';
 
-interface Host extends Plugin { index: HelmIndex; mutations: Mutations; vault: VaultAdapter; today(): IsoDate }
+interface Host extends Plugin { index: HelmIndex; mutations: Mutations; vault: VaultAdapter; today(): IsoDate; settings: { planHeading: string } }
 
 export async function runSelfTest(host: Host): Promise<string> {
   const lines: string[] = ['# Helm self-test report', '', `Run at ${new Date().toISOString()} in vault “${host.app.vault.getName()}”.`, ''];
@@ -51,7 +51,7 @@ export async function runSelfTest(host: Host): Promise<string> {
     check('Scheduling adds ⏳ and an id to the source', /Self-test task one 🆔 tsk-\w+ (?:➕ \S+ )?⏳ \d{4}-\d{2}-\d{2}/.test(src), src.split('\n').find((l) => l.includes('task one')) ?? '');
     const dailyPath = index.dailyPath(today);
     const daily = await read(dailyPath);
-    check('Mirror line written into today’s daily note', daily.includes('%% helm:start %%') && daily.includes(`Self-test task one 🆔 ${t1b.id}`) && daily.includes('🔗 [['), dailyPath);
+    check('Mirror line written into today’s daily note under the plan heading', daily.includes(host.settings.planHeading.trim()) && daily.includes(`Self-test task one 🆔 ${t1b.id}`) && daily.includes('🔗 [[') && !daily.includes('%% helm:start %%'), dailyPath);
     check('Mirror is linked in the index', index.mirrorsOf(t1b.key).length === 1);
 
     const mirror = index.mirrorsOf(t1b.key)[0]!;
@@ -69,7 +69,7 @@ export async function runSelfTest(host: Host): Promise<string> {
 
     await m.addTask({ text: 'Self-test standalone', date: today, fields: { effortMinutes: 15, effortRaw: '15m' } });
     const st = index.allTasks().find((t) => t.origin === 'daily' && t.noteDate === today && t.text === 'Self-test standalone');
-    check('Standalone task lands in the daily note’s Today section', st !== undefined && st.section === 'today');
+    check('Standalone task lands in the daily note’s plan', st !== undefined && st.section === 'anytime');
     if (st) {
       await m.schedule(st.key, tomorrow);
       const st2 = index.allTasks().find((t) => t.origin === 'daily' && t.noteDate === tomorrow && t.text === 'Self-test standalone');
@@ -99,6 +99,12 @@ export async function runSelfTest(host: Host): Promise<string> {
       check('Goal can be marked achieved', index.goal(goal.key)?.status === 'done');
       await m.setStatus(goal.key, 'todo');
     }
+    // Parts of the day: plan into the evening, move to the morning.
+    await m.schedule(t1b.key, today, 'evening');
+    check('Task planned into the evening section', new RegExp(`### Evening\\n(?:.*\\n)*?- \\[ \\] Self-test task one 🆔 ${t1b.id}`).test(await read(dailyPath)));
+    const mirror2 = index.mirrorsOf(t1b.key)[0];
+    if (mirror2) { await m.setPart(mirror2.key, 'morning'); check('Moved to the morning section', index.mirrorsOf(t1b.key)[0]?.part === 'morning'); }
+    await m.schedule(t1b.key, undefined);
 
     const rec = await m.reconcile();
     check('Reconcile finds nothing to fix after a clean run', rec === 0, `${rec} writes`);

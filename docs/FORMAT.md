@@ -20,6 +20,7 @@ followed by `[x]` is a task line.
 | Symbol | Field |
 |---|---|
 | `🆔 tsk-xxxxxx` | id (assigned by Helm when first needed) |
+| `➕ YYYY-MM-DD` | created — written only when the *Stamp created date* setting is on |
 | `➕ YYYY-MM-DD` | created |
 | `🛫 YYYY-MM-DD` | start — not actionable before |
 | `⏳ YYYY-MM-DD` | scheduled — the day it is planned on |
@@ -82,29 +83,35 @@ Located via the Daily Notes / Periodic Notes settings (folder + moment
 format), or the plugin settings when set. The date of a note is parsed from
 its path with the same format.
 
-The Helm region:
+The plan section — the section under the plan heading (`## Plan` by
+default) up to the next heading of the same or a higher level:
 
 ```markdown
-%% helm:start %%
 ## Plan
 ### Habits
 - [x] 🏃 Morning workout 🆔 hab-xxxxxx ✅ 2026-08-27
-### Today
-- [ ] Standalone task ⏱️ 30m
-### From projects
+### Morning
 - [ ] Mirror of a project task 🆔 tsk-xxxxxx 📅 2026-09-30 🔗 [[Project]]
-%% helm:end %%
+### Afternoon
+- [ ] Standalone task ⏱️ 30m
+### Evening
+### Anytime
+- [ ] Another standalone task
 ```
 
-- Sections appear in this order; empty sections are omitted.
-- Unrecognised lines inside the region are kept, below the sections.
-- Nothing outside the markers is ever written by Helm.
-- A start marker without an end marker makes the note read-only for Helm.
-- A note without markers gets them on first write, placed per the
+- Sub-sections appear in this order; empty ones are omitted. `Today`,
+  `Tasks`, `From projects` are read as *Anytime* (older notes).
+- The sub-heading a line sits under is its **part of the day**.
+- Unrecognised lines inside the section are kept, below the parts.
+- Nothing outside the section is ever written by Helm.
+- A note without the heading gets it on first write, placed per the
   **regionPlacement** setting (before the first heading by default).
-- Task lines outside the region are indexed as daily tasks with
-  `section: outside`; lines with a time block and no text (empty planner
-  slots) are ignored.
+- Legacy `%% helm:start %%` … `%% helm:end %%` markers are still read; the
+  next write replaces them with the plain heading form. A start marker
+  without an end marker makes the note read-only for Helm.
+- Task lines outside the section are indexed as daily tasks with
+  `section: outside`, their part derived from a leading time block (`morningEnds`
+  / `afternoonEnds` settings); empty planner slots are ignored.
 
 **Mirror lines** carry the source's `🆔`, text, priority, due, recurrence,
 effort and time block plus `🔗 [[Source note]]`. They never carry `⏳` (the
@@ -133,13 +140,14 @@ note's date.
 
 ## 5. Horizons: goals and periods
 
-**Periods** are keys: `2026` (year), `2026-Q3` (quarter), `2026-08` (month).
+**Periods** are keys: `2026` (year), `2026-Q3` (quarter), `2026-08` (month), `2026-W35` (ISO week).
 Read leniently (`Q3 2026`, `Aug 2026`, `08-2026`), always written in that
 canonical form.
 
 **Periodic notes** are located via the Periodic Notes plugin (yearly /
-quarterly / monthly folder + moment format; defaults `YYYY`, `YYYY-[Q]Q`,
-`YYYY-MM`) or the plugin settings. A note's period is parsed from its path.
+quarterly / monthly / weekly folder + moment format; defaults `YYYY`,
+`YYYY-[Q]Q`, `YYYY-MM`, `gggg-[W]ww`) or the plugin settings. A week belongs
+to the month, quarter and year its Thursday falls in (ISO). A note's period is parsed from its path.
 
 **Goals** are depth-0 task lines under the goals heading (`## Goals` by
 default; `Objectives` / `OKRs` also recognised) of a periodic note:

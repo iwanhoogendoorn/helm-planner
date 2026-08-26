@@ -22,7 +22,7 @@ export default class HelmPlugin extends Plugin {
   index!: HelmIndex;
   mutations!: Mutations;
   private daily = { folder: '', format: '', template: '' };
-  private periodic: Record<'year' | 'quarter' | 'month', { folder: string; format: string; template: string }> = { year: { folder: '', format: '', template: '' }, quarter: { folder: '', format: '', template: '' }, month: { folder: '', format: '', template: '' } };
+  private periodic: Record<'year' | 'quarter' | 'month' | 'week', { folder: string; format: string; template: string }> = { year: { folder: '', format: '', template: '' }, quarter: { folder: '', format: '', template: '' }, month: { folder: '', format: '', template: '' }, week: { folder: '', format: '', template: '' } };
   private reconcileTimer: number | undefined;
   private pendingPaths = new Set<string>();
   private updateTimer: number | undefined;
@@ -37,7 +37,7 @@ export default class HelmPlugin extends Plugin {
       settings: () => this.settings,
       today: () => this.today(),
       dailyConfig: () => ({ folder: this.daily.folder || DAILY_FALLBACK.folder, format: this.daily.format || DAILY_FALLBACK.format }),
-      periodicConfig: () => ({ year: this.periodic.year, quarter: this.periodic.quarter, month: this.periodic.month }),
+      periodicConfig: () => ({ year: this.periodic.year, quarter: this.periodic.quarter, month: this.periodic.month, week: this.periodic.week }),
     });
     this.mutations = new Mutations({
       vault: this.vault,
@@ -102,15 +102,15 @@ export default class HelmPlugin extends Plugin {
     this.daily = { folder: pick('folder').replace(/\/+$/, ''), format: pick('format'), template: pick('template') };
     if (this.daily.template && !this.daily.template.endsWith('.md')) this.daily.template += '.md';
     const pn = await readJson('.obsidian/plugins/periodic-notes/data.json');
-    const per = (k: 'yearly' | 'quarterly' | 'monthly'): { folder: string; format: string; template: string } => {
+    const per = (k: 'yearly' | 'quarterly' | 'monthly' | 'weekly'): { folder: string; format: string; template: string } => {
       const c = pn?.[k] as Record<string, unknown> | undefined;
       const g = (key: string): string => (typeof c?.[key] === 'string' ? (c[key] as string) : '');
       return { folder: g('folder').replace(/\/+$/, ''), format: g('format'), template: g('template') };
     };
-    this.periodic = { year: per('yearly'), quarter: per('quarterly'), month: per('monthly') };
+    this.periodic = { year: per('yearly'), quarter: per('quarterly'), month: per('monthly'), week: per('weekly') };
   }
 
-  periodicConfigFor(kind: 'year' | 'quarter' | 'month'): { folder: string; format: string; template: string } { return this.periodic[kind]; }
+  periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string } { return this.periodic[kind]; }
 
   private async readTemplate(p: string): Promise<string | undefined> {
     if (!p) return undefined;
@@ -250,6 +250,7 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'open-projects', name: 'Open Projects', callback: () => void this.openView().then((v) => v.navigate('projects')) });
     this.addCommand({ id: 'open-inbox', name: 'Open Inbox', callback: () => void this.openView().then((v) => v.navigate('inbox')) });
     this.addCommand({ id: 'open-review', name: 'Open Review', callback: () => void this.openView().then((v) => v.navigate('review')) });
+    this.addCommand({ id: 'open-dashboard', name: 'Open Dashboard', callback: () => void this.openView().then((v) => v.navigate('dashboard')) });
     this.addCommand({ id: 'open-horizons', name: 'Open Horizons (goals by year, quarter, month)', callback: () => void this.openView().then((v) => v.navigate('horizons')) });
     this.addCommand({ id: 'capture', name: 'Capture a task', callback: () => openCapture(ctx()) });
     this.addCommand({ id: 'capture-today', name: 'Capture a task for today', callback: () => openCapture(ctx(), { date: this.today() }) });

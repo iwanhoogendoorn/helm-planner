@@ -121,34 +121,48 @@ Previous day: [[25, Tuesday, Aug, 2026|Yesterday]]
 - [ ] 08:00 - 09:00: Start with OIB
 `;
 
+const RS = { regionPlacement: 'before-first-heading' as const, regionAnchor: '', planHeading: '## Plan' };
+
 describe('daily note region', () => {
   it('inserts before the first heading and reads back', () => {
-    const content = { habits: [newTaskLine('Workout', { id: 'hab-1' })], today: [newTaskLine('Fix router', { id: 'tsk-1', effortMinutes: 30 })], projects: [newTaskLine('Draft list', { id: 'tsk-2', mirrorLink: '[[OCI]]', due: '2026-09-05' })], extra: [] };
-    const w = writeRegion(DAILY, content, { regionPlacement: 'before-first-heading', regionAnchor: '' })!;
+    const content = { habits: [newTaskLine('Workout', { id: 'hab-1' })], morning: [], afternoon: [newTaskLine('Fix router', { id: 'tsk-1', effortMinutes: 30 })], evening: [], anytime: [newTaskLine('Draft list', { id: 'tsk-2', mirrorLink: '[[OCI]]', due: '2026-09-05' })], extra: [] };
+    const w = writeRegion(DAILY, content, RS)!;
     const text = w.lines.join(w.eol);
-    expect(text).toContain('%% helm:start %%\n## Plan\n### Habits\n- [ ] Workout 🆔 hab-1\n### Today\n- [ ] Fix router 🆔 tsk-1 ⏱️ 30m\n### From projects\n- [ ] Draft list 🆔 tsk-2 📅 2026-09-05 🔗 [[OCI]]\n%% helm:end %%\n\n# Backlog Tasks');
-    const scan = findRegion(w.lines);
+    expect(text).toContain('## Plan\n### Habits\n- [ ] Workout 🆔 hab-1\n### Afternoon\n- [ ] Fix router 🆔 tsk-1 ⏱️ 30m\n### Anytime\n- [ ] Draft list 🆔 tsk-2 📅 2026-09-05 🔗 [[OCI]]\n\n# Backlog Tasks');
+    expect(text).not.toContain('%%');
+    const scan = findRegion(w.lines, RS);
     expect(scan.region).toBeDefined();
     const rc = readRegion(w.lines, scan.region!);
-    expect(rc.today[0]!.text).toBe('Fix router');
-    expect(rc.projects[0]!.mirrorLink).toBe('[[OCI]]');
+    expect(rc.afternoon[0]!.text).toBe('Fix router');
+    expect(rc.anytime[0]!.mirrorLink).toBe('[[OCI]]');
     // Rewrite in place: nothing outside changes.
-    const w2 = writeRegion(text, { ...rc, today: [] }, { regionPlacement: 'end', regionAnchor: '' })!;
+    const w2 = writeRegion(text, { ...rc, afternoon: [] }, { ...RS, regionPlacement: 'end' })!;
     const text2 = w2.lines.join(w2.eol);
-    expect(text2.replace(/%% helm:start %%[\s\S]*%% helm:end %%/, 'R')).toBe(text.replace(/%% helm:start %%[\s\S]*%% helm:end %%/, 'R'));
-    expect(text2).not.toContain('### Today');
+    expect(text2.replace(/## Plan[\s\S]*?\n\n# Backlog/, 'R')).toBe(text.replace(/## Plan[\s\S]*?\n\n# Backlog/, 'R'));
+    expect(text2).not.toContain('### Afternoon');
   });
-  it('keeps unknown content and refuses broken regions', () => {
-    const lines = ['%% helm:start %%', '## Plan', 'Some note', '### Today', '- [ ] a', '%% helm:end %%'];
-    const scan = findRegion(lines);
+  it('reads legacy marker regions and rewrites them without markers', () => {
+    const lines = ['%% helm:start %%', '## Plan', 'Some note', '### Today', '- [ ] a', '### From projects', '- [ ] b 🔗 [[P]]', '%% helm:end %%', '', '# Next'];
+    const scan = findRegion(lines, RS);
+    expect(scan.region!.legacy).toBe(true);
     expect(scan.region!.extra).toEqual(['Some note']);
-    expect(renderRegion(readRegion(lines, scan.region!))).toEqual(['%% helm:start %%', '## Plan', '### Today', '- [ ] a', 'Some note', '%% helm:end %%']);
-    expect(findRegion(['%% helm:start %%', '- [ ] a']).broken).toBe(true);
-    expect(writeRegion('%% helm:start %%\n- [ ] a', { habits: [], today: [], projects: [], extra: [] }, { regionPlacement: 'end', regionAnchor: '' })).toBeUndefined();
+    const rc = readRegion(lines, scan.region!);
+    expect(rc.anytime.map((l) => l.text)).toEqual(['a', 'b']);
+    expect(renderRegion(rc, RS)).toEqual(['## Plan', '### Anytime', '- [ ] a', '- [ ] b 🔗 [[P]]', 'Some note']);
+    const w = writeRegion(lines.join('\n'), rc, RS)!;
+    expect(w.lines.join('\n')).toBe('## Plan\n### Anytime\n- [ ] a\n- [ ] b 🔗 [[P]]\nSome note\n\n# Next');
+    expect(findRegion(['%% helm:start %%', '- [ ] a'], RS).broken).toBe(true);
+    expect(writeRegion('%% helm:start %%\n- [ ] a', { habits: [], morning: [], afternoon: [], evening: [], anytime: [], extra: [] }, RS)).toBeUndefined();
+  });
+  it('heading-delimited region ends at the next heading of the same level', () => {
+    const lines = ['# Top', '', '## Plan', '### Morning', '- [ ] m', '', '## Other', '- [ ] not ours'];
+    const scan = findRegion(lines, RS);
+    expect(scan.region).toMatchObject({ start: 2, end: 4, legacy: false });
+    expect(readRegion(lines, scan.region!).morning.map((l) => l.text)).toEqual(['m']);
   });
   it('after-anchor placement', () => {
-    const w = writeRegion('# Top\n\n## Helm\n\n## Other\n', { habits: [], today: [newTaskLine('x')], projects: [], extra: [] }, { regionPlacement: 'after-anchor', regionAnchor: '## Helm' })!;
-    expect(w.lines.join('\n')).toBe('# Top\n\n## Helm\n\n%% helm:start %%\n## Plan\n### Today\n- [ ] x\n%% helm:end %%\n\n## Other\n');
+    const w = writeRegion('# Top\n\n## Helm\n\n## Other\n', { habits: [], morning: [], afternoon: [], evening: [], anytime: [newTaskLine('x')], extra: [] }, { ...RS, regionPlacement: 'after-anchor', regionAnchor: '## Helm' })!;
+    expect(w.lines.join('\n')).toBe('# Top\n\n## Helm\n\n## Plan\n### Anytime\n- [ ] x\n\n## Other\n');
   });
 });
 

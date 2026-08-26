@@ -18,6 +18,7 @@ import { parseRecurrence } from './recurrence';
 
 export interface Capture {
   text: string;
+  part?: 'morning' | 'afternoon' | 'evening';
   tags: string[];
   priority: Priority;
   scheduled?: IsoDate;
@@ -47,6 +48,13 @@ export function parseCapture(input: string, today: IsoDate, weekStartsOn: 1 | 7 
   // Project: "@Name Words" until a token that starts with ! # ~ @ or looks like a date keyword.
   s = s.replace(/\s@([^\s!#~@][^!#~@]*?)(?=\s(?:!|#|~|@|due\b|on\b|today\b|tomorrow\b|tod\b|tom\b|next\b|in\s+\d|\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}|eom\b|eow\b|mon\b|tue\b|wed\b|thu\b|fri\b|sat\b|sun\b|monday\b|tuesday\b|wednesday\b|thursday\b|friday\b|saturday\b|sunday\b)|\s$)/i, (_, p: string) => {
     out.project = p.trim();
+    return ' ';
+  });
+
+  // Part of the day.
+  s = s.replace(/\s(?:in the\s+|this\s+)?(morning|afternoon|evening|tonight)(?=\s)/i, (_, w: string) => {
+    out.part = w.toLowerCase() === 'tonight' ? 'evening' : (w.toLowerCase() as 'morning' | 'afternoon' | 'evening');
+    if (w.toLowerCase() === 'tonight' && !out.scheduled) out.scheduled = today;
     return ' ';
   });
 

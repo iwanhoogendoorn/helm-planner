@@ -7,6 +7,7 @@ import { PRIORITY_ORDER } from '../../core/taskLine';
 import { button, h } from '../dom';
 import type { UiContext } from '../context';
 import { STATUS_LABELS, pickProject } from '../menus';
+import { DAY_PARTS, PART_LABEL } from '../../core/dailyNote';
 
 export function openTaskEditor(ctx: UiContext, task: Task): void {
   const src = task.origin === 'daily-mirror' && task.mirrorOf ? ctx.index.task(task.mirrorOf) ?? task : task;
@@ -29,13 +30,17 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   const timeStart = h('input', { attr: { type: 'time', value: src.time?.start ?? '' } });
   const timeEnd = h('input', { attr: { type: 'time', value: src.time?.end ?? '' } });
   const blockedBy = h('input', { attr: { type: 'text', placeholder: 'tsk-abc123, tsk-def456', value: src.blockedBy.join(', ') } });
+  const onDay = task.noteDate !== undefined && task.section !== 'outside';
+  const partSel = h('select');
+  for (const p of DAY_PARTS) partSel.appendChild(h('option', { text: PART_LABEL[p], attr: { value: p, selected: (task.part ?? 'anytime') === p } }));
+  partSel.disabled = !onDay;
   const where = h('div', { cls: 'helm-hint', text: locationLabel(ctx, src) });
 
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
   root.append(
     field('Text', text),
     h('div', { cls: 'helm-grid2' }, field('Status', status), field('Priority', priority)),
-    h('div', { cls: 'helm-grid3' }, field('Planned for', scheduled), field('Due', due), field('Start (not before)', start)),
+    h('div', { cls: 'helm-grid3' }, field('Planned for', h('div', { cls: 'helm-row' }, scheduled, partSel)), field('Due', due), field('Start (not before)', start)),
     h('div', { cls: 'helm-grid3' }, field('Effort', effort), field('Time block', h('div', { cls: 'helm-row' }, timeStart, timeEnd)), field('Repeat', recurrence)),
     field('Blocked by (ids)', blockedBy),
     where,
@@ -78,9 +83,14 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     const sched = scheduled.value && isIsoDate(scheduled.value) ? scheduled.value : undefined;
     const currentSched = src.scheduled ?? (src.origin === 'daily' ? src.noteDate : undefined);
     if (sched !== currentSched) patch.scheduled = sched;
+    const newPart = partSel.value as 'morning' | 'afternoon' | 'evening' | 'anytime';
+    const partChanged = onDay && newPart !== (task.part ?? 'anytime');
     m.close();
-    if (Object.keys(patch).length === 0) return;
-    await ctx.run('Save task', () => ctx.mutations.updateTask(src.key, patch));
+    if (Object.keys(patch).length === 0 && !partChanged) return;
+    await ctx.run('Save task', async () => {
+      if (Object.keys(patch).length > 0) await ctx.mutations.updateTask(src.key, patch);
+      if (partChanged && !patch.scheduled) await ctx.mutations.setPart(task.key, newPart);
+    });
     void today;
   }
 
