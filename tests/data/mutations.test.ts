@@ -455,3 +455,21 @@ describe('timed lines are kept in time order', () => {
     expect(await vault.read(dailyPath(TODAY))).toBe(`# Day planner\n\n### A. Morning\n\n- [ ] 07:00 - 08:00: \n- [ ] 08:00 - 08:30: Standup\n- [ ] 09:00 - 10:00: \n\n### B. Afternoon\n\n- [ ] 13:00 - 14:00: Clean up email\n- [ ] 14:30: Dentist\n- [ ] 16:00 - 17:00: \n- [ ] 17:30: Late one\n- [ ] No time\n`);
   });
 });
+
+describe('archiving and deleting projects', () => {
+  it('archive moves the folder out of the index and drops future mirrors; delete trashes it', async () => {
+    const { m, vault, index } = await setup();
+    await m.schedule('tsk-0001', TODAY);
+    expect(await vault.read(dailyPath(TODAY))).toContain('tsk-0001');
+    const dest = await m.archiveProject('prj-book');
+    expect(dest).toBe('02 PROJECTS/ZZZ. Project Archive/Oracle Book Writing');
+    expect(vault.files.has('02 PROJECTS/ZZZ. Project Archive/Oracle Book Writing/Oracle Book Writing.md')).toBe(true);
+    expect(vault.files.has('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')).toBe(false);
+    expect(index.project('prj-book')).toBeUndefined();
+    expect(await vault.read(dailyPath(TODAY))).not.toContain('tsk-0001');
+    await m.deleteProject('prj-kitchen');
+    expect(vault.trashed).toEqual(['02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md']);
+    expect(index.project('prj-kitchen')).toBeUndefined();
+    expect(index.snapshot.projects.size).toBe(2);
+  });
+});

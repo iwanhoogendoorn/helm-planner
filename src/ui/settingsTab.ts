@@ -26,6 +26,7 @@ export class HelmSettingTab extends PluginSettingTab {
     text('Habits folder', 'Notes with “type: habit” in their frontmatter.', 'habitsFolder', '02 PROJECTS/Habits');
     text('Inbox note', 'Where quick captures land when they have no date and no project.', 'inboxNote', '01 INBOX/Inbox.md');
     new Setting(containerEl).setName('Never index these paths').setDesc('Comma-separated path prefixes — archives, old task boards. Keeps the Inbox and the index clean.').addText((t) => t.setValue(s.excludePaths.join(', ')).onChange(async (v) => { s.excludePaths = v.split(',').map((x) => x.trim()).filter(Boolean); await save(); }));
+    new Setting(containerEl).setName('Archive folder').setDesc('“Archive project” moves a project folder here (keep it in the list above so it stays out of the index).').addText((t) => t.setValue(s.archiveFolder).onChange(async (v) => { s.archiveFolder = v.trim(); await save(); }));
     new Setting(containerEl).setName('Extra folders to scan').setDesc('Comma-separated. Tasks in these notes show up under “Tasks in other notes” in the Inbox and can be planned onto a day.').addText((t) => t.setValue(s.extraFolders.join(', ')).onChange(async (v) => { s.extraFolders = v.split(',').map((x) => x.trim()).filter(Boolean); await save(); }));
 
     const dc = this.host.dailyConfig();

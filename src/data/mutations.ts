@@ -637,6 +637,40 @@ export class Mutations {
     return p;
   }
 
+  /** Drop every future mirror of the project's tasks (past notes stay as a record). */
+  private async dropFutureMirrors(p: Project): Promise<void> {
+    const keys = new Set([...p.phases.flatMap((ph) => ph.taskKeys), ...p.looseTaskKeys]);
+    const days = new Map<IsoDate, Set<string>>();
+    for (const m of this.index.allTasks()) if (m.origin === 'daily-mirror' && m.mirrorOf && keys.has(m.mirrorOf) && m.noteDate && m.noteDate >= this.today && m.id) days.set(m.noteDate, new Set([...(days.get(m.noteDate) ?? []), m.id]));
+    for (const [d, ids] of days) await this.editRegion(d, (rc) => { removeLines(rc, (l) => l.id !== undefined && ids.has(l.id)); return rc; });
+  }
+
+  /** Move the project (its folder when it has one) into the archive folder; it leaves the index. */
+  async archiveProject(id: string): Promise<string> {
+    const p = this.index.project(id);
+    if (!p) throw new Error('Project not found');
+    if (!this.d.vault.rename) throw new Error('This vault cannot move files');
+    await this.dropFutureMirrors(p);
+    const src = p.folderNote ? p.folder : p.path;
+    const dest = `${this.settings.archiveFolder.replace(/\/+$/, '')}/${baseName(src.endsWith('.md') ? src : src + '.md')}${src.endsWith('.md') ? '.md' : ''}`;
+    if (await this.d.vault.exists(dest)) throw new Error(`Already in the archive: ${dest}`);
+    await this.d.vault.rename(src, dest);
+    for (const path of [...this.index.snapshot.tasksByPath.keys()]) if (path === src || path.startsWith(src + '/')) this.index.update(path, undefined);
+    await this.index.rebuild();
+    return dest;
+  }
+
+  /** Move the project (its folder when it has one) to the trash. */
+  async deleteProject(id: string): Promise<void> {
+    const p = this.index.project(id);
+    if (!p) throw new Error('Project not found');
+    if (!this.d.vault.trash) throw new Error('This vault cannot delete files');
+    await this.dropFutureMirrors(p);
+    const target = p.folderNote ? p.folder : p.path;
+    await this.d.vault.trash(target);
+    await this.index.rebuild();
+  }
+
   async setProjectFields(id: string, fields: { status?: ProjectStatus; priority?: ProjectPriority; area?: string; due?: IsoDate | null; start?: IsoDate | null; title?: string; period?: string | null; goal?: string | null }): Promise<void> {
     const p = this.index.project(id);
     if (!p) throw new Error('Project not found');

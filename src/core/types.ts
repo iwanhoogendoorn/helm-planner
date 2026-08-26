@@ -214,6 +214,8 @@ export interface HelmSettings {
   extraFolders: string[];
   /** Path prefixes never indexed (archives). */
   excludePaths: string[];
+  /** Where "Archive project" moves a project folder. */
+  archiveFolder: string;
   /** Periodic-note overrides; empty → follow the Periodic Notes plugin. */
   yearlyFolder: string;
   yearlyFormat: string;
@@ -254,6 +256,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   weeklyFormat: '',
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
+  archiveFolder: '02 PROJECTS/ZZZ. Project Archive',
   yearlyFolder: '',
   yearlyFormat: '',
   quarterlyFolder: '',

@@ -45,6 +45,12 @@ export class ObsidianVault implements VaultAdapter {
     return f instanceof TFile ? f.stat.mtime : undefined;
   }
 
+  async trash(path: string): Promise<void> {
+    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    if (!f) throw new Error(`Not in the vault: ${path}`);
+    await this.app.vault.trash(f, false);
+  }
+
   async rename(from: string, to: string): Promise<void> {
     const f = this.app.vault.getAbstractFileByPath(normalizePath(from));
     if (!f) throw new Error(`Not in the vault: ${from}`);

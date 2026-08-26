@@ -96,6 +96,13 @@ function projectMenu(ctx: UiContext, p: Project, ev: MouseEvent): void {
   menu.addSeparator();
   menu.addItem((i) => i.setTitle('New sub-project…').setIcon('folder-plus').onClick(() => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) })));
   menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => void ctx.openFile(p.path)));
+  menu.addSeparator();
+  menu.addItem((i) => i.setTitle('Archive project').setIcon('archive').onClick(() => {
+    if (window.confirm(`Move “${p.title}”${p.childIds.length ? ` and its ${p.childIds.length} sub-project(s)` : ''} to ${ctx.settings().archiveFolder}?`)) void ctx.run('Archive', async () => { const dest = await ctx.mutations.archiveProject(p.id); ctx.notify(`Archived to ${dest}`); ctx.navigate('projects'); });
+  }));
+  menu.addItem((i) => i.setTitle('Delete project…').setIcon('trash').setWarning(true).onClick(() => {
+    if (window.confirm(`Move “${p.title}”${p.folderNote ? ' (its whole folder)' : ''} to the trash? Obsidian keeps it in .trash, so this can be undone from the file system.`)) void ctx.run('Delete', async () => { await ctx.mutations.deleteProject(p.id); ctx.notify(`Deleted “${p.title}”.`); ctx.navigate('projects'); });
+  }));
   menu.showAtMouseEvent(ev);
 }
 

@@ -7,8 +7,11 @@ export interface VaultAdapter {
   write(path: string, content: string): Promise<void>;
   exists(path: string): Promise<boolean>;
   mtime(path: string): number | undefined;
+  /** Move a file or folder (and everything under it). */
   rename?(from: string, to: string): Promise<void>;
   delete?(path: string): Promise<void>;
+  /** Move a file or folder to the trash (recoverable). */
+  trash?(path: string): Promise<void>;
 }
 
 export class MemoryVault implements VaultAdapter {
@@ -34,11 +37,15 @@ export class MemoryVault implements VaultAdapter {
   async exists(path: string): Promise<boolean> { return this.files.has(path); }
   mtime(path: string): number | undefined { return this.mtimes.get(path); }
   async rename(from: string, to: string): Promise<void> {
-    const c = await this.read(from);
-    this.files.delete(from);
-    this.files.set(to, c);
+    for (const p of [...this.files.keys()]) {
+      if (p === from || p.startsWith(from + '/')) { const c = this.files.get(p)!; this.files.delete(p); this.files.set(to + p.slice(from.length), c); }
+    }
   }
   async delete(path: string): Promise<void> { this.files.delete(path); }
+  trashed: string[] = [];
+  async trash(path: string): Promise<void> {
+    for (const p of [...this.files.keys()]) if (p === path || p.startsWith(path + '/')) { this.files.delete(p); this.trashed.push(p); }
+  }
 }
 
 export function folderOf(path: string): string {
