@@ -773,11 +773,12 @@ export class Mutations {
    * the note of that date, same part of the day, text untouched. Returns the
    * number of lines moved.
    */
-  async moveMisfiled(): Promise<number> {
+  async moveMisfiled(opts: { onlyFuture?: boolean } = {}): Promise<number> {
     let moved = 0;
     for (const t0 of this.index.allTasks()) {
       const target = misfiledDate(t0);
       if (!target) continue;
+      if (opts.onlyFuture && target < this.today) continue;
       const t = this.index.task(t0.key);
       if (!t || misfiledDate(t) !== target) continue;
       const part: DayPart = t.part ?? (t.time ? this.partOfTime(t.time.start) : 'anytime');
@@ -807,7 +808,7 @@ export class Mutations {
   async reconcile(): Promise<number> {
     const today = this.today;
     let writes = 0;
-    if (this.settings.autoMoveRecurring) writes += await this.moveMisfiled();
+    if (this.settings.autoMoveRecurring) writes += await this.moveMisfiled({ onlyFuture: true });
     const mirrors = this.index.allTasks().filter((t) => t.origin === 'daily-mirror' && t.mirrorOf);
     for (const m0 of mirrors) {
       const m = this.index.task(m0.key);

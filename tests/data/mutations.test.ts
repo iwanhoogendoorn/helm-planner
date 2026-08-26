@@ -425,14 +425,21 @@ describe('recurring tasks spawned in old notes', () => {
     expect(dayPlan(index.snapshot, '2026-08-31', settings).today.map((t) => t.text)).toEqual(['Infuus vervangen']);
     const r = await m.rollover('2026-08-24', TODAY);
     expect(r.moved).toBe(1);
+    expect(await m.moveMisfiled({ onlyFuture: true })).toBe(1);
     const moved = await m.moveMisfiled();
-    expect(moved).toBe(1);
+    expect(moved).toBe(0);
     const monday = await vault.read(dailyPath('2026-08-24'));
     expect(monday).not.toContain('📅 2026-08-31');
     expect(monday).toContain('- [x] 07:00 - 08:00: Infuus vervangen 📅 2026-08-24');
     const nextMonday = await vault.read('70 OBSIDIAN/70-06 Daily Notes/2026/08 - August/36/31, Monday, Aug, 2026.md');
     expect(nextMonday).toContain('### Morning\n- [ ] 07:00 - 08:00: Infuus vervangen 📅 2026-08-31 🔁 every week on monday');
-    expect(await m.moveMisfiled()).toBe(0);
     expect(await m.reconcile()).toBe(0);
+  });
+  it('the automatic pass leaves old misfiled lines alone', async () => {
+    const { m, vault } = await setup({ [dailyPath('2026-08-24')]: `# Day planner\n\n### A. Morning\n\n- [ ] Old thing 📅 2026-08-25\n` });
+    expect(await m.moveMisfiled({ onlyFuture: true })).toBe(0);
+    expect(await vault.read(dailyPath('2026-08-24'))).toContain('- [ ] Old thing 📅 2026-08-25');
+    expect(await m.moveMisfiled()).toBe(1);
+    expect(await vault.read(dailyPath('2026-08-25'))).toContain('- [ ] Old thing 📅 2026-08-25');
   });
 });
