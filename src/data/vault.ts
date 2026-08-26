@@ -2,6 +2,8 @@
 export interface VaultAdapter {
   /** Every markdown path in the vault, vault-relative, forward slashes. */
   list(): Promise<string[]>;
+  /** Non-markdown files worth knowing about (.canvas, .excalidraw). */
+  listOther?(): Promise<string[]>;
   read(path: string): Promise<string>;
   /** Overwrite. Creates parent folders as needed. */
   write(path: string, content: string): Promise<void>;
@@ -26,6 +28,7 @@ export class MemoryVault implements VaultAdapter {
     for (const [p, c] of Object.entries(seed)) this.files.set(p, c), this.mtimes.set(p, this.clock++);
   }
   async list(): Promise<string[]> { return [...this.files.keys()].filter((p) => p.endsWith('.md')); }
+  async listOther(): Promise<string[]> { return [...this.files.keys()].filter((p) => /\.(canvas|excalidraw)$/.test(p)); }
   async read(path: string): Promise<string> {
     const c = this.files.get(path);
     if (c === undefined) throw new Error(`ENOENT ${path}`);

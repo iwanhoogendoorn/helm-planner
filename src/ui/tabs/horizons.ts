@@ -2,6 +2,7 @@
 import type { Goal, Project } from '../../core/types';
 import { humanDate } from '../../core/dates';
 import { parsePeriod, periodOf, type Period } from '../../core/periods';
+import { yearPeriod } from '../../core/periods';
 import { horizons, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../../data/planner';
 import { button, chip, empty, h, icon, iconButton, progressBar, richText, section } from '../dom';
 import type { UiContext } from '../context';
@@ -10,6 +11,7 @@ import { openTaskEditor } from '../modals/taskEditor';
 import { openProjectForm } from '../modals/projectForm';
 import { Menu } from 'obsidian';
 import { crumbBar } from '../crumbs';
+import { drawingsButton, targetForPeriod } from '../drawings';
 
 export interface HorizonsState { year: number; selected?: string; collapsed: Map<string, boolean> }
 
@@ -36,6 +38,7 @@ export function renderHorizons(ctx: UiContext, root: HTMLElement, state: Horizon
       iconButton('chevron-right', 'Next year', () => { state.year++; state.selected = undefined; ctx.refresh(); }),
     ),
     h('div', { cls: 'helm-day-actions' },
+      drawingsButton(ctx, selP ? targetForPeriod(selP) : targetForPeriod(yearPeriod(state.year))),
       button('Open year note', { icon: 'file-text', onClick: () => openPeriodNote(ctx, hz.year.period) }),
     ),
   ));

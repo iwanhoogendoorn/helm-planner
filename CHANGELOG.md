@@ -2,6 +2,18 @@
 
 ## 0.5.0 — 2026-08-26
 
+- Drawings: Excalidraw (and Canvas) files are indexed and attached to tasks,
+  projects, days, weeks, months, quarters and years — by Helm's own
+  `helm-task` / `helm-project` / `helm-date` / `helm-period` frontmatter, by
+  the note that embeds them, by the project folder they sit in, by a name that
+  starts with the note's title, or by links in their text. Every task row,
+  day, period and project shows what exists (open with a click) and offers
+  *New drawing…* (named, placed and embedded for you). Settings → Drawings.
+- AI overview diagrams: one-page visual overviews of a day / week / month /
+  quarter / year / project. Helm sends a compact digest to the Claude CLI on
+  your subscription, gets back a short structure, and lays it out itself as
+  editable Excalidraw elements (themes, items, highlights, next). Commands
+  *AI overview diagram of this week/month/quarter/year/today*.
 - Built-in yearly, quarterly, monthly and weekly note templates (Templater
   flavour: navigation links derived from the title, a Goals section, focus
   and review). Helm uses your override, else the Periodic Notes template,

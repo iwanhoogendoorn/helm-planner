@@ -40,6 +40,7 @@ async function ctxFor() {
     run: async (_l, fn) => { await fn(); },
     trackModal: () => undefined,
     resourceUrl: (p) => `app://${p}`,
+    aiAvailable: true,
   };
   return { ...s, ctx, nav, opened };
 }
@@ -133,7 +134,7 @@ describe('Projects tab', () => {
     const state = { projectId: 'prj-book', filter: '', showClosed: false, collapsed: new Map(), showDone: false };
     const root = render((r) => renderProjects(ctx, r, state));
     expect(root.querySelector('h2')!.textContent).toBe('Oracle Book Writing');
-    expect(texts(root, '.helm-section-title')).toEqual(['Outline', 'Writing', 'Other tasks']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Outline', 'Writing', 'Other tasks', 'Diagrams']);
     expect(texts(root, '.helm-section:nth-of-type(1) .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams', 'Review with editor']);
     const input = root.querySelector<HTMLInputElement>('.helm-section:nth-of-type(2) .helm-quickadd-input')!;
     input.value = 'Chapter 3 tomorrow !high';
@@ -581,5 +582,31 @@ describe('Breadcrumbs are consistent across tabs', () => {
     expect(texts(render(tabs[4]![1]), '.helm-crumb')).toEqual(['Review', '2026', 'Q3', 'Aug', 'W35']);
     expect(texts(render(tabs[6]![1]), '.helm-crumb')).toEqual(['Dashboard', '30 days']);
     expect(texts(render(tabs[1]![1]), '.helm-crumb')).toEqual(['Calendar', '2026', 'Q3', 'Aug', 'W35']);
+  });
+});
+
+describe('Drawings in the UI', () => {
+  it('day and period headers carry a drawings button with a count; task rows show an indicator only when drawings exist', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.createDrawing({ kind: 'date', date: TODAY, title: TODAY }, { name: 'sketch' });
+    const today = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const btn = today.querySelector('.helm-day-actions .helm-drawings-btn')!;
+    expect(btn.querySelector('.helm-badge')!.textContent).toBe('1');
+    click(btn);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual([expect.stringContaining('26, Wednesday, Aug, 2026 — sketch'), 'New drawing…', 'AI overview diagram']);
+    const cal = render((r) => renderCalendar(ctx, r, { anchor: TODAY, scope: 'week', collapsed: new Map() } as CalendarState));
+    expect(cal.querySelector('.helm-day-actions .helm-drawings-btn .helm-badge')).toBeNull();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Call the plumber' && x.origin !== 'daily-mirror')!;
+    expect(taskRow(ctx, t).querySelector('.helm-task-drawings')).toBeNull();
+    await m.createDrawing({ kind: 'task', key: t.key, title: t.text });
+    const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === 'Call the plumber' && x.origin !== 'daily-mirror')!;
+    expect(taskRow(ctx, t2).querySelector('.helm-task-drawings .helm-badge')!.textContent).toBe('1');
+  });
+  it('project detail shows a Diagrams section with cards, New and AI', async () => {
+    const { ctx, m } = await ctxFor();
+    await m.createDrawing({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Architecture' });
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    expect(texts(root, '.helm-drawing-card-title')).toEqual(['Architecture']);
+    expect(texts(root, '.helm-drawing-actions button')).toEqual(['New drawing', 'AI overview']);
   });
 });

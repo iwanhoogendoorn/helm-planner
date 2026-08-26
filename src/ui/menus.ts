@@ -3,6 +3,7 @@ import { FuzzySuggestModal, Menu } from 'obsidian';
 import type { IsoDate, Project, Task, TaskStatus } from '../core/types';
 import { addDays, humanDate, startOfWeek } from '../core/dates';
 import type { UiContext } from './context';
+import { addDrawingItems, targetForTask } from './drawings';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
@@ -68,6 +69,11 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     for (const p of PRIORITY_ORDER) {
       sub.addItem((j) => j.setTitle(p.charAt(0).toUpperCase() + p.slice(1)).setChecked(task.priority === p).onClick(() => void ctx.run('Priority', () => ctx.mutations.updateTask(task.key, { priority: p }))));
     }
+  });
+  menu.addItem((i) => {
+    i.setTitle('Drawings').setIcon('pen-tool');
+    const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    addDrawingItems(sub, ctx, targetForTask(task));
   });
   menu.addItem((i) => i.setTitle('Move to project…').setIcon('folder-input').onClick(() => pickProject(ctx, (p, phaseId) => void ctx.run('Move', () => ctx.mutations.moveToProject(task.key, p.id, phaseId)), { phases: true })));
   menu.addSeparator();

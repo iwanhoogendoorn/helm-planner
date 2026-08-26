@@ -25,6 +25,10 @@ import { habitDue } from './habits';
 import { misfiledDate } from './planner';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
 import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates';
+import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
+import { layoutDiagram, parseDiagramSpec, type DiagramSpec } from '../core/diagram';
+import { digestFor } from './digest';
+import type { DrawingTarget } from '../core/types';
 
 export interface MutationDeps {
   vault: VaultAdapter;
@@ -38,6 +42,10 @@ export interface MutationDeps {
   periodicTemplate?: (kind: PeriodKind) => Promise<string | undefined>;
   /** How long a template engine gets to react to a new file before Helm re-asserts a template note's content (ms). */
   templateSettleMs?: number;
+  /** Ask the AI (Claude CLI) a question; resolves with the raw reply. */
+  ai?: (prompt: string) => Promise<string>;
+  /** The Excalidraw plugin's own folder for new drawings, when it is installed. */
+  excalidrawFolder?: () => string | undefined;
   /**
    * Let a template engine (Templater) process a freshly created note that
    * holds the raw template. Returns true when it did; false to fall back to
@@ -777,6 +785,114 @@ export class Mutations {
     if (fields.iconImage !== undefined) u['icon_image'] = fields.iconImage ?? '';
     await this.editFile(h.path, (lines) => setFrontmatter(lines, u));
   }
+
+  /* ── Drawings ──────────────────────────────────────────────────────── */
+
+  private safeName(s: string): string { return s.replace(/[\\/:*?"<>|#^[\]]/g, '-').replace(/\s+/g, ' ').trim(); }
+
+  /** Frontmatter that ties a drawing to its target. */
+  private drawingFrontmatter(target: DrawingTarget, id?: string): Record<string, string | string[] | boolean> {
+    switch (target.kind) {
+      case 'task': return { 'helm-task': id ?? target.id ?? target.key };
+      case 'project': return { 'helm-project': target.id };
+      case 'date': return { 'helm-date': target.date };
+      case 'period': return { 'helm-period': target.key };
+    }
+  }
+
+  /** Folder and default file name for a new drawing attached to a target. */
+  drawingPathFor(target: DrawingTarget, name?: string): string {
+    const s = this.settings;
+    let folder = s.drawingsFolder.trim() || this.d.excalidrawFolder?.() || 'Excalidraw';
+    if (target.kind === 'project' && s.projectDrawingsInProjectFolder) { const p = this.index.project(target.id); if (p) folder = this.index.projectFolderOf(p) || folder; }
+    folder = folder.replace(/\/+$/, '');
+    const base = target.kind === 'date' ? formatDate(target.date, this.templateConfig().dailyTitleFormat) : target.kind === 'period' ? target.key : target.title;
+    const stem = name?.trim() ? (target.kind === 'project' ? name.trim() : `${base} — ${name.trim()}`) : base;
+    return `${folder ? folder + '/' : ''}${this.safeName(stem)}.excalidraw.md`;
+  }
+
+  private async uniquePath(path: string): Promise<string> {
+    if (!(await this.d.vault.exists(path))) return path;
+    const stem = path.replace(/\.excalidraw\.md$/, '');
+    for (let i = 2; ; i++) { const p = `${stem} ${i}.excalidraw.md`; if (!(await this.d.vault.exists(p))) return p; }
+  }
+
+  /** Create a blank drawing for a target (through Excalidraw when present, else a minimal file) and embed it in the target's note. */
+  async createDrawing(target: DrawingTarget, opts: { name?: string } = {}): Promise<string> {
+    let id: string | undefined;
+    if (target.kind === 'task') id = await this.ensureId(target.key);
+    const path = await this.uniquePath(this.drawingPathFor(target, opts.name));
+    const frontmatter = this.drawingFrontmatter(target, id);
+    const tplPath = this.settings.drawingTemplate.trim();
+    let content: string | undefined;
+    if (tplPath) {
+      const p = tplPath.endsWith('.md') ? tplPath : `${tplPath}.md`;
+      const tpl = await this.d.vault.read(p).catch(() => undefined);
+      if (tpl !== undefined) content = setFrontmatter(tpl.split('\n'), Object.fromEntries(Object.entries(frontmatter).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]))).join('\n');
+    }
+    content ??= renderExcalidrawDocument({ frontmatter });
+    await this.d.vault.write(path, content);
+    this.index.update(path, content);
+    await this.embedDrawing(target, path);
+    return path;
+  }
+
+  /** Put `![[X.excalidraw]]` under a Diagrams heading in the note the target lives in (project, daily or periodic note). */
+  async embedDrawing(target: DrawingTarget, drawingPath: string): Promise<void> {
+    if (!this.settings.embedDrawings || target.kind === 'task') return;
+    let notePath: string | undefined;
+    if (target.kind === 'project') notePath = this.index.project(target.id)?.path;
+    else if (target.kind === 'date') notePath = await this.ensureDailyNote(target.date);
+    else { const p = parsePeriod(target.key); if (p) notePath = await this.ensurePeriodicNote(p); }
+    if (!notePath) return;
+    const embed = `![[${drawingTitle(drawingPath)}.excalidraw]]`;
+    await this.editFile(notePath, (lines, doc) => {
+      if (lines.some((l) => l.includes(embed))) return false;
+      const h = doc.headings.find((x) => /^(diagrams?|drawings?|visuals?)$/i.test(x.text.trim()));
+      if (h) { lines.splice(sectionInsertPoint(doc, h), 0, embed); return true; }
+      let e = lines.length;
+      while (e > 0 && lines[e - 1]!.trim() === '') e--;
+      lines.splice(e, lines.length - e, '', '## Diagrams', '', embed, '');
+      return true;
+    });
+  }
+
+  /** The prompt Helm sends for an AI diagram of a target. */
+  diagramPrompt(target: DrawingTarget): string {
+    const digest = digestFor(this.index.snapshot, target, this.today, this.settings);
+    const what = target.kind === 'project' ? 'this project' : target.kind === 'date' ? 'this day' : `this ${parsePeriod(target.key)?.kind ?? 'period'}`;
+    return [
+      `You are turning a personal planning digest into a one-page visual overview of ${what}. Reply with ONLY a JSON object, no prose, no code fence, with this exact shape:`,
+      `{"title": string (≤ 60 chars), "summary": string (one sentence, ≤ 160 chars, factual), "themes": [{"name": string (≤ 28 chars), "color": one of blue|green|yellow|purple|orange|teal|pink|red|grey, "items": [string (≤ 48 chars each)]}], "highlights": [string (≤ 48 chars)], "next": [string (≤ 48 chars)]}`,
+      'Rules: 3 to 6 themes, 2 to 6 items each; group by what actually matters (projects, goals, areas, days), not by list headings. Items are concrete things from the digest, never invented. Highlights are the 2–4 wins or facts worth remembering; next are the 2–4 things that clearly need attention (overdue, stale, due soon, open goals). Keep every string short: this is drawn on a canvas, not read as a report.',
+      ...(this.settings.aiInstructions.trim() ? [`Extra instructions from the user: ${this.settings.aiInstructions.trim()}`] : []),
+      '', 'DIGEST:', digest,
+    ].join('\n');
+  }
+
+  /** Ask the AI for a visual overview of a target and draw it. Returns the drawing path. */
+  async generateDiagram(target: DrawingTarget, opts: { name?: string } = {}): Promise<string> {
+    if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
+    const raw = await this.d.ai(this.diagramPrompt(target));
+    const spec = parseDiagramSpec(raw);
+    if (!spec) throw new Error('The AI reply was not a diagram (expected JSON with title and themes)');
+    return this.drawSpec(target, spec, opts.name);
+  }
+
+  /** Draw a spec for a target without any AI involved (also what the AI path ends in). */
+  async drawSpec(target: DrawingTarget, spec: DiagramSpec, name?: string): Promise<string> {
+    let id: string | undefined;
+    if (target.kind === 'task') id = await this.ensureId(target.key);
+    const path = await this.uniquePath(this.drawingPathFor(target, name ?? 'overview'));
+    const frontmatter = { ...this.drawingFrontmatter(target, id), 'helm-generated': true, 'helm-generated-on': this.today };
+    const content = renderExcalidrawDocument({ elements: layoutDiagram(spec), frontmatter, extra: spec.summary ? `> ${spec.summary}` : undefined });
+    await this.d.vault.write(path, content);
+    this.index.update(path, content);
+    await this.embedDrawing(target, path);
+    return path;
+  }
+
+  drawingsFor(target: DrawingTarget): Drawing[] { return this.index.drawingsFor(target); }
 
   /* ── Horizons: goals in yearly / quarterly / monthly notes ───────────── */
 

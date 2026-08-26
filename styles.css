@@ -540,3 +540,19 @@ button.helm-month-wk:hover { color: var(--text-accent); }
   .helm-settings { flex-direction: column; }
   .helm-settings-nav { flex-direction: row; flex-wrap: wrap; position: static; width: 100%; }
 }
+
+/* Drawings */
+.helm-drawings-btn { position: relative; }
+.helm-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--interactive-accent); color: var(--text-on-accent); font-size: 10px; font-weight: 600; line-height: 1; margin-left: 2px; }
+.helm-task-drawings { position: relative; }
+.helm-task-drawings .helm-badge { position: absolute; top: -4px; right: -6px; }
+.helm-drawings { display: flex; flex-direction: column; gap: 8px; }
+.helm-drawing-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.helm-drawing-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; height: auto; text-align: left; background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); box-shadow: none; cursor: pointer; }
+.helm-drawing-card:hover { border-color: var(--interactive-accent); }
+.helm-drawing-card-icon { color: var(--text-accent); display: flex; }
+.helm-drawing-card-icon svg { width: 18px; height: 18px; }
+.helm-drawing-card-title { font-weight: 600; font-size: var(--font-ui-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.helm-drawing-card-meta { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.helm-drawing-actions { display: flex; gap: 6px; }
+.modal:has(.helm-name-modal) { width: min(480px, 95vw); }

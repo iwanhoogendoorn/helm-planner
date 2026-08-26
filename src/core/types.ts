@@ -178,6 +178,13 @@ export interface DailyNoteInfo {
 }
 
 /** The whole parsed vault, rebuilt from markdown at any time. */
+/** What a drawing can be attached to. */
+export type DrawingTarget =
+  | { kind: 'task'; key: string; id?: string; title: string }
+  | { kind: 'project'; id: string; title: string }
+  | { kind: 'date'; date: IsoDate; title: string }
+  | { kind: 'period'; key: string; title: string };
+
 export interface Snapshot {
   builtAt: number;
   tasks: Map<string, Task>;
@@ -189,6 +196,8 @@ export interface Snapshot {
   diagnostics: Diagnostic[];
   /** path -> keys of tasks in that file, in line order. */
   tasksByPath: Map<string, string[]>;
+  /** Excalidraw / canvas drawings by path. */
+  drawings: Map<string, import('./drawing').Drawing>;
 }
 
 export interface HelmSettings {
@@ -221,6 +230,16 @@ export interface HelmSettings {
   weeklyTemplate: string;
   /** Create this week's / month's / quarter's / year's notes when Helm starts. */
   autoCreatePeriodicNotes: boolean;
+  /** Drawings: where new ones go (empty → the Excalidraw plugin's folder), template, linking, AI. */
+  drawingsFolder: string;
+  drawingTemplate: string;
+  projectDrawingsInProjectFolder: boolean;
+  embedDrawings: boolean;
+  aiEnabled: boolean;
+  aiCommand: string;
+  aiModel: string;
+  aiTimeoutSec: number;
+  aiInstructions: string;
   extraFolders: string[];
   /** Path prefixes never indexed (archives). */
   excludePaths: string[];
@@ -269,6 +288,15 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   monthlyTemplate: '',
   weeklyTemplate: '',
   autoCreatePeriodicNotes: true,
+  drawingsFolder: '',
+  drawingTemplate: '',
+  projectDrawingsInProjectFolder: true,
+  embedDrawings: true,
+  aiEnabled: true,
+  aiCommand: 'claude',
+  aiModel: '',
+  aiTimeoutSec: 180,
+  aiInstructions: '',
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
   archiveFolder: '02 PROJECTS/ZZZ. Project Archive',

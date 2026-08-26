@@ -2,6 +2,7 @@
  * The index: a Snapshot built from markdown, kept fresh per file.
  * Never a source of truth — delete it and rebuild at any time.
  */
+import type { DrawingTarget } from '../core/types';
 import type { DailyNoteInfo, Diagnostic, Goal, Habit, HabitCompletion, HelmSettings, IsoDate, Project, Snapshot, Task, TaskOrigin } from '../core/types';
 import { DEFAULT_PERIOD_FORMATS, formatPeriod, parsePeriodFromPath, type Period, type PeriodKind } from '../core/periods';
 import { sectionRange } from '../core/document';
@@ -11,11 +12,12 @@ import { parseHabit } from '../core/habit';
 import { findRegion, partOfLine, type Section } from '../core/dailyNote';
 import { derivedKey, hash } from '../core/ids';
 import { formatDate, parseDateFromPath } from '../core/dates';
+import { isDrawingPath, parseDrawing, type Drawing } from '../core/drawing';
 import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
 
 export const DAILY_FALLBACK = { folder: 'Daily Notes', format: 'YYYY-MM-DD' };
 
-export type FileKind = 'project' | 'habit' | 'daily' | 'inbox' | 'note' | 'periodic';
+export type FileKind = 'project' | 'habit' | 'daily' | 'inbox' | 'note' | 'periodic' | 'drawing';
 
 export type PeriodicConfig = Record<PeriodKind, { folder: string; format: string }>;
 export const PERIODIC_FALLBACK: PeriodicConfig = { year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' }, week: { folder: 'Weekly Notes', format: 'gggg-[W]ww' } };
@@ -28,6 +30,9 @@ interface FileEntry {
   tasks: Task[];
   project?: Project;
   habit?: Habit;
+  drawing?: Drawing;
+  /** Basenames of drawings this note embeds or links (`![[X.excalidraw]]`). */
+  drawingLinks?: string[];
   date?: IsoDate;
   period?: Period;
   hasRegion: boolean;
@@ -112,9 +117,10 @@ export class HelmIndex {
   }
 
   inScope(path: string): boolean {
-    if (!path.endsWith('.md')) return false;
     const s = this.settings;
     if (s.excludePaths.some((x) => x.trim() !== '' && isUnder(path, x.trim()))) return false;
+    if (isDrawingPath(path)) return true;
+    if (!path.endsWith('.md')) return false;
     if (path === s.inboxNote) return true;
     if (isUnder(path, s.projectsFolder) || isUnder(path, s.habitsFolder)) return true;
     if (this.dateOfPath(path) !== undefined) return true;
@@ -125,9 +131,9 @@ export class HelmIndex {
   async rebuild(): Promise<void> {
     this.building = true;
     try {
-      const paths = (await this.vault.list()).filter((p) => this.inScope(p));
+      const paths = [...(await this.vault.list()), ...(this.vault.listOther ? await this.vault.listOther() : [])].filter((p) => this.inScope(p));
       const next = new Map<string, FileEntry>();
-      const contents = await Promise.all(paths.map(async (p) => [p, await this.vault.read(p).catch(() => undefined)] as const));
+      const contents = await Promise.all(paths.map(async (p) => [p, p.endsWith('.md') ? await this.vault.read(p).catch(() => undefined) : ''] as const));
       for (const [p, c] of contents) if (c !== undefined) next.set(p, this.parseFile(p, c));
       this.files = next;
       this.link();
@@ -171,7 +177,10 @@ export class HelmIndex {
     const s = this.settings;
     const entry: FileEntry = { path, kind: 'note', hash: hash(content), tasks: [], hasRegion: false, completions: [], diagnostics: [] };
     const mtime = this.vault.mtime(path);
+    if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
     const date = this.dateOfPath(path);
+    const dl = [...content.matchAll(/!?\[\[([^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]/g)].map((m) => m[1]!.trim()).filter((t) => /\.(excalidraw|canvas)$/i.test(t)).map((t) => t.slice(t.lastIndexOf('/') + 1).replace(/\.(excalidraw|canvas)$/i, ''));
+    if (dl.length > 0) entry.drawingLinks = [...new Set(dl)];
 
     if (isUnder(path, s.habitsFolder)) {
       const h = parseHabit(path, content);
@@ -345,7 +354,86 @@ export class HelmIndex {
     }
     for (const p of projects.values()) p.childIds.sort((a, b) => projects.get(a)!.title.localeCompare(projects.get(b)!.title));
 
-    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath };
+    const drawings = new Map<string, Drawing>();
+    for (const e of this.files.values()) if (e.drawing) drawings.set(e.path, e.drawing);
+    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath, drawings };
+    this.attachDrawings();
+  }
+
+  /* ── Drawings ↔ tasks / projects / days / periods ───────────────────── */
+
+  private attachments = new Map<string, { taskKeys: Set<string>; projectIds: Set<string>; dates: Set<IsoDate>; periodKeys: Set<string> }>();
+
+  private attachDrawings(): void {
+    const snap = this.snapshot;
+    this.attachments = new Map();
+    if (snap.drawings.size === 0) return;
+    const byTitle = new Map<string, Drawing[]>();
+    for (const d of snap.drawings.values()) byTitle.set(d.title.toLowerCase(), [...(byTitle.get(d.title.toLowerCase()) ?? []), d]);
+    const att = (d: Drawing) => { let a = this.attachments.get(d.path); if (!a) { a = { taskKeys: new Set(), projectIds: new Set(), dates: new Set(), periodKeys: new Set() }; this.attachments.set(d.path, a); } return a; };
+    const projectsByTitle = new Map<string, Project>();
+    for (const p of snap.projects.values()) { projectsByTitle.set(p.title.toLowerCase(), p); projectsByTitle.set(baseName(p.path).toLowerCase(), p); }
+    const projectsByFolder = [...snap.projects.values()].filter((p) => p.folder !== '').sort((a, b) => b.folder.length - a.folder.length);
+    const dailyTitleFormat = this.dailyFormat().slice(this.dailyFormat().lastIndexOf('/') + 1);
+    const dateByTitle = new Map<string, IsoDate>();
+    for (const d of snap.dailyNotes.keys()) dateByTitle.set(formatDate(d, dailyTitleFormat).toLowerCase(), d);
+    const taskById = new Map<string, string>();
+    for (const t of snap.tasks.values()) if (t.id && t.origin !== 'daily-mirror') taskById.set(t.id, t.key);
+    const periodOfText = (s: string): string | undefined => { const m = /^(\d{4}(?:-Q[1-4]|-\d{2}|-W\d{2})?)(?![\w-])/i.exec(s.trim()); return m ? m[1]!.toUpperCase() : undefined; };
+    const dateOfTitlePrefix = (title: string): IsoDate | undefined => {
+      const t = title.toLowerCase();
+      for (const [dt, date] of dateByTitle) if (t === dt || t.startsWith(dt + ' ') || t.startsWith(dt + ' —') || t.startsWith(dt + ' -') || t.startsWith(dt + '_')) return date;
+      const direct = parseDateFromPath(title, dailyTitleFormat);
+      return direct;
+    };
+    for (const d of snap.drawings.values()) {
+      const a = att(d);
+      for (const id of [...d.taskIds, ...d.mentionedTaskIds]) { const k = taskById.get(id); if (k) a.taskKeys.add(k); }
+      for (const ref of d.projectRefs) { const p = snap.projects.get(ref) ?? projectsByTitle.get(ref.toLowerCase()); if (p) a.projectIds.add(p.id); }
+      for (const date of d.dates) a.dates.add(date);
+      for (const k of d.periodKeys) { const pk = periodOfText(k); if (pk) a.periodKeys.add(pk); }
+      // Where it lives.
+      const owner = projectsByFolder.find((p) => isUnder(d.path, p.folder));
+      if (owner) a.projectIds.add(owner.id);
+      // What it is called.
+      const byDate = dateOfTitlePrefix(d.title);
+      if (byDate) a.dates.add(byDate);
+      const byPeriod = periodOfText(d.title);
+      if (byPeriod && !byDate) a.periodKeys.add(byPeriod);
+      // What it says.
+      for (const l of d.links) {
+        const p = projectsByTitle.get(l.toLowerCase()); if (p) a.projectIds.add(p.id);
+        const dt = dateByTitle.get(l.toLowerCase()); if (dt) a.dates.add(dt);
+        const pk = periodOfText(l); if (pk && pk.length === l.trim().length) a.periodKeys.add(pk);
+      }
+    }
+    // Who embeds it.
+    for (const e of this.files.values()) {
+      if (!e.drawingLinks) continue;
+      for (const t of e.drawingLinks) for (const d of byTitle.get(t.toLowerCase()) ?? []) {
+        const a = att(d);
+        if (e.kind === 'daily' && e.date) a.dates.add(e.date);
+        else if (e.kind === 'periodic' && e.period) a.periodKeys.add(e.period.key);
+        else if (e.kind === 'project' && e.project) a.projectIds.add(e.project.id);
+      }
+    }
+  }
+
+  allDrawings(): Drawing[] { return [...this.snapshot.drawings.values()].sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0)); }
+
+  /** Drawings attached to a task (by key), project (by id), day or period. Newest first. */
+  drawingsFor(target: DrawingTarget): Drawing[] {
+    const out: Drawing[] = [];
+    for (const d of this.snapshot.drawings.values()) {
+      const a = this.attachments.get(d.path);
+      if (!a) continue;
+      const hit = target.kind === 'task' ? a.taskKeys.has(target.key) || (target.id !== undefined && [...a.taskKeys].some((k) => this.snapshot.tasks.get(k)?.id === target.id))
+        : target.kind === 'project' ? a.projectIds.has(target.id)
+        : target.kind === 'date' ? a.dates.has(target.date)
+        : a.periodKeys.has(target.key.toUpperCase());
+      if (hit) out.push(d);
+    }
+    return out.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
   }
 
   /* ── Queries ─────────────────────────────────────────────────────────── */
@@ -370,5 +458,5 @@ export class HelmIndex {
 }
 
 export function emptySnapshot(): Snapshot {
-  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map() };
+  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map(), drawings: new Map() };
 }

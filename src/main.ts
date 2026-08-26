@@ -18,6 +18,9 @@ import { runSelfTest } from './selftest';
 import { TEMPLATE_FILE_NAMES } from './core/periodicTemplates';
 import type { PeriodKind } from './core/periods';
 import { PERIOD_LABELS } from './ui/settingsTab';
+import { aiAvailable, runClaude } from './ai';
+import { aiDiagram, newDrawing, targetForDate, targetForPeriod } from './ui/drawings';
+import { periodOf } from './core/periods';
 
 export default class HelmPlugin extends Plugin {
   override settings: HelmSettings = { ...DEFAULT_SETTINGS };
@@ -25,6 +28,7 @@ export default class HelmPlugin extends Plugin {
   index!: HelmIndex;
   mutations!: Mutations;
   private daily = { folder: '', format: '', template: '' };
+  private excalidrawFolder: string | undefined;
   private periodic: Record<'year' | 'quarter' | 'month' | 'week', { folder: string; format: string; template: string }> = { year: { folder: '', format: '', template: '' }, quarter: { folder: '', format: '', template: '' }, month: { folder: '', format: '', template: '' }, week: { folder: '', format: '', template: '' } };
   private reconcileTimer: number | undefined;
   private pendingPaths = new Set<string>();
@@ -52,6 +56,8 @@ export default class HelmPlugin extends Plugin {
       dailyTemplate: () => this.readDailyTemplate(),
       periodicTemplate: (kind) => this.readTemplate(this.periodicTemplatePath(kind) ?? ''),
       processTemplate: (path) => this.runTemplater(path),
+      excalidrawFolder: () => this.excalidrawFolder,
+      ai: (prompt) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: Math.max(30, this.settings.aiTimeoutSec || 180), ...(this.vaultBasePath() ? { cwd: this.vaultBasePath()! } : {}) }),
     });
     this.index.onChange(() => this.refreshViews());
 
@@ -125,6 +131,20 @@ export default class HelmPlugin extends Plugin {
       return { folder: g('folder').replace(/\/+$/, ''), format: g('format'), template: g('template') };
     };
     this.periodic = { year: per('yearly'), quarter: per('quarterly'), month: per('monthly'), week: per('weekly') };
+    const ex = await readJson('.obsidian/plugins/obsidian-excalidraw-plugin/data.json');
+    this.excalidrawFolder = typeof ex?.['folder'] === 'string' && (ex['folder'] as string).trim() !== '' ? (ex['folder'] as string).replace(/\/+$/, '') : undefined;
+  }
+
+  excalidrawFolderPath(): string | undefined { return this.excalidrawFolder; }
+  aiAvailable(): boolean { return aiAvailable(); }
+  /** Absolute path of the vault on disk (desktop), so the AI command runs inside it. */
+  private vaultBasePath(): string | undefined {
+    const a = this.app.vault.adapter as unknown as { getBasePath?: () => string };
+    return typeof a.getBasePath === 'function' ? a.getBasePath() : undefined;
+  }
+  /** Ask the AI something small, to check the command works. */
+  async aiPing(): Promise<string> {
+    return runClaude('Reply with exactly: OK', { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: 60 });
   }
 
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string } { return this.periodic[kind]; }
@@ -207,6 +227,7 @@ export default class HelmPlugin extends Plugin {
       run: (label, fn) => this.run(label, fn),
       trackModal: (m) => { this.openModals.add(m); const orig = m.onClose?.bind(m); m.onClose = () => { orig?.(); this.openModals.delete(m); }; },
       resourceUrl: (path) => this.vault.resourceUrl(path),
+      aiAvailable: aiAvailable(),
     };
   }
 
@@ -332,6 +353,12 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'new-habit', name: 'New habit', callback: () => openHabitForm(ctx()) });
     this.addCommand({ id: 'create-periodic-notes', name: 'Create this week’s, month’s, quarter’s and year’s notes', callback: () => void this.run('Periodic notes', async () => { const c = await this.mutations.ensureCurrentPeriodicNotes(); new Notice(c.length === 0 ? 'This week, month, quarter and year already have notes.' : `Created ${c.length} note${c.length === 1 ? '' : 's'}: ${c.map((x) => x.slice(x.lastIndexOf('/') + 1).replace(/\.md$/, '')).join(', ')}.`); }) });
     this.addCommand({ id: 'write-periodic-templates', name: 'Write Helm’s periodic note templates (keeps existing ones)', callback: () => void this.run('Templates', async () => { const out: string[] = []; for (const k of ['year', 'quarter', 'month', 'week'] as PeriodKind[]) out.push(`${PERIOD_LABELS[k]}: ${await this.writeTemplate(k, false)}`); new Notice(out.join(' · ')); }) });
+    this.addCommand({ id: 'drawing-today', name: 'New drawing for today', callback: () => newDrawing(ctx(), targetForDate(this.today())) });
+    this.addCommand({ id: 'drawing-week', name: 'New drawing for this week', callback: () => newDrawing(ctx(), targetForPeriod(periodOf(this.today(), 'week'))) });
+    for (const [kind, label] of [['week', 'week'], ['month', 'month'], ['quarter', 'quarter'], ['year', 'year']] as const) {
+      this.addCommand({ id: `ai-diagram-${kind}`, name: `AI overview diagram of this ${label}`, checkCallback: (checking) => { if (!this.settings.aiEnabled || !aiAvailable()) return false; if (!checking) aiDiagram(ctx(), targetForPeriod(periodOf(this.today(), kind))); return true; } });
+    }
+    this.addCommand({ id: 'ai-diagram-today', name: 'AI overview diagram of today', checkCallback: (checking) => { if (!this.settings.aiEnabled || !aiAvailable()) return false; if (!checking) aiDiagram(ctx(), targetForDate(this.today())); return true; } });
     this.addCommand({ id: 'rebuild-index', name: 'Rebuild index', callback: () => void this.run('Rebuild index', () => this.index.rebuild()) });
     this.addCommand({ id: 'move-recurring', name: 'Move recurring tasks to their next date', callback: () => void this.run('Move recurring', async () => { const n = await this.mutations.moveMisfiled(); new Notice(n === 0 ? 'Every dated task is already in the right note.' : `Moved ${n} task${n === 1 ? '' : 's'} to the note of its date.`); }) });
     this.addCommand({ id: 'sync-habits-today', name: 'Add today’s habits to the daily note', callback: () => void this.run('Habits', () => this.mutations.syncHabitsForDay(this.today())) });

@@ -14,6 +14,7 @@ import { openDatePicker } from '../modals/datePicker';
 import { minutesToHuman } from '../../core/dates';
 import { periodChoices, projectPeriodLabel } from './horizons';
 import { crumbBar } from '../crumbs';
+import { drawingsButton, drawingsSection, targetForProject } from '../drawings';
 
 export interface ProjectsState { projectId?: string; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
 
@@ -140,6 +141,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       h('h2', { text: p.title }),
       h('span', { cls: 'helm-spacer' }),
       button('Open note', { icon: 'file-text', onClick: () => void ctx.openFile(p.path) }),
+      drawingsButton(ctx, targetForProject(p.id, p.title)),
       button('', { icon: 'more-horizontal', title: 'More', onClick: (ev) => projectMenu(ctx, p, ev) }),
     ),
     h('div', { cls: 'helm-detail-meta' },
@@ -155,7 +157,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   ));
 
   if (p.childIds.length > 0) {
-    root.appendChild(section('Sub-projects', { count: p.childIds.length, store: state.collapsed, key: 'children' },
+  root.appendChild(section('Sub-projects', { count: p.childIds.length, store: state.collapsed, key: 'children' },
       ...p.childIds.map((cid) => ctx.index.project(cid)).filter((c): c is Project => c !== undefined).map((c) => projectCard(ctx, projectHealth(snap, c, today, settings), 0, today))));
   }
 
@@ -194,6 +196,8 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
 
   const log = quickAdd(ctx, 'Log a note to this project…', (text) => void ctx.run('Log', () => ctx.mutations.appendLog(p.id, text)), 'message-square-plus');
   root.appendChild(h('div', { cls: 'helm-detail-log' }, log));
+  const drawTarget = targetForProject(p.id, p.title);
+  root.appendChild(section('Diagrams', { count: ctx.index.drawingsFor(drawTarget).length, store: state.collapsed, key: 'drawings', collapsed: ctx.index.drawingsFor(drawTarget).length === 0 }, drawingsSection(ctx, drawTarget)));
 }
 
 function quickAdd(ctx: UiContext, placeholder: string, onSubmit: (text: string) => void, iconName = 'plus'): HTMLElement {

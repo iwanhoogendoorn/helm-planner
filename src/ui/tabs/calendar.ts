@@ -14,6 +14,7 @@ import { openProjectForm } from '../modals/projectForm';
 import { pickProject } from '../menus';
 import { barChart } from '../charts';
 import { crumbBar, dateCrumbs } from '../crumbs';
+import { drawingsButton, targetForPeriod } from '../drawings';
 
 export type CalendarScope = 'week' | 'month' | 'quarter' | 'year';
 export interface CalendarState { scope: CalendarScope; anchor: IsoDate; collapsed: Map<string, boolean> }
@@ -47,6 +48,7 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
     h('div', { cls: 'helm-day-actions' },
       button('Open note', { icon: 'file-text', onClick: () => void ctx.run('Open note', async () => { const p = await ctx.mutations.ensurePeriodicNote(period); await ctx.openFile(p); }) }),
       button('Horizons', { icon: 'mountain', onClick: () => ctx.navigate('horizons', { periodKey: period.key }) }),
+      drawingsButton(ctx, targetForPeriod(period)),
     ),
   ));
 

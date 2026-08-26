@@ -9,6 +9,11 @@ export class ObsidianVault implements VaultAdapter {
     return this.app.vault.getMarkdownFiles().map((f) => f.path);
   }
 
+  async listOther(): Promise<string[]> {
+    const files = (this.app.vault as unknown as { getFiles?: () => { path: string; extension: string }[] }).getFiles?.() ?? [];
+    return files.filter((f) => f.extension === 'canvas' || f.extension === 'excalidraw').map((f) => f.path);
+  }
+
   async read(path: string): Promise<string> {
     const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
     if (f instanceof TFile) return this.app.vault.read(f);

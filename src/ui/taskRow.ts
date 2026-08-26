@@ -7,6 +7,7 @@ import type { UiContext } from './context';
 import { taskMenu } from './menus';
 import { openTaskEditor } from './modals/taskEditor';
 import { isBlocked, isOpen } from '../data/planner';
+import { drawingsIndicator } from './drawings';
 import { taskLabel } from './context';
 
 export interface RowOptions {
@@ -102,6 +103,8 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   row.appendChild(main);
 
   const actions = h('div', { cls: 'helm-task-actions' });
+  const dr = drawingsIndicator(ctx, t);
+  if (dr) actions.appendChild(dr);
   if (opts.quickAction) actions.appendChild(iconButton(opts.quickAction.icon, opts.quickAction.title, (ev) => { ev.stopPropagation(); opts.quickAction!.onClick(t); }));
   else if (open) actions.appendChild(iconButton('calendar', 'Schedule…', (ev) => { ev.stopPropagation(); taskMenu(ctx, t, ev); }));
   for (const a of opts.extraActions ?? []) actions.appendChild(iconButton(a.icon, a.title, (ev) => { ev.stopPropagation(); a.onClick(t); }));

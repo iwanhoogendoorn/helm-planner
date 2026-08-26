@@ -13,6 +13,7 @@ import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { habitBadge } from '../fields';
+import { drawingsButton, targetForDate } from '../drawings';
 
 export interface TodayState { date: IsoDate; collapsed: Map<string, boolean> }
 
@@ -43,6 +44,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
       button('Plan day', { icon: 'list-plus', primary: !isPast && plan.openCount === 0, onClick: () => openPlanDay(ctx, date) }),
       button('Wrap up', { icon: 'moon', onClick: () => openWrapUp(ctx, date) }),
       button('', { icon: 'plus', title: 'Capture into this day', onClick: () => openCapture(ctx, { date }) }),
+      drawingsButton(ctx, targetForDate(date)),
       button('', { icon: 'file-text', title: note ? 'Open daily note' : 'Create and open daily note', onClick: () => void ctx.run('Open note', async () => { const p = await ctx.mutations.ensureDailyNote(date); await ctx.openFile(p); }) }),
     ),
   ), h('div', { cls: 'helm-capacity' },

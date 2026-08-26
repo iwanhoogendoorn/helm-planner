@@ -223,3 +223,24 @@ notes link up and sideways; goals live under the goals heading.
 
 With *Create this period's notes on startup* on, Helm makes sure this week's,
 month's, quarter's and year's notes exist every time it loads.
+
+## 7. Drawings
+
+Excalidraw drawings (`*.excalidraw.md`) and Canvas files are read — only their
+frontmatter and `## Text Elements`, never the scene JSON. A drawing is attached
+to a task, project, day or period when:
+
+- its frontmatter says so: `helm-task: tsk-…`, `helm-project: prj-…`,
+  `helm-date: 2026-08-26`, `helm-period: 2026-W35` (scalars or lists; what Helm
+  writes when it creates one);
+- a daily, periodic or project note embeds or links it (`![[X.excalidraw]]`);
+- it sits under a project's folder;
+- its name starts with a daily or periodic note's title
+  (`26, Wednesday, Aug, 2026 — flow`, `2026-W35 map`);
+- its text links such a note, or mentions a task's 🆔.
+
+Drawings Helm creates are named `<note title> — <name>` (projects: `<name>`,
+inside the project folder), get an embed under `## Diagrams` in the note, and
+AI overviews carry `helm-generated: true` with the summary as a quote above the
+scene.
+
