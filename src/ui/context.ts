@@ -28,7 +28,7 @@ export interface UiContext {
   /** A URL the renderer can load a vault image from. */
   resourceUrl: (path: string) => string | undefined;
   /** Register an open modal so the plugin can close it on unload (a reload must never leave a dead overlay). */
-  trackModal: (m: { close: () => void }) => void;
+  trackModal: (m: { close: () => void; onClose?: () => void }) => void;
 }
 
 export function taskLabel(t: Task): string {

@@ -27,7 +27,7 @@ export default class HelmPlugin extends Plugin {
   private pendingPaths = new Set<string>();
   private updateTimer: number | undefined;
   private busy = 0;
-  private openModals = new Set<{ close: () => void }>();
+  private openModals = new Set<{ close: () => void; onClose?: () => void }>();
 
   override async onload(): Promise<void> {
     await this.loadSettings();
@@ -163,7 +163,7 @@ export default class HelmPlugin extends Plugin {
       refresh: () => (view ? view.requestRender() : this.refreshViews()),
       navigate: (tab, opts) => { void this.openView().then(() => (view ?? this.activeView())?.navigate(tab, opts)); },
       run: (label, fn) => this.run(label, fn),
-      trackModal: (m) => { this.openModals.add(m); },
+      trackModal: (m) => { this.openModals.add(m); const orig = m.onClose?.bind(m); m.onClose = () => { orig?.(); this.openModals.delete(m); }; },
       resourceUrl: (path) => this.vault.resourceUrl(path),
     };
   }

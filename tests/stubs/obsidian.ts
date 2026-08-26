@@ -16,7 +16,8 @@ export class Modal {
   app: unknown; titleEl: HTMLElement; contentEl: HTMLElement; opened = false;
   constructor(app: unknown) { this.app = app; this.titleEl = document.createElement('div'); this.contentEl = document.createElement('div'); }
   open(): void { this.opened = true; Modal.last = this; }
-  close(): void { this.opened = false; }
+  close(): void { this.opened = false; this.onClose(); }
+  onClose(): void {}
   static last: Modal | undefined;
 }
 export class FuzzySuggestModal<T> extends Modal { setPlaceholder(): void {} getItems(): T[] { return []; } }

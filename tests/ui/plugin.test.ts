@@ -83,6 +83,16 @@ describe('HelmPlugin', () => {
     expect(plugin.index.project('prj-kitchen')?.path).toBe(np);
   });
 
+  it('modals are tracked while open and forgotten once closed', async () => {
+    const { plugin, app } = await boot();
+    const { Modal } = await import('../stubs/obsidian');
+    app.commands.find((c) => c.id === 'new-habit')!.callback!();
+    const tracked = (plugin as unknown as { openModals: Set<unknown> }).openModals;
+    expect(tracked.size).toBe(1);
+    Modal.last!.close();
+    expect(tracked.size).toBe(0);
+  });
+
   it('editor commands find the task under the cursor', async () => {
     const { app } = await boot();
     const cmd = app.commands.find((c) => c.id === 'task-under-cursor-today')!;
