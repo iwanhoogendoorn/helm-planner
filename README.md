@@ -8,6 +8,22 @@ Markdown is the source of truth. Every task is a real `- [ ]` line in a real
 note, in the standard Obsidian Tasks emoji format. Uninstall Helm and nothing
 breaks — you keep a plain-text task system that other plugins can read.
 
+## Install
+
+**With BRAT** (recommended while Helm is not in the community list):
+
+1. Install and enable [BRAT](https://github.com/TfTHacker/obsidian42-brat).
+2. BRAT settings → *Add beta plugin* → `iwanhoogendoorn/helm-planner`.
+3. Enable *Helm* under Community plugins. BRAT keeps it updated from releases.
+
+**By hand**: download `main.js`, `manifest.json` and `styles.css` from the
+[latest release](https://github.com/iwanhoogendoorn/helm-planner/releases/latest)
+into `<vault>/.obsidian/plugins/helm-planner/` and enable the plugin.
+
+Optional companions Helm plays with when present: Obsidian Tasks (format),
+Periodic Notes and Daily Notes (where notes live), Templater (rendering new
+notes), Excalidraw (drawings attached to tasks, days, periods and projects).
+
 ## The loop
 
 ```

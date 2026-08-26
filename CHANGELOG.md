@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.5.0 — 2026-08-26
+## 1.0.0 — 2026-08-26
+
+First finished release. Everything below since 0.4.2 ships in it.
 
 - Notes attached to tasks, projects, days and periods, the same way as
   drawings: *New note…*, *Link existing note…* (any note in the vault — the
