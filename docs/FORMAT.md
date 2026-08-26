@@ -250,3 +250,11 @@ or a project's subject as a topic: the model may search the web and read pages
 (`Allow web research`), and the drawing carries the knowledge itself. Research
 drawings are named `<subject> — research`, overviews `<note> — overview`, skill
 drawings `<note> — diagram`.
+
+## 8. Prompts
+
+A prompt note lives in the prompts folder (`Prompts` by default), named
+`<subject> — prompt <n>.md`, with `helm-prompt: <n>`, `helm-prompt-angle`,
+the target key (`helm-task` …) and the prompt text in a code block. Helm lists
+them per target in number order; deleting moves the note to the trash.
+

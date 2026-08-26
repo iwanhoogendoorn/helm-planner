@@ -18,6 +18,13 @@
   Drawings: the CLI runs the skill in a scratch folder (edits auto-accepted,
   only uv allowed), optionally with its render-and-fix loop, and Helm imports
   the finished scene into the vault as a normal drawing.
+- Prompts: from any task (or project, day, period) → *Prompts* → *New prompt*
+  builds a ready-to-paste brief about the subject, copies it to the clipboard
+  at once, saves it as a numbered note in the prompts folder and shows it.
+  Five angles rotate (deep dive, action plan, options & trade-offs, learn it,
+  checklist & pitfalls) or pick one. Existing prompts are listed as Prompt 1,
+  2, … — select to copy and view. *Manage drawings & prompts…* trashes either
+  (drawing embeds are removed from the notes that carried them).
 - Two diagram modes: *overview* (a period, day or project seen through its
   digest) and *research* (a task — or a project's subject — treated as a
   topic: the model researches it on the web when allowed and draws the

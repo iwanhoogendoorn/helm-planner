@@ -198,6 +198,8 @@ export interface Snapshot {
   tasksByPath: Map<string, string[]>;
   /** Excalidraw / canvas drawings by path. */
   drawings: Map<string, import('./drawing').Drawing>;
+  /** Saved prompts by path. */
+  prompts: Map<string, import('./prompts').Prompt>;
 }
 
 export interface HelmSettings {
@@ -248,6 +250,8 @@ export interface HelmSettings {
   skillBackground: 'white' | 'dark';
   skillRender: boolean;
   skillTimeoutSec: number;
+  /** Where generated prompt notes go. */
+  promptsFolder: string;
   extraFolders: string[];
   /** Path prefixes never indexed (archives). */
   excludePaths: string[];
@@ -311,6 +315,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   skillBackground: 'white',
   skillRender: true,
   skillTimeoutSec: 900,
+  promptsFolder: 'Prompts',
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
   archiveFolder: '02 PROJECTS/ZZZ. Project Archive',

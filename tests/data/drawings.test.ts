@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { setup, TODAY, dailyPath } from './fixture';
 import { HelmIndex } from '../../src/data/index';
 import { Mutations } from '../../src/data/mutations';
+import { buildPrompt } from '../../src/core/prompts';
 import { SETTINGS, DAILY_FOLDER, DAILY_FORMAT, makeVault } from './fixture';
 
 const DRAW = (fm: string, text = ''): string => `---\n${fm}\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n---\n# Excalidraw Data\n\n## Text Elements\n${text}\n\n%%\n## Drawing\n\`\`\`json\n{"type":"excalidraw","elements":[]}\n\`\`\`\n%%\n`;
@@ -190,5 +191,48 @@ describe('job progress and cancellation', () => {
     await new Promise((r) => setTimeout(r, 0));
     cancel!();
     await expect(run).rejects.toThrow('Cancelled');
+  });
+});
+
+describe('prompts', () => {
+  it('numbers prompts per task, rotates the angle, saves a note tied to the task, and lists them in order', async () => {
+    const { m, vault, index } = await setup();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
+    const target = { kind: 'task' as const, key: t.key, title: t.text };
+    const p1 = await m.createPrompt(target);
+    expect(p1.n).toBe(1); expect(p1.angle).toBe('deep-dive');
+    expect(p1.path).toBe(`Prompts/${t.text} — prompt 1.md`);
+    expect(p1.text).toContain('I want to properly understand the subject below');
+    expect(p1.text).toContain(`SUBJECT\nTask: ${t.text}`);
+    const note = await vault.read(p1.path);
+    expect(note).toMatch(/helm-prompt: 1\nhelm-prompt-angle: deep-dive\nhelm-task: tsk-\w+/);
+    const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === t.text && x.origin === 'project')!;
+    const target2 = { kind: 'task' as const, key: t2.key, id: t2.id, title: t2.text };
+    const p2 = await m.createPrompt(target2);
+    expect(p2.n).toBe(2); expect(p2.angle).toBe('plan');
+    const p3 = await m.createPrompt(target2, 'checklist');
+    expect(p3.n).toBe(3); expect(p3.angle).toBe('checklist');
+    expect(index.promptsFor(target2).map((p) => `${p.n}:${p.angle}`)).toEqual(['1:deep-dive', '2:plan', '3:checklist']);
+    await m.deletePrompt(p2.path);
+    expect(vault.trashed).toContain(p2.path);
+    expect(index.promptsFor(target2).map((p) => p.n)).toEqual([1, 3]);
+    const p4 = await m.createPrompt(target2);
+    expect(p4.n).toBe(4);
+  });
+  it('every angle builds a distinct, complete prompt', () => {
+    const texts = (['deep-dive', 'plan', 'options', 'learn', 'checklist'] as const).map((a) => buildPrompt(a, 'Task: X'));
+    expect(new Set(texts).size).toBe(5);
+    for (const t of texts) { expect(t).toContain('SUBJECT\nTask: X'); expect(t).toContain('Be concrete and specific'); }
+  });
+  it('deleting a drawing trashes it and removes its embed (and an emptied Diagrams heading) from the note', async () => {
+    const { m, vault, index } = await setup();
+    const p = await m.createDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, { name: 'map' });
+    expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('![[2026-W35 — map.excalidraw]]');
+    await m.deleteDrawing(p);
+    expect(vault.trashed).toContain(p);
+    const week = await vault.read('Weekly Notes/2026-W35.md');
+    expect(week).not.toContain('map.excalidraw');
+    expect(week).not.toMatch(/## Diagrams/);
+    expect(index.drawingsFor({ kind: 'period', key: '2026-W35', title: '' })).toEqual([]);
   });
 });

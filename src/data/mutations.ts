@@ -28,6 +28,7 @@ import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates'
 import { drawingTitle, parseExcalidrawScene, renderExcalidrawDocument, type Drawing, type ExcalidrawElement } from '../core/drawing';
 import { layoutDiagram, parseDiagramSpec, type DiagramSpec } from '../core/diagram';
 import { digestFor } from './digest';
+import { buildPrompt, renderPromptNote, PROMPT_ANGLES, type Prompt, type PromptAngle } from '../core/prompts';
 import type { DrawingTarget } from '../core/types';
 
 export type DiagramMode = 'overview' | 'research';
@@ -873,7 +874,7 @@ export class Mutations {
   subjectBrief(target: DrawingTarget): string {
     const snap = this.index.snapshot;
     if (target.kind === 'task') {
-      const t = snap.tasks.get(target.key) ?? [...snap.tasks.values()].find((x) => x.id === target.id);
+      const t = snap.tasks.get(target.key) ?? (target.id ? [...snap.tasks.values()].find((x) => x.id === target.id && x.origin !== 'daily-mirror') : undefined) ?? [...snap.tasks.values()].find((x) => x.id !== undefined && x.id === target.key);
       if (!t) return `Task: ${target.title}`;
       const proj = t.projectId ? snap.projects.get(t.projectId) : undefined;
       const phase = proj?.phases.find((ph) => ph.id === t.phaseId);
@@ -1025,6 +1026,62 @@ export class Mutations {
   }
 
   drawingsFor(target: DrawingTarget): Drawing[] { return this.index.drawingsFor(target); }
+
+  /** Trash a drawing and take its embed lines out of the notes that carried them. */
+  async deleteDrawing(path: string): Promise<void> {
+    if (!this.d.vault.trash) throw new Error('This vault cannot trash files');
+    const title = drawingTitle(path);
+    const needle = `[[${title}.excalidraw`;
+    const carriers = this.index.filesEmbedding(title);
+    for (const notePath of carriers) {
+      await this.editFile(notePath, (lines) => {
+        let changed = false;
+        for (let i = lines.length - 1; i >= 0; i--) { if (lines[i]!.includes(needle)) { lines.splice(i, 1); changed = true; } }
+        // Drop a Diagrams heading left with nothing under it.
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (/^#{1,6}\s+diagrams?\s*$/i.test(lines[i]!)) {
+            let j = i + 1; while (j < lines.length && lines[j]!.trim() === '') j++;
+            if (j >= lines.length || /^#{1,6}\s/.test(lines[j]!)) { lines.splice(i, j - i); changed = true; }
+          }
+        }
+        return changed;
+      });
+    }
+    await this.d.vault.trash(path);
+    this.index.update(path, undefined);
+  }
+
+  /* ── Prompts ───────────────────────────────────────────────────────── */
+
+  /** Create the next prompt for a target with the given angle (or the next angle in rotation), save it as a note, return it. */
+  async createPrompt(target: DrawingTarget, angle?: PromptAngle): Promise<Prompt> {
+    let id: string | undefined;
+    if (target.kind === 'task') { id = await this.ensureId(target.key); target = { ...target, key: this.index.task(id)?.key ?? id, id }; }
+    const existing = this.index.promptsFor(target);
+    const n = existing.length === 0 ? 1 : Math.max(...existing.map((p) => p.n)) + 1;
+    const a = angle ?? PROMPT_ANGLES[(n - 1) % PROMPT_ANGLES.length]!.id;
+    const text = buildPrompt(a, this.subjectBrief(target), { extra: this.settings.aiInstructions });
+    const folder = (this.settings.promptsFolder.trim() || 'Prompts').replace(/\/+$/, '');
+    const base = this.safeName(target.kind === 'date' ? formatDate(target.date, this.templateConfig().dailyTitleFormat) : target.kind === 'period' ? target.key : target.title).slice(0, 80);
+    const path = await this.uniqueMd(`${folder}/${base} — prompt ${n}.md`);
+    const fmTarget = Object.fromEntries(Object.entries(this.drawingFrontmatter(target, id)).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]));
+    const content = renderPromptNote({ n, angle: a, text, target: fmTarget, today: this.today, subject: target.title });
+    await this.d.vault.write(path, content);
+    this.index.update(path, content);
+    return this.index.snapshot.prompts.get(path) ?? { path, title: baseName(path), n, angle: a, text, taskIds: [], projectRefs: [], dates: [], periodKeys: [] };
+  }
+
+  private async uniqueMd(path: string): Promise<string> {
+    if (!(await this.d.vault.exists(path))) return path;
+    const stem = path.replace(/\.md$/, '');
+    for (let i = 2; ; i++) { const p = `${stem} (${i}).md`; if (!(await this.d.vault.exists(p))) return p; }
+  }
+
+  async deletePrompt(path: string): Promise<void> {
+    if (!this.d.vault.trash) throw new Error('This vault cannot trash files');
+    await this.d.vault.trash(path);
+    this.index.update(path, undefined);
+  }
 
   /* ── Horizons: goals in yearly / quarterly / monthly notes ───────────── */
 

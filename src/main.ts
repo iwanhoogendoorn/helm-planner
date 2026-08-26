@@ -272,6 +272,7 @@ export default class HelmPlugin extends Plugin {
       resourceUrl: (path) => this.vault.resourceUrl(path),
       aiAvailable: aiAvailable(),
       currentJob: () => this.job,
+      copy: async (text) => { await navigator.clipboard.writeText(text); },
     };
   }
 

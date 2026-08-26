@@ -566,3 +566,18 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-job-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: var(--size-4-2) 0; border-radius: var(--radius-m); background: var(--background-secondary); border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-small); }
 .helm-job-banner .helm-statusbar-spin { color: var(--text-accent); }
 .helm-job-label { font-weight: 600; }
+
+/* Prompts & manage */
+.helm-prompt-text { white-space: pre-wrap; font-family: var(--font-monospace); font-size: var(--font-ui-small); background: var(--background-secondary); border-radius: var(--radius-m); padding: 10px 12px; max-height: 50vh; overflow: auto; margin: 8px 0; }
+.modal:has(.helm-prompt-modal), .modal:has(.helm-manage-modal) { width: min(720px, 95vw); }
+.helm-prompt-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.helm-prompt-chip { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; height: auto; }
+.helm-prompt-chip svg { width: 12px; height: 12px; }
+.helm-manage-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 10px; }
+.helm-manage-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--radius-s); }
+.helm-manage-row:hover { background: var(--background-modifier-hover); }
+.helm-manage-title { font-weight: 500; }
+.helm-manage-head2 { margin-top: 8px; }
+.helm-drawing-card { position: relative; }
+.helm-drawing-card-delete { position: absolute; top: 4px; right: 4px; opacity: 0; }
+.helm-drawing-card:hover .helm-drawing-card-delete { opacity: 1; }

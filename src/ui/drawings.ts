@@ -6,6 +6,7 @@
 import { Menu, Modal, setIcon } from 'obsidian';
 import type { DrawingTarget, Task } from '../core/types';
 import type { Drawing } from '../core/drawing';
+import { PROMPT_ANGLES, type Prompt, type PromptAngle } from '../core/prompts';
 import type { Period } from '../core/periods';
 import { humanDate } from '../core/dates';
 import { button, h, icon, iconButton } from './dom';
@@ -67,6 +68,7 @@ export function addDrawingItems(menu: Menu, ctx: UiContext, target: DrawingTarge
   if (list.length > 12) menu.addItem((i) => i.setTitle(`… ${list.length - 12} more`).setIcon('more-horizontal').setDisabled(true));
   if (list.length > 0) menu.addSeparator();
   menu.addItem((i) => i.setTitle('New drawing…').setIcon('pen-tool').onClick(() => newDrawing(ctx, target)));
+  menu.addItem((i) => i.setTitle('Manage drawings & prompts…').setIcon('settings-2').onClick(() => manageModal(ctx, target)));
   if (aiOn(ctx)) {
     if (target.kind === 'task') menu.addItem((i) => i.setTitle('AI diagram: research this subject').setIcon('sparkles').onClick(() => aiDiagram(ctx, target, 'research')));
     else {
@@ -79,6 +81,8 @@ export function addDrawingItems(menu: Menu, ctx: UiContext, target: DrawingTarge
 export function drawingsMenu(ctx: UiContext, target: DrawingTarget, ev: MouseEvent): void {
   const menu = new Menu();
   addDrawingItems(menu, ctx, target);
+  menu.addSeparator();
+  addPromptItems(menu, ctx, target);
   menu.showAtMouseEvent(ev);
 }
 
@@ -111,12 +115,97 @@ export function drawingsSection(ctx: UiContext, target: DrawingTarget): HTMLElem
       h('span', { cls: 'helm-drawing-card-icon' }), h('span', { cls: 'helm-drawing-card-title', text: d.title }),
       h('span', { cls: 'helm-drawing-card-meta', text: [d.generated ? 'AI' : '', d.kind === 'canvas' ? 'canvas' : '', when(d, today)].filter(Boolean).join(' · ') }));
     setIcon(card.querySelector('.helm-drawing-card-icon') as HTMLElement, d.kind === 'canvas' ? 'layout-grid' : 'pen-tool');
+    card.appendChild(iconButton('trash', 'Move to trash', (ev) => { ev.stopPropagation(); if (window.confirm(`Move “${d.title}” to the trash?`)) void ctx.run('Delete drawing', () => ctx.mutations.deleteDrawing(d.path)); }, 'helm-drawing-card-delete'));
     cards.appendChild(card);
   }
   if (list.length === 0) cards.appendChild(h('div', { cls: 'helm-hint', text: 'No drawings yet.' }));
   const actions = h('div', { cls: 'helm-drawing-actions' }, button('New drawing', { icon: 'pen-tool', onClick: () => newDrawing(ctx, target) }),
     aiOn(ctx) && target.kind !== 'task' ? button('AI overview', { icon: 'sparkles', onClick: () => aiDiagram(ctx, target, 'overview') }) : null,
     aiOn(ctx) && (target.kind === 'task' || target.kind === 'project') ? button('AI research', { icon: 'telescope', title: 'Research the subject and draw what is true about it', onClick: () => aiDiagram(ctx, target, 'research') }) : null);
-  return h('div', { cls: 'helm-drawings' }, cards, actions);
+  const prompts = ctx.index.promptsFor(target);
+  const promptRow = h('div', { cls: 'helm-prompt-chips' },
+    ...prompts.map((pr) => h('button', { cls: 'helm-chip helm-prompt-chip', title: `${angleLabel(pr.angle)} — click to copy and view`, onClick: () => { void ctx.copy(pr.text).then(() => ctx.notify(`Prompt ${pr.n} copied to the clipboard.`)); promptModal(ctx, pr, target); } }, icon('clipboard-copy'), h('span', { text: `Prompt ${pr.n}` }))),
+    button('New prompt', { icon: 'sparkle', cls: 'helm-btn-quiet', title: 'Build a prompt about this subject and copy it to the clipboard', onClick: () => newPrompt(ctx, target) }),
+  );
+  return h('div', { cls: 'helm-drawings' }, cards, actions, promptRow);
 }
 void icon;
+
+/* ── Prompts ───────────────────────────────────────────────────────────── */
+
+const angleLabel = (a: PromptAngle): string => PROMPT_ANGLES.find((x) => x.id === a)?.label ?? a;
+
+/** Show a prompt: the text, Copy, Open note, Delete. */
+export function promptModal(ctx: UiContext, prompt: Prompt, target: DrawingTarget): void {
+  const m = new Modal(ctx.app);
+  m.titleEl.setText(`Prompt ${prompt.n} · ${angleLabel(prompt.angle)}`);
+  m.contentEl.addClass('helm-modal', 'helm-prompt-modal');
+  const pre = h('pre', { cls: 'helm-prompt-text', text: prompt.text });
+  const copyBtn = button('Copy', { icon: 'copy', primary: true, onClick: () => { void ctx.copy(prompt.text).then(() => { copyBtn.querySelector('span')!.textContent = 'Copied'; ctx.notify(`Prompt ${prompt.n} copied to the clipboard.`); }); } });
+  m.contentEl.append(
+    h('div', { cls: 'helm-hint', text: `For ${target.title} · paste into the Claude app or the CLI` }),
+    pre,
+    h('div', { cls: 'helm-modal-buttons' },
+      button('Delete', { icon: 'trash', cls: 'helm-btn-quiet', onClick: () => { if (window.confirm(`Move prompt ${prompt.n} to the trash?`)) { m.close(); void ctx.run('Delete prompt', () => ctx.mutations.deletePrompt(prompt.path)); } } }),
+      button('Open note', { icon: 'file-text', onClick: () => { m.close(); void ctx.openFile(prompt.path); } }),
+      h('span', { cls: 'helm-spacer' }), button('Close', { onClick: () => m.close() }), copyBtn),
+  );
+  m.open();
+  ctx.trackModal(m);
+}
+
+/** Make the next prompt, copy it straight to the clipboard, and show it. */
+export function newPrompt(ctx: UiContext, target: DrawingTarget, angle?: PromptAngle): void {
+  void ctx.run('New prompt', async () => {
+    const pr = await ctx.mutations.createPrompt(target, angle);
+    await ctx.copy(pr.text);
+    ctx.notify(`Prompt ${pr.n} (${angleLabel(pr.angle)}) copied to the clipboard.`);
+    promptModal(ctx, pr, target);
+  });
+}
+
+export function addPromptItems(menu: Menu, ctx: UiContext, target: DrawingTarget): void {
+  const list = ctx.index.promptsFor(target);
+  for (const pr of list) menu.addItem((i) => i.setTitle(`Prompt ${pr.n} · ${angleLabel(pr.angle)}`).setIcon('clipboard-copy').onClick(() => { void ctx.copy(pr.text).then(() => ctx.notify(`Prompt ${pr.n} copied to the clipboard.`)); promptModal(ctx, pr, target); }));
+  if (list.length > 0) menu.addSeparator();
+  const next = PROMPT_ANGLES[list.length % PROMPT_ANGLES.length]!;
+  menu.addItem((i) => i.setTitle(`New prompt (${next.label})`).setIcon('sparkle').onClick(() => newPrompt(ctx, target, next.id)));
+  menu.addItem((i) => {
+    i.setTitle('New prompt with angle…').setIcon('list');
+    const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    for (const a of PROMPT_ANGLES) sub.addItem((j) => j.setTitle(a.label).setIcon(a.icon).onClick(() => newPrompt(ctx, target, a.id)));
+  });
+}
+
+/* ── Manage: drawings and prompts of a target, with delete ─────────────── */
+
+export function manageModal(ctx: UiContext, target: DrawingTarget): void {
+  const m = new Modal(ctx.app);
+  m.titleEl.setText(`Drawings & prompts · ${target.title}`);
+  m.contentEl.addClass('helm-modal', 'helm-manage-modal');
+  const draw = (): void => {
+    m.contentEl.empty();
+    const today = ctx.today();
+    const drawings = ctx.index.drawingsFor(target);
+    const prompts = ctx.index.promptsFor(target);
+    const rows = h('div', { cls: 'helm-manage-list' });
+    m.contentEl.appendChild(h('div', { cls: 'helm-field-label', text: `Drawings (${drawings.length})` }));
+    if (drawings.length === 0) m.contentEl.appendChild(h('div', { cls: 'helm-hint', text: 'None.' }));
+    for (const d of drawings) rows.appendChild(h('div', { cls: 'helm-manage-row' }, icon(d.kind === 'canvas' ? 'layout-grid' : 'pen-tool'), h('span', { cls: 'helm-manage-title', text: d.title }), h('span', { cls: 'helm-hint', text: [d.generated ? 'AI' : '', when(d, today)].filter(Boolean).join(' · ') }), h('span', { cls: 'helm-spacer' }),
+      button('Open', { icon: 'external-link', cls: 'helm-btn-quiet', onClick: () => { m.close(); void ctx.openFile(d.path); } }),
+      iconButton('trash', 'Move to trash', () => { if (window.confirm(`Move “${d.title}” to the trash? Its embed lines are removed from the notes that carry it.`)) void ctx.run('Delete drawing', async () => { await ctx.mutations.deleteDrawing(d.path); draw(); }); })));
+    m.contentEl.appendChild(rows);
+    m.contentEl.appendChild(h('div', { cls: 'helm-field-label helm-manage-head2', text: `Prompts (${prompts.length})` }));
+    if (prompts.length === 0) m.contentEl.appendChild(h('div', { cls: 'helm-hint', text: 'None.' }));
+    const prow = h('div', { cls: 'helm-manage-list' });
+    for (const pr of prompts) prow.appendChild(h('div', { cls: 'helm-manage-row' }, icon('clipboard-copy'), h('span', { cls: 'helm-manage-title', text: `Prompt ${pr.n} · ${angleLabel(pr.angle)}` }), h('span', { cls: 'helm-spacer' }),
+      button('Copy', { icon: 'copy', cls: 'helm-btn-quiet', onClick: () => void ctx.copy(pr.text).then(() => ctx.notify(`Prompt ${pr.n} copied.`)) }),
+      button('View', { icon: 'eye', cls: 'helm-btn-quiet', onClick: () => promptModal(ctx, pr, target) }),
+      iconButton('trash', 'Move to trash', () => { if (window.confirm(`Move prompt ${pr.n} to the trash?`)) void ctx.run('Delete prompt', async () => { await ctx.mutations.deletePrompt(pr.path); draw(); }); })));
+    m.contentEl.appendChild(prow);
+    m.contentEl.appendChild(h('div', { cls: 'helm-modal-buttons' }, button('New drawing…', { icon: 'pen-tool', onClick: () => { m.close(); newDrawing(ctx, target); } }), button('New prompt', { icon: 'sparkle', onClick: () => { m.close(); newPrompt(ctx, target); } }), h('span', { cls: 'helm-spacer' }), button('Close', { onClick: () => m.close() })));
+  };
+  draw();
+  m.open();
+  ctx.trackModal(m);
+}
