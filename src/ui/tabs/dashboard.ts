@@ -1,6 +1,6 @@
 /** Dashboard: filterable stats with charts you can click into. */
 import type { IsoDate, Task } from '../../core/types';
-import { addDays, humanDate, minutesToHuman, startOfWeek } from '../../core/dates';
+import { addDays, humanDate, minutesToHuman, startOfWeek, WEEKDAY_NAMES } from '../../core/dates';
 import { periodOf } from '../../core/periods';
 import { computeStats, filterOptions, type Series, type StatsFilter } from '../../data/stats';
 import { PART_LABEL } from '../../core/dailyNote';
@@ -125,7 +125,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
       h('div', { cls: 'helm-hint', text: (['morning', 'afternoon', 'evening', 'anytime'] as const).map((p) => `${PART_LABEL[p]}: ${s.byPart[p].planned ? Math.round((100 * s.byPart[p].done) / s.byPart[p].planned) : 0}% kept`).join(' · ') })),
   )));
   // Weekday.
-  grid.appendChild(card('Done by weekday', 'weekday', 'your productive days', barChart(s.byWeekday.map((w) => ({ key: w.key, label: w.label, value: w.value })), { onClick: (k) => { const w = s.byWeekday.find((x) => x.key === k); if (w) drill(`Done on ${w.label}s`, w.tasks); }, valueLabels: true, height: 120 })));
+  grid.appendChild(card('Done by weekday', 'weekday', 'your productive days', barChart(s.byWeekday.map((w) => ({ key: w.key, label: w.label, value: w.value })), { onClick: (k) => { const w = s.byWeekday.find((x) => x.key === k); if (w) drill(`Done on ${WEEKDAY_NAMES[Number(w.key) - 1]!.replace(/^./, (c) => c.toUpperCase())}s`, w.tasks); }, valueLabels: true, height: 120 })));
   // Age.
   grid.appendChild(card('Age of open tasks', 'age', 'old open tasks are decisions you have not made', barChart(s.ageBuckets.map((b) => ({ key: b.key, label: b.label, value: b.value, color: b.key === '> 1 year' || b.key === '3–12 months' ? 'var(--color-red)' : undefined })), { horizontal: true, onClick: (k) => { const b = s.ageBuckets.find((x) => x.key === k); if (b) drill(`Open for ${b.label}`, b.tasks); } })));
   // Areas & tags.
