@@ -1,13 +1,14 @@
 /** Edit every field of a task in one form. */
 import { Modal } from 'obsidian';
 import type { IsoDate, Priority, Task, TaskLine, TaskStatus } from '../../core/types';
-import { isIsoDate, minutesToHuman, parseEffort } from '../../core/dates';
+import { isIsoDate, minutesToHuman } from '../../core/dates';
 import { formatRecurrence, parseRecurrence } from '../../core/recurrence';
 import { PRIORITY_ORDER } from '../../core/taskLine';
 import { button, h } from '../dom';
 import type { UiContext } from '../context';
 import { STATUS_LABELS, pickProject } from '../menus';
 import { DAY_PARTS, PART_LABEL } from '../../core/dailyNote';
+import { effortField, linkTimes } from '../fields';
 
 export function openTaskEditor(ctx: UiContext, task: Task): void {
   const src = task.origin === 'daily-mirror' && task.mirrorOf ? ctx.index.task(task.mirrorOf) ?? task : task;
@@ -25,10 +26,11 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   const scheduled = h('input', { attr: { type: 'date', value: src.scheduled ?? (src.origin === 'daily' ? src.noteDate : '') ?? '' } });
   const due = h('input', { attr: { type: 'date', value: src.due ?? '' } });
   const start = h('input', { attr: { type: 'date', value: src.start ?? '' } });
-  const effort = h('input', { attr: { type: 'text', placeholder: '30m, 2h, 1h30m', value: src.effortRaw ?? (src.effortMinutes !== undefined ? minutesToHuman(src.effortMinutes) : '') } });
+  const effort = effortField(src.effortMinutes);
   const recurrence = h('input', { attr: { type: 'text', placeholder: 'every week on monday', value: src.recurrence ? src.recurrence.raw : '' } });
   const timeStart = h('input', { attr: { type: 'time', value: src.time?.start ?? '' } });
   const timeEnd = h('input', { attr: { type: 'time', value: src.time?.end ?? '' } });
+  linkTimes(timeStart, timeEnd, effort);
   const blockedBy = h('input', { attr: { type: 'text', placeholder: 'tsk-abc123, tsk-def456', value: src.blockedBy.join(', ') } });
   const onDay = task.noteDate !== undefined && task.section !== 'outside';
   const partSel = h('select');
@@ -41,7 +43,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     field('Text', text),
     h('div', { cls: 'helm-grid2' }, field('Status', status), field('Priority', priority)),
     h('div', { cls: 'helm-grid3' }, field('Planned for', h('div', { cls: 'helm-row' }, scheduled, partSel)), field('Due', due), field('Start (not before)', start)),
-    h('div', { cls: 'helm-grid3' }, field('Effort', effort), field('Time block', h('div', { cls: 'helm-row' }, timeStart, timeEnd)), field('Repeat', recurrence)),
+    h('div', { cls: 'helm-grid3' }, field('Effort', effort.el), field('Time block', h('div', { cls: 'helm-row' }, timeStart, timeEnd)), field('Repeat', recurrence)),
     field('Blocked by (ids)', blockedBy),
     where,
     h('div', { cls: 'helm-modal-buttons' },
@@ -64,13 +66,9 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     if (dv !== src.due) patch.due = dv;
     const sv = start.value && isIsoDate(start.value) ? start.value : undefined;
     if (sv !== src.start) patch.start = sv;
-    const ef = effort.value.trim();
-    if (ef === '') { if (src.effortMinutes !== undefined) { patch.effortMinutes = undefined; patch.effortRaw = undefined; } }
-    else {
-      const min = parseEffort(ef);
-      if (min === undefined) { ctx.notify('Effort must look like 30m, 2h or 1h30m'); return; }
-      if (min !== src.effortMinutes) { patch.effortMinutes = min; patch.effortRaw = ef; }
-    }
+    const min = effort.get();
+    if (min === undefined) { if (src.effortMinutes !== undefined) { patch.effortMinutes = undefined; patch.effortRaw = undefined; } }
+    else if (min !== src.effortMinutes) { patch.effortMinutes = min; patch.effortRaw = minutesToHuman(min); }
     const rv = recurrence.value.trim();
     if (rv === '') { if (src.recurrence) patch.recurrence = undefined; }
     else if (rv !== src.recurrence?.raw) { const r = parseRecurrence(rv); if (!r.parsed) { ctx.notify(`I do not understand “${rv}”. Try “every week on monday”.`); return; } patch.recurrence = { ...r, raw: formatRecurrence(r) }; }

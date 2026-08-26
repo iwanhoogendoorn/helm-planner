@@ -11,6 +11,7 @@ import { append, button, chip, h } from '../dom';
 import type { UiContext } from '../context';
 import { pickProject } from '../menus';
 import { partOfTime } from '../../core/dailyNote';
+import { effortField, linkTimes } from '../fields';
 
 export interface CaptureDefaults {
   date?: IsoDate;
@@ -35,6 +36,10 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   const timeStart = h('input', { attr: { type: 'time' }, title: 'Start time' });
   const timeEnd = h('input', { attr: { type: 'time' }, title: 'End time' });
   const timeOf = (c: { time?: { start: string; end?: string } }): { start: string; end?: string } | undefined => timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : c.time;
+  const effort = effortField();
+  let grammarEffort: number | undefined;
+  linkTimes(timeStart, timeEnd, effort);
+  effort.onChange(() => render());
 
   const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Call the plumber tomorrow !high #home @Kitchen ~30m', value: defaults.text ?? '' } });
   const preview = h('div', { cls: 'helm-capture-preview' });
@@ -53,7 +58,9 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     const shownPart = part ?? (time ? partOfTime(time.start, ctx.settings()) : undefined);
     if (date) preview.appendChild(chip(`plan ${humanDate(date, today)}${shownPart ? ` · ${shownPart}${!part ? ' (by time)' : ''}` : ''}`, 'scheduled'));
     if (c.due) preview.appendChild(chip(`due ${humanDate(c.due, today)}`, 'due'));
-    if (c.effortMinutes) preview.appendChild(chip(minutesToHuman(c.effortMinutes), 'effort'));
+    if (c.effortMinutes !== grammarEffort) { grammarEffort = c.effortMinutes; if (c.effortMinutes) { effort.set(c.effortMinutes); if (timeStart.value) timeStart.dispatchEvent(new Event('input')); } }
+    const eff = effort.get();
+    if (eff) preview.appendChild(chip(minutesToHuman(eff), 'effort'));
     if (time) preview.appendChild(chip(time.end ? `${time.start}–${time.end}` : time.start, 'time'));
     if (c.recurrence) preview.appendChild(chip(formatRecurrence(c.recurrence), 'recurrence'));
     for (const t of c.tags) preview.appendChild(chip(`#${t}`, 'tag'));
@@ -67,6 +74,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
       button(date ? 'Unplan' : 'Plan today', { icon: date ? 'calendar-x' : 'sun', title: date ? 'Keep it unplanned (inbox or project only)' : 'Plan it on today', onClick: () => { explicitDate = true; date = date ? undefined : today; render(); } }),
       date ? h('span', { cls: 'helm-segmented' }, ...(['morning', 'afternoon', 'evening'] as const).map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: p, onClick: () => { explicitPart = true; part = part === p ? undefined : p; render(); } }))) : null,
       date ? h('span', { cls: 'helm-capture-time' }, timeStart, h('span', { cls: 'helm-hint', text: '–' }), timeEnd) : null,
+      h('span', { cls: 'helm-capture-effort' }, h('span', { cls: 'helm-hint', text: 'effort' }), effort.el),
     ]);
   };
   input.addEventListener('input', render);
@@ -81,7 +89,8 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (c.text.trim() === '') return;
     const fields: Partial<TaskLine> = { priority: c.priority };
     if (c.due) fields.due = c.due;
-    if (c.effortMinutes) { fields.effortMinutes = c.effortMinutes; fields.effortRaw = minutesToHuman(c.effortMinutes); }
+    const eff = effort.get() ?? c.effortMinutes;
+    if (eff) { fields.effortMinutes = eff; fields.effortRaw = minutesToHuman(eff); }
     const time = timeOf(c);
     if (time) fields.time = time;
     if (c.recurrence) fields.recurrence = { ...c.recurrence, raw: formatRecurrence(c.recurrence) };

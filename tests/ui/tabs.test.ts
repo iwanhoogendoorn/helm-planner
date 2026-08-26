@@ -14,6 +14,7 @@ import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { taskRow } from '../../src/ui/taskRow';
 import { parsePhases } from '../../src/ui/modals/projectForm';
+import { effortField, linkTimes } from '../../src/ui/fields';
 import { renderHorizons } from '../../src/ui/tabs/horizons';
 import { renderDashboard, defaultDashboardState } from '../../src/ui/tabs/dashboard';
 import { renderCalendar, type CalendarState } from '../../src/ui/tabs/calendar';
@@ -386,5 +387,38 @@ describe('Calendar tab', () => {
     const { ctx } = await cal();
     const w = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: TODAY, collapsed: new Map() }));
     expect(w.querySelectorAll('.helm-week-day')).toHaveLength(7);
+  });
+});
+
+describe('effort field and time linking', () => {
+  it('start + effort gives the end; start + end gives the effort; grammar fills the dropdown', () => {
+    const start = document.createElement('input'); start.type = 'time';
+    const end = document.createElement('input'); end.type = 'time';
+    const effort = effortField();
+    linkTimes(start, end, effort);
+    const sel = effort.el.querySelector('select')!;
+    sel.value = '45'; sel.dispatchEvent(new Event('change'));
+    start.value = '13:00'; start.dispatchEvent(new Event('input'));
+    expect(end.value).toBe('13:45');
+    end.value = '15:00'; end.dispatchEvent(new Event('input'));
+    expect(effort.get()).toBe(120);
+    sel.value = 'custom'; sel.dispatchEvent(new Event('change'));
+    const custom = effort.el.querySelector<HTMLInputElement>('input')!;
+    custom.value = '1h10m'; custom.dispatchEvent(new Event('change'));
+    expect(effort.get()).toBe(70);
+    expect(end.value).toBe('14:10');
+  });
+
+  it('capture writes the effort and the end time derived from it', async () => {
+    const { ctx, vault } = await ctxFor();
+    openCapture(ctx, { date: TODAY });
+    const m = Modal.last!;
+    const input = m.contentEl.querySelector<HTMLInputElement>('.helm-capture-input')!;
+    input.value = 'Deep work ~1h'; input.dispatchEvent(new Event('input'));
+    const start = m.contentEl.querySelector<HTMLInputElement>('.helm-capture-time input[type="time"]')!;
+    start.value = '09:00'; start.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('- [ ] 09:00 - 10:00: Deep work ⏱️ 1h');
   });
 });

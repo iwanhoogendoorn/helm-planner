@@ -250,6 +250,10 @@
 .helm-capture-where { color: var(--text-muted); }
 .helm-capture-time { display: inline-flex; align-items: center; gap: 4px; }
 .helm-capture-time input[type="time"] { width: auto; }
+.helm-capture-effort { display: inline-flex; align-items: center; gap: 4px; }
+.helm-effort { display: inline-flex; align-items: center; gap: 4px; }
+.helm-effort-select { height: 28px; }
+.helm-effort-custom { width: 80px !important; }
 .modal:has(.helm-plan) { width: min(1100px, 95vw); }
 .modal:has(.helm-wrapup) { width: min(900px, 95vw); }
 .modal:has(.helm-task-editor), .modal:has(.helm-project-form) { width: min(720px, 95vw); }
