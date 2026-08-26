@@ -7,6 +7,7 @@ import { Menu, Modal, setIcon } from 'obsidian';
 import type { DrawingTarget, Task } from '../core/types';
 import type { Drawing } from '../core/drawing';
 import { PROMPT_ANGLES, type Prompt, type PromptAngle } from '../core/prompts';
+import { Mutations } from '../data/mutations';
 import type { Period } from '../core/periods';
 import { humanDate } from '../core/dates';
 import { button, h, icon, iconButton } from './dom';
@@ -142,16 +143,26 @@ export function promptModal(ctx: UiContext, prompt: Prompt, target: DrawingTarge
   m.contentEl.addClass('helm-modal', 'helm-prompt-modal');
   const pre = h('pre', { cls: 'helm-prompt-text', text: prompt.text });
   const copyBtn = button('Copy', { icon: 'copy', primary: true, onClick: () => { void ctx.copy(prompt.text).then(() => { copyBtn.querySelector('span')!.textContent = 'Copied'; ctx.notify(`Prompt ${prompt.n} copied to the clipboard.`); }); } });
+  const kind = Mutations.kindForAngle(prompt.angle);
+  const drawBtn = aiOn(ctx) ? button(`Draw with AI (${Mutations.KIND_LABELS[kind]})`, { icon: 'sparkles', title: 'Let the AI answer this prompt and draw the answer', onClick: () => { m.close(); drawFromPrompt(ctx, target, prompt); } }) : null;
   m.contentEl.append(
     h('div', { cls: 'helm-hint', text: `For ${target.title} · paste into the Claude app or the CLI` }),
     pre,
     h('div', { cls: 'helm-modal-buttons' },
       button('Delete', { icon: 'trash', cls: 'helm-btn-quiet', onClick: () => { if (window.confirm(`Move prompt ${prompt.n} to the trash?`)) { m.close(); void ctx.run('Delete prompt', () => ctx.mutations.deletePrompt(prompt.path)); } } }),
       button('Open note', { icon: 'file-text', onClick: () => { m.close(); void ctx.openFile(prompt.path); } }),
+      drawBtn,
       h('span', { cls: 'helm-spacer' }), button('Close', { onClick: () => m.close() }), copyBtn),
   );
   m.open();
   ctx.trackModal(m);
+}
+
+/** Let the AI answer a saved prompt and draw the answer in the shape that fits its angle. */
+export function drawFromPrompt(ctx: UiContext, target: DrawingTarget, prompt: Prompt): void {
+  const kind = Mutations.kindForAngle(prompt.angle);
+  ctx.notify(`Answering prompt ${prompt.n} and drawing a ${Mutations.KIND_LABELS[kind]}… ${ctx.settings().aiEngine === 'skill' ? 'this takes several minutes' : 'give it a minute or two'}.`);
+  void ctx.run('AI diagram', async () => { const p = await ctx.mutations.generateFromPrompt(target, prompt); ctx.notify(`Drew ${p.slice(p.lastIndexOf('/') + 1).replace(/\.excalidraw\.md$/, '')}.`); await ctx.openFile(p); });
 }
 
 /** Make the next prompt, copy it straight to the clipboard, and show it. */
@@ -167,6 +178,11 @@ export function newPrompt(ctx: UiContext, target: DrawingTarget, angle?: PromptA
 export function addPromptItems(menu: Menu, ctx: UiContext, target: DrawingTarget): void {
   const list = ctx.index.promptsFor(target);
   for (const pr of list) menu.addItem((i) => i.setTitle(`Prompt ${pr.n} · ${angleLabel(pr.angle)}`).setIcon('clipboard-copy').onClick(() => { void ctx.copy(pr.text).then(() => ctx.notify(`Prompt ${pr.n} copied to the clipboard.`)); promptModal(ctx, pr, target); }));
+  if (list.length > 0 && aiOn(ctx)) menu.addItem((i) => {
+    i.setTitle('Draw a prompt with AI').setIcon('sparkles');
+    const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    for (const pr of list) sub.addItem((j) => j.setTitle(`Prompt ${pr.n} → ${Mutations.KIND_LABELS[Mutations.kindForAngle(pr.angle)]}`).setIcon('sparkles').onClick(() => drawFromPrompt(ctx, target, pr)));
+  });
   if (list.length > 0) menu.addSeparator();
   const next = PROMPT_ANGLES[list.length % PROMPT_ANGLES.length]!;
   menu.addItem((i) => i.setTitle(`New prompt (${next.label})`).setIcon('sparkle').onClick(() => newPrompt(ctx, target, next.id)));
@@ -201,6 +217,7 @@ export function manageModal(ctx: UiContext, target: DrawingTarget): void {
     for (const pr of prompts) prow.appendChild(h('div', { cls: 'helm-manage-row' }, icon('clipboard-copy'), h('span', { cls: 'helm-manage-title', text: `Prompt ${pr.n} · ${angleLabel(pr.angle)}` }), h('span', { cls: 'helm-spacer' }),
       button('Copy', { icon: 'copy', cls: 'helm-btn-quiet', onClick: () => void ctx.copy(pr.text).then(() => ctx.notify(`Prompt ${pr.n} copied.`)) }),
       button('View', { icon: 'eye', cls: 'helm-btn-quiet', onClick: () => promptModal(ctx, pr, target) }),
+      aiOn(ctx) ? button('Draw', { icon: 'sparkles', cls: 'helm-btn-quiet', title: `AI: ${Mutations.KIND_LABELS[Mutations.kindForAngle(pr.angle)]}`, onClick: () => { m.close(); drawFromPrompt(ctx, target, pr); } }) : null,
       iconButton('trash', 'Move to trash', () => { if (window.confirm(`Move prompt ${pr.n} to the trash?`)) void ctx.run('Delete prompt', async () => { await ctx.mutations.deletePrompt(pr.path); draw(); }); })));
     m.contentEl.appendChild(prow);
     m.contentEl.appendChild(h('div', { cls: 'helm-modal-buttons' }, button('New drawing…', { icon: 'pen-tool', onClick: () => { m.close(); newDrawing(ctx, target); } }), button('New prompt', { icon: 'sparkle', onClick: () => { m.close(); newPrompt(ctx, target); } }), h('span', { cls: 'helm-spacer' }), button('Close', { onClick: () => m.close() })));

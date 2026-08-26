@@ -236,3 +236,26 @@ describe('prompts', () => {
     expect(index.drawingsFor({ kind: 'period', key: '2026-W35', title: '' })).toEqual([]);
   });
 });
+
+describe('drawing a saved prompt', () => {
+  it('sends the prompt as the brief with the shape for its angle, draws that shape, names the file after the prompt', async () => {
+    const { vault, index, settings } = await setup();
+    const calls: { prompt: string; research?: boolean }[] = [];
+    const m = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, ai: async (prompt, o) => { calls.push({ prompt, ...(o?.research !== undefined ? { research: o.research } : {}) }); return JSON.stringify({ kind: 'flow', title: 'Plan', summary: 'done', steps: [{ title: 'A', effort: '1h' }, { title: 'B' }], stalls: ['x'] }); } });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
+    const pr = await m.createPrompt({ kind: 'task', key: t.key, title: t.text }, 'plan');
+    const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === t.text && x.origin === 'project')!;
+    const path = await m.generateFromPrompt({ kind: 'task', key: t2.key, id: t2.id, title: t2.text }, pr);
+    expect(path).toBe(`Excalidraw/${t.text} — prompt 1 roadmap.excalidraw.md`);
+    expect(calls[0]!.research).toBe(true);
+    expect(calls[0]!.prompt).toContain('THE BRIEF:\nTurn the subject below into a plan I can execute.');
+    expect(calls[0]!.prompt).toContain('"kind":"flow"');
+    expect(calls[0]!.prompt).toContain('a roadmap');
+    const c = await vault.read(path);
+    expect(c).toContain('helm-generated: true');
+    expect(c).toContain('1. A\n⏱ 1h ^');
+    expect(index.drawingsFor({ kind: 'task', key: t2.key, id: t2.id, title: '' }).map((d) => d.title)).toEqual([`${t.text} — prompt 1 roadmap`]);
+    expect(Mutations.kindForAngle('deep-dive')).toBe('hub');
+    expect(Mutations.kindForAngle('learn')).toBe('lesson');
+  });
+});

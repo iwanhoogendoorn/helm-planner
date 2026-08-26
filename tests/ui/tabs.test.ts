@@ -631,7 +631,7 @@ describe('Prompts in the UI', () => {
     const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === t.text && x.origin === 'project')!;
     click(taskRow(ctx, t2).querySelector('button[aria-label="More…"]'));
     const prompts2 = Menu.last!.items.find((i) => i.title === 'Prompts')!.sub!;
-    expect(prompts2.items.map((i) => i.title)).toEqual(['Prompt 1 · Deep dive', 'New prompt (Action plan)', 'New prompt with angle…']);
+    expect(prompts2.items.map((i) => i.title)).toEqual(['Prompt 1 · Deep dive', 'Draw a prompt with AI', 'New prompt (Action plan)', 'New prompt with angle…']);
     prompts2.items[0]!.click!();
     await flush();
     expect(copied).toHaveLength(2);

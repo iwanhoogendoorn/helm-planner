@@ -26,12 +26,21 @@ import { misfiledDate } from './planner';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
 import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates';
 import { drawingTitle, parseExcalidrawScene, renderExcalidrawDocument, type Drawing, type ExcalidrawElement } from '../core/drawing';
-import { layoutDiagram, parseDiagramSpec, type DiagramSpec } from '../core/diagram';
+import { layoutDiagram, parseDiagramSpec, KIND_SCHEMAS, type DiagramSpec, type DiagramKind } from '../core/diagram';
 import { digestFor } from './digest';
 import { buildPrompt, renderPromptNote, PROMPT_ANGLES, type Prompt, type PromptAngle } from '../core/prompts';
 import type { DrawingTarget } from '../core/types';
 
 export type DiagramMode = 'overview' | 'research';
+
+const KIND_HINTS: Record<DiagramKind, string> = {
+  columns: 'themes as columns with items, highlights and next steps',
+  hub: 'the subject in the centre, key concepts around it with a line each, a how-it-works flow, and the best sources',
+  flow: 'prerequisites, then the steps in order with effort and a verification for each, then where it stalls',
+  matrix: 'options across, criteria down, one cell per pair, the recommended option highlighted with the reason',
+  checklist: 'Before / During / After columns of checkbox items, pitfalls marked on the During steps, the common mistakes',
+  lesson: 'a worked example step by step, a glossary of terms, quiz cards with answers, and a summary',
+};
 
 /** A running piece of work, for a status bar or a banner. */
 export interface JobState { label: string; phase: string; startedAt: number; cancel: () => void }
@@ -929,10 +938,10 @@ export class Mutations {
   }
 
   /** The prompt for coleam00's excalidraw-diagram skill: digest in, a `.excalidraw` file out at `outPath`. */
-  skillPrompt(target: DrawingTarget, outPath: string, skillDir: string, mode: DiagramMode = 'overview'): string {
+  skillPrompt(target: DrawingTarget, outPath: string, skillDir: string, mode: DiagramMode = 'overview', brief?: string): string {
     const s = this.settings;
     const research = mode === 'research';
-    const digest = research ? this.subjectBrief(target) : digestFor(this.index.snapshot, target, this.today, s);
+    const digest = brief ?? (research ? this.subjectBrief(target) : digestFor(this.index.snapshot, target, this.today, s));
     const what = target.kind === 'project' ? `the project “${target.title}”` : target.kind === 'date' ? `the day ${target.title}` : target.kind === 'task' ? `the task “${target.title}”` : `${parsePeriod(target.key)?.label ?? target.key}`;
     return [
       `Use the excalidraw-diagram skill installed at ${skillDir} — read its SKILL.md and the files under references/ first and follow its methodology (visual argument, concrete content, container discipline, tight text widths).`,
@@ -971,7 +980,7 @@ export class Mutations {
   }
 
   /** The skill engine: the CLI builds a `.excalidraw` file in a scratch folder; Helm imports it into the vault. */
-  private async generateWithSkill(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode }, signal?: AbortSignal, phase: (p: string) => void = () => undefined): Promise<string> {
+  private async generateWithSkill(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode; brief?: string }, signal?: AbortSignal, phase: (p: string) => void = () => undefined): Promise<string> {
     const mode = this.diagramMode(target, opts.mode);
     const sk = this.d.skill;
     if (!sk) throw new Error('The skill engine needs the desktop app and the Claude CLI');
@@ -981,7 +990,7 @@ export class Mutations {
     let reply = '';
     let timedOut: Error | undefined;
     phase(this.settings.skillRender ? 'skill is designing, drawing and rendering' : 'skill is designing and drawing');
-    try { reply = await sk.run(this.skillPrompt(target, outPath, skillDir, mode), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 900), extraDirs: [skillDir], research: mode === 'research' && this.settings.aiResearch, ...(signal ? { signal } : {}) }); }
+    try { reply = await sk.run(this.skillPrompt(target, outPath, skillDir, mode, opts.brief), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 900), extraDirs: [skillDir], research: mode === 'research' && this.settings.aiResearch, ...(signal ? { signal } : {}) }); }
     catch (e) { if (signal?.aborted) throw e; timedOut = e as Error; }
     phase('importing');
     let raw: string | undefined;
@@ -1010,6 +1019,47 @@ export class Mutations {
     this.index.update(path, content);
     await this.embedDrawing(target, path);
     return path;
+  }
+
+  /** Which diagram shape fits a prompt's angle. */
+  static kindForAngle(angle: PromptAngle): DiagramKind { return ({ 'deep-dive': 'hub', plan: 'flow', options: 'matrix', learn: 'lesson', checklist: 'checklist' } as Record<PromptAngle, DiagramKind>)[angle]; }
+
+  static readonly KIND_LABELS: Record<DiagramKind, string> = { columns: 'overview', hub: 'knowledge map', flow: 'roadmap', matrix: 'comparison matrix', checklist: 'checklist board', lesson: 'illustrated lesson' };
+
+  /** The prompt that answers a saved prompt and returns the answer in a diagram shape. */
+  promptDiagramPrompt(prompt: Prompt, kind: DiagramKind): string {
+    const s = this.settings;
+    return [
+      `Below is a brief the user wrote for you. Do exactly what it asks — ${s.aiResearch ? 'research with web search and page fetching where facts matter; use current, primary sources' : 'from what you know'} — and then, instead of prose, express your complete answer as a diagram specification.`,
+      `Reply with ONLY a JSON object, no prose, no code fence, with this exact shape (a ${Mutations.KIND_LABELS[kind]}):`,
+      KIND_SCHEMAS[kind],
+      'Every string must be short enough to sit in a box (respect the limits), concrete and true for this subject; no placeholders, no restating the brief. Fill every field the shape has.',
+      ...(s.aiInstructions.trim() ? [`Extra instructions from the user: ${s.aiInstructions.trim()}`] : []),
+      '', 'THE BRIEF:', prompt.text,
+    ].join('\n');
+  }
+
+  /** Answer a saved prompt with the AI and draw the answer in the shape that fits its angle. */
+  async generateFromPrompt(target: DrawingTarget, prompt: Prompt, opts: { kind?: DiagramKind; replacePath?: string } = {}): Promise<string> {
+    const kind = opts.kind ?? Mutations.kindForAngle(prompt.angle);
+    const skill = this.settings.aiEngine === 'skill';
+    const ac = new AbortController();
+    const label = `Prompt ${prompt.n} → ${Mutations.KIND_LABELS[kind]} for “${target.title}”`;
+    const job: JobState = { label, phase: 'preparing', startedAt: Date.now(), cancel: () => ac.abort() };
+    const phase = (p: string): void => { job.phase = p; this.d.progress?.({ ...job }); };
+    phase(job.phase);
+    try {
+      const name = `prompt ${prompt.n} ${Mutations.KIND_LABELS[kind]}`;
+      if (skill) return await this.generateWithSkill(target, { name, ...(opts.replacePath ? { replacePath: opts.replacePath } : {}), mode: 'research', brief: `${prompt.text}\n\nShape it as a ${Mutations.KIND_LABELS[kind]}: ${KIND_HINTS[kind]}` }, ac.signal, phase);
+      if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
+      phase(this.settings.aiResearch ? 'answering the prompt (web allowed)' : 'answering the prompt');
+      const raw = await this.d.ai(this.promptDiagramPrompt(prompt, kind), { research: this.settings.aiResearch, signal: ac.signal });
+      const spec = parseDiagramSpec(raw);
+      if (!spec) throw new Error('The AI reply was not a diagram (expected JSON for the requested shape)');
+      spec.kind = kind;
+      phase('drawing');
+      return await this.drawSpec(target, spec, name, opts.replacePath);
+    } finally { this.d.progress?.(null); }
   }
 
   /** Draw a spec for a target without any AI involved (also what the AI path ends in). */
