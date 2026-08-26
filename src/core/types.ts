@@ -242,6 +242,8 @@ export interface HelmSettings {
   aiInstructions: string;
   /** Which engine draws AI diagrams: Helm's structured layout, or coleam00's excalidraw-diagram skill through the CLI. */
   aiEngine: 'helm' | 'skill';
+  /** Let research diagrams use web search and page fetching. */
+  aiResearch: boolean;
   skillPath: string;
   skillBackground: 'white' | 'dark';
   skillRender: boolean;
@@ -304,6 +306,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   aiTimeoutSec: 180,
   aiInstructions: '',
   aiEngine: 'helm',
+  aiResearch: true,
   skillPath: '~/.claude/skills/excalidraw-diagram',
   skillBackground: 'white',
   skillRender: true,

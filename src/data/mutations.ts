@@ -30,6 +30,8 @@ import { layoutDiagram, parseDiagramSpec, type DiagramSpec } from '../core/diagr
 import { digestFor } from './digest';
 import type { DrawingTarget } from '../core/types';
 
+export type DiagramMode = 'overview' | 'research';
+
 export interface MutationDeps {
   vault: VaultAdapter;
   index: HelmIndex;
@@ -43,9 +45,9 @@ export interface MutationDeps {
   /** How long a template engine gets to react to a new file before Helm re-asserts a template note's content (ms). */
   templateSettleMs?: number;
   /** Ask the AI (Claude CLI) a question; resolves with the raw reply. */
-  ai?: (prompt: string) => Promise<string>;
+  ai?: (prompt: string, opts?: { research?: boolean }) => Promise<string>;
   /** Run the CLI with tools so a skill can build a file: returns the reply; `readFile` fetches what it wrote. */
-  skill?: { run: (prompt: string, opts: { cwd: string; timeoutSec: number; extraDirs: string[] }) => Promise<string>; readFile: (path: string) => Promise<string>; workDir: () => string; expandHome: (p: string) => string };
+  skill?: { run: (prompt: string, opts: { cwd: string; timeoutSec: number; extraDirs: string[]; research?: boolean }) => Promise<string>; readFile: (path: string) => Promise<string>; workDir: () => string; expandHome: (p: string) => string };
   /** The Excalidraw plugin's own folder for new drawings, when it is installed. */
   excalidrawFolder?: () => string | undefined;
   /**
@@ -859,8 +861,56 @@ export class Mutations {
     });
   }
 
+  /** Which kind of diagram a target gets by default: tasks are subjects to research, the rest are periods to overview. */
+  diagramMode(target: DrawingTarget, mode?: DiagramMode): DiagramMode { return mode ?? (target.kind === 'task' ? 'research' : 'overview'); }
+
+  /** What the AI needs to know about a research subject: the task or project text plus its context. */
+  subjectBrief(target: DrawingTarget): string {
+    const snap = this.index.snapshot;
+    if (target.kind === 'task') {
+      const t = snap.tasks.get(target.key) ?? [...snap.tasks.values()].find((x) => x.id === target.id);
+      if (!t) return `Task: ${target.title}`;
+      const proj = t.projectId ? snap.projects.get(t.projectId) : undefined;
+      const phase = proj?.phases.find((ph) => ph.id === t.phaseId);
+      const subs = t.childKeys.map((k) => snap.tasks.get(k)?.text).filter((x): x is string => !!x);
+      return [
+        `Task: ${t.text}`,
+        proj ? `Project: ${proj.title}${phase ? ` › ${phase.title}` : ''}${proj.area ? ` (area: ${proj.area})` : ''}` : '',
+        t.tags.length ? `Tags: ${t.tags.map((x) => `#${x}`).join(' ')}` : '',
+        t.due ? `Due: ${t.due}` : '', t.scheduled ? `Planned for: ${t.scheduled}` : '',
+        subs.length ? `Subtasks:\n${subs.map((x) => `- ${x}`).join('\n')}` : '',
+      ].filter(Boolean).join('\n');
+    }
+    if (target.kind === 'project') {
+      const p = snap.projects.get(target.id);
+      if (!p) return `Project: ${target.title}`;
+      const tasks = [...snap.tasks.values()].filter((t) => t.projectId === p.id && t.origin === 'project');
+      return [`Project: ${p.title}${p.area ? ` (area: ${p.area})` : ''}`, p.phases.length ? `Phases: ${p.phases.map((ph) => ph.title).join(' → ')}` : '', tasks.length ? `Tasks:\n${tasks.slice(0, 40).map((t) => `- [${t.status === 'done' ? 'x' : ' '}] ${t.text}`).join('\n')}` : ''].filter(Boolean).join('\n');
+    }
+    return target.title;
+  }
+
   /** The prompt Helm sends for an AI diagram of a target. */
-  diagramPrompt(target: DrawingTarget): string {
+  diagramPrompt(target: DrawingTarget, mode?: DiagramMode): string {
+    if (this.diagramMode(target, mode) === 'research') return this.researchPrompt(target);
+    return this.overviewPrompt(target);
+  }
+
+  /** Research mode: the task or project is a subject; the diagram carries real knowledge about it, never a restatement. */
+  researchPrompt(target: DrawingTarget): string {
+    const s = this.settings;
+    return [
+      `You are a domain expert asked to turn a subject into a one-page knowledge diagram for a personal knowledge base. The subject comes from the user's ${target.kind === 'task' ? 'task' : 'project'} below. Do the actual work the subject implies: ${s.aiResearch ? 'research it (web search and fetching pages are allowed and expected — use current, primary sources such as the vendor\'s own pages)' : 'use what you know'}, then distil it.`,
+      'Reply with ONLY a JSON object, no prose, no code fence, with this exact shape:',
+      `{"title": string (≤ 60 chars), "summary": string (one sentence, ≤ 160 chars, the key takeaway), "themes": [{"name": string (≤ 28 chars), "color": one of blue|green|yellow|purple|orange|teal|pink|red|grey, "items": [string (≤ 48 chars each)]}], "highlights": [string (≤ 48 chars)], "next": [string (≤ 48 chars)]}`,
+      'Rules: themes are the real structure of the subject (for certifications: one theme per vendor or track, items are the actual certifications in progression order with level, code or cost in the label — e.g. "NCA-GENL · Associate · $135"); for a technology: components, flows, options; for a decision: the alternatives with their trade-offs. 3 to 6 themes, 2 to 8 items each. Highlights are the 2–4 facts worth remembering (prerequisites, validity, prices, gotchas). Next is the recommended path for this user in 2–4 concrete steps. Every item must be true and specific. NEVER restate the task, describe the request, or comment on how much information you were given — the diagram is about the subject, not about the task.',
+      ...(s.aiInstructions.trim() ? [`Extra instructions from the user: ${s.aiInstructions.trim()}`] : []),
+      '', 'SUBJECT:', this.subjectBrief(target),
+    ].join('\n');
+  }
+
+  /** Overview mode: a factual picture of a period, day or project from the digest. */
+  overviewPrompt(target: DrawingTarget): string {
     const digest = digestFor(this.index.snapshot, target, this.today, this.settings);
     const what = target.kind === 'project' ? 'this project' : target.kind === 'date' ? 'this day' : `this ${parsePeriod(target.key)?.kind ?? 'period'}`;
     return [
@@ -873,35 +923,40 @@ export class Mutations {
   }
 
   /** The prompt for coleam00's excalidraw-diagram skill: digest in, a `.excalidraw` file out at `outPath`. */
-  skillPrompt(target: DrawingTarget, outPath: string, skillDir: string): string {
+  skillPrompt(target: DrawingTarget, outPath: string, skillDir: string, mode: DiagramMode = 'overview'): string {
     const s = this.settings;
-    const digest = digestFor(this.index.snapshot, target, this.today, s);
-    const what = target.kind === 'project' ? `the project “${target.title}”` : target.kind === 'date' ? `the day ${target.title}` : `${parsePeriod(target.key)?.label ?? target.key}`;
+    const research = mode === 'research';
+    const digest = research ? this.subjectBrief(target) : digestFor(this.index.snapshot, target, this.today, s);
+    const what = target.kind === 'project' ? `the project “${target.title}”` : target.kind === 'date' ? `the day ${target.title}` : target.kind === 'task' ? `the task “${target.title}”` : `${parsePeriod(target.key)?.label ?? target.key}`;
     return [
       `Use the excalidraw-diagram skill installed at ${skillDir} — read its SKILL.md and the files under references/ first and follow its methodology (visual argument, concrete content, container discipline, tight text widths).`,
-      `Task: a one-page Excalidraw overview of ${what} for a personal planning vault. The audience is the vault's owner; the point is to SEE the shape of the period: what moved, what is stuck, what is next. Group by what matters (projects, goals, areas, days), show progress and relationships, keep every label short.`,
+      research
+        ? `Task: a one-page Excalidraw knowledge diagram about the SUBJECT of ${what} for a personal knowledge base. Do the actual work the subject implies — ${s.aiResearch ? 'research it on the web with current primary sources (vendor pages), then' : 'from what you know,'} lay out the real structure: tracks, levels, prerequisites, options, trade-offs, costs, order. Never restate the task or describe the request; the diagram is about the subject.`
+        : `Task: a one-page Excalidraw overview of ${what} for a personal planning vault. The audience is the vault's owner; the point is to SEE the shape of the period: what moved, what is stuck, what is next. Group by what matters (projects, goals, areas, days), show progress and relationships, keep every label short.`,
       `Background: ${s.skillBackground === 'dark' ? 'black (#1e1e1e)' : 'white (#ffffff)'} — already chosen, do not ask.`,
-      'Do not research anything on the web; use only the digest below. Do not invent items that are not in it.',
+      research ? (s.aiResearch ? 'Web research is allowed and expected; cite nothing, just draw what is true.' : 'Do not use the web; use what you know.') : 'Do not research anything on the web; use only the digest below. Do not invent items that are not in it.',
       `Write the finished diagram as a single JSON file to exactly this path: ${outPath}`,
       s.skillRender ? `Then run the skill's render step (uv is installed; the references folder has its environment) to view the PNG and fix layout problems, as the skill requires. Write the PNG next to the JSON, not anywhere else.` : 'Skip the render-and-validate loop; do not run any commands.',
       'Do not create any other files. When done, reply with only the absolute path of the JSON file.',
       ...(s.aiInstructions.trim() ? [`Extra instructions from the user: ${s.aiInstructions.trim()}`] : []),
-      '', 'DIGEST:', digest,
+      '', research ? 'SUBJECT:' : 'DIGEST:', digest,
     ].join('\n');
   }
 
   /** Ask the AI for a visual overview of a target and draw it. Returns the drawing path. */
-  async generateDiagram(target: DrawingTarget, opts: { name?: string; replacePath?: string } = {}): Promise<string> {
-    if (this.settings.aiEngine === 'skill') return this.generateWithSkill(target, opts);
+  async generateDiagram(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode } = {}): Promise<string> {
+    const mode = this.diagramMode(target, opts.mode);
+    if (this.settings.aiEngine === 'skill') return this.generateWithSkill(target, { ...opts, mode });
     if (!this.d.ai) throw new Error('AI is not available — check the command in Settings → Drawings');
-    const raw = await this.d.ai(this.diagramPrompt(target));
+    const raw = await this.d.ai(this.diagramPrompt(target, mode), { research: mode === 'research' && this.settings.aiResearch });
     const spec = parseDiagramSpec(raw);
     if (!spec) throw new Error('The AI reply was not a diagram (expected JSON with title and themes)');
-    return this.drawSpec(target, spec, opts.name, opts.replacePath);
+    return this.drawSpec(target, spec, opts.name ?? (mode === 'research' ? 'research' : undefined), opts.replacePath);
   }
 
   /** The skill engine: the CLI builds a `.excalidraw` file in a scratch folder; Helm imports it into the vault. */
-  private async generateWithSkill(target: DrawingTarget, opts: { name?: string; replacePath?: string }): Promise<string> {
+  private async generateWithSkill(target: DrawingTarget, opts: { name?: string; replacePath?: string; mode?: DiagramMode }): Promise<string> {
+    const mode = this.diagramMode(target, opts.mode);
     const sk = this.d.skill;
     if (!sk) throw new Error('The skill engine needs the desktop app and the Claude CLI');
     const skillDir = sk.expandHome(this.settings.skillPath.trim() || '~/.claude/skills/excalidraw-diagram');
@@ -909,7 +964,7 @@ export class Mutations {
     const outPath = `${work}/diagram.excalidraw`;
     let reply = '';
     let timedOut: Error | undefined;
-    try { reply = await sk.run(this.skillPrompt(target, outPath, skillDir), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 900), extraDirs: [skillDir] }); }
+    try { reply = await sk.run(this.skillPrompt(target, outPath, skillDir, mode), { cwd: work, timeoutSec: Math.max(60, this.settings.skillTimeoutSec || 900), extraDirs: [skillDir], research: mode === 'research' && this.settings.aiResearch }); }
     catch (e) { timedOut = e as Error; }
     let raw: string | undefined;
     try { raw = await sk.readFile(outPath); } catch { raw = undefined; }
@@ -923,7 +978,7 @@ export class Mutations {
     }
     const scene = raw !== undefined ? parseExcalidrawScene(raw) : parseExcalidrawScene(reply);
     if (!scene) throw new Error(`The skill did not produce an Excalidraw file (${reply.trim().slice(0, 120) || 'no reply'})`);
-    return this.importScene(target, scene.elements, { ...(scene.background ? { background: scene.background } : {}), ...(opts.name ? { name: opts.name } : {}), ...(opts.replacePath ? { replacePath: opts.replacePath } : {}), engine: 'excalidraw-diagram skill' });
+    return this.importScene(target, scene.elements, { ...(scene.background ? { background: scene.background } : {}), name: opts.name ?? (mode === 'research' ? 'research' : 'diagram'), ...(opts.replacePath ? { replacePath: opts.replacePath } : {}), engine: 'excalidraw-diagram skill' });
   }
 
   /** Write a scene into the vault as a drawing attached to a target. */

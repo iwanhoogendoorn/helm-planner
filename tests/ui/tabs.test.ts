@@ -607,6 +607,6 @@ describe('Drawings in the UI', () => {
     await m.createDrawing({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Architecture' });
     const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
     expect(texts(root, '.helm-drawing-card-title')).toEqual(['Architecture']);
-    expect(texts(root, '.helm-drawing-actions button')).toEqual(['New drawing', 'AI overview']);
+    expect(texts(root, '.helm-drawing-actions button')).toEqual(['New drawing', 'AI overview', 'AI research']);
   });
 });

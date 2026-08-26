@@ -151,3 +151,28 @@ describe('skill engine when the clock runs out', () => {
     await expect(mk().generateDiagram({ kind: 'period', key: '2026-W36', title: 'Week 36' })).rejects.toThrow(/longer than 900s/);
   });
 });
+
+describe('research diagrams', () => {
+  it('a task is a subject: the prompt carries the task and its context, asks for real knowledge, allows research, and never sends the digest', async () => {
+    const { vault, index, settings } = await setup();
+    const calls: { prompt: string; research?: boolean }[] = [];
+    const m = new Mutations({ vault, index, settings: () => settings, today: () => TODAY, notify: () => undefined, ai: async (prompt, o) => { calls.push({ prompt, ...(o?.research !== undefined ? { research: o.research } : {}) }); return '{"title":"NVIDIA & Anthropic certification tracks","summary":"Two ladders.","themes":[{"name":"NVIDIA","items":["NCA-GENL · Associate"]},{"name":"Anthropic","items":["Claude Certified Architect"]}],"highlights":["NCA exams cost $135"],"next":["Start with NCA-GENL"]}'; } });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
+    const proj = index.project(t.projectId!)!;
+    const p = await m.generateDiagram({ kind: 'task', key: t.key, title: t.text });
+    expect(p).toBe(`Excalidraw/${t.text} — research.excalidraw.md`);
+    expect(calls[0]!.research).toBe(true);
+    expect(calls[0]!.prompt).toContain(`SUBJECT:\nTask: ${t.text}`);
+    expect(calls[0]!.prompt).toContain(`Project: ${proj.title}`);
+    expect(calls[0]!.prompt).toContain('NEVER restate the task');
+    expect(calls[0]!.prompt).not.toContain('DIGEST:');
+    expect(await vault.read(p)).toContain('NCA-GENL · Associate');
+    // A project can be researched too; an overview of a period never is.
+    await m.generateDiagram({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { mode: 'research' });
+    expect(calls[1]!.prompt).toContain('SUBJECT:\nProject: Kitchen Remodel');
+    expect(calls[1]!.prompt).toMatch(/Tasks:\n- \[ \]/);
+    await m.generateDiagram({ kind: 'period', key: '2026-W35', title: 'Week 35' });
+    expect(calls[2]!.research).toBe(false);
+    expect(calls[2]!.prompt).toContain('DIGEST:');
+  });
+});

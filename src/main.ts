@@ -58,12 +58,12 @@ export default class HelmPlugin extends Plugin {
       processTemplate: (path) => this.runTemplater(path),
       excalidrawFolder: () => this.excalidrawFolder,
       skill: {
-        run: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: o.timeoutSec, cwd: o.cwd, extraArgs: ['--permission-mode', 'acceptEdits', '--allowedTools', 'Read,Write,Edit,Glob,Grep,Skill,Bash(uv *),Bash(cd *),Bash(ls *),Bash(cat *)', '--add-dir', ...o.extraDirs] }),
+        run: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: o.timeoutSec, cwd: o.cwd, extraArgs: ['--permission-mode', 'acceptEdits', '--allowedTools', `Read,Write,Edit,Glob,Grep,Skill,Bash(uv *),Bash(cd *),Bash(ls *),Bash(cat *)${o.research ? ',WebSearch,WebFetch' : ''}`, '--add-dir', ...o.extraDirs] }),
         readFile: (p) => readTextFile(p),
         workDir: () => makeWorkDir(),
         expandHome,
       },
-      ai: (prompt) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: Math.max(30, this.settings.aiTimeoutSec || 180), ...(this.vaultBasePath() ? { cwd: this.vaultBasePath()! } : {}) }),
+      ai: (prompt, o) => runClaude(prompt, { command: this.settings.aiCommand.trim() || 'claude', ...(this.settings.aiModel.trim() ? { model: this.settings.aiModel.trim() } : {}), timeoutSec: Math.max(30, o?.research ? Math.max(600, this.settings.aiTimeoutSec) : this.settings.aiTimeoutSec || 180), ...(this.vaultBasePath() ? { cwd: this.vaultBasePath()! } : {}), ...(o?.research ? { extraArgs: ['--allowedTools', 'WebSearch,WebFetch'] } : {}) }),
     });
     this.index.onChange(() => this.refreshViews());
 

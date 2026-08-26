@@ -45,9 +45,11 @@ export function newDrawing(ctx: UiContext, target: DrawingTarget): void {
   });
 }
 
-export function aiDiagram(ctx: UiContext, target: DrawingTarget): void {
-  ctx.notify(ctx.settings().aiEngine === 'skill' ? `Asking the excalidraw-diagram skill for ${target.title}… this takes several minutes; Helm will say when it is done.` : `Asking the AI for an overview of ${target.title}…`);
-  void ctx.run('AI diagram', async () => { const p = await ctx.mutations.generateDiagram(target); ctx.notify(`Drew ${p.slice(p.lastIndexOf('/') + 1).replace(/\.excalidraw\.md$/, '')}.`); await ctx.openFile(p); });
+export function aiDiagram(ctx: UiContext, target: DrawingTarget, mode?: 'overview' | 'research'): void {
+  const m = mode ?? (target.kind === 'task' ? 'research' : 'overview');
+  const skill = ctx.settings().aiEngine === 'skill';
+  ctx.notify(m === 'research' ? `Researching “${target.title}” and drawing what it finds… ${skill ? 'this takes several minutes' : 'give it a minute or two'}; Helm will say when it is done.` : skill ? `Asking the excalidraw-diagram skill for ${target.title}… this takes several minutes; Helm will say when it is done.` : `Asking the AI for an overview of ${target.title}…`);
+  void ctx.run('AI diagram', async () => { const p = await ctx.mutations.generateDiagram(target, { mode: m }); ctx.notify(`Drew ${p.slice(p.lastIndexOf('/') + 1).replace(/\.excalidraw\.md$/, '')}.`); await ctx.openFile(p); });
 }
 
 export function regenerate(ctx: UiContext, target: DrawingTarget, path: string): void {
@@ -65,7 +67,13 @@ export function addDrawingItems(menu: Menu, ctx: UiContext, target: DrawingTarge
   if (list.length > 12) menu.addItem((i) => i.setTitle(`… ${list.length - 12} more`).setIcon('more-horizontal').setDisabled(true));
   if (list.length > 0) menu.addSeparator();
   menu.addItem((i) => i.setTitle('New drawing…').setIcon('pen-tool').onClick(() => newDrawing(ctx, target)));
-  if (aiOn(ctx)) menu.addItem((i) => i.setTitle('AI overview diagram').setIcon('sparkles').onClick(() => aiDiagram(ctx, target)));
+  if (aiOn(ctx)) {
+    if (target.kind === 'task') menu.addItem((i) => i.setTitle('AI diagram: research this subject').setIcon('sparkles').onClick(() => aiDiagram(ctx, target, 'research')));
+    else {
+      menu.addItem((i) => i.setTitle('AI overview diagram').setIcon('sparkles').onClick(() => aiDiagram(ctx, target, 'overview')));
+      if (target.kind === 'project') menu.addItem((i) => i.setTitle('AI diagram: research the subject').setIcon('telescope').onClick(() => aiDiagram(ctx, target, 'research')));
+    }
+  }
 }
 
 export function drawingsMenu(ctx: UiContext, target: DrawingTarget, ev: MouseEvent): void {
@@ -106,7 +114,9 @@ export function drawingsSection(ctx: UiContext, target: DrawingTarget): HTMLElem
     cards.appendChild(card);
   }
   if (list.length === 0) cards.appendChild(h('div', { cls: 'helm-hint', text: 'No drawings yet.' }));
-  const actions = h('div', { cls: 'helm-drawing-actions' }, button('New drawing', { icon: 'pen-tool', onClick: () => newDrawing(ctx, target) }), aiOn(ctx) ? button('AI overview', { icon: 'sparkles', onClick: () => aiDiagram(ctx, target) }) : null);
+  const actions = h('div', { cls: 'helm-drawing-actions' }, button('New drawing', { icon: 'pen-tool', onClick: () => newDrawing(ctx, target) }),
+    aiOn(ctx) && target.kind !== 'task' ? button('AI overview', { icon: 'sparkles', onClick: () => aiDiagram(ctx, target, 'overview') }) : null,
+    aiOn(ctx) && (target.kind === 'task' || target.kind === 'project') ? button('AI research', { icon: 'telescope', title: 'Research the subject and draw what is true about it', onClick: () => aiDiagram(ctx, target, 'research') }) : null);
   return h('div', { cls: 'helm-drawings' }, cards, actions);
 }
 void icon;
