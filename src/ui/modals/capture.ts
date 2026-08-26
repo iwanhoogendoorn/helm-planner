@@ -38,8 +38,20 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   const timeOf = (c: { time?: { start: string; end?: string } }): { start: string; end?: string } | undefined => timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : c.time;
   const effort = effortField();
   let grammarEffort: number | undefined;
+  let timeTouched = false;
+  let timeAuto = false;
+  let programmatic = false;
+  const poke = (el: HTMLInputElement): void => { programmatic = true; try { el.dispatchEvent(new Event('input')); } finally { programmatic = false; } };
+  timeStart.addEventListener('input', () => { if (programmatic) return; timeTouched = true; timeAuto = false; });
+  timeEnd.addEventListener('input', () => { if (programmatic) return; timeTouched = true; });
   linkTimes(timeStart, timeEnd, effort);
   effort.onChange(() => render());
+  /** Today's capture starts at the current hour unless the user or the text says otherwise. */
+  const applyDefaultTime = (grammarTime: { start: string } | undefined): void => {
+    if (!ctx.settings().defaultCaptureTime || timeTouched || grammarTime) { if (timeAuto && (grammarTime || date !== today)) { timeStart.value = ''; timeEnd.value = ''; timeAuto = false; } return; }
+    if (date === today && !timeStart.value) { timeStart.value = `${ctx.now().slice(0, 2)}:00`; timeAuto = true; poke(timeStart); }
+    else if (date !== today && timeAuto) { timeStart.value = ''; timeEnd.value = ''; timeAuto = false; }
+  };
 
   const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Call the plumber tomorrow !high #home @Kitchen ~30m', value: defaults.text ?? '' } });
   const preview = h('div', { cls: 'helm-capture-preview' });
@@ -54,11 +66,12 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (c.project && !project) { const p = ctx.index.projectByTitle(c.project); if (p) project = p; else preview.appendChild(chip(`@${c.project} (unknown project)`, 'warn')); }
     if (c.scheduled && !explicitDate) date = c.scheduled;
     if (c.part && !explicitPart) part = c.part;
+    applyDefaultTime(c.time);
     const time = timeOf(c);
     const shownPart = part ?? (time ? partOfTime(time.start, ctx.settings()) : undefined);
     if (date) preview.appendChild(chip(`plan ${humanDate(date, today)}${shownPart ? ` · ${shownPart}${!part ? ' (by time)' : ''}` : ''}`, 'scheduled'));
     if (c.due) preview.appendChild(chip(`due ${humanDate(c.due, today)}`, 'due'));
-    if (c.effortMinutes !== grammarEffort) { grammarEffort = c.effortMinutes; if (c.effortMinutes) { effort.set(c.effortMinutes); if (timeStart.value) timeStart.dispatchEvent(new Event('input')); } }
+    if (c.effortMinutes !== grammarEffort) { grammarEffort = c.effortMinutes; if (c.effortMinutes) { effort.set(c.effortMinutes); if (timeStart.value) poke(timeStart); } }
     const eff = effort.get();
     if (eff) preview.appendChild(chip(minutesToHuman(eff), 'effort'));
     if (time) preview.appendChild(chip(time.end ? `${time.start}–${time.end}` : time.start, 'time'));

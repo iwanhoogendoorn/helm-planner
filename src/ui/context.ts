@@ -13,6 +13,8 @@ export interface UiContext {
   settings: () => HelmSettings;
   saveSettings: (patch: Partial<HelmSettings>) => Promise<void>;
   today: () => IsoDate;
+  /** Wall-clock time, HH:MM. */
+  now: () => string;
   notify: (msg: string) => void;
   /** Open a note (optionally at a line) in the editor. */
   openFile: (path: string, line?: number) => Promise<void>;

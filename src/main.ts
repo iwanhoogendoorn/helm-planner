@@ -152,6 +152,7 @@ export default class HelmPlugin extends Plugin {
       settings: () => this.settings,
       saveSettings: async (patch) => { Object.assign(this.settings, patch); await this.saveSettings(); },
       today: () => this.today(),
+      now: () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; },
       notify: (m) => { new Notice(m); },
       openFile: (path, line) => this.openFile(path, line),
       openLink: (target, from) => { this.app.workspace.openLinkText(target, from ?? '', false); },

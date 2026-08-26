@@ -30,6 +30,7 @@ async function ctxFor() {
     settings: () => s.settings,
     saveSettings: async () => undefined,
     today: () => TODAY,
+    now: () => '14:37',
     notify: (m) => { new Notice(m); },
     openFile: async (p) => { opened.push(p); },
     openLink: () => undefined,
@@ -407,6 +408,24 @@ describe('effort field and time linking', () => {
     custom.value = '1h10m'; custom.dispatchEvent(new Event('change'));
     expect(effort.get()).toBe(70);
     expect(end.value).toBe('14:10');
+  });
+
+  it('a capture for today defaults to the current hour; a typed time wins', async () => {
+    const { ctx, vault } = await ctxFor();
+    openCapture(ctx, { date: TODAY });
+    const m = Modal.last!;
+    const start = m.contentEl.querySelector<HTMLInputElement>('.helm-capture-time input[type="time"]')!;
+    expect(start.value).toBe('14:00');
+    const input = m.contentEl.querySelector<HTMLInputElement>('.helm-capture-input')!;
+    input.value = 'Call back ~30m'; input.dispatchEvent(new Event('input'));
+    expect(m.contentEl.querySelectorAll<HTMLInputElement>('.helm-capture-time input[type="time"]')[1]!.value).toBe('14:30');
+    input.value = 'Call back 16:15 ~30m'; input.dispatchEvent(new Event('input'));
+    expect(start.value).toBe('');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('- [ ] 16:15: Call back ⏱️ 30m');
+    openCapture(ctx, { date: '2026-08-28' });
+    expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('.helm-capture-time input[type="time"]')!.value).toBe('');
   });
 
   it('capture writes the effort and the end time derived from it', async () => {

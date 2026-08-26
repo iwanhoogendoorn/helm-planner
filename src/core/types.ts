@@ -204,6 +204,8 @@ export interface HelmSettings {
   afternoonEnds: string;
   /** Stamp ➕ created on tasks Helm creates. */
   writeCreatedDate: boolean;
+  /** Capture for today starts at the current hour by default. */
+  defaultCaptureTime: boolean;
   /** Move a daily task dated later than its note (a spawned recurrence) into that day's note automatically. */
   autoMoveRecurring: boolean;
   /** Weekly notes (Periodic Notes overrides). */
@@ -246,6 +248,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   morningEnds: '12:00',
   afternoonEnds: '18:00',
   writeCreatedDate: false,
+  defaultCaptureTime: true,
   autoMoveRecurring: true,
   weeklyFolder: '',
   weeklyFormat: '',
