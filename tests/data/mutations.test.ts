@@ -214,14 +214,16 @@ describe('day rituals', () => {
   it('rollover from yesterday to today', async () => {
     const { m, vault, index } = await setup({ [BOOK]: (await setup()).vault.files.get(BOOK)!.replace('- [ ] Chapter 1 📅 2026-08-20', '- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 ⏳ 2026-08-25') });
     const r = await m.rollover('2026-08-25', TODAY);
-    expect(r.moved).toBe(2);
+    expect(r.moved).toBe(3);
     const y = await vault.read(dailyPath('2026-08-25'));
-    expect(y).toContain('- [ ] 08:00 - 09:00: Start with OIB'); // planner slots are a log, not carried
+    expect(y).toContain('- [>] 08:00 - 09:00: Start with OIB'); // a planned slot with text is real work
+    expect(y).toContain('- [ ] 07:00 - 08:00:'); // empty slots are left alone
+    expect(y).toContain('- 🎂 No birthdays today');
     expect(y).toContain('- [>] Fix router config ⏱️ 30m');
     expect(y).toContain('- [x] Pay invoice ✅ 2026-08-25');
     expect(y).toContain('- [>] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
     const t = await vault.read(dailyPath(TODAY));
-    expect(t).toContain('### Afternoon\n- [ ] Fix router config ⏱️ 30m\n### Anytime\n- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
+    expect(t).toContain('### Morning\n- [ ] 08:00 - 09:00: Start with OIB\n### Afternoon\n- [ ] Fix router config ⏱️ 30m\n### Anytime\n- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
     expect(index.task('tsk-0003')!.scheduled).toBe(TODAY);
   });
 });
@@ -333,5 +335,79 @@ Next week: 2026-09-02 · 27
     const tpl = '---\ntitle: <% tp.file.title %>\ncreation_date: <% tp.date.now("YYYY-MM-DD") %>\n---\n<%tp.web.daily_quote()%>\n{{date:dddd}} {{title}}\n';
     expect(renderDailyTemplate(tpl, '2026-08-26', '26, Wednesday, Aug, 2026')).toBe('---\ntitle: 26, Wednesday, Aug, 2026\ncreation_date: 2026-08-26\n---\n\nWednesday 26, Wednesday, Aug, 2026\n');
     expect(renderDailyTemplate(undefined, '2026-08-26', 'X')).toContain('# X');
+  });
+});
+
+describe('working inside the user\'s own Day planner sections', () => {
+  const REAL = `---
+title: 26, Wednesday, Aug, 2026
+Type: Daily Note
+tags:
+  - dailynotes
+---
+
+> [!quote] Decide what you want.
+Previous day: [[25, Tuesday, Aug, 2026|Yesterday]]  
+Next day: [[27, Thursday, Aug, 2026|Tomorrow]]
+
+# Backlog Tasks
+
+[[Backlog Tasks]]
+
+# Day planner
+
+### A. Morning
+
+- 🎂 No birthdays today — next: Gaurav on 07 Sep
+- [ ] 07:00 - 08:00: 
+- [ ] 08:00 - 09:00: Start with OCI Infra Builder (OIB)
+- [ ] 09:00 - 10:00: 
+
+---
+### B. Afternoon
+
+- [ ] 12:00 - 13:00: 
+- [ ] 15:00 - 16:00: Search for a plumber
+
+---
+### C. Evening
+
+- [ ] 18:00 - 19:00: 
+`;
+  it('inserts into the existing sections and leaves every other byte alone', async () => {
+    const { m, vault, index } = await setup({ [dailyPath(TODAY)]: REAL });
+    await m.addTask({ text: 'Close the original task', date: TODAY, part: 'afternoon' });
+    await m.schedule('tsk-0001', TODAY, 'morning');
+    await m.planDay(TODAY, []); // habits
+    const out = await vault.read(dailyPath(TODAY));
+    expect(out).toBe(REAL
+      .replace('# Day planner\n\n### A. Morning', '# Day planner\n\n### Habits\n- [ ] Evening reading 🆔 hab-read\n- [ ] 🏃 Morning workout 🆔 hab-workout\n\n### A. Morning')
+      .replace('- [ ] 09:00 - 10:00: \n', '- [ ] 09:00 - 10:00: \n- [ ] Draft chapter list 🆔 tsk-0001 ⏫ 🔗 [[Oracle Book Writing]]\n')
+      .replace('- [ ] 15:00 - 16:00: Search for a plumber\n', '- [ ] 15:00 - 16:00: Search for a plumber\n- [ ] Close the original task\n'));
+    expect(out).not.toContain('## Plan');
+    // The planner slot with text is a real afternoon task; empty slots are not tasks.
+    const plumber = index.allTasks().find((t) => t.text === 'Search for a plumber')!;
+    expect(plumber.section).toBe('afternoon');
+    expect(index.tasksInFile(dailyPath(TODAY)).map((t) => t.text)).not.toContain('');
+    // Move the project task to the evening, tick the plumber, roll the rest to tomorrow.
+    await m.setPart(`tsk-0001@${TODAY}`, 'evening');
+    await m.setStatus(plumber.key, 'done');
+    const out2 = await vault.read(dailyPath(TODAY));
+    expect(out2).toContain('### C. Evening\n\n- [ ] 18:00 - 19:00: \n- [ ] Draft chapter list 🆔 tsk-0001 ⏫ 🔗 [[Oracle Book Writing]]\n');
+    expect(out2).toContain('- [x] 15:00 - 16:00: Search for a plumber ✅ 2026-08-26');
+    expect(out2).not.toContain('- [ ] 09:00 - 10:00: \n- [ ] Draft');
+    expect(out2).toContain('- 🎂 No birthdays today');
+    expect(out2.split('---\n### B. Afternoon')).toHaveLength(2);
+  });
+});
+
+describe('stray lines', () => {
+  it('a task outside the plan sections can be pulled into a part of the day', async () => {
+    const note = `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n## Plan\n### Afternoon\n- [ ] Close the original task\n\n# Day planner\n\n### A. Morning\n\n- [ ] 07:00 - 08:00: \n\n### B. Afternoon\n\n- [ ] 15:00 - 16:00: Search for a plumber\n`;
+    const { m, vault, index } = await setup({ [dailyPath(TODAY)]: note });
+    const stray = index.allTasks().find((t) => t.text === 'Close the original task')!;
+    expect(stray.section).toBe('outside');
+    await m.setPart(stray.key, 'afternoon');
+    expect(await vault.read(dailyPath(TODAY))).toBe(`---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n## Plan\n### Afternoon\n\n# Day planner\n\n### A. Morning\n\n- [ ] 07:00 - 08:00: \n\n### B. Afternoon\n\n- [ ] 15:00 - 16:00: Search for a plumber\n- [ ] Close the original task\n`);
   });
 });

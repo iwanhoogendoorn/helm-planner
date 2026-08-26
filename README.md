@@ -128,22 +128,36 @@ due_date: 2026-12-31
 - 2026-08-26 — Outline approved.
 ```
 
-**Daily note** — Helm owns exactly one section, the one under `## Plan`
-(configurable), split into parts of the day, and never touches anything
-outside it. No markers, no hidden syntax:
+**Daily note** — Helm works *inside your own template*. Any headings named
+Morning / Afternoon / Evening (with or without an `A.` prefix), Habits and
+Anytime are the plan; typically that is your `# Day planner`. A task is
+inserted after the last task of its section, removed with its subtask
+lines, or rewritten on its own line — every other byte of the note stays
+exactly where it was: your time slots, separators, birthday bullets, quotes.
+A section you don't have yet (Habits, Anytime) is created beside its
+siblings. No markers, no hidden syntax:
 
 ```markdown
-## Plan
+# Day planner
+
 ### Habits
 - [x] 🏃 Morning workout 🆔 hab-0012 ✅ 2026-08-27
-### Morning
+
+### A. Morning
+
+- [ ] 07:00 - 08:00: 
+- [ ] 08:00 - 09:00: Start with OIB
 - [ ] Chapter 1 🆔 tsk-8822 📅 2026-09-30 🔗 [[OCI Networking Book]]
-### Afternoon
+
+---
+### B. Afternoon
+
+- [ ] 15:00 - 16:00: Search for a plumber
 - [ ] Fix router config ⏱️ 30m
-### Evening
-### Anytime
-- [ ] Call the plumber
 ```
+
+Only a note with none of those headings gets a small `## Plan` block of its
+own (heading configurable).
 
 A line with `🔗 [[Project]]` is a **mirror** of the task in the project note:
 same id, same text. Tick it in either place and the other follows. Edit the

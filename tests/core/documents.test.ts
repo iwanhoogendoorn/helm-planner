@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseDocument } from '../../src/core/document';
 import { parseFrontmatter, setFrontmatter, splitLines } from '../../src/core/frontmatter';
 import { parseProject, renderProjectNote } from '../../src/core/project';
-import { findRegion, readRegion, writeRegion, renderRegion } from '../../src/core/dailyNote';
+import { emptyContent, findRegion, readRegion, writeRegion, renderRegion } from '../../src/core/dailyNote';
 import { newTaskLine } from '../../src/core/taskLine';
 import { parseHabit } from '../../src/core/habit';
 
@@ -124,22 +124,60 @@ Previous day: [[25, Tuesday, Aug, 2026|Yesterday]]
 const RS = { regionPlacement: 'before-first-heading' as const, regionAnchor: '', planHeading: '## Plan' };
 
 describe('daily note region', () => {
-  it('inserts before the first heading and reads back', () => {
-    const content = { habits: [newTaskLine('Workout', { id: 'hab-1' })], morning: [], afternoon: [newTaskLine('Fix router', { id: 'tsk-1', effortMinutes: 30 })], evening: [], anytime: [newTaskLine('Draft list', { id: 'tsk-2', mirrorLink: '[[OCI]]', due: '2026-09-05' })], extra: [] };
+  it('adopts the note\'s own Day planner sections and edits them in place', () => {
+    const { lines: l0 } = splitLines(DAILY);
+    const scan0 = findRegion(l0, RS);
+    expect(scan0.region?.adopted).toBe(true);
+    expect(scan0.region?.sections.morning.taskLines).toHaveLength(2);
+    const cur = readRegion(l0, scan0.region!);
+    const content = { ...cur, habits: [newTaskLine('Workout', { id: 'hab-1' })], morning: [...cur.morning, newTaskLine('Standup', { id: 'tsk-3' })], afternoon: [newTaskLine('Fix router', { id: 'tsk-1', effortMinutes: 30 })], anytime: [newTaskLine('Draft list', { id: 'tsk-2', mirrorLink: '[[OCI]]', due: '2026-09-05' })] };
     const w = writeRegion(DAILY, content, RS)!;
     const text = w.lines.join(w.eol);
-    expect(text).toContain('## Plan\n### Habits\n- [ ] Workout 🆔 hab-1\n### Afternoon\n- [ ] Fix router 🆔 tsk-1 ⏱️ 30m\n### Anytime\n- [ ] Draft list 🆔 tsk-2 📅 2026-09-05 🔗 [[OCI]]\n\n# Backlog Tasks');
+    expect(text).not.toContain('## Plan');
     expect(text).not.toContain('%%');
+    expect(text).toBe(`---
+title: 26, Wednesday, Aug, 2026
+---
+
+Previous day: [[25, Tuesday, Aug, 2026|Yesterday]]
+
+# Backlog Tasks
+
+# Day planner
+
+### Habits
+- [ ] Workout 🆔 hab-1
+
+### A. Morning
+
+- [ ] 07:00 - 08:00:
+- [ ] 08:00 - 09:00: Start with OIB
+- [ ] Standup 🆔 tsk-3
+
+### Afternoon
+- [ ] Fix router 🆔 tsk-1 ⏱️ 30m
+
+### Anytime
+- [ ] Draft list 🆔 tsk-2 📅 2026-09-05 🔗 [[OCI]]
+`);
     const scan = findRegion(w.lines, RS);
-    expect(scan.region).toBeDefined();
+    expect(scan.region?.adopted).toBe(true);
     const rc = readRegion(w.lines, scan.region!);
+    expect(rc.morning.map((l) => l.text)).toEqual(['', 'Start with OIB', 'Standup']);
     expect(rc.afternoon[0]!.text).toBe('Fix router');
-    expect(rc.anytime[0]!.mirrorLink).toBe('[[OCI]]');
-    // Rewrite in place: nothing outside changes.
-    const w2 = writeRegion(text, { ...rc, afternoon: [] }, { ...RS, regionPlacement: 'end' })!;
-    const text2 = w2.lines.join(w2.eol);
-    expect(text2.replace(/## Plan[\s\S]*?\n\n# Backlog/, 'R')).toBe(text.replace(/## Plan[\s\S]*?\n\n# Backlog/, 'R'));
-    expect(text2).not.toContain('### Afternoon');
+    // Remove one, tick one: only those lines change.
+    const rc2 = { ...rc, afternoon: [], morning: rc.morning.map((l) => (l.text === 'Standup' ? { ...l, status: 'done' as const, marker: 'x', done: '2026-08-26' } : l)) };
+    const w2 = writeRegion(text, rc2, RS)!;
+    expect(w2.lines.join('\n')).toBe(text.replace('- [ ] Standup 🆔 tsk-3', '- [x] Standup 🆔 tsk-3 ✅ 2026-08-26').replace('- [ ] Fix router 🆔 tsk-1 ⏱️ 30m\n', ''));
+  });
+  it('creates its own plan block only when the note has no sections', () => {
+    const note = '---\ntitle: x\n---\n\n# Notes\n\nsome prose\n';
+    const w = writeRegion(note, { ...emptyContent(), anytime: [newTaskLine('a')] }, RS)!;
+    expect(w.lines.join('\n')).toBe('---\ntitle: x\n---\n\n## Plan\n### Anytime\n- [ ] a\n\n# Notes\n\nsome prose\n');
+    const w2 = writeRegion(w.lines.join('\n'), { ...emptyContent(), morning: [newTaskLine('m')], anytime: [newTaskLine('a')] }, RS)!;
+    expect(w2.lines.join('\n')).toBe('---\ntitle: x\n---\n\n## Plan\n### Morning\n- [ ] m\n### Anytime\n- [ ] a\n\n# Notes\n\nsome prose\n');
+    const w3 = writeRegion(w2.lines.join('\n'), { ...emptyContent(), anytime: [newTaskLine('a')] }, RS)!;
+    expect(w3.lines.join('\n')).toBe(w.lines.join('\n'));
   });
   it('reads legacy marker regions and rewrites them without markers', () => {
     const lines = ['%% helm:start %%', '## Plan', 'Some note', '### Today', '- [ ] a', '### From projects', '- [ ] b 🔗 [[P]]', '%% helm:end %%', '', '# Next'];
@@ -161,7 +199,7 @@ describe('daily note region', () => {
     expect(readRegion(lines, scan.region!).morning.map((l) => l.text)).toEqual(['m']);
   });
   it('after-anchor placement', () => {
-    const w = writeRegion('# Top\n\n## Helm\n\n## Other\n', { habits: [], morning: [], afternoon: [], evening: [], anytime: [newTaskLine('x')], extra: [] }, { ...RS, regionPlacement: 'after-anchor', regionAnchor: '## Helm' })!;
+    const w = writeRegion('# Top\n\n## Helm\n\n## Other\n', { ...emptyContent(), anytime: [newTaskLine('x')] }, { ...RS, regionPlacement: 'after-anchor', regionAnchor: '## Helm' })!;
     expect(w.lines.join('\n')).toBe('# Top\n\n## Helm\n\n## Plan\n### Anytime\n- [ ] x\n\n## Other\n');
   });
 });

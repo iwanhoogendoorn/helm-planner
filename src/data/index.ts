@@ -161,6 +161,8 @@ export class HelmIndex {
       if (h) { entry.kind = 'habit'; entry.habit = h; return entry; }
     }
     const doc = parseDocument(content);
+    const seen = new Map<string, number>();
+    const derived = (text: string): string => { const n = seen.get(text.trim()) ?? 0; seen.set(text.trim(), n + 1); return derivedKey(path, n, text); };
 
     const period = this.periodOfPath(path);
     if (period !== undefined && !isProjectNote(doc)) {
@@ -172,7 +174,7 @@ export class HelmIndex {
         const { start, end } = sectionRange(doc, heading);
         for (const dt of doc.tasks) {
           if (dt.line < start || dt.line >= end || dt.depth > 0) continue;
-          const key = dt.task.id ?? derivedKey(path, dt.line, dt.task.text);
+          const key = dt.task.id ?? derived(dt.task.text);
           entry.tasks.push({ ...dt.task, key, path, line: dt.line, depth: 0, childKeys: [], origin: 'goal', periodKey: period.key });
         }
       }
@@ -186,7 +188,7 @@ export class HelmIndex {
       entry.diagnostics.push(...parsed.diagnostics);
       const keyOfLine = new Map<number, string>();
       parsed.doc.tasks.forEach((dt, i) => {
-        const key = dt.task.id ?? derivedKey(path, dt.line, dt.task.text);
+        const key = dt.task.id ?? derived(dt.task.text);
         keyOfLine.set(dt.line, key);
         const phaseId = parsed.phaseOfTask.get(i);
         const phase = phaseId ? parsed.project.phases.find((p) => p.id === phaseId) : undefined;
@@ -220,7 +222,7 @@ export class HelmIndex {
       }
       if (dt.task.text.trim() === '' && dt.task.unknown.length === 0) continue; // empty planner slot
       const isMirror = date !== undefined && dt.task.mirrorLink !== undefined;
-      let key = dt.task.id ?? derivedKey(path, dt.line, dt.task.text);
+      let key = dt.task.id ?? derived(dt.task.text);
       if (isMirror) key = `${key}@${date}`;
       keyOfLine.set(dt.line, key);
       const task: Task = { ...dt.task, key, path, line: dt.line, depth: dt.depth, childKeys: [], origin: isMirror ? 'daily-mirror' : origin };

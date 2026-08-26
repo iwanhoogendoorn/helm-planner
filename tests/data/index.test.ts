@@ -17,14 +17,14 @@ describe('index', () => {
     expect(snap.projects.get('prj-oracle')!.childIds).toEqual(['prj-cert']);
     expect([...snap.habits.keys()].sort()).toEqual(['hab-read', 'hab-workout']);
     expect(snap.dailyNotes.get('2026-08-25')?.hasRegion).toBe(true);
-    expect(snap.completions).toEqual([{ habitId: 'hab-workout', date: '2026-08-25', path: dailyPath('2026-08-25'), line: 13, state: 'done' }]);
+    expect(snap.completions).toEqual([{ habitId: 'hab-workout', date: '2026-08-25', path: dailyPath('2026-08-25'), line: 14, state: 'done' }]);
   });
 
   it('classifies daily lines', async () => {
     const { index } = await setup();
     const tasks = index.tasksInFile(dailyPath('2026-08-25'));
     expect(tasks.map((t) => [t.text, t.origin, t.section])).toEqual([
-      ['Start with OIB', 'daily', 'outside'],
+      ['Start with OIB', 'daily', 'morning'],
       ['Fix router config', 'daily', 'afternoon'],
       ['Pay invoice', 'daily', 'afternoon'],
       ['Chapter 1', 'daily-mirror', 'anytime'],
@@ -68,8 +68,9 @@ describe('planner', () => {
   it('day plan', async () => {
     const { index, settings } = await setup();
     const plan = dayPlan(index.snapshot, '2026-08-25', settings);
-    expect(plan.today.map((t) => t.text)).toEqual(['Fix router config', 'Pay invoice']);
-    expect(plan.timeBlocks.map((t) => t.text)).toEqual(['Start with OIB']);
+    expect(plan.today.map((t) => t.text)).toEqual(['Start with OIB', 'Fix router config', 'Pay invoice']);
+    expect(plan.timeBlocks).toEqual([]);
+    expect(plan.byPart.morning.map((i) => i.display.text)).toEqual(['Start with OIB']);
     expect(plan.mirrors).toHaveLength(1);
     expect(plan.openCount).toBe(3);
     expect(plan.doneCount).toBe(1);

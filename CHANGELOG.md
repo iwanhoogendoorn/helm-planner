@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 — 2026-08-26
+
+- Helm now plans **inside the daily note's own sections** (`# Day planner ›
+  A. Morning / B. Afternoon / C. Evening`, Habits, Anytime) with line-level
+  edits; the `## Plan` block is only a fallback for notes without them.
+- New daily notes are handed to Templater when it is installed; the fallback
+  renderer evaluates `moment()` chains and offsets.
+- Charts render at real pixel width; dashboard KPI and legend layout fixes.
+
 ## 0.4.0 — 2026-08-26
 
 - **Calendar tab** with Week · Month · Quarter · Year scopes, breadcrumbs,

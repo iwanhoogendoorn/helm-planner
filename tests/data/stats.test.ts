@@ -14,7 +14,7 @@ describe('dashboard stats', () => {
     expect(s.cumulative[s.cumulative.length - 1]!.done).toBe(3);
     expect(s.byPart.morning.done).toBe(1);
     expect(s.byPart.afternoon).toMatchObject({ planned: 2, done: 1 });
-    expect(s.adherence).toMatchObject({ planned: 4, done: 2 });
+    expect(s.adherence).toMatchObject({ planned: 5, done: 2 });
     expect(s.byWeekday[2]!.value).toBe(1); // Wednesday the 26th
     expect(s.byWeekday[3]!.value).toBe(1); // Thursday the 20th
     expect(s.byProject[0]!.project.title).toBe('Oracle Book Writing');

@@ -355,7 +355,20 @@ export class Mutations {
       });
       return;
     }
-    if (t.origin === 'daily' && t.section === 'outside') { this.d.notify('That line lives in your day planner; its part of the day follows its time.'); return; }
+    if (t.origin === 'daily' && t.section === 'outside' && t.noteDate !== undefined) {
+      // A stray line elsewhere in the note: pull it (with its subtree) into the section.
+      let carried: TaskLine[] = [];
+      await this.editFile(t.path, (lines) => {
+        const { start, end } = this.subtreeRange(lines, t);
+        carried = lines.slice(start, end).map((l) => parseTaskLine(l)).filter((x): x is TaskLine => x !== undefined);
+        lines.splice(start, end - start);
+        return true;
+      });
+      const baseIndent = carried[0]?.raw.indent ?? '';
+      const rebased = carried.map((l) => ({ ...l, raw: { ...l.raw, indent: l.raw.indent.slice(baseIndent.length), eol: '' } }));
+      await this.editRegion(t.noteDate, (rc) => ({ ...rc, [part]: [...rc[part], ...rebased] }));
+      return;
+    }
     if (t.scheduled) { await this.schedule(t.key, t.scheduled, part); return; }
     const mirror = this.index.mirrorsOf(t.key).find((m) => m.noteDate !== undefined && m.noteDate >= this.today);
     if (mirror) { await this.setPart(mirror.key, part); return; }

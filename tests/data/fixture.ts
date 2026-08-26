@@ -128,19 +128,36 @@ export const DAILY_YESTERDAY = `---
 title: 25, Tuesday, Aug, 2026
 ---
 
+> [!quote] Decide what you want.
+Previous day: [[24, Monday, Aug, 2026|Yesterday]]
+
+# Backlog Tasks
+
+[[Backlog Tasks]]
+
 # Day planner
+
+### Habits
+- [x] 🏃 Morning workout 🆔 hab-workout ✅ 2026-08-25
 
 ### A. Morning
 
+- 🎂 No birthdays today
 - [ ] 07:00 - 08:00:
 - [ ] 08:00 - 09:00: Start with OIB
 
-## Plan
-### Habits
-- [x] 🏃 Morning workout 🆔 hab-workout ✅ 2026-08-25
-### Afternoon
+---
+### B. Afternoon
+
+- [ ] 12:00 - 13:00:
 - [ ] Fix router config ⏱️ 30m
 - [x] Pay invoice ✅ 2026-08-25
+
+---
+### C. Evening
+
+- [ ] 18:00 - 19:00:
+
 ### Anytime
 - [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]
 `;

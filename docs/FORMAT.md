@@ -83,8 +83,15 @@ Located via the Daily Notes / Periodic Notes settings (folder + moment
 format), or the plugin settings when set. The date of a note is parsed from
 its path with the same format.
 
-The plan section — the section under the plan heading (`## Plan` by
-default) up to the next heading of the same or a higher level:
+The plan is made of the note's **own section headings**: the first heading
+anywhere in the note whose text (after an optional `A.`-style prefix) is
+Habits, Morning, Afternoon, Evening (also Tonight), or Anytime (also Today,
+Tasks, From projects). Each section runs to the next heading of the same or
+a higher level. Writes are line-level and never touch anything else in the
+note. A missing section is created beside its siblings (Habits first,
+Anytime last, at the siblings' heading level). Only a note with none of
+these headings gets Helm's own block under the plan heading (`## Plan` by
+default), which looks like:
 
 ```markdown
 ## Plan
