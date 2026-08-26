@@ -125,5 +125,14 @@ describe('deleting and linking drawings', () => {
     expect(await vault.read('Excalidraw/random.excalidraw.md')).not.toContain('helm-task');
     await expect(m.linkDrawing({ kind: 'date', date: TODAY, title: TODAY }, 'Excalidraw/board.canvas')).rejects.toThrow(/canvas/);
   });
+  it('unlinking the only target removes the key entirely; linking again afterwards writes it fresh', async () => {
+    const { m, vault } = await setup();
+    const p = await m.createDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, { name: 'x' });
+    await m.unlinkDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, p);
+    expect(await vault.read(p)).not.toContain('helm-period');
+    await m.linkDrawing({ kind: 'period', key: '2026-08', title: '2026-08' }, p);
+    expect(await vault.read(p)).toContain('helm-period: 2026-08');
+    expect(await vault.read('Monthly Notes/2026-08.md')).toContain('![[2026-W35 — x.excalidraw]]');
+  });
 });
 
