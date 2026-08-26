@@ -179,6 +179,7 @@ export default class HelmPlugin extends Plugin {
   }
 
   excalidrawFolderPath(): string | undefined { return this.excalidrawFolder; }
+  private excalidrawInstalled(): boolean { return !!(this.app as unknown as { plugins?: { plugins?: Record<string, unknown> } }).plugins?.plugins?.['obsidian-excalidraw-plugin']; }
   aiAvailable(): boolean { return aiAvailable(); }
   /** Absolute path of the vault on disk (desktop), so the AI command runs inside it. */
   private vaultBasePath(): string | undefined {
@@ -318,6 +319,13 @@ export default class HelmPlugin extends Plugin {
     const f = this.app.vault.getAbstractFileByPath(path);
     if (!(f instanceof TFile)) { new Notice(`Not found: ${path}`); return; }
     const leaf = this.app.workspace.getLeaf(false);
+    // A drawing Helm just wrote is not in the metadata cache yet, so the Excalidraw plugin would show it as
+    // markdown. Ask for its view explicitly; fall back to a normal open when the plugin is not there.
+    if (/\.excalidraw\.md$/i.test(path) && this.excalidrawInstalled()) {
+      await leaf.setViewState({ type: 'excalidraw', state: { file: path }, active: true });
+      this.app.workspace.setActiveLeaf(leaf, { focus: true });
+      return;
+    }
     await leaf.openFile(f, line !== undefined ? { eState: { line } } : undefined);
     if (line !== undefined) {
       const view = leaf.view;

@@ -118,6 +118,20 @@ describe('HelmPlugin', () => {
     for (const p of ['Monthly Notes/2026-08.md', 'Quarterly Notes/2026-Q3.md', 'Yearly Notes/2026.md']) expect(await app.vault.read(new FakeTFile(p))).toContain('## Goals');
   });
 
+  it('opens a fresh drawing in the Excalidraw view when that plugin is present, as markdown otherwise', async () => {
+    const { plugin, app } = await boot();
+    const path = await plugin.mutations.createDrawing({ kind: 'date', date: TODAY, title: TODAY });
+    const states: unknown[] = [];
+    const opened: string[] = [];
+    (app.workspace as unknown as { getLeaf: () => unknown }).getLeaf = () => ({ setViewState: async (s: unknown) => { states.push(s); }, openFile: async (f: { path: string }) => { opened.push(f.path); }, view: {} });
+    (app as unknown as { plugins: unknown }).plugins = { plugins: { 'obsidian-excalidraw-plugin': {} } };
+    await (plugin as unknown as { openFile: (p: string) => Promise<void> }).openFile(path);
+    expect(states).toEqual([{ type: 'excalidraw', state: { file: path }, active: true }]);
+    (app as unknown as { plugins: unknown }).plugins = { plugins: {} };
+    await (plugin as unknown as { openFile: (p: string) => Promise<void> }).openFile(path);
+    expect(opened).toEqual([path]);
+  });
+
   it('the self-test passes against the fixture vault', async () => {
     const { plugin, app } = await boot();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);

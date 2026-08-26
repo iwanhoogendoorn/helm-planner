@@ -29,6 +29,7 @@ class FakeVault {
 }
 
 class FakeWorkspace {
+  setActiveLeaf(): void {}
   private ready: (() => void)[] = [];
   onLayoutReady(fn: () => void): void { this.ready.push(fn); }
   fireLayoutReady(): void { for (const f of this.ready) f(); }
