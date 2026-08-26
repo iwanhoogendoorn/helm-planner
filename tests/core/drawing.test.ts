@@ -58,7 +58,7 @@ describe('drawings', () => {
     const section = /## Text Elements\n([\s\S]*?)\n%%/.exec(doc)![1]!;
     const entries = section.split('\n\n').filter(Boolean);
     expect(entries.length).toBe(json.elements.filter((e) => e.type === 'text').length);
-    expect(entries.every((e) => /\^helm\w+$/.test(e.trim()))).toBe(true);
+    expect(entries.every((e) => /\^h[a-z0-9]{9}$/.test(e.trim()))).toBe(true);
     const texts = json.elements.filter((e) => e.type === 'text').map((e) => e.text);
     expect(texts).toEqual(expect.arrayContaining(['Week 35', 'A good week.', 'Kitchen', 'Pick tiles', 'Highlights', 'Tiles chosen', 'Next', 'Plumber quote']));
     // Every box label is bound to its rectangle.
@@ -92,20 +92,24 @@ describe('scene import', () => {
 });
 
 describe('element ids', () => {
-  it('rewrites ids to block-id-safe, unique values and follows every reference', () => {
+  it('gives imported elements opaque fixed-length ids and follows every reference', () => {
     const els = sanitiseElementIds([
       { id: 'stat_done', type: 'rectangle', x: 0, y: 0, width: 1, height: 1, boundElements: [{ type: 'text', id: 'stat_done.txt' }] },
       { id: 'stat_done.txt', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '40', containerId: 'stat_done' },
-      { id: 'stat-done', type: 'ellipse', x: 0, y: 0, width: 1, height: 1 },
-      { id: 'arr', type: 'arrow', x: 0, y: 0, width: 1, height: 1, startBinding: { elementId: 'stat_done', focus: 0, gap: 1 }, endBinding: { elementId: 'stat-done', focus: 0, gap: 1 } },
+      { id: 'title', type: 'ellipse', x: 0, y: 0, width: 1, height: 1 },
+      { id: 'subtitle', type: 'arrow', x: 0, y: 0, width: 1, height: 1, startBinding: { elementId: 'stat_done', focus: 0, gap: 1 }, endBinding: { elementId: 'title', focus: 0, gap: 1 } },
     ] as never);
-    expect(els.map((e) => e.id)).toEqual(['stat-done', 'stat-done-txt', 'stat-done-2', 'arr']);
-    expect((els[0]!['boundElements'] as { id: string }[])[0]!.id).toBe('stat-done-txt');
-    expect(els[1]!['containerId']).toBe('stat-done');
-    expect((els[3]!['startBinding'] as { elementId: string }).elementId).toBe('stat-done');
-    expect((els[3]!['endBinding'] as { elementId: string }).elementId).toBe('stat-done-2');
+    const ids = els.map((e) => e.id);
+    expect(ids.every((id) => /^h[a-z0-9]{9}$/.test(id))).toBe(true);
+    expect(new Set(ids).size).toBe(4);
+    expect((els[0]!['boundElements'] as { id: string }[])[0]!.id).toBe(ids[1]);
+    expect(els[1]!['containerId']).toBe(ids[0]);
+    expect((els[3]!['startBinding'] as { elementId: string }).elementId).toBe(ids[0]);
+    expect((els[3]!['endBinding'] as { elementId: string }).elementId).toBe(ids[2]);
+    // Already-clean ids are left alone; a rendered document never carries the skill's ids.
+    expect(sanitiseElementIds(els)).toBe(els);
     const doc = renderExcalidrawDocument({ elements: [{ id: 'a_b', type: 'text', x: 0, y: 0, width: 1, height: 1, text: 'hi' }] });
-    expect(doc).toContain('hi ^a-b');
+    expect(doc).toMatch(/hi \^h[a-z0-9]{9}\n/);
     expect(doc).not.toContain('a_b');
   });
 });

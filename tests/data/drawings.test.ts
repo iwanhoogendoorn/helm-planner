@@ -124,7 +124,7 @@ describe('excalidraw-diagram skill engine', () => {
     const c = await vault.read(p);
     expect(c).toContain('helm-engine: excalidraw-diagram skill');
     expect(c).toContain('"viewBackgroundColor":"#1e1e1e"');
-    expect(c).toContain('Kitchen ^t1');
+    expect(c).toMatch(/Kitchen \^h[a-z0-9]{9}/);
     expect(c).not.toContain('"gone"');
     expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('![[2026-W35 — diagram.excalidraw]]');
   });

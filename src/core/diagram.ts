@@ -22,7 +22,7 @@ export const PALETTE: Record<string, { bg: string; stroke: string }> = {
 const ORDER = ['blue', 'green', 'yellow', 'purple', 'orange', 'teal', 'pink', 'red', 'grey'];
 
 let counter = 0;
-const nid = (): string => `helm${(++counter).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+const nid = (): string => `h${(++counter % 1679616).toString(36).padStart(4, '0')}${Math.floor(Math.random() * 60466176).toString(36).padStart(5, '0')}`;
 const base = (): Record<string, unknown> => ({ angle: 0, fillStyle: 'solid', strokeWidth: 1, strokeStyle: 'solid', roughness: 1, opacity: 100, groupIds: [], frameId: null, seed: Math.floor(Math.random() * 2 ** 31), version: 1, versionNonce: Math.floor(Math.random() * 2 ** 31), isDeleted: false, boundElements: null, updated: Date.now(), link: null, locked: false });
 
 const CHAR_W = 0.6;

@@ -81,21 +81,17 @@ export interface ExcalidrawElement {
 }
 
 /**
- * Obsidian block ids allow only letters, digits and dashes, and the Excalidraw
- * plugin keys its `## Text Elements` on `^<element id>` — an id like
- * `stat_done` breaks that mapping. Rewrite ids to be block-id safe and unique,
- * and follow every reference to them.
+ * The Excalidraw plugin keys its `## Text Elements` on `^<element id>` and
+ * matches by substring, so ids that contain odd characters (`stat_done`) or are
+ * prefixes of one another (`title` / `subtitle`) get their text mixed up.
+ * Imported scenes therefore get fresh opaque ids of one fixed length, with
+ * every reference (containers, bound text, arrow bindings, frames) remapped.
  */
 export function sanitiseElementIds(elements: ExcalidrawElement[]): ExcalidrawElement[] {
+  const ok = (id: string): boolean => /^[a-z][a-z0-9]{9}$/.test(id);
+  if (elements.every((e) => ok(e.id)) && new Set(elements.map((e) => e.id)).size === elements.length) return elements;
   const map = new Map<string, string>();
-  const used = new Set<string>();
-  for (const e of elements) {
-    let base = e.id.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'el';
-    let id = base;
-    for (let i = 2; used.has(id); i++) id = `${base}-${i}`;
-    used.add(id); map.set(e.id, id);
-  }
-  if ([...map].every(([a, b]) => a === b)) return elements;
+  elements.forEach((e, i) => { map.set(e.id, `h${i.toString(36).padStart(4, '0')}${Math.floor(Math.random() * 60466176).toString(36).padStart(5, '0')}`); });
   const re = (id: unknown): unknown => (typeof id === 'string' && map.has(id) ? map.get(id) : id);
   return elements.map((e) => {
     const out: ExcalidrawElement = { ...e, id: map.get(e.id)! };
