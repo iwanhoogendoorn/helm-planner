@@ -25,6 +25,8 @@ export interface UiContext {
   navigate: (tab: TabId, opts?: { date?: IsoDate; projectId?: string; periodKey?: string; scope?: 'week' | 'month' | 'quarter' | 'year' }) => void;
   /** Run a mutation with error handling and a refresh afterwards. */
   run: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+  /** Register an open modal so the plugin can close it on unload (a reload must never leave a dead overlay). */
+  trackModal: (m: { close: () => void }) => void;
 }
 
 export function taskLabel(t: Task): string {

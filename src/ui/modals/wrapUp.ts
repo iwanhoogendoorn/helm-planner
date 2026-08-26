@@ -94,4 +94,5 @@ export function openWrapUp(ctx: UiContext, date: IsoDate): void {
     button('Apply', { primary: true, icon: 'check', onClick: () => void apply() }),
   ));
   m.open();
+  ctx.trackModal(m);
 }

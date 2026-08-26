@@ -36,5 +36,6 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       : ctx.mutations.createHabit({ title: title.value.trim(), schedule: formatRecurrence(r), graceDays: Number(grace.value) || 0, ...(tpw ? { targetPerWeek: tpw } : {}), ...(icon.value.trim() ? { icon: icon.value.trim() } : {}) }));
   }
   m.open();
+  ctx.trackModal(m);
   setTimeout(() => title.focus(), 0);
 }

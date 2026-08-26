@@ -37,6 +37,7 @@ async function ctxFor() {
     refresh: () => undefined,
     navigate: (tab, opts) => { nav.push({ tab, opts }); },
     run: async (_l, fn) => { await fn(); },
+    trackModal: () => undefined,
   };
   return { ...s, ctx, nav, opened };
 }

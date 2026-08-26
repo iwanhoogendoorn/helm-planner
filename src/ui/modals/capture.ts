@@ -124,5 +124,6 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   ));
   render();
   m.open();
+  ctx.trackModal(m);
   setTimeout(() => input.focus(), 0);
 }

@@ -38,5 +38,6 @@ export function openDrilldown(ctx: UiContext, title: string, tasks: Task[]): voi
   );
   render();
   m.open();
+  ctx.trackModal(m);
   setTimeout(() => filter.focus(), 0);
 }

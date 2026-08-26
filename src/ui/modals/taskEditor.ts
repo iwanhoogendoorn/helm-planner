@@ -93,6 +93,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   }
 
   m.open();
+  ctx.trackModal(m);
   setTimeout(() => { text.focus(); text.select(); }, 0);
 }
 

@@ -126,5 +126,6 @@ export function openPlanDay(ctx: UiContext, date: IsoDate): void {
   root.append(filter, h('div', { cls: 'helm-plan-cols' }, left, right), foot);
   render();
   m.open();
+  ctx.trackModal(m);
   setTimeout(() => filter.focus(), 0);
 }

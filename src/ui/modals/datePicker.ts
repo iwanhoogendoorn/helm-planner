@@ -38,5 +38,6 @@ export function openDatePicker(ctx: UiContext, opts: { title: string; initial?: 
     ),
   );
   m.open();
+  ctx.trackModal(m);
   setTimeout(() => free.focus(), 0);
 }

@@ -65,6 +65,7 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; perio
     });
   }
   m.open();
+  ctx.trackModal(m);
   setTimeout(() => title.focus(), 0);
 }
 
