@@ -13,6 +13,7 @@ import { findRegion, partOfLine, type Section } from '../core/dailyNote';
 import { derivedKey, hash } from '../core/ids';
 import { formatDate, parseDateFromPath } from '../core/dates';
 import { isDrawingPath, parseDrawing, type Drawing } from '../core/drawing';
+import { contentHasHelmKeys, hasHelmKeys, notesSectionLinks, noteTitle, parseNoteRef, wikilinksIn, type NoteRef } from '../core/noteRef';
 import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
 
 export const DAILY_FALLBACK = { folder: 'Daily Notes', format: 'YYYY-MM-DD' };
@@ -31,6 +32,10 @@ interface FileEntry {
   project?: Project;
   habit?: Habit;
   drawing?: Drawing;
+  /** Attachment keys, for any note that carries them. */
+  noteRef?: NoteRef;
+  /** Basenames linked under this note's Notes heading. */
+  noteLinks?: string[];
   /** Basenames of drawings this note embeds or links (`![[X.excalidraw]]`). */
   drawingLinks?: string[];
   date?: IsoDate;
@@ -116,11 +121,14 @@ export class HelmIndex {
     return undefined;
   }
 
-  inScope(path: string): boolean {
+  inScope(path: string, content?: string): boolean {
     const s = this.settings;
     if (s.excludePaths.some((x) => x.trim() !== '' && isUnder(path, x.trim()))) return false;
     if (isDrawingPath(path)) return true;
     if (!path.endsWith('.md')) return false;
+    if (isUnder(path, s.notesFolder)) return true;
+    // A note anywhere in the vault that carries helm-* keys is attached to something and belongs in the index.
+    if (content !== undefined ? contentHasHelmKeys(content) : hasHelmKeys(this.vault.frontmatter?.(path))) return true;
     if (path === s.inboxNote) return true;
     if (isUnder(path, s.projectsFolder) || isUnder(path, s.habitsFolder)) return true;
     if (this.dateOfPath(path) !== undefined) return true;
@@ -131,7 +139,9 @@ export class HelmIndex {
   async rebuild(): Promise<void> {
     this.building = true;
     try {
-      const paths = [...(await this.vault.list()), ...(this.vault.listOther ? await this.vault.listOther() : [])].filter((p) => this.inScope(p));
+      const all = await this.vault.list();
+      this.allNoteTitles = new Map(all.filter((p) => p.endsWith('.md') && !isDrawingPath(p)).map((p) => [noteTitle(p).toLowerCase(), p]));
+      const paths = [...all, ...(this.vault.listOther ? await this.vault.listOther() : [])].filter((p) => this.inScope(p));
       const next = new Map<string, FileEntry>();
       const contents = await Promise.all(paths.map(async (p) => [p, p.endsWith('.md') ? await this.vault.read(p).catch(() => undefined) : ''] as const));
       for (const [p, c] of contents) if (c !== undefined) next.set(p, this.parseFile(p, c));
@@ -160,9 +170,13 @@ export class HelmIndex {
     return changed;
   }
 
+  /** Every markdown note in the vault by lower-cased basename (for resolving wikilinks), refreshed on rebuild and on file events. */
+  private allNoteTitles = new Map<string, string>();
+
   private applyOne(path: string, content: string | undefined): boolean {
     const known = this.files.get(path);
-    if (!this.inScope(path) || content === undefined) {
+    if (path.endsWith('.md') && !isDrawingPath(path)) { if (content === undefined) { if (this.allNoteTitles.get(noteTitle(path).toLowerCase()) === path) this.allNoteTitles.delete(noteTitle(path).toLowerCase()); } else this.allNoteTitles.set(noteTitle(path).toLowerCase(), path); }
+    if (!this.inScope(path, content) || content === undefined) {
       if (!known) return false;
       this.files.delete(path);
       return true;
@@ -178,6 +192,9 @@ export class HelmIndex {
     const entry: FileEntry = { path, kind: 'note', hash: hash(content), tasks: [], hasRegion: false, completions: [], diagnostics: [] };
     const mtime = this.vault.mtime(path);
     if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
+    if (contentHasHelmKeys(content)) { const fm = parseDocument(content).frontmatter.values as Record<string, unknown>; entry.noteRef = parseNoteRef(path, fm, mtime); }
+    const nl = notesSectionLinks(content);
+    if (nl.length > 0) entry.noteLinks = nl;
     const date = this.dateOfPath(path);
     const dl = [...content.matchAll(/!?\[\[([^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]/g)].map((m) => m[1]!.trim()).filter((t) => /\.(excalidraw|canvas)$/i.test(t)).map((t) => t.slice(t.lastIndexOf('/') + 1).replace(/\.(excalidraw|canvas)$/i, ''));
     if (dl.length > 0) entry.drawingLinks = [...new Set(dl)];
@@ -355,9 +372,11 @@ export class HelmIndex {
     for (const p of projects.values()) p.childIds.sort((a, b) => projects.get(a)!.title.localeCompare(projects.get(b)!.title));
 
     const drawings = new Map<string, Drawing>();
-    for (const e of this.files.values()) if (e.drawing) drawings.set(e.path, e.drawing);
-    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath, drawings };
+    const notes = new Map<string, NoteRef>();
+    for (const e of this.files.values()) { if (e.drawing) drawings.set(e.path, e.drawing); if (e.noteRef) notes.set(e.path, e.noteRef); }
+    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath, drawings, notes };
     this.attachDrawings();
+    this.attachNotes();
   }
 
   /* ── Drawings ↔ tasks / projects / days / periods ───────────────────── */
@@ -400,6 +419,8 @@ export class HelmIndex {
       if (byDate) a.dates.add(byDate);
       const byPeriod = periodOfText(d.title);
       if (byPeriod && !byDate) a.periodKeys.add(byPeriod);
+      // Tasks whose text links the drawing.
+      for (const t of snap.tasks.values()) if (t.origin !== 'daily-mirror' && wikilinksIn(t.text).some((l) => l.toLowerCase() === d.title.toLowerCase() || l.toLowerCase() === `${d.title.toLowerCase()}.excalidraw`)) a.taskKeys.add(t.key);
       // What it says.
       for (const l of d.links) {
         const p = projectsByTitle.get(l.toLowerCase()); if (p) a.projectIds.add(p.id);
@@ -423,6 +444,73 @@ export class HelmIndex {
   filesEmbedding(title: string): string[] {
     const t = title.toLowerCase();
     return [...this.files.values()].filter((e) => e.drawingLinks?.some((x) => x.toLowerCase() === t)).map((e) => e.path);
+  }
+
+  private noteAttachments = new Map<string, { taskKeys: Set<string>; projectIds: Set<string>; dates: Set<IsoDate>; periodKeys: Set<string> }>();
+
+  /** Notes ↔ targets: frontmatter keys, task-text links, and links under a Notes heading of the target's note. */
+  private attachNotes(): void {
+    const snap = this.snapshot;
+    this.noteAttachments = new Map();
+    const att = (path: string) => { let a = this.noteAttachments.get(path); if (!a) { a = { taskKeys: new Set(), projectIds: new Set(), dates: new Set(), periodKeys: new Set() }; this.noteAttachments.set(path, a); } return a; };
+    const projectsByTitle = new Map<string, Project>();
+    for (const p of snap.projects.values()) { projectsByTitle.set(p.title.toLowerCase(), p); projectsByTitle.set(baseName(p.path).toLowerCase(), p); }
+    const taskById = new Map<string, string>();
+    for (const t of snap.tasks.values()) if (t.id && t.origin !== 'daily-mirror') taskById.set(t.id, t.key);
+    const isOwnNote = (path: string): boolean => { const e = this.files.get(path); return !!e && (e.kind === 'project' || e.kind === 'daily' || e.kind === 'periodic' || e.kind === 'habit' || e.kind === 'inbox'); };
+    for (const n of snap.notes.values()) {
+      const a = att(n.path);
+      for (const id of n.taskIds) { const k = taskById.get(id); if (k) a.taskKeys.add(k); }
+      for (const ref of n.projectRefs) { const p = snap.projects.get(ref) ?? projectsByTitle.get(ref.toLowerCase()); if (p) a.projectIds.add(p.id); }
+      for (const d of n.dates) a.dates.add(d);
+      for (const k of n.periodKeys) a.periodKeys.add(k.toUpperCase());
+    }
+    // Task text links a note.
+    for (const t of snap.tasks.values()) {
+      if (t.origin === 'daily-mirror') continue;
+      for (const l of wikilinksIn(t.text)) {
+        if (/\.(excalidraw|canvas)$/i.test(l)) continue;
+        const path = this.allNoteTitles.get(l.toLowerCase());
+        if (path && !isOwnNote(path)) att(path).taskKeys.add(t.key);
+      }
+    }
+    // Links under a Notes heading of a project / daily / periodic note.
+    for (const e of this.files.values()) {
+      if (!e.noteLinks) continue;
+      for (const l of e.noteLinks) {
+        const path = this.allNoteTitles.get(l.toLowerCase());
+        if (!path || isOwnNote(path)) continue;
+        const a = att(path);
+        if (e.kind === 'daily' && e.date) a.dates.add(e.date);
+        else if (e.kind === 'periodic' && e.period) a.periodKeys.add(e.period.key.toUpperCase());
+        else if (e.kind === 'project' && e.project) a.projectIds.add(e.project.id);
+      }
+    }
+  }
+
+  /** Notes attached to a target, newest first. Unindexed notes reached by links come back with just path and title. */
+  notesFor(target: DrawingTarget): NoteRef[] {
+    const out: NoteRef[] = [];
+    for (const [path, a] of this.noteAttachments) {
+      const hit = target.kind === 'task' ? a.taskKeys.has(target.key) || (target.id !== undefined && [...a.taskKeys].some((k) => this.snapshot.tasks.get(k)?.id === target.id))
+        : target.kind === 'project' ? a.projectIds.has(target.id)
+        : target.kind === 'date' ? a.dates.has(target.date)
+        : a.periodKeys.has(target.key.toUpperCase());
+      if (!hit) continue;
+      out.push(this.snapshot.notes.get(path) ?? { path, title: noteTitle(path), taskIds: [], projectRefs: [], dates: [], periodKeys: [], ...(this.vault.mtime(path) !== undefined ? { mtime: this.vault.mtime(path) } : {}) });
+    }
+    return out.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
+  }
+
+  /** Every markdown note in the vault that could be linked (not Helm's own project / daily / periodic notes, not drawings). */
+  linkableNotes(): { path: string; title: string }[] {
+    return [...this.allNoteTitles.values()].filter((p) => { const e = this.files.get(p); return !e || e.kind === 'note' || e.kind === 'drawing' ? !isDrawingPath(p) && !(e && e.kind !== 'note') : false; }).map((p) => ({ path: p, title: noteTitle(p) })).sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  /** Paths of notes whose Notes heading links a note by title. */
+  filesLinkingNote(title: string): string[] {
+    const t = title.toLowerCase();
+    return [...this.files.values()].filter((e) => e.noteLinks?.some((x) => x.toLowerCase() === t)).map((e) => e.path);
   }
 
   allDrawings(): Drawing[] { return [...this.snapshot.drawings.values()].sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0)); }
@@ -464,5 +552,5 @@ export class HelmIndex {
 }
 
 export function emptySnapshot(): Snapshot {
-  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map(), drawings: new Map() };
+  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map(), drawings: new Map(), notes: new Map() };
 }

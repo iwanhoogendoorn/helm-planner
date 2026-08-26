@@ -2,6 +2,13 @@
 
 ## 0.5.0 — 2026-08-26
 
+- Notes attached to tasks, projects, days and periods, the same way as
+  drawings: *New note…*, *Link existing note…* (any note in the vault — the
+  key goes in its frontmatter, so it can live anywhere), *Manage notes…* with
+  Open / Unlink / Move to trash. A task also owns the notes its own text
+  links (`Call the plumber || [[Plumber quotes]]`); a project, daily or
+  periodic note owns the notes listed under its `## Notes` heading, which is
+  where Helm writes the links. Task-text links to a drawing attach it too.
 - Drawings: Excalidraw (and Canvas) files are indexed and attached to tasks,
   projects, days, weeks, months, quarters and years — by Helm's own
   `helm-task` / `helm-project` / `helm-date` / `helm-period` frontmatter, by

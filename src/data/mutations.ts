@@ -26,6 +26,7 @@ import { misfiledDate } from './planner';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
 import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates';
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
+import { noteTitle, renderNewNote, listValues, type NoteRef } from '../core/noteRef';
 import type { DrawingTarget } from '../core/types';
 
 export interface MutationDeps {
@@ -921,6 +922,120 @@ export class Mutations {
     }
     const note = await this.noteOf(target);
     if (note && (await this.d.vault.exists(note))) await this.removeEmbed(note, drawingPath);
+  }
+
+  /* ── Notes attached to tasks / projects / days / periods ──────────── */
+
+  notesFor(target: DrawingTarget): NoteRef[] { return this.index.notesFor(target); }
+
+  /** Folder and file name for a new note attached to a target. */
+  notePathFor(target: DrawingTarget, name?: string): string {
+    const s = this.settings;
+    let folder = (s.notesFolder.trim() || 'Notes').replace(/\/+$/, '');
+    if (target.kind === 'project' && s.projectNotesInProjectFolder) { const p = this.index.project(target.id); if (p) folder = this.index.projectFolderOf(p) || folder; }
+    const base = target.kind === 'date' ? formatDate(target.date, this.templateConfig().dailyTitleFormat) : target.kind === 'period' ? target.key : target.title;
+    const stem = name?.trim() ? (target.kind === 'project' ? name.trim() : `${base} — ${name.trim()}`) : `${base} — note`;
+    return `${folder ? folder + '/' : ''}${this.safeName(stem).slice(0, 120)}.md`;
+  }
+
+  private async uniqueNotePath(path: string): Promise<string> {
+    if (!(await this.d.vault.exists(path))) return path;
+    const stem = path.replace(/\.md$/, '');
+    for (let i = 2; ; i++) { const p = `${stem} ${i}.md`; if (!(await this.d.vault.exists(p))) return p; }
+  }
+
+  /** What a note's "For:" line points at. */
+  private async forLabel(target: DrawingTarget): Promise<string> {
+    if (target.kind === 'task') return target.title;
+    const note = await this.noteOf(target);
+    return note ? `[[${noteTitle(note)}]]` : target.title;
+  }
+
+  /** Create a note for a target, with the attachment key in its frontmatter, and link it from the target's note. */
+  async createNote(target: DrawingTarget, opts: { name?: string } = {}): Promise<string> {
+    let id: string | undefined;
+    if (target.kind === 'task') { id = await this.ensureId(target.key); target = { ...target, key: this.index.task(id)?.key ?? id, id }; }
+    const path = await this.uniqueNotePath(this.notePathFor(target, opts.name));
+    const fm = Object.fromEntries(Object.entries(this.drawingFrontmatter(target, id)).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]));
+    const content = renderNewNote({ title: noteTitle(path), target: fm, forLabel: await this.forLabel(target), today: this.today });
+    await this.d.vault.write(path, content);
+    this.index.update(path, content);
+    await this.linkInTargetNote(target, path);
+    return path;
+  }
+
+  /** `- [[Note]]` under a Notes heading in the target's own note (project, daily, periodic); tasks keep their line as is. */
+  private async linkInTargetNote(target: DrawingTarget, notePath: string): Promise<void> {
+    if (!this.settings.linkNotes || target.kind === 'task') return;
+    let host: string | undefined;
+    if (target.kind === 'project') host = this.index.project(target.id)?.path;
+    else if (target.kind === 'date') host = await this.ensureDailyNote(target.date);
+    else { const p = parsePeriod(target.key); if (p) host = await this.ensurePeriodicNote(p); }
+    if (!host || host === notePath) return;
+    const link = `- [[${noteTitle(notePath)}]]`;
+    await this.editFile(host, (lines, doc) => {
+      if (lines.some((l) => l.includes(`[[${noteTitle(notePath)}]]`) || l.includes(`[[${noteTitle(notePath)}|`))) return false;
+      const h = doc.headings.find((x) => /^(notes?|related|links?)$/i.test(x.text.trim()));
+      if (h) { lines.splice(sectionInsertPoint(doc, h), 0, link); return true; }
+      let e = lines.length;
+      while (e > 0 && lines[e - 1]!.trim() === '') e--;
+      lines.splice(e, lines.length - e, '', '## Notes', '', link, '');
+      return true;
+    });
+  }
+
+  private async removeNoteLink(host: string, notePath: string): Promise<void> {
+    const t = noteTitle(notePath);
+    await this.editFile(host, (lines) => {
+      let changed = false;
+      for (let i = lines.length - 1; i >= 0; i--) { if (/^\s*[-*]\s+!?\[\[/.test(lines[i]!) && (lines[i]!.includes(`[[${t}]]`) || lines[i]!.includes(`[[${t}|`))) { lines.splice(i, 1); changed = true; } }
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (/^#{1,6}\s+(notes?|related|links?)\s*$/i.test(lines[i]!)) {
+          let j = i + 1; while (j < lines.length && lines[j]!.trim() === '') j++;
+          if (j >= lines.length || /^#{1,6}\s/.test(lines[j]!)) { lines.splice(i, j - i); changed = true; }
+        }
+      }
+      return changed;
+    });
+  }
+
+  /** Attach an existing note: the key on the note's frontmatter (created when missing), plus the link in the target's note. */
+  async linkNote(target: DrawingTarget, notePath: string): Promise<void> {
+    let id: string | undefined;
+    if (target.kind === 'task') { id = await this.ensureId(target.key); target = { ...target, key: this.index.task(id)?.key ?? id, id }; }
+    const [key, value] = Object.entries(this.drawingFrontmatter(target, id))[0]! as [string, string];
+    await this.editFile(notePath, (lines, doc) => {
+      const have = listValues(doc.frontmatter.values[key]);
+      if (have.includes(value)) return false;
+      const next = [...have, value];
+      lines.splice(0, lines.length, ...setFrontmatter(lines, { [key]: next.length === 1 ? next[0]! : next }));
+      return true;
+    });
+    await this.linkInTargetNote(target, notePath);
+  }
+
+  /** Detach a note from a target: drop the key value and the link line. A link inside the task's own text is left alone. */
+  async unlinkNote(target: DrawingTarget, notePath: string): Promise<void> {
+    const id = target.kind === 'task' ? (target.id ?? this.index.task(target.key)?.id) : undefined;
+    const [key, value] = Object.entries(this.drawingFrontmatter(target, id))[0]! as [string, string];
+    await this.editFile(notePath, (lines, doc) => {
+      const have = listValues(doc.frontmatter.values[key]);
+      const own = 'key' in target ? target.key : '';
+      const next = have.filter((x) => x !== value && x !== own);
+      if (next.length === have.length) return false;
+      lines.splice(0, lines.length, ...setFrontmatter(lines, { [key]: next.length === 0 ? undefined : next.length === 1 ? next[0]! : next }));
+      return true;
+    });
+    const host = await this.noteOf(target);
+    if (host && (await this.d.vault.exists(host))) await this.removeNoteLink(host, notePath);
+  }
+
+  /** Trash a note and take its link lines out of the notes that carried them. */
+  async deleteNote(path: string): Promise<void> {
+    if (!this.d.vault.trash) throw new Error('This vault cannot trash files');
+    for (const host of this.index.filesLinkingNote(noteTitle(path))) await this.removeNoteLink(host, path);
+    await this.d.vault.trash(path);
+    this.index.update(path, undefined);
   }
 
   /* ── Horizons: goals in yearly / quarterly / monthly notes ───────────── */

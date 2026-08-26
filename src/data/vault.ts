@@ -16,6 +16,8 @@ export interface VaultAdapter {
   trash?(path: string): Promise<void>;
   /** Write a binary file (icons). */
   writeBinary?(path: string, data: ArrayBuffer): Promise<void>;
+  /** Frontmatter of a markdown file without reading it in full (a metadata cache where there is one). */
+  frontmatter?(path: string): Record<string, unknown> | undefined;
 }
 
 export class MemoryVault implements VaultAdapter {
@@ -47,6 +49,14 @@ export class MemoryVault implements VaultAdapter {
     }
   }
   async delete(path: string): Promise<void> { this.files.delete(path); }
+  frontmatter(path: string): Record<string, unknown> | undefined {
+    const c = this.files.get(path);
+    if (c === undefined || !c.startsWith('---')) return undefined;
+    const end = c.indexOf('\n---', 3);
+    const out: Record<string, unknown> = {};
+    for (const line of c.slice(4, end === -1 ? undefined : end).split('\n')) { const m = /^([\w-]+):\s*(.*)$/.exec(line); if (m) out[m[1]!] = m[2]!; }
+    return out;
+  }
   binaries = new Map<string, ArrayBuffer>();
   async writeBinary(path: string, data: ArrayBuffer): Promise<void> { this.binaries.set(path, data); }
   trashed: string[] = [];

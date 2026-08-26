@@ -244,3 +244,15 @@ inside the project folder) and get an embed under `## Diagrams` in the note.
 Linking an existing drawing adds the `helm-*` key (a list when it serves
 several targets) and the embed; unlinking removes both, and deleting moves the
 file to the trash and strips its embeds.
+
+## 8. Notes
+
+A note is attached to a task / project / day / period by `helm-task` /
+`helm-project` / `helm-date` / `helm-period` in its own frontmatter (scalar or
+list), wherever it lives in the vault; Helm reads those keys from Obsidian's
+metadata cache so out-of-scope notes are found without a full scan. A task also
+owns the notes its text links; a project, daily or periodic note owns the notes
+listed under its `## Notes` heading. New notes go to the notes folder
+(`Notes`), or the project folder for projects, as `<note title> — <name>.md`
+with a `> For:` line.
+

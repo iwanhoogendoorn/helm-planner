@@ -39,7 +39,7 @@ export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
   { id: 'daily', label: 'Daily notes', icon: 'calendar-days' },
   { id: 'horizons', label: 'Horizons', icon: 'mountain' },
   { id: 'planning', label: 'Planning', icon: 'sliders-horizontal' },
-  { id: 'drawings', label: 'Drawings', icon: 'pen-tool' },
+  { id: 'drawings', label: 'Notes & drawings', icon: 'pen-tool' },
   { id: 'view', label: 'View', icon: 'layout-dashboard' },
   { id: 'about', label: 'About', icon: 'info' },
 ];
@@ -341,6 +341,12 @@ export class HelmSettingTab extends PluginSettingTab {
     this.toggle(where.content, 'projectDrawingsInProjectFolder', 'Project drawings live in the project folder', 'Next to the project note, like the drawings you already keep there.');
     this.text(where.content, 'drawingTemplate', { name: 'Drawing template', desc: 'An Excalidraw note to copy for new drawings (grid, colours, frames). Empty = blank.', placeholder: 'Excalidraw/Templates/Grid enabled.excalidraw', pick: 'note' });
     this.toggle(where.content, 'embedDrawings', 'Embed new drawings in the note', 'A `![[…excalidraw]]` line under a Diagrams heading in the daily, periodic or project note, so the drawing shows up inside the note too.');
+
+    const notes = this.group(body, { icon: 'file-text', title: 'Notes', subtitle: 'Plain notes attached to tasks, days, periods and projects — created or linked the same way as drawings.', chip: this.pathChip(s.notesFolder) });
+    this.text(notes.content, 'notesFolder', { name: 'Notes folder', desc: 'For new notes attached to tasks, days and periods.', placeholder: 'Notes', pick: 'folder', fallback: 'Notes', after: (v) => notes.setChip(this.pathChip(v).text, this.pathChip(v).tone) });
+    this.toggle(notes.content, 'projectNotesInProjectFolder', 'Project notes live in the project folder', 'Next to the project note.');
+    this.toggle(notes.content, 'linkNotes', 'List linked notes in the note', 'A `- [[Note]]` line under a Notes heading in the daily, periodic or project note.');
+    this.note(notes.content, 'A note belongs to a task when it carries helm-task in its frontmatter or the task’s own text links it (“Call the plumber || [[Plumber quotes]]”). It belongs to a project, day or period when it carries the matching key or is listed under that note’s Notes heading. Any note in the vault can be linked; the key is what makes Helm find it.');
 
     const how = this.group(body, { icon: 'link', title: 'How drawings are found', subtitle: 'Nothing to configure — this is what Helm looks at.' });
     this.note(how.content, 'A drawing belongs to a project when it sits in the project’s folder, when the project note embeds it, or when it links the project. It belongs to a day or a period when its name starts with that note’s title (“26, Wednesday, Aug, 2026 — flow”, “2026-W35 map”), when that note embeds it, or when its text links the note. It belongs to a task when Helm made it for that task or its text mentions the task’s 🆔. Drawings Helm creates carry helm-task / helm-project / helm-date / helm-period frontmatter, which always wins.');

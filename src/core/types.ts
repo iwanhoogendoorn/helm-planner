@@ -198,6 +198,8 @@ export interface Snapshot {
   tasksByPath: Map<string, string[]>;
   /** Excalidraw / canvas drawings by path. */
   drawings: Map<string, import('./drawing').Drawing>;
+  /** Notes attached to tasks / projects / days / periods, by path. */
+  notes: Map<string, import('./noteRef').NoteRef>;
 }
 
 export interface HelmSettings {
@@ -235,6 +237,10 @@ export interface HelmSettings {
   drawingTemplate: string;
   projectDrawingsInProjectFolder: boolean;
   embedDrawings: boolean;
+  /** Notes: where new ones go, and whether links are written into the target's note. */
+  notesFolder: string;
+  projectNotesInProjectFolder: boolean;
+  linkNotes: boolean;
   extraFolders: string[];
   /** Path prefixes never indexed (archives). */
   excludePaths: string[];
@@ -287,6 +293,9 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   drawingTemplate: '',
   projectDrawingsInProjectFolder: true,
   embedDrawings: true,
+  notesFolder: 'Notes',
+  projectNotesInProjectFolder: true,
+  linkNotes: true,
   extraFolders: [],
   excludePaths: ['02 PROJECTS/ZZZ. Project Archive', '02 PROJECTS/999. ARCHIVED TASKS.md', '90 ARCHIVE'],
   archiveFolder: '02 PROJECTS/ZZZ. Project Archive',

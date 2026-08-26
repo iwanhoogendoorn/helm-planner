@@ -59,6 +59,13 @@ export class ObsidianVault implements VaultAdapter {
     await this.app.vault.createBinary(p, data);
   }
 
+  frontmatter(path: string): Record<string, unknown> | undefined {
+    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    if (!(f instanceof TFile)) return undefined;
+    const mc = this.app.metadataCache as unknown as { getFileCache?: (f: TFile) => { frontmatter?: Record<string, unknown> } | null };
+    return mc.getFileCache?.(f)?.frontmatter ?? undefined;
+  }
+
   resourceUrl(path: string): string | undefined {
     const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
     return f instanceof TFile ? this.app.vault.getResourcePath(f) : undefined;

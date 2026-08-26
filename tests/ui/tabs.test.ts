@@ -133,7 +133,7 @@ describe('Projects tab', () => {
     const state = { projectId: 'prj-book', filter: '', showClosed: false, collapsed: new Map(), showDone: false };
     const root = render((r) => renderProjects(ctx, r, state));
     expect(root.querySelector('h2')!.textContent).toBe('Oracle Book Writing');
-    expect(texts(root, '.helm-section-title')).toEqual(['Outline', 'Writing', 'Other tasks', 'Diagrams']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Outline', 'Writing', 'Other tasks', 'Notes', 'Diagrams']);
     expect(texts(root, '.helm-section:nth-of-type(1) .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams', 'Review with editor']);
     const input = root.querySelector<HTMLInputElement>('.helm-section:nth-of-type(2) .helm-quickadd-input')!;
     input.value = 'Chapter 3 tomorrow !high';
@@ -606,7 +606,8 @@ describe('Drawings in the UI', () => {
     await m.createDrawing({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Architecture' });
     const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
     expect(texts(root, '.helm-drawing-card-title')).toEqual(['Architecture']);
-    expect(texts(root, '.helm-drawing-actions button')).toEqual(['New drawing', 'Link existing', 'Manage']);
+    const diagrams = [...root.querySelectorAll('.helm-section')].find((sec) => sec.querySelector('.helm-section-title')?.textContent === 'Diagrams')!;
+    expect(texts(diagrams as HTMLElement, '.helm-drawing-actions button')).toEqual(['New drawing', 'Link existing', 'Manage']);
   });
 });
 
@@ -625,5 +626,29 @@ describe('Linking drawings in the UI', () => {
     expect(index.drawingsFor({ kind: 'date', date: TODAY, title: '' }).map((d) => d.title)).toEqual(['loose']);
     expect(await vault.read('Excalidraw/loose.excalidraw.md')).toContain('helm-date: 2026-08-26');
     expect(await vault.read(dailyPath(TODAY))).toContain('![[loose.excalidraw]]');
+  });
+});
+
+describe('Notes in the UI', () => {
+  it('headers carry a notes button; the task menu has a Notes submenu; linking a note attaches it and shows an indicator', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await vault.write('10 PERSONAL/Reading list.md', '# Reading list\n');
+    index.update('10 PERSONAL/Reading list.md', '# Reading list\n');
+    const today = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    click(today.querySelector('.helm-day-actions .helm-notes-btn'));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['New note…', 'Link existing note…']);
+    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
+    click(taskRow(ctx, t).querySelector('button[aria-label="More…"]'));
+    const notes = Menu.last!.items.find((i) => i.title === 'Notes')!.sub!;
+    notes.items.find((i) => i.title === 'Link existing note…')!.click!();
+    const picker = Modal.last as unknown as { getItems: () => { path: string }[]; onChooseItem: (n: { path: string }) => void };
+    expect(picker.getItems().map((n) => n.path)).toContain('10 PERSONAL/Reading list.md');
+    picker.onChooseItem({ path: '10 PERSONAL/Reading list.md' });
+    await flush(); await flush();
+    const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === t.text && x.origin === 'project')!;
+    expect(await vault.read('10 PERSONAL/Reading list.md')).toContain(`helm-task: ${t2.id}`);
+    expect(taskRow(ctx, t2).querySelector('.helm-task-notes .helm-badge')!.textContent).toBe('1');
+    const detail = render((r) => renderProjects(ctx, r, { projectId: t2.projectId!, filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    expect(texts(detail, '.helm-section-title')).toContain('Notes');
   });
 });

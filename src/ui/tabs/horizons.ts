@@ -12,6 +12,7 @@ import { openProjectForm } from '../modals/projectForm';
 import { Menu } from 'obsidian';
 import { crumbBar } from '../crumbs';
 import { drawingsButton, targetForPeriod } from '../drawings';
+import { notesButton } from '../notes';
 
 export interface HorizonsState { year: number; selected?: string; collapsed: Map<string, boolean> }
 
@@ -38,6 +39,7 @@ export function renderHorizons(ctx: UiContext, root: HTMLElement, state: Horizon
       iconButton('chevron-right', 'Next year', () => { state.year++; state.selected = undefined; ctx.refresh(); }),
     ),
     h('div', { cls: 'helm-day-actions' },
+      notesButton(ctx, selP ? targetForPeriod(selP) : targetForPeriod(yearPeriod(state.year))),
       drawingsButton(ctx, selP ? targetForPeriod(selP) : targetForPeriod(yearPeriod(state.year))),
       button('Open year note', { icon: 'file-text', onClick: () => openPeriodNote(ctx, hz.year.period) }),
     ),

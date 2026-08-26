@@ -567,3 +567,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-drawing-card { position: relative; }
 .helm-drawing-card-delete { position: absolute; top: 4px; right: 4px; opacity: 0; }
 .helm-drawing-card:hover .helm-drawing-card-delete { opacity: 1; }
+
+.helm-task-notes { position: relative; }
+.helm-task-notes .helm-badge { position: absolute; top: -4px; right: -6px; }
+.helm-notes-btn { position: relative; }

@@ -7,6 +7,7 @@ import { PRIORITY_ORDER } from '../../core/taskLine';
 import { button, h } from '../dom';
 import type { UiContext } from '../context';
 import { drawingsSection, targetForTask } from '../drawings';
+import { notesSection } from '../notes';
 import { STATUS_LABELS, pickProject } from '../menus';
 import { DAY_PARTS, PART_LABEL } from '../../core/dailyNote';
 import { effortField, linkTimes } from '../fields';
@@ -47,6 +48,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     h('div', { cls: 'helm-grid3' }, field('Effort', effort.el), field('Time block', h('div', { cls: 'helm-row' }, timeStart, timeEnd)), field('Repeat', recurrence)),
     field('Blocked by (ids)', blockedBy),
     where,
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Notes' }), notesSection(ctx, targetForTask(task))),
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Drawings' }), drawingsSection(ctx, targetForTask(task))),
     h('div', { cls: 'helm-modal-buttons' },
       button('Move to project…', { icon: 'folder-input', onClick: () => pickProject(ctx, (p, phaseId) => { m.close(); void ctx.run('Move', () => ctx.mutations.moveToProject(src.key, p.id, phaseId)); }, { phases: true }) }),

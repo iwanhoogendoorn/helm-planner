@@ -4,6 +4,7 @@ import type { IsoDate, Project, Task, TaskStatus } from '../core/types';
 import { addDays, humanDate, startOfWeek } from '../core/dates';
 import type { UiContext } from './context';
 import { addDrawingItems, targetForTask } from './drawings';
+import { addNoteItems } from './notes';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
@@ -69,6 +70,11 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     for (const p of PRIORITY_ORDER) {
       sub.addItem((j) => j.setTitle(p.charAt(0).toUpperCase() + p.slice(1)).setChecked(task.priority === p).onClick(() => void ctx.run('Priority', () => ctx.mutations.updateTask(task.key, { priority: p }))));
     }
+  });
+  menu.addItem((i) => {
+    i.setTitle('Notes').setIcon('file-text');
+    const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    addNoteItems(sub, ctx, targetForTask(task));
   });
   menu.addItem((i) => {
     i.setTitle('Drawings').setIcon('pen-tool');
