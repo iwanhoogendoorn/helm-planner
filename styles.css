@@ -632,3 +632,12 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-task-actions .helm-task-notes .helm-badge, .helm-task-actions .helm-task-drawings .helm-badge { position: static; min-width: 0; height: auto; padding: 0; margin: 0; background: transparent; color: inherit; font-size: 11px; font-weight: 600; }
 
 .helm-sgroup-body .setting-item-name .helm-schip { margin-left: 8px; vertical-align: middle; }
+
+/* Setup rows: name + chip on one line, path in mono, one action column */
+.helm-sgroup-body .setting-item.helm-setup-row { align-items: center; }
+.helm-sgroup-body .setting-item.helm-setup-row .setting-item-name { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.helm-sgroup-body .setting-item.helm-setup-row .setting-item-name .helm-schip { margin-left: 0; }
+.helm-sgroup-body .setting-item.helm-setup-row .setting-item-description { font-family: var(--font-monospace); font-size: var(--font-ui-smaller); word-break: break-all; }
+.helm-sgroup-body .setting-item.helm-setup-row .setting-item-control { display: flex; justify-content: flex-end; gap: 6px; flex: 0 0 auto; }
+.helm-sgroup-body .setting-item.helm-setup-row .setting-item-control > button { width: auto; min-width: 96px; }
+.helm-setup-checking { padding: 12px; }

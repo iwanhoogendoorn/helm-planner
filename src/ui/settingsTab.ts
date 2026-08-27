@@ -15,6 +15,12 @@ import type { PeriodKind } from '../core/periods';
 
 export const PERIOD_LABELS: Record<PeriodKind, string> = { year: 'Yearly', quarter: 'Quarterly', month: 'Monthly', week: 'Weekly' };
 
+interface SetupData {
+  plugins: { id: string; name: string; why: string; needed: boolean; status: 'enabled' | 'disabled' | 'missing' }[];
+  places: { name: string; path: string; section: string; kind: 'folder' | 'note'; exists: boolean }[];
+  templates: { kind: 'day' | PeriodKind; name: string; path: string | undefined; target: string; exists: boolean; source: string; section: string }[];
+}
+
 export interface SettingsHost extends Plugin {
   settings: HelmSettings;
   saveSettings(): Promise<void>;
@@ -207,7 +213,7 @@ export class HelmSettingTab extends PluginSettingTab {
     // Any render supersedes a Setup render still in flight (it is async and must not land on another section).
     this.renderSeq++;
     switch (this.active) {
-      case 'setup': { const seq = this.renderSeq; const scratch = body.createDiv(); scratch.detach(); void this.renderSetup(scratch).then(() => { if (seq === this.renderSeq) body.replaceChildren(...Array.from(scratch.children)); }); break; }
+      case 'setup': { const seq = this.renderSeq; body.createDiv({ cls: 'helm-hint helm-setup-checking', text: 'Checking…' }); void this.gatherSetup().then((data) => { if (seq !== this.renderSeq) return; body.empty(); this.renderSetup(body, data); }); break; }
       case 'daily': this.renderDaily(body); break;
       case 'horizons': this.renderHorizons(body); break;
       case 'planning': this.renderPlanning(body); break;
@@ -226,41 +232,17 @@ export class HelmSettingTab extends PluginSettingTab {
     this.renderBody();
   }
 
-  private async renderSetup(body: HTMLElement): Promise<void> {
+  private async gatherSetup(): Promise<SetupData> {
     const s = this.host.settings;
     const dc = this.host.dailyConfig();
-    let issues = 0;
-    const summary = this.group(body, { icon: 'wrench', title: 'Setup', subtitle: 'Everything Helm needs, checked. Fix a line with its button, or all of them at once.' });
-    const fixAllRow = new Setting(summary.content).setName('Fix everything').setDesc('Creates every missing folder, note and template below. Plugins are enabled where they are installed; missing ones open the install page.');
-    const fixers: (() => Promise<void>)[] = [];
-
-    const rowChip = (setting: Setting, ok: boolean, okText: string, badText: string): void => {
-      const c = setting.nameEl.createSpan({ cls: ['helm-schip', ok ? 'helm-schip-ok' : 'helm-schip-warn'].join(' ') });
-      c.setText(ok ? okText : badText);
-      if (!ok) issues++;
-    };
-
-    // Companion plugins.
-    const plugins = this.group(body, { icon: 'blocks', title: 'Companion plugins', subtitle: 'Helm works without them, but this is the intended setup.' });
-    const wanted: { id: string; name: string; why: string; needed: boolean }[] = [
+    const plugins = [
       { id: 'core:daily-notes', name: 'Daily Notes (core)', why: 'Where today lives. Helm reads its folder, format and template.', needed: true },
       { id: 'obsidian-tasks-plugin', name: 'Tasks', why: 'The task format Helm writes (🆔 📅 ⏳ ✅ 🔁). Optional, but you get its queries and recurrence for free.', needed: false },
       { id: 'periodic-notes', name: 'Periodic Notes', why: 'Weekly / monthly / quarterly / yearly notes and their templates, which Horizons uses.', needed: false },
       { id: 'templater-obsidian', name: 'Templater', why: 'Renders the templates when Helm creates a note. Without it Helm fills in the common tags itself.', needed: false },
       { id: 'obsidian-excalidraw-plugin', name: 'Excalidraw', why: 'Drawings attached to tasks, days, periods and projects.', needed: false },
-    ];
-    for (const w of wanted) {
-      const st = this.host.pluginStatus(w.id);
-      const row = new Setting(plugins.content).setName(w.name).setDesc(w.why);
-      rowChip(row, st === 'enabled', 'enabled', st === 'disabled' ? 'installed, disabled' : w.needed ? 'not installed' : 'not installed (optional)');
-      if (st === 'disabled') { row.addButton((b) => b.setButtonText('Enable').setCta().onClick(async () => { await this.host.enablePlugin(w.id); this.renderBody(); })); fixers.push(() => this.host.enablePlugin(w.id)); }
-      if (st === 'missing') row.addButton((b) => b.setButtonText(w.id.startsWith('core:') ? 'Open core plugins' : 'Install…').onClick(() => this.host.openPluginInstall(w.id)));
-      if (st === 'enabled' && !w.needed) issues -= 0;
-    }
-
-    // Folders and notes.
-    const places = this.group(body, { icon: 'folder-tree', title: 'Folders and notes', subtitle: 'Created empty when missing; change a location in the section it belongs to.' });
-    const folderRows: { name: string; path: string; section: string; kind: 'folder' | 'note' }[] = [
+    ].map((w) => ({ ...w, status: this.host.pluginStatus(w.id) }));
+    const placeSpecs: { name: string; path: string; section: string; kind: 'folder' | 'note' }[] = [
       { name: 'Projects folder', path: s.projectsFolder, section: 'folders', kind: 'folder' },
       { name: 'Habits folder', path: s.habitsFolder, section: 'folders', kind: 'folder' },
       { name: 'Inbox note', path: s.inboxNote, section: 'folders', kind: 'note' },
@@ -269,38 +251,67 @@ export class HelmSettingTab extends PluginSettingTab {
       { name: 'Drawings folder', path: s.drawingsFolder.trim() || this.host.excalidrawFolderPath() || 'Excalidraw', section: 'drawings', kind: 'folder' },
       { name: 'Notes folder', path: s.notesFolder.trim() || 'Notes', section: 'drawings', kind: 'folder' },
     ];
-    for (const f of folderRows) {
-      const exists = f.path.trim() !== '' && (await this.host.fileExists(f.path));
+    const places = await Promise.all(placeSpecs.map(async (f) => ({ ...f, exists: f.path.trim() !== '' && (await this.host.fileExists(f.path)) })));
+    const dailyPath = this.host.dailyTemplatePath();
+    const templates: SetupData['templates'] = [{ kind: 'day', name: 'Daily note template', path: dailyPath, target: this.host.dailyTemplateTarget(), exists: dailyPath ? await this.host.fileExists(dailyPath) : false, source: dailyPath ? 'configured' : 'none', section: 'daily' }];
+    for (const k of ['year', 'quarter', 'month', 'week'] as const) {
+      const info = await this.host.templateInfo(k);
+      templates.push({ kind: k, name: `${PERIOD_LABELS[k]} note template`, path: info.path, target: this.host.templateTargetPath(k), exists: info.exists, source: info.source, section: 'horizons' });
+    }
+    return { plugins, places, templates };
+  }
+
+  /** Synchronous: everything was gathered first, so the page appears in one piece. */
+  private renderSetup(body: HTMLElement, data: SetupData): void {
+    let issues = 0;
+    const fixers: (() => Promise<void>)[] = [];
+    const summary = this.group(body, { icon: 'wrench', title: 'Setup', subtitle: 'Everything Helm needs, checked. Fix a line with its button, or all of them at once.' });
+    const fixAllRow = new Setting(summary.content).setName('Fix everything').setDesc('Creates every missing folder, note and template below and enables installed plugins. Missing plugins open their install page.');
+    const rowChip = (setting: Setting, ok: boolean, okText: string, badText: string): void => {
+      const c = setting.nameEl.createSpan({ cls: ['helm-schip', ok ? 'helm-schip-ok' : 'helm-schip-warn'].join(' ') });
+      c.setText(ok ? okText : badText);
+      if (!ok) issues++;
+    };
+    const refresh = (): void => this.renderBody();
+
+    const plugins = this.group(body, { icon: 'blocks', title: 'Companion plugins', subtitle: 'Helm works without them, but this is the intended setup.' });
+    for (const w of data.plugins) {
+      const row = new Setting(plugins.content).setName(w.name).setDesc(w.why);
+      row.settingEl.addClass('helm-setup-row');
+      rowChip(row, w.status === 'enabled', 'enabled', w.status === 'disabled' ? 'installed, disabled' : w.needed ? 'not installed' : 'not installed (optional)');
+      if (w.status === 'disabled') { const fix = () => this.host.enablePlugin(w.id); row.addButton((b) => b.setButtonText('Enable').setCta().onClick(async () => { await fix(); refresh(); })); fixers.push(fix); }
+      if (w.status === 'missing') row.addButton((b) => b.setButtonText(w.id.startsWith('core:') ? 'Open core plugins' : 'Install…').onClick(() => this.host.openPluginInstall(w.id)));
+    }
+
+    const places = this.group(body, { icon: 'folder-tree', title: 'Folders and notes', subtitle: 'Created empty when missing; change a location in the section it belongs to.' });
+    for (const f of data.places) {
       const row = new Setting(places.content).setName(f.name).setDesc(f.path || '— not set —');
-      rowChip(row, exists, 'found', f.path ? 'missing' : 'not set');
-      if (!exists && f.path) {
-        const fix = f.kind === 'note' && f.name === 'Inbox note' ? () => this.host.ensureInboxNote().then(() => undefined) : () => this.host.ensureFolder(f.path).then(() => undefined);
-        row.addButton((b) => b.setButtonText('Create').setCta().onClick(async () => { await fix(); this.renderBody(); }));
+      row.settingEl.addClass('helm-setup-row');
+      rowChip(row, f.exists, 'found', f.path ? 'missing' : 'not set');
+      if (!f.exists && f.path) {
+        const fix = f.kind === 'note' ? () => this.host.ensureInboxNote().then(() => undefined) : () => this.host.ensureFolder(f.path).then(() => undefined);
+        row.addButton((b) => b.setButtonText('Create').setCta().onClick(async () => { await fix(); refresh(); }));
         fixers.push(fix);
       }
       row.addButton((b) => b.setButtonText('Change…').onClick(() => this.goTo(f.section)));
     }
 
-    // Templates.
     const tpls = this.group(body, { icon: 'file-plus-2', title: 'Templates', subtitle: 'Helm ships a template for each kind; a missing one is written into your templates folder.' });
-    const dailyPath = this.host.dailyTemplatePath();
-    const dailyExists = dailyPath ? await this.host.fileExists(dailyPath) : false;
-    const dailyRow = new Setting(tpls.content).setName('Daily note template').setDesc(dailyPath ?? `none configured — would be created as ${this.host.dailyTemplateTarget()}`);
-    rowChip(dailyRow, dailyExists, 'found', dailyPath ? 'missing' : 'none');
-    if (!dailyExists) { const fix = () => this.host.writeDailyTemplate(false).then(() => undefined); dailyRow.addButton((b) => b.setButtonText('Create').setCta().onClick(async () => { await fix(); this.renderBody(); })); fixers.push(fix); }
-    dailyRow.addButton((b) => b.setButtonText('Change…').onClick(() => this.goTo('daily')));
-    for (const k of ['year', 'quarter', 'month', 'week'] as const) {
-      const info = await this.host.templateInfo(k);
-      const target = this.host.templateTargetPath(k);
-      const row = new Setting(tpls.content).setName(`${PERIOD_LABELS[k]} note template`).setDesc(info.path ?? `built-in — would be written as ${target}`);
-      rowChip(row, info.exists, 'found', info.source === 'built-in' ? 'built-in (not in vault)' : 'missing');
-      if (!info.exists) { const fix = () => this.host.writeTemplate(k, false).then(() => undefined); row.addButton((b) => b.setButtonText('Create').setCta().onClick(async () => { await fix(); this.renderBody(); })); fixers.push(fix); }
-      row.addButton((b) => b.setButtonText('Change…').onClick(() => this.goTo('horizons')));
+    for (const t of data.templates) {
+      const row = new Setting(tpls.content).setName(t.name).setDesc(t.path ?? `none configured — would be created as ${t.target}`);
+      row.settingEl.addClass('helm-setup-row');
+      rowChip(row, t.exists, 'found', t.source === 'none' ? 'none' : t.source === 'built-in' ? 'built-in (not in vault)' : 'missing');
+      if (!t.exists) {
+        const fix = t.kind === 'day' ? () => this.host.writeDailyTemplate(false).then(() => undefined) : () => this.host.writeTemplate(t.kind as PeriodKind, false).then(() => undefined);
+        row.addButton((b) => b.setButtonText('Create').setCta().onClick(async () => { await fix(); refresh(); }));
+        fixers.push(fix);
+      }
+      row.addButton((b) => b.setButtonText('Change…').onClick(() => this.goTo(t.section)));
     }
 
     summary.setChip(issues === 0 ? 'all good' : `${issues} to fix`, issues === 0 ? 'ok' : 'warn');
     if (fixers.length === 0) fixAllRow.setDesc('Nothing to fix — Helm is ready.');
-    else fixAllRow.addButton((b) => b.setButtonText(`Fix ${fixers.length} item${fixers.length === 1 ? '' : 's'}`).setCta().onClick(async () => { b.setButtonText('Working…'); for (const f of fixers) { try { await f(); } catch (e) { console.warn('[helm] setup fix failed', e); } } this.host.onSettingsChanged(); this.renderBody(); }));
+    else fixAllRow.addButton((b) => b.setButtonText(`Fix ${fixers.length} item${fixers.length === 1 ? '' : 's'}`).setCta().onClick(async () => { b.setButtonText('Working…'); for (const f of fixers) { try { await f(); } catch (e) { console.warn('[helm] setup fix failed', e); } } this.host.onSettingsChanged(); refresh(); }));
   }
 
   // ── folders ───────────────────────────────────────────────────────────
