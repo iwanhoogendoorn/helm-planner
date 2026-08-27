@@ -1,7 +1,12 @@
 /** Dashboard: filterable stats with charts you can click into. */
 import type { IsoDate, Task } from '../../core/types';
 import { addDays, humanDate, minutesToHuman, startOfWeek, WEEKDAY_NAMES } from '../../core/dates';
-import { periodOf } from '../../core/periods';
+import { periodOf, type Period, type PeriodKind } from '../../core/periods';
+import { ghostHabits, habitHistories } from '../../data/habits';
+import { formatRecurrence } from '../../core/recurrence';
+import { colourise } from '../habitCard';
+import { habitBadge } from '../fields';
+import { MONTH_SHORT } from '../../core/dates';
 import { computeStats, filterOptions, type Series, type StatsFilter } from '../../data/stats';
 import { PART_LABEL } from '../../core/dailyNote';
 import { barChart, donut, gauge, legend, lineChart } from '../charts';
@@ -10,6 +15,7 @@ import type { UiContext } from '../context';
 import { habitColor } from '../../core/habit';
 import { crumbBar } from '../crumbs';
 import { openDrilldown } from '../modals/drilldown';
+import { openHabitForm } from '../modals/habitForm';
 
 export type RangePreset = '7d' | '14d' | '30d' | '90d' | 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom';
 
@@ -21,11 +27,13 @@ export interface DashboardState {
   area?: string;
   tag?: string;
   periodKey?: string;
+  /** Column size of the all-time habit tracker. */
+  habitScope: PeriodKind;
   collapsed: Map<string, boolean>;
 }
 
 export function defaultDashboardState(): DashboardState {
-  return { preset: '30d', collapsed: new Map() };
+  return { preset: '30d', habitScope: 'month', collapsed: new Map() };
 }
 
 function rangeFor(state: DashboardState, today: IsoDate, weekStartsOn: 1 | 7): { from: IsoDate; to: IsoDate } {
@@ -136,6 +144,13 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   grid.appendChild(card('Done by tag', 'tag', 'top tags on finished work', s.byTag.length ? barChart(s.byTag.map((t) => ({ key: t.key, label: t.label, value: t.value })), { horizontal: true, onClick: (k) => { const t = s.byTag.find((x) => x.key === k); if (t) drill(`Done with ${t.label}`, t.tasks); } }) : h('div', { cls: 'helm-hint', text: 'No tags on finished tasks in this range.' })));
   root.appendChild(grid);
 
+  // Habit tracker: every habit, all time.
+  const allHabits = [...[...snap.habits.values()].sort((a, b) => Number(b.active) - Number(a.active) || a.title.localeCompare(b.title)), ...ghostHabits(snap.habits, snap.completions)];
+  root.appendChild(allHabits.length > 0 ? habitTracker(ctx, state, allHabits, today)
+    : section('Habit tracker', { store: state.collapsed, key: 'habit-tracker', count: 0 },
+      h('div', { cls: 'helm-empty helm-hgrid-empty' }, h('p', { text: 'No habits yet. Once you have some, every one of them shows up here over its whole life — by week, month, quarter or year.' }),
+        button('New habit', { icon: 'plus', primary: true, onClick: () => openHabitForm(ctx) }))));
+
   // Projects table.
   root.appendChild(section('Projects', { store, key: 'projects', count: s.byProject.length, actions: [h('span', { cls: 'helm-hint', text: 'velocity = done per week in range · ETA = open ÷ velocity' })] },
     h('div', { cls: 'helm-table-wrap' }, h('table', { cls: 'helm-table' },
@@ -151,13 +166,69 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
     )),
   ));
 
-  // Habits and goals.
   if (s.habits.length > 0) root.appendChild(section('Habit consistency', { store, key: 'habits', count: s.habits.length },
     barChart(s.habits.map((hb) => ({ key: hb.habit.id, label: `${hb.habit.icon ? hb.habit.icon + ' ' : ''}${hb.habit.title}`, value: Math.round(hb.rate * 100), title: `${hb.habit.title}: ${hb.done}/${hb.scheduled} (${Math.round(hb.rate * 100)}%) · streak ${hb.streak}`, color: `var(--color-${habitColor(hb.habit)})` })), { horizontal: true }),
     h('div', { cls: 'helm-hint', text: 'Percent of scheduled days done in the range.' })));
   if (s.goals.length > 0) root.appendChild(section('Goals', { store, key: 'goals', count: s.goals.length },
     barChart(s.goals.map((g) => ({ key: g.goal.key, label: `${g.goal.periodKey} ${g.goal.text}`, value: Math.round(g.progress * 100), title: `${g.goal.text}: ${Math.round(g.progress * 100)}% · ${g.projects} project(s)`, color: g.goal.status === 'done' ? 'var(--color-green)' : undefined })), { horizontal: true, onClick: (k) => ctx.navigate('horizons', { periodKey: ctx.index.goal(k)?.periodKey ?? '' }) })));
 
+}
+
+const HABIT_SCOPES: [PeriodKind, string][] = [['week', 'Week'], ['month', 'Month'], ['quarter', 'Quarter'], ['year', 'Year']];
+
+const shortLabel = (p: Period): string => p.kind === 'week' ? `W${p.week}` : p.kind === 'month' ? MONTH_SHORT[p.month! - 1]! : p.kind === 'quarter' ? `Q${p.quarter}` : String(p.year);
+
+/** Every habit over its whole life, one column per week / month / quarter / year, coloured by completion rate. */
+function habitTracker(ctx: UiContext, state: DashboardState, habits: import('../../core/types').Habit[], today: IsoDate): HTMLElement {
+  const kind = state.habitScope;
+  const { periods, rows } = habitHistories(habits, ctx.index.snapshot.completions, kind, today);
+  const scopeBar = h('div', { cls: 'helm-segmented helm-habit-scope' }, ...HABIT_SCOPES.map(([k, label]) => h('button', { cls: ['helm-seg', k === kind && 'is-active'], text: label, onClick: () => { state.habitScope = k; ctx.refresh(); } })));
+  const open = (p: Period): void => { if (p.kind === 'week') ctx.navigate('week', { date: p.start }); else ctx.navigate('horizons', { periodKey: p.key }); };
+  // Year groups above the period labels, except when the columns are years already.
+  const hasYears = kind !== 'year';
+  const yearRow = !hasYears ? null : (() => {
+    const groups: { year: number; n: number }[] = [];
+    for (const p of periods) { const g = groups[groups.length - 1]; if (g && g.year === p.year) g.n++; else groups.push({ year: p.year, n: 1 }); }
+    return h('tr', { cls: 'helm-hgrid-years' }, h('th', { cls: 'helm-hgrid-habit' }), ...groups.map((g) => h('th', { text: String(g.year), attr: { colspan: String(g.n) } })));
+  })();
+  const head = h('thead', {}, yearRow,
+    h('tr', {}, h('th', { cls: 'helm-hgrid-habit', text: 'Habit' }), ...periods.map((p) => h('th', { cls: ['helm-hgrid-col', p.start <= today && p.end >= today && 'is-current'], text: shortLabel(p), title: p.label }))));
+  const body = h('tbody', {}, ...rows.map((r) => {
+    const hb = r.habit;
+    const tr = colourise(h('tr', { cls: [!hb.active && 'is-paused', hb.removed && 'is-removed'] }), hb);
+    const changes = hb.history ?? [];
+    const pauses = hb.pauses ?? [];
+    const changedTitle = [...changes.map((e) => `until ${e.until}: ${formatRecurrence(e.schedule)}${e.parts?.length ? ` (${e.parts.join(', ')})` : ''}`), `now: ${formatRecurrence(hb.schedule)}${hb.parts?.length ? ` (${hb.parts.join(', ')})` : ''}`].join('\n');
+    const pausedTitle = pauses.map((p) => `${p.from} → ${p.to ?? 'now'}`).join('\n');
+    tr.append(
+      h('td', { cls: 'helm-hgrid-habit' }, h('span', { cls: 'helm-hgrid-dot' }), habitBadge(ctx, hb), h('span', { cls: 'helm-hgrid-title', text: hb.title }),
+        hb.removed ? chip('removed', 'muted', 'The habit note is gone; these are the ticks left in your daily notes.') : !hb.active ? chip('paused', 'muted', pausedTitle || 'Paused') : null,
+        changes.length ? chip(`changed ${changes.length}×`, 'muted', changedTitle) : null,
+        !hb.removed && hb.active && pauses.length ? chip(`paused ${pauses.length}×`, 'muted', pausedTitle) : null),
+      ...r.cells.map((c) => {
+        const pct = Math.round(c.rate * 100);
+        const cell = h('td', { cls: ['helm-hgrid-cell', `is-${c.state}`] });
+        if (c.state === 'rated') cell.append(h('button', { cls: 'helm-hgrid-val', text: `${pct}`, title: `${c.period.label} · ${r.habit.title}: ${c.done}/${c.due} done (${pct}%)`, style: { background: `rgba(var(--hc-rgb), ${(0.12 + 0.78 * c.rate).toFixed(2)})`, color: c.rate >= 0.5 ? 'var(--text-on-accent)' : 'var(--hc)' }, onClick: () => open(c.period) }));
+        else if (c.state === 'idle') cell.append(h('span', { cls: 'helm-hgrid-val is-idle', text: '·', title: `${c.period.label}: nothing scheduled` }));
+        return cell;
+      }),
+    );
+    return tr;
+  }));
+  // Totals live in their own table beside the scrolling grid, so they stay put; row heights are fixed so the two line up.
+  const totals = h('table', { cls: 'helm-table helm-hgrid helm-hgrid-totals' },
+    h('thead', {}, hasYears ? h('tr', { cls: 'helm-hgrid-years' }, h('th', { attr: { colspan: '4' } })) : null,
+      h('tr', {}, ...['Done', 'Rate', 'Streak', 'Best'].map((t) => h('th', { cls: 'helm-hgrid-total', text: t })))),
+    h('tbody', {}, ...rows.map((r) => h('tr', { cls: [!r.habit.active && 'is-paused', r.habit.removed && 'is-removed'] },
+      h('td', { cls: 'helm-hgrid-total', text: `${r.done}/${r.due}` }),
+      h('td', { cls: 'helm-hgrid-total', text: `${Math.round(r.rate * 100)}%` }),
+      h('td', { cls: 'helm-hgrid-total', text: r.habit.active ? String(r.streak) : '—', title: r.habit.removed ? 'Removed' : r.habit.active ? 'Current streak' : 'Paused' }),
+      h('td', { cls: 'helm-hgrid-total', text: String(r.bestStreak), title: 'Best streak' }),
+    ))));
+  const from = rows.map((r) => r.from).sort()[0] ?? today;
+  return section('Habit tracker', { store: state.collapsed, key: 'habit-tracker', count: rows.length, actions: [scopeBar] },
+    h('div', { cls: 'helm-hgrid-flex' }, h('div', { cls: 'helm-table-wrap helm-hgrid-wrap' }, h('table', { cls: 'helm-table helm-hgrid' }, head, body)), totals),
+    h('div', { cls: 'helm-hint', text: `All time, since ${humanDate(from, today)} — a cell is the share of scheduled occurrences done in that ${kind}; click one to open it. Streaks tolerate each habit's grace days. Days are judged by the schedule that applied then; paused spans are not due; removed habits keep the ticks left in your daily notes.` }));
 }
 
 export type { Series };

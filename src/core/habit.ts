@@ -11,13 +11,17 @@
  * target_per_week: 5
  * grace_days: 1
  * icon: 🏃
+ * history:                         # earlier definitions: "<until> <schedule> [parts: a, b]"
+ *   - 2026-06-30 every day
+ * paused:                          # spans not due: "<from>..<to>", open when still paused
+ *   - 2026-07-01..2026-07-14
  * ---
  * ```
  */
-import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitPart } from './types';
+import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitPart, type Recurrence } from './types';
 import { parseDocument, type Document } from './document';
 import { scalar } from './frontmatter';
-import { parseRecurrence } from './recurrence';
+import { formatRecurrence, parseRecurrence } from './recurrence';
 
 export function isHabitNote(doc: Document): boolean {
   const t = scalar(doc.frontmatter.values['type'] ?? doc.frontmatter.values['Type']);
@@ -51,10 +55,40 @@ export function parseHabit(path: string, content: string, fallbackId?: string): 
   if (created && /^\d{4}-\d{2}-\d{2}/.test(created)) habit.created = created.slice(0, 10);
   const color = (scalar(fm['color']) ?? '').toLowerCase();
   if ((HABIT_COLORS as string[]).includes(color)) habit.color = color as HabitColor;
+  const history = asList(fm['history']).map(parseHistoryEntry).filter((x): x is NonNullable<ReturnType<typeof parseHistoryEntry>> => x !== undefined).sort((a, b) => a.until.localeCompare(b.until));
+  if (history.length > 0) habit.history = history;
+  const pauses = asList(fm['paused']).map(parsePauseEntry).filter((x): x is NonNullable<ReturnType<typeof parsePauseEntry>> => x !== undefined).sort((a, b) => a.from.localeCompare(b.from));
+  if (pauses.length > 0) habit.pauses = pauses;
   const img = scalar(fm['icon_image']) ?? scalar(fm['image']);
   if (img) habit.iconImage = img.replace(/^\[\[|\]\]$/g, '').replace(/^!\[\[|\]\]$/g, '');
   return habit;
 }
+
+const asList = (v: unknown): string[] => Array.isArray(v) ? v.map(String) : typeof v === 'string' && v.trim() ? [v] : [];
+const PARTS_RE = /\s*\[?parts:\s*([a-z, ]+)\]?\s*$/i;
+
+/** `2026-06-30 every weekday [parts: morning, evening]` → the definition in force up to that day. */
+export function parseHistoryEntry(raw: string): { until: string; schedule: Recurrence; parts?: HabitPart[] } | undefined {
+  const m = /^(\d{4}-\d{2}-\d{2})\s+(.+)$/.exec(raw.trim());
+  if (!m) return undefined;
+  let text = m[2]!;
+  const pm = PARTS_RE.exec(text);
+  const parts = pm ? pm[1]!.split(',').map((x) => x.trim().toLowerCase()).filter((x): x is HabitPart => (HABIT_PARTS as string[]).includes(x)) : [];
+  if (pm) text = text.slice(0, pm.index);
+  return { until: m[1]!, schedule: parseRecurrence(text.trim()), ...(parts.length ? { parts } : {}) };
+}
+
+export function formatHistoryEntry(e: { until: string; schedule: Recurrence; parts?: HabitPart[] }): string {
+  return `${e.until} ${formatRecurrence(e.schedule)}${e.parts && e.parts.length ? ` [parts: ${e.parts.join(', ')}]` : ''}`;
+}
+
+/** `2026-07-01..2026-07-14`, or `2026-07-01..` while still paused. */
+export function parsePauseEntry(raw: string): { from: string; to?: string } | undefined {
+  const m = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})?$/.exec(raw.trim());
+  return m ? { from: m[1]!, ...(m[2] ? { to: m[2] } : {}) } : undefined;
+}
+
+export const formatPauseEntry = (p: { from: string; to?: string }): string => `${p.from}..${p.to ?? ''}`;
 
 export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor; today: string }): string {
   const fm = ['---', `title: ${h.title}`, 'type: habit', `id: ${h.id}`, `schedule: ${h.schedule}`, 'active: true'];

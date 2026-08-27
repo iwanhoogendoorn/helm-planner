@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Dashboard → *Habit tracker*: every habit over its whole life, one column
+  per week, month, quarter or year (switch at the top right), each cell the
+  share of scheduled occurrences done, in the habit's colour; totals, rate,
+  current and best streak per row; paused habits included. Click a cell to
+  open that week or horizon. Shows something even with no habits (a New
+  habit button), and sits above the Projects table.
+- Habits that changed or went away are handled honestly: editing a schedule
+  or the parts of the day records the old definition in the habit note
+  (`history`), pausing / resuming records the span (`paused`), and every
+  statistic judges each day by the rules that applied then. A habit whose
+  note was deleted still appears in the tracker — rebuilt from the ticks
+  left in your daily notes, marked *removed*. A tick on a day the habit was
+  not scheduled counts as a bonus, never above 100%.
+- *Habit consistency* now covers the whole selected range (it silently
+  stopped at 84 days before, so “This year” and “12 months” were wrong).
+
 ## 1.4.0 — 2026-08-27
 
 - Notes and drawings for habits: the same New / Link existing / Manage

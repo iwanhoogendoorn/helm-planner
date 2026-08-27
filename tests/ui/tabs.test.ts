@@ -319,6 +319,46 @@ describe('Dashboard tab', () => {
     expect(m.contentEl.querySelector('.helm-drilldown-summary')!.textContent).toContain('1 task');
   });
 
+  it('shows an empty habit tracker with a New habit button when the vault has no habits', async () => {
+    const { ctx, vault, index } = await ctxFor();
+    for (const p of [...index.snapshot.habits.values()].map((x) => x.path)) { await vault.delete(p); index.update(p, undefined); }
+    index.snapshot.completions.length = 0; // no ticks left either — otherwise the removed habits would still show
+    const root = render((r) => renderDashboard(ctx, r, defaultDashboardState()));
+    const tracker = [...root.querySelectorAll('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Habit tracker')!;
+    expect(tracker.textContent).toContain('No habits yet');
+    click([...tracker.querySelectorAll('button')].find((b) => b.textContent?.includes('New habit')));
+    expect(Modal.last!.titleEl.textContent).toBe('New habit');
+  });
+
+  it('has an all-time habit tracker with week / month / quarter / year columns, rate cells and totals', async () => {
+    const { ctx, index } = await ctxFor();
+    const state = defaultDashboardState();
+    let root = render((r) => renderDashboard(ctx, r, state));
+    const tracker = () => [...root.querySelectorAll('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Habit tracker')!;
+    expect(tracker()).toBeTruthy();
+    expect(texts(tracker() as HTMLElement, '.helm-habit-scope .helm-seg')).toEqual(['Week', 'Month', 'Quarter', 'Year']);
+    expect(texts(tracker() as HTMLElement, 'thead .helm-hgrid-col')).toContain('Aug');
+    expect(texts(tracker() as HTMLElement, '.helm-hgrid-title')).toEqual(['Evening reading', 'Morning workout']);
+    const cell = [...tracker().querySelectorAll('.helm-hgrid-val')].find((b) => b.getAttribute('title')?.includes('Morning workout'))!;
+    expect(cell.getAttribute('title')).toMatch(/August 2026 · Morning workout: 1\/\d+ done/);
+    click([...tracker().querySelectorAll('.helm-seg')].find((b) => b.textContent === 'Week'));
+    expect(state.habitScope).toBe('week');
+    root = render((r) => renderDashboard(ctx, r, state));
+    expect(texts(tracker() as HTMLElement, 'thead .helm-hgrid-col')).toContain('W35');
+    expect(texts(tracker() as HTMLElement, '.helm-hgrid-years th').filter(Boolean)).toEqual(['2026']);
+    // A habit whose note is gone still shows, rebuilt from its ticks, marked removed.
+    index.snapshot.completions.push({ habitId: 'hab-gone', date: '2026-08-05', path: 'x.md', line: 1, state: 'done', text: '🧘 Meditate 🆔 hab-gone' });
+    root = render((r) => renderDashboard(ctx, r, state));
+    expect(texts(tracker() as HTMLElement, '.helm-hgrid-title')).toEqual(['Evening reading', 'Morning workout', 'Meditate']);
+    expect(tracker().querySelector('tr.is-removed .helm-chip')!.textContent).toBe('removed');
+    index.snapshot.completions.pop();
+    root = render((r) => renderDashboard(ctx, r, state));
+    const navs: unknown[] = [];
+    ctx.navigate = (tab, opts) => { navs.push([tab, opts]); };
+    click([...tracker().querySelectorAll('.helm-hgrid-val')].find((b) => b.getAttribute('title')?.includes('Week 35')));
+    expect(navs).toEqual([['week', { date: '2026-08-24' }]]);
+  });
+
   it('Today tab renders parts with drop zones and moves a task on drop', async () => {
     const { ctx, vault } = await ctxFor();
     await ctx.mutations.schedule('tsk-0001', TODAY, 'morning');

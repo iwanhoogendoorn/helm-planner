@@ -13,7 +13,8 @@ import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKE
 import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, addMonths, diffDays, formatDate } from '../core/dates';
-import { nextOccurrence } from '../core/recurrence';
+import { formatRecurrence, nextOccurrence } from '../core/recurrence';
+import { formatHistoryEntry, formatPauseEntry } from '../core/habit';
 import { uniqueId } from '../core/ids';
 import { setFrontmatter } from '../core/frontmatter';
 import { renderProjectNote } from '../core/project';
@@ -808,6 +809,20 @@ export class Mutations {
     if (fields.icon !== undefined) u['icon'] = fields.icon;
     if (fields.iconImage !== undefined) u['icon_image'] = fields.iconImage ?? '';
     if (fields.parts !== undefined) (u as Record<string, string | string[] | null | undefined>)['parts'] = fields.parts.length ? fields.parts : undefined;
+    // A changed schedule or parts closes the old definition at yesterday, so history is judged by the rules of its day.
+    const newSchedule = fields.schedule !== undefined ? fields.schedule : formatRecurrence(h.schedule);
+    const newParts = fields.parts !== undefined ? fields.parts : h.parts ?? [];
+    const sameParts = newParts.length === (h.parts ?? []).length && newParts.every((x) => (h.parts ?? []).includes(x));
+    if ((newSchedule !== formatRecurrence(h.schedule) || !sameParts) && (h.created === undefined || h.created < this.today)) {
+      (u as Record<string, string | string[] | null | undefined>)['history'] = [...(h.history ?? []), { until: addDays(this.today, -1), schedule: h.schedule, ...(h.parts && h.parts.length ? { parts: h.parts } : {}) }].map(formatHistoryEntry);
+    }
+    // Pausing opens a span at today; resuming closes it at yesterday (a same-day flip leaves no span).
+    if (fields.active !== undefined && fields.active !== h.active) {
+      const spans = [...(h.pauses ?? [])];
+      if (!fields.active) spans.push({ from: this.today });
+      else { const open = spans.findIndex((s) => s.to === undefined); if (open !== -1) { if (spans[open]!.from >= this.today) spans.splice(open, 1); else spans[open] = { from: spans[open]!.from, to: addDays(this.today, -1) }; } }
+      (u as Record<string, string | string[] | null | undefined>)['paused'] = spans.length ? spans.map(formatPauseEntry) : undefined;
+    }
     if (fields.color !== undefined) (u as Record<string, string | string[] | null | undefined>)['color'] = fields.color ?? undefined;
     await this.editFile(h.path, (lines) => setFrontmatter(lines, u));
   }

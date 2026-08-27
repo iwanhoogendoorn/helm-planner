@@ -17,7 +17,7 @@ describe('index', () => {
     expect(snap.projects.get('prj-oracle')!.childIds).toEqual(['prj-cert']);
     expect([...snap.habits.keys()].sort()).toEqual(['hab-read', 'hab-workout']);
     expect(snap.dailyNotes.get('2026-08-25')?.hasRegion).toBe(true);
-    expect(snap.completions).toEqual([{ habitId: 'hab-workout', date: '2026-08-25', path: dailyPath('2026-08-25'), line: 14, state: 'done' }]);
+    expect(snap.completions).toEqual([{ habitId: 'hab-workout', date: '2026-08-25', path: dailyPath('2026-08-25'), line: 14, state: 'done', text: '🏃 Morning workout' }]);
   });
 
   it('classifies daily lines', async () => {

@@ -166,7 +166,7 @@ export function computeStats(snap: Snapshot, f: StatsFilter, today: IsoDate, set
 
   // Habits and goals.
   const habits = [...snap.habits.values()].filter((h) => h.active).map((habit) => {
-    const st = habitStats(habit, snap.completions, today, settings.weekStartsOn, Math.min(days, 84));
+    const st = habitStats(habit, snap.completions, today, settings.weekStartsOn, Math.max(days, 1));
     let scheduled = 0;
     let done = 0;
     for (const d of st.days) { if (d.date < f.from || d.date > f.to) continue; if (d.state === 'off' || d.state === 'future') continue; scheduled++; if (d.state === 'done') done++; }

@@ -158,6 +158,12 @@ export interface Habit {
   color?: HabitColor;
   /** The day the habit started; earlier days are not counted as missed. */
   created?: IsoDate;
+  /** Earlier definitions, oldest first: the schedule (and parts) in force up to and including `until`. */
+  history?: { until: IsoDate; schedule: Recurrence; parts?: HabitPart[] }[];
+  /** Spans the habit was paused; an open span (no `to`) is the current pause. Days inside are not due. */
+  pauses?: { from: IsoDate; to?: IsoDate }[];
+  /** No habit note any more — reconstructed from the ticks left in daily notes. */
+  removed?: boolean;
 }
 
 export type HabitColor = 'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'pink';
@@ -176,6 +182,8 @@ export interface HabitCompletion {
   state: 'done' | 'skipped' | 'missed';
   /** Which occurrence of the day this line is; undefined = the day-level line in the Habits section. */
   part?: HabitPart;
+  /** The line's text (icon and title as written that day) — the only trace of a habit whose note is gone. */
+  text?: string;
 }
 
 export interface Diagnostic {
