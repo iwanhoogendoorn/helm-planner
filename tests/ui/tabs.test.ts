@@ -787,3 +787,24 @@ describe('habit board', () => {
     expect(form.contentEl.querySelector('.helm-swatch.is-active')!.getAttribute('title')).toBe('purple');
   });
 });
+
+describe('Follow up from the UI', () => {
+  it('the task menu offers Follow up…; the dialog prefills the title, defaults to tomorrow, and creates the tagged, dependent task', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'daily' && x.noteDate === '2026-08-25' && x.status === 'todo' && x.section !== 'outside')!;
+    click(taskRow(ctx, t).querySelector('button[aria-label="More…"]'));
+    expect(Menu.last!.items.map((i) => i.title).slice(0, 2)).toEqual(['Edit…', 'Follow up…']);
+    Menu.last!.items[1]!.click!();
+    const m = Modal.last!;
+    expect(m.titleEl.textContent).toBe('Follow up');
+    const text = m.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;
+    expect(text.value).toBe(t.text);
+    expect(m.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-08-27');
+    text.value = 'Next step';
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent?.includes('Create follow-up')));
+    await flush(); await flush(); await flush();
+    expect(await vault.read(dailyPath('2026-08-27'))).toMatch(/- \[ \] Next step #followup ⛔ tsk-\w+/);
+    const row = taskRow(ctx, [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Next step') && x.origin === 'daily')!);
+    expect(row.querySelector('.helm-chip.followup')!.textContent).toContain('follows:');
+  });
+});

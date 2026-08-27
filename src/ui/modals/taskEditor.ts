@@ -8,6 +8,7 @@ import { button, h } from '../dom';
 import type { UiContext } from '../context';
 import { drawingsSection, targetForTask } from '../drawings';
 import { notesSection } from '../notes';
+import { openFollowUp } from './followUp';
 import { STATUS_LABELS, pickProject } from '../menus';
 import { DAY_PARTS, PART_LABEL } from '../../core/dailyNote';
 import { effortField, linkTimes , wikilinkSuggest } from '../fields';
@@ -52,6 +53,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Notes' }), notesSection(ctx, targetForTask(task))),
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Drawings' }), drawingsSection(ctx, targetForTask(task))),
     h('div', { cls: 'helm-modal-buttons' },
+      button('Follow up…', { icon: 'corner-down-right', cls: 'helm-btn-quiet', title: 'Continue this task another day', onClick: () => { m.close(); openFollowUp(ctx, task); } }),
       button('Move to project…', { icon: 'folder-input', onClick: () => pickProject(ctx, (p, phaseId) => { m.close(); void ctx.run('Move', () => ctx.mutations.moveToProject(src.key, p.id, phaseId)); }, { phases: true }) }),
       button('Open note', { icon: 'file-text', onClick: () => { m.close(); void ctx.openFile(src.path, src.line); } }),
       h('span', { cls: 'helm-spacer' }),

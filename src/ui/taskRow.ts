@@ -6,7 +6,7 @@ import { chip, h, icon, iconButton, richText } from './dom';
 import type { UiContext } from './context';
 import { taskMenu } from './menus';
 import { openTaskEditor } from './modals/taskEditor';
-import { isBlocked, isOpen } from '../data/planner';
+import { followsOf, followUpsOf, isBlocked, isOpen } from '../data/planner';
 import { drawingsIndicator } from './drawings';
 import { notesIndicator } from './notes';
 import { taskLabel } from './context';
@@ -92,7 +92,12 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (t.origin === 'daily' && t.noteDate && t.due && t.due > t.noteDate && open) meta.appendChild(chip(`in ${humanDate(t.noteDate, today)}'s note`, 'note', 'Dated later than the note it sits in — Helm moves it to the right note'));
   if (t.effortMinutes !== undefined) meta.appendChild(chip(minutesToHuman(t.effortMinutes), 'effort'));
   if (t.recurrence) meta.appendChild(chip(formatRecurrence(t.recurrence), 'recurrence', t.recurrence.parsed ? '' : 'Unrecognised rule'));
-  if (blocked) meta.appendChild(chip('blocked', 'blocked', `Waiting on ${t.blockedBy.join(', ')}`));
+  const fuTag = (ctx.settings().followupTag.trim() || 'followup').replace(/^#/, '');
+  const follows = followsOf(snap, t, fuTag);
+  if (follows) meta.appendChild(h('button', { cls: 'helm-chip followup', title: `Continues “${follows.text}” — click to open`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(follows.path, follows.line); } }, icon('corner-down-right'), h('span', { text: `follows: ${follows.text.length > 40 ? follows.text.slice(0, 39) + '…' : follows.text}${isOpen(follows) ? ' (open)' : ''}` })));
+  else if (blocked) meta.appendChild(chip('blocked', 'blocked', `Waiting on ${t.blockedBy.join(', ')}`));
+  const ups = followUpsOf(snap, t, fuTag);
+  for (const u of ups.slice(0, 2)) meta.appendChild(h('button', { cls: ['helm-chip', 'followup', !isOpen(u) && 'is-done'], title: `Follow-up: ${u.text}`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(u.path, u.line); } }, icon('corner-down-right'), h('span', { text: `→ ${u.scheduled ?? u.noteDate ? humanDate((u.scheduled ?? u.noteDate)!, today) : 'unplanned'}` })));
   if (t.status === 'waiting') meta.appendChild(chip('waiting', 'waiting'));
   if (t.childKeys.length > 0) {
     const kids = t.childKeys.map((k) => snap.tasks.get(k)).filter((x): x is Task => x !== undefined);

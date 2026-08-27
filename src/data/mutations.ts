@@ -811,6 +811,27 @@ export class Mutations {
     await this.editFile(h.path, (lines) => setFrontmatter(lines, u));
   }
 
+  /* ── Follow-ups ────────────────────────────────────────────────────── */
+
+  /**
+   * Continue a task another day: a new task on `date` carrying the follow-up tag and
+   * `⛔ <original id>` (blocked until the original is done), in the original's project and
+   * phase when it has one, else in the day's note. Optionally ticks the original now.
+   */
+  async followUp(key: string, opts: { text?: string; date: IsoDate; part?: DayPart; markOriginalDone?: boolean; fields?: Partial<TaskLine> }): Promise<{ id: string; date: IsoDate }> {
+    const id = await this.ensureId(key);
+    const orig = this.fresh(this.index.task(id)?.key ?? key);
+    const src = orig.mirrorOf ? this.fresh(orig.mirrorOf) : orig;
+    const tag = (this.settings.followupTag.trim() || 'followup').replace(/^#/, '');
+    let text = (opts.text?.trim() || src.text).trim();
+    if (!new RegExp(`(^|\\s)#${tag}(\\s|$)`).test(text)) text = `${text} #${tag}`;
+    const fields: Partial<TaskLine> = { ...(opts.fields ?? {}), blockedBy: [...new Set([...(opts.fields?.blockedBy ?? []), id])], priority: opts.fields?.priority ?? src.priority };
+    if (src.projectId && src.origin === 'project') await this.addTask({ text, projectId: src.projectId, ...(src.phaseId ? { phaseId: src.phaseId } : {}), date: opts.date, ...(opts.part ? { part: opts.part } : {}), fields });
+    else await this.addTask({ text, date: opts.date, ...(opts.part ?? src.part ? { part: opts.part ?? (src.part === 'anytime' ? undefined : src.part) } : {}), fields });
+    if (opts.markOriginalDone) await this.setStatus(src.key, 'done');
+    return { id, date: opts.date };
+  }
+
   /* ── Drawings ──────────────────────────────────────────────────────── */
 
   private safeName(s: string): string { return s.replace(/[\\/:*?"<>|#^[\]]/g, '-').replace(/\s+/g, ' ').trim(); }

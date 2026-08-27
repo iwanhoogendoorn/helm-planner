@@ -251,6 +251,8 @@ export interface HelmSettings {
   drawingTemplate: string;
   projectDrawingsInProjectFolder: boolean;
   embedDrawings: boolean;
+  /** Tag put on follow-up tasks (without #). */
+  followupTag: string;
   /** Notes: where new ones go, and whether links are written into the target's note. */
   notesFolder: string;
   projectNotesInProjectFolder: boolean;
@@ -307,6 +309,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   drawingTemplate: '',
   projectDrawingsInProjectFolder: true,
   embedDrawings: true,
+  followupTag: 'followup',
   notesFolder: 'Notes',
   projectNotesInProjectFolder: true,
   linkNotes: true,

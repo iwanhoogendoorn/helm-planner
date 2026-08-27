@@ -618,3 +618,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-swatch:hover { opacity: 1; }
 .helm-swatch.is-active { opacity: 1; border-color: var(--text-normal); transform: scale(1.1); }
 @media (max-width: 720px) { .helm-habit-card { grid-template-columns: auto minmax(0, 1fr); } .helm-habit-week, .helm-habit-month { grid-column: 2; } }
+
+.helm-chip.followup { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); border: none; height: auto; }
+.helm-chip.followup svg { width: 11px; height: 11px; }
+.helm-chip.followup.is-done { opacity: 0.6; text-decoration: line-through; }

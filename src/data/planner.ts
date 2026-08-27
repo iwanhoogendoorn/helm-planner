@@ -448,3 +448,17 @@ export function horizons(snap: Snapshot, year: number, today: IsoDate, settings:
   const py = periodsOfYear(year);
   return { year: build(py.year), quarters: py.quarters.map(build), months: py.months.map(build) };
 }
+
+/** The follow-ups spawned from a task (tasks tagged as follow-ups that depend on its id), open first. */
+export function followUpsOf(snap: Snapshot, t: Task, tag: string): Task[] {
+  if (!t.id) return [];
+  const id = t.id;
+  return [...snap.tasks.values()].filter((x) => x.origin !== 'daily-mirror' && x.blockedBy.includes(id) && x.tags.includes(tag)).sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || (a.scheduled ?? a.noteDate ?? '').localeCompare(b.scheduled ?? b.noteDate ?? ''));
+}
+
+/** The task a follow-up continues, when it is one. */
+export function followsOf(snap: Snapshot, t: Task, tag: string): Task | undefined {
+  if (!t.tags.includes(tag)) return undefined;
+  for (const id of t.blockedBy) { const src = [...snap.tasks.values()].find((x) => x.id === id && x.origin !== 'daily-mirror'); if (src) return src; }
+  return undefined;
+}

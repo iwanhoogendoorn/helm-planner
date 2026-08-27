@@ -495,3 +495,45 @@ describe('a carried-over task put on today', () => {
     expect(yPlan.openCount).toBe(yPlan.items.filter((i) => ['todo', 'doing', 'waiting'].includes(i.task.status)).length);
   });
 });
+
+describe('follow up', () => {
+  it('daily task: a tagged, dependent task lands on the chosen day; the original gets an id and can be ticked; it unblocks when the original is done', async () => {
+    const { setup, dailyPath } = await import('./fixture');
+    const { followsOf, followUpsOf, isBlocked } = await import('../../src/data/planner');
+    const { m, vault, index, settings } = await setup();
+    const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'daily' && t.noteDate === '2026-08-25' && t.status === 'todo' && t.section !== 'outside')!;
+    const r = await m.followUp(orig.key, { text: 'Continue with OIB: networking module', date: '2026-08-28', part: 'morning', markOriginalDone: true });
+    expect(r.id).toMatch(/^tsk-/);
+    const friday = await vault.read(dailyPath('2026-08-28'));
+    expect(friday).toMatch(new RegExp(`- \\[ \\] Continue with OIB: networking module #followup ⛔ ${r.id}`));
+    const yesterday = await vault.read(dailyPath('2026-08-25'));
+    expect(yesterday).toMatch(new RegExp(`- \\[x\\] .*🆔 ${r.id}.*✅ \\d{4}-\\d{2}-\\d{2}`));
+    const fu = [...index.snapshot.tasks.values()].find((t) => t.text.startsWith('Continue with OIB'))!;
+    const src = [...index.snapshot.tasks.values()].find((t) => t.id === r.id)!;
+    expect(fu.tags).toContain('followup');
+    expect(fu.part).toBe('morning');
+    expect(followsOf(index.snapshot, fu, 'followup')?.id).toBe(r.id);
+    expect(followUpsOf(index.snapshot, src, 'followup').map((t) => t.text)).toEqual([fu.text]);
+    expect(isBlocked(fu, index.snapshot)).toBe(false); // the original is done
+    // Without ticking the original, the follow-up waits on it.
+    const r2 = await m.followUp(fu.key, { date: '2026-08-31' });
+    const fu2 = [...index.snapshot.tasks.values()].find((t) => t.text === fu.text && t.noteDate === '2026-08-31')!;
+    expect(fu2.blockedBy).toContain(r2.id);
+    expect(isBlocked(fu2, index.snapshot)).toBe(true);
+    expect(settings.followupTag).toBe('followup');
+  });
+  it('project task: the follow-up joins the same project and phase and is mirrored onto the day', async () => {
+    const { setup, dailyPath } = await import('./fixture');
+    const { m, vault, index } = await setup();
+    const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'project' && t.projectId === 'prj-book' && t.phaseId !== undefined && t.status !== 'done')!;
+    const r = await m.followUp(orig.key, { text: 'Second draft of the outline', date: '2026-08-28' });
+    const note = await vault.read(orig.path);
+    const line = note.split('\n').find((l) => l.includes('Second draft of the outline'))!;
+    expect(line).toMatch(/^- \[ \] Second draft of the outline #followup 🆔 tsk-\w+/);
+    expect(line).toContain('⏳ 2026-08-28');
+    expect(line).toContain(`⛔ ${r.id}`);
+    const fu = [...index.snapshot.tasks.values()].find((t) => t.text.startsWith('Second draft') && t.origin === 'project')!;
+    expect(fu.phaseId).toBe(orig.phaseId);
+    expect(await vault.read(dailyPath('2026-08-28'))).toContain('Second draft of the outline');
+  });
+});

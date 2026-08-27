@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Follow up…: continue a task another day from its menu or the editor —
+  own title, day (tomorrow and quick picks), part of the day, and “mark the
+  original done”. The follow-up carries #followup and depends on the original
+  (⛔ id), so it reads “follows: …”, the original shows “→ Fri 28”, and it is
+  blocked until the original is ticked. Project tasks continue inside the same
+  project and phase, mirrored onto the day. Tag name in Settings → Planning.
 - Habit board on Today: a coloured card per habit — today's tick (one per
   part for morning/afternoon/evening habits), streak and this-week count,
   the current week as seven cells you can click to fix a past day, and a
