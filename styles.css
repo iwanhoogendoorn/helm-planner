@@ -400,8 +400,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-month-cell-head { display: flex; align-items: center; gap: 4px; }
 .helm-month-dom { font-weight: 700; font-size: var(--font-ui-small); }
 .helm-month-cell.is-today .helm-month-dom { color: var(--text-accent); }
-.helm-month-plan { opacity: 0; }
-.helm-month-cell:hover .helm-month-plan { opacity: 1; }
+.helm-month-plan { opacity: 0; padding: 2px; }
+.helm-month-cell:hover .helm-month-plan, .helm-month-plan:focus-visible { opacity: 1; }
+@media (hover: none) { .helm-month-plan { opacity: 1; } }
 .helm-month-items { display: flex; flex-direction: column; gap: 2px; }
 .helm-month-item { font-size: 11px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1px 4px; border-radius: 3px; background: var(--background-modifier-border); display: flex; gap: 4px; }
 .helm-month-item.is-project { background: rgba(var(--color-blue-rgb), 0.14); }

@@ -9,6 +9,7 @@ import { wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
 import { openPlanDay } from '../modals/planDay';
 import { openCapture } from '../modals/capture';
+import { onDayContext } from '../dayMenu';
 import { periodOf } from '../../core/periods';
 import { goalProgress } from '../../data/planner';
 import { progressBar, richText } from '../dom';
@@ -57,7 +58,7 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
   for (const d of w.days) {
     const isToday = d.date === today;
     const isPast = d.date < today;
-    const col = h('div', { cls: ['helm-week-day', isToday && 'is-today', isPast && 'is-past'], attr: { 'data-date': d.date } });
+    const col = onDayContext(h('div', { cls: ['helm-week-day', isToday && 'is-today', isPast && 'is-past'], attr: { 'data-date': d.date } }), ctx, d.date);
     col.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task')) { ev.preventDefault(); col.classList.add('is-dropping'); } });
     col.addEventListener('dragleave', () => col.classList.remove('is-dropping'));
     col.addEventListener('drop', (ev) => {
@@ -72,6 +73,7 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
         h('span', { cls: 'helm-week-dom', text: String(Number(d.date.slice(8, 10))) }),
         h('span', { cls: 'helm-spacer' }),
         d.minutes > 0 ? chip(minutesToHuman(d.minutes), d.minutes > settings.dailyCapacityMinutes ? 'effort is-over' : 'effort') : null,
+        iconButton('plus', `New task on ${humanDate(d.date, today)}`, (ev) => { ev.stopPropagation(); openCapture(ctx, { date: d.date }); }),
         iconButton('list-plus', 'Plan this day', (ev) => { ev.stopPropagation(); openPlanDay(ctx, d.date); }),
       ),
       weekDayBody(ctx, d.date, d.open, d.done.length, isPast),

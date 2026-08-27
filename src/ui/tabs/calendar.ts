@@ -17,6 +17,8 @@ import { barChart } from '../charts';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { drawingsButton, targetForPeriod } from '../drawings';
 import { notesButton } from '../notes';
+import { dayMenu, firstUsefulDay, onDayContext, periodMenu } from '../dayMenu';
+import { openCapture } from '../modals/capture';
 
 export type CalendarScope = 'week' | 'month' | 'quarter' | 'year';
 export interface CalendarState { scope: CalendarScope; anchor: IsoDate; collapsed: Map<string, boolean> }
@@ -48,6 +50,7 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
       iconButton('chevron-right', 'Next', () => go(state.scope, step(1))),
     ),
     h('div', { cls: 'helm-day-actions' },
+      button('New task', { icon: 'plus', title: `New task on ${humanDate(firstUsefulDay(period, today), today)}`, onClick: () => openCapture(ctx, { date: firstUsefulDay(period, today) }) }),
       button('Open note', { icon: 'file-text', onClick: () => void ctx.run('Open note', async () => { const p = await ctx.mutations.ensurePeriodicNote(period); await ctx.openFile(p); }) }),
       button('Horizons', { icon: 'mountain', onClick: () => ctx.navigate('horizons', { periodKey: period.key }) }),
       notesButton(ctx, targetForPeriod(period)),
@@ -100,8 +103,10 @@ function renderMonth(ctx: UiContext, root: HTMLElement, period: Period, days: Ma
         b.done.length > 0 ? chip(`✓${b.done.length}`, 'done-count') : null,
         b.dueUnplanned.length > 0 ? chip(`!${b.dueUnplanned.length}`, 'due is-overdue', `${b.dueUnplanned.length} due, not planned`) : null,
         h('span', { cls: 'helm-spacer' }),
+        iconButton('plus', `New task on ${humanDate(b.date, today)}`, (ev) => { ev.stopPropagation(); openCapture(ctx, { date: b.date }); }, 'helm-month-plan helm-month-add'),
         b.date >= today ? iconButton('list-plus', 'Plan this day', (ev) => { ev.stopPropagation(); openPlanDay(ctx, b.date); }, 'helm-month-plan') : null,
       ));
+      onDayContext(cell, ctx, b.date);
       const items = h('div', { cls: 'helm-month-items' });
       for (const t of b.open.slice(0, 3)) items.appendChild(h('div', { cls: ['helm-month-item', t.projectTitle && 'is-project'], title: `${t.text}${t.projectTitle ? ` · ${t.projectTitle}` : ''}` }, t.time ? h('span', { cls: 'helm-time', text: t.time.start }) : null, richText(t.text)));
       if (b.open.length > 3) items.appendChild(h('div', { cls: 'helm-hint', text: `+${b.open.length - 3} more` }));
@@ -133,7 +138,7 @@ function renderQuarter(ctx: UiContext, root: HTMLElement, period: Period, days: 
     const done = inM.reduce((s, b) => s + b.done.length, 0);
     const open = inM.reduce((s, b) => s + b.open.length, 0);
     row.appendChild(h('div', { cls: ['helm-qmonth', m.start <= today && today <= m.end && 'is-current'] },
-      h('div', { cls: 'helm-qmonth-head', onClick: () => ctx.navigate('week', { date: m.start, scope: 'month' }) }, h('span', { cls: 'helm-qmonth-title', text: m.label.split(' ')[0]! }), h('span', { cls: 'helm-spacer' }), chip(`✓${done}`, 'done-count'), open ? chip(`${open} planned`, 'scheduled') : null),
+      h('div', { cls: 'helm-qmonth-head', onClick: () => ctx.navigate('week', { date: m.start, scope: 'month' }), onContextMenu: (ev: MouseEvent) => periodMenu(ctx, m, ev) }, h('span', { cls: 'helm-qmonth-title', text: m.label.split(' ')[0]! }), h('span', { cls: 'helm-spacer' }), chip(`✓${done}`, 'done-count'), open ? chip(`${open} planned`, 'scheduled') : null),
       miniMonth(ctx, m, days, today, settings.weekStartsOn),
       hp.goals.length > 0 ? h('div', { cls: 'helm-qmonth-goals' }, ...hp.goals.slice(0, 3).map((g) => goalLine(g))) : null,
       hp.projectsWithin.length > 0 ? h('div', { cls: 'helm-task-meta' }, ...hp.projectsWithin.slice(0, 4).map((p) => projectChip(ctx, p))) : null,
@@ -156,12 +161,12 @@ function renderYear(ctx: UiContext, root: HTMLElement, period: Period, days: Map
     const qp = quarterPeriod(period.year, q);
     const hq = horizonPeriod(snap, qp, today, settings);
     const block = h('div', { cls: ['helm-year-quarter', qp.start <= today && today <= qp.end && 'is-current'] });
-    block.appendChild(h('div', { cls: 'helm-year-quarter-head', onClick: () => ctx.navigate('week', { date: qp.start, scope: 'quarter' }) }, h('span', { cls: 'helm-qmonth-title', text: qp.label }), h('span', { cls: 'helm-spacer' }), hq.goals.length ? chip(`${hq.goals.filter((g) => g.goal.status === 'done').length}/${hq.goals.length} goals`, 'count') : null, hq.projectsWithin.length ? chip(`${hq.projectsWithin.length} proj`, 'project') : null));
+    block.appendChild(h('div', { cls: 'helm-year-quarter-head', onClick: () => ctx.navigate('week', { date: qp.start, scope: 'quarter' }), onContextMenu: (ev: MouseEvent) => periodMenu(ctx, qp, ev) }, h('span', { cls: 'helm-qmonth-title', text: qp.label }), h('span', { cls: 'helm-spacer' }), hq.goals.length ? chip(`${hq.goals.filter((g) => g.goal.status === 'done').length}/${hq.goals.length} goals`, 'count') : null, hq.projectsWithin.length ? chip(`${hq.projectsWithin.length} proj`, 'project') : null));
     const months = h('div', { cls: 'helm-year-months' });
     for (let i = 0; i < 3; i++) {
       const m = monthPeriod(period.year, (q - 1) * 3 + 1 + i);
       const x = perMonth[(m.month ?? 1) - 1]!;
-      months.appendChild(h('div', { cls: ['helm-year-month', m.start <= today && today <= m.end && 'is-current'], onClick: () => ctx.navigate('week', { date: m.start, scope: 'month' }) },
+      months.appendChild(h('div', { cls: ['helm-year-month', m.start <= today && today <= m.end && 'is-current'], onClick: () => ctx.navigate('week', { date: m.start, scope: 'month' }), onContextMenu: (ev: MouseEvent) => periodMenu(ctx, m, ev) },
         h('div', { cls: 'helm-year-month-head' }, h('span', { text: MONTH_SHORT[(m.month ?? 1) - 1]! }), h('span', { cls: 'helm-hint', text: `✓${x.done}${x.open ? ` · ${x.open}` : ''}` })),
         miniMonth(ctx, m, days, today, settings.weekStartsOn, { compact: true }),
       ));
@@ -189,6 +194,7 @@ function miniMonth(ctx: UiContext, m: Period, days: Map<IsoDate, DayBucket>, tod
       cls: ['helm-mini-day', out && 'is-outside', d === today && 'is-today', `heat-${level}`, b && b.open.length > 0 && !out && 'has-open'],
       title: b && !out ? `${humanDate(d, today)}: ${b.done.length} done · ${b.open.length} planned${b.dueUnplanned.length ? ` · ${b.dueUnplanned.length} due` : ''}` : '',
       onClick: (ev) => { ev.stopPropagation(); if (!out) ctx.navigate('today', { date: d }); },
+      onContextMenu: (ev: MouseEvent) => { if (!out) dayMenu(ctx, d, ev); else ev.preventDefault(); },
     }, opts.compact ? null : h('span', { text: String(Number(d.slice(8, 10))) })));
   }
   return grid;

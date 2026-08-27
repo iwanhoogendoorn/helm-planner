@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- New tasks straight from the calendar, at every scope: a *+* on each week
+  column and month cell, a *New task* button in the week / month / quarter /
+  year header (lands on today when the period holds it, else its first day),
+  and a right-click menu on any day — week columns, month cells, the
+  mini-month dots in quarter and year — with *New task on …*, *Plan this
+  day*, *Open day*, *Open daily note*. Month and quarter blocks in the
+  quarter and year views right-click to *New task in <month>*.
 - Hovering a task no longer nudges the layout: the row's action buttons
   always take their space and are only revealed on hover (always shown on
   touch screens), so nothing rewraps or shifts underneath the pointer.

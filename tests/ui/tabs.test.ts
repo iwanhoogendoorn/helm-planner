@@ -392,6 +392,50 @@ describe('Calendar tab', () => {
     const ctx: UiContext = { ...c.ctx, index: s.index, mutations: s.m };
     return { ...s, ctx, nav: c.nav };
   }
+  it('new task from any scope: + on week / month cells, right-click day menus, New task in the header, month blocks in quarter and year', async () => {
+    const { ctx, nav } = await cal();
+    // Month: + on a cell opens Capture on that day; right-click gives the day menu.
+    let root = render((r) => renderCalendar(ctx, r, { scope: 'month', anchor: TODAY, collapsed: new Map() }));
+    const cell = root.querySelector<HTMLElement>('.helm-month-cell[data-date="2026-08-28"]')!;
+    click(cell.querySelector('.helm-month-add'));
+    expect(Modal.last!.titleEl.textContent).toBe('Capture');
+    expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-08-28');
+    cell.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['New task on Fri 28 Aug…', 'Plan this day…', 'Open day', 'Open daily note']);
+    Menu.last!.items[2]!.click!();
+    expect(nav.at(-1)).toEqual({ tab: 'today', opts: { date: '2026-08-28' } });
+    // Yesterday has no Plan entry.
+    root.querySelector<HTMLElement>('.helm-month-cell[data-date="2026-08-25"]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['New task on Yesterday…', 'Open day', 'Open daily note']);
+    // Header button: New task lands on today when the period holds it.
+    click([...root.querySelectorAll('.helm-day-actions button')].find((b) => b.textContent?.includes('New task')));
+    expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe(TODAY);
+    // Week: + on a day column and right-click on the column.
+    root = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: TODAY, collapsed: new Map() }));
+    const col = root.querySelector<HTMLElement>('.helm-week-day[data-date="2026-08-27"]')!;
+    click(col.querySelector('button[aria-label^="New task on"]'));
+    expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-08-27');
+    col.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items[0]!.title).toBe('New task on Tomorrow…');
+    // Quarter: a mini-month day right-click is a day menu; a month head right-click offers the month.
+    root = render((r) => renderCalendar(ctx, r, { scope: 'quarter', anchor: TODAY, collapsed: new Map() }));
+    const sept = [...root.querySelectorAll<HTMLElement>('.helm-qmonth')].find((m) => m.textContent?.startsWith('Sep'))!;
+    sept.querySelector('.helm-qmonth-head')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['New task in September 2026 (Tue 1 Sep)…', 'Open month', 'Open note']);
+    Menu.last!.items[0]!.click!();
+    expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-09-01');
+    const miniDays = [...sept.querySelectorAll<HTMLElement>('.helm-mini-day:not(.is-outside)')];
+    miniDays[9]!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items[0]!.title).toBe('New task on Thu 10 Sep…');
+    // Year: the current month's block offers today; a future quarter head offers its first day.
+    root = render((r) => renderCalendar(ctx, r, { scope: 'year', anchor: TODAY, collapsed: new Map() }));
+    root.querySelector<HTMLElement>('.helm-year-month.is-current')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items[0]!.title).toBe('New task in August 2026 (Today)…');
+    const q4 = [...root.querySelectorAll<HTMLElement>('.helm-year-quarter-head')].find((x) => x.textContent?.includes('Q4'))!;
+    q4.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items[0]!.title).toBe('New task in Q4 2026 (Thu 1 Oct)…');
+  });
+
   it('month: grid with week numbers, counts, goals and projects; day click drills to Today; drop plans', async () => {
     const { ctx, nav, vault } = await cal();
     const state: CalendarState = { scope: 'month', anchor: TODAY, collapsed: new Map() };
