@@ -106,25 +106,27 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   }
   for (const part of DAY_PARTS) {
     const items = plan.byPart[part].filter((it) => it.display.status !== 'done' && it.display.status !== 'cancelled');
+    // Finished tasks stay in their part as ghosts, so a part you worked through does not read as an empty morning.
+    const doneItems = plan.byPart[part].filter((it) => it.display.status === 'done' || it.display.status === 'cancelled');
     const partHabits = part !== 'anytime' ? habitChipsFor(part) : null;
-    if (items.length === 0 && !partHabits && (isPast || (openItems.length === 0 && part !== 'anytime'))) continue;
+    if (items.length === 0 && doneItems.length === 0 && !partHabits && (isPast || (openItems.length === 0 && part !== 'anytime'))) continue;
     const minutes = items.reduce((s, it) => s + (it.display.effortMinutes ?? settings.defaultEffortMinutes), 0);
     const sec = section(PART_LABEL[part], {
       count: items.length, store, key: `part:${part}`, cls: `part-${part}`,
       actions: [
+        doneItems.length > 0 ? chip(`${doneItems.length} done`, 'done', `${doneItems.length} finished in the ${PART_LABEL[part].toLowerCase()}`) : null,
         minutes > 0 ? chip(minutesToHuman(minutes), 'effort') : null,
         iconButton('plus', `Add a task to the ${PART_LABEL[part].toLowerCase()}`, () => openCapture(ctx, { date, part: part === 'anytime' ? undefined : part })),
       ],
-    }, partHabits, ...items.map((it) => itemRow(ctx, it)), items.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
+    }, partHabits, ...items.map((it) => itemRow(ctx, it)),
+      ...doneItems.map((it) => { const row = taskRow(ctx, it.display, { showDate: 'none' }); row.classList.add('helm-ghost'); return row; }),
+      items.length === 0 && doneItems.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
     sec.querySelector('.helm-section-head')?.prepend(icon(PART_ICON[part], 'helm-part-icon'));
     makeDropZone(ctx, sec, date, part);
     root.appendChild(sec);
   }
   if (plan.unmirrored.length > 0 && !isPast) root.appendChild(h('div', { cls: 'helm-hint' }, `${plan.unmirrored.length} planned project task(s) are not in the daily note yet. `, button('Write them', { onClick: () => void ctx.run('Sync', async () => { for (const t of plan.unmirrored) await ctx.mutations.schedule(t.key, date); }) })));
 
-  // Done.
-  const doneAll = plan.items.filter((it) => it.display.status === 'done' || it.display.status === 'cancelled');
-  if (doneAll.length > 0) root.appendChild(section('Done', { count: doneAll.length, collapsed: true, store, key: 'done' }, ...doneAll.map((it) => taskRow(ctx, it.display, { showDate: 'none' }))));
 }
 
 function itemRow(ctx: UiContext, it: DayItem): HTMLElement {

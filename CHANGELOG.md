@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Today: finished tasks stay in their part of the day as faded ghost rows
+  under the open ones (with a green *N done* chip in the header), instead of
+  being swept into a Done section at the bottom — a morning you worked
+  through no longer looks like an empty morning.
 - An uploaded habit icon (PNG) no longer blows up to full size on the habit
   board, Today's part chips or the Dashboard tracker: it is 18–22 px
   everywhere except the form's preview box.

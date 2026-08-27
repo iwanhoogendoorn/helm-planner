@@ -689,3 +689,8 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-hgrid th.helm-hgrid-total { font-size: 11px; }
 .helm-hgrid-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .helm-hgrid-empty p { margin: 0; color: var(--text-muted); }
+
+/* Finished tasks left in their part of the day */
+.helm-ghost { opacity: 0.55; }
+.helm-ghost:hover { opacity: 0.9; }
+.helm-chip.done { background: rgba(var(--color-green-rgb), 0.14); color: var(--color-green); }

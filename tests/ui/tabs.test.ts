@@ -56,9 +56,14 @@ describe('Today tab', () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderToday(ctx, r, { date: '2026-08-25', collapsed: new Map() }));
     expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('Yesterday');
-    expect(texts(root, '.helm-section-title')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime', 'Done']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']); // no Done section: finished tasks ghost inside their part
     expect(texts(root, '.helm-section:nth-of-type(2) .helm-task-text')).toEqual(['Start with OIB']);
-    expect(texts(root, '.helm-section:nth-of-type(3) .helm-task-text')).toEqual(['Fix router config']);
+    expect(texts(root, '.helm-section:nth-of-type(3) .helm-task-text')).toEqual(['Fix router config', 'Pay invoice']); // open first, then the ghost
+    const ghost = root.querySelector('.helm-ghost')!;
+    expect(ghost.querySelector('.helm-task-text')!.textContent).toBe('Pay invoice');
+    const ghostSection = ghost.closest('.helm-section')!;
+    expect(ghostSection.querySelector('.helm-chip.done')!.textContent).toBe('1 done');
+    expect(ghostSection.querySelector('.helm-dropzone-hint')).toBeNull();
     expect(root.querySelector('.helm-habit-card.is-day-done')!.textContent).toContain('Morning workout');
     expect(root.querySelector('.helm-capacity-label')!.textContent).toContain('3 open · 1 done');
   });
