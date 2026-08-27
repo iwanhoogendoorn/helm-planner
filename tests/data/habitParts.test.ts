@@ -77,3 +77,17 @@ describe('habits split over the day', () => {
     expect(index.snapshot.habits.get('hab-med')!.parts).toBeUndefined();
   });
 });
+
+describe('deleting a habit', () => {
+  it('trashes the note and removes its lines from today, keeping yesterday’s record', async () => {
+    const { m, vault, index } = await setup({ '02 PROJECTS/Habits/Meditate.md': MEDITATE });
+    await m.syncHabitsForDay(TODAY);
+    expect((await vault.read(dailyPath(TODAY))).includes('hab-med')).toBe(true);
+    await m.deleteHabit('hab-med');
+    expect(vault.trashed).toContain('02 PROJECTS/Habits/Meditate.md');
+    expect(index.snapshot.habits.has('hab-med')).toBe(false);
+    expect((await vault.read(dailyPath(TODAY))).includes('hab-med')).toBe(false);
+    expect((await vault.read(dailyPath('2026-08-25'))).includes('hab-workout')).toBe(true); // other habits' records untouched
+    await expect(m.deleteHabit('hab-nope')).rejects.toThrow(/Unknown habit/);
+  });
+});

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Habits are manageable where you see them: a labelled *New habit* button on
+  the Habits section, a right-click menu on every habit chip (Edit, Mark
+  done / Skip today / Clear, Pause or Resume, Open note, Delete habit…), the
+  same menu on Review rows, and a Delete button in the edit form. Deleting
+  trashes the habit note and removes its lines from today; past notes keep
+  their ticks.
+
 ## 1.3.0 — 2026-08-27
 
 - New drawing / New note dialog: a Location field (folder picker, prefilled

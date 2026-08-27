@@ -573,3 +573,6 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-notes-btn { position: relative; }
 
 .helm-path-preview { font-family: var(--font-monospace); font-size: var(--font-ui-smaller); color: var(--text-muted); word-break: break-all; padding: 6px 8px; background: var(--background-secondary); border-radius: var(--radius-s); }
+
+.helm-link-btn { background: transparent; border: none; box-shadow: none; padding: 0; height: auto; color: var(--text-muted); text-decoration: underline dotted; cursor: pointer; font-size: inherit; }
+.helm-link-btn:hover { color: var(--text-normal); }

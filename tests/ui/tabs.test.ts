@@ -729,3 +729,24 @@ describe('New drawing / note dialog', () => {
     expect(await vault.read('70 OBSIDIAN/70-02 Excalidraw/map.excalidraw.md')).toContain('helm-period: 2026-W35');
   });
 });
+
+describe('managing habits from Today', () => {
+  it('has a New habit button, a right-click menu on chips with edit / skip / pause / delete, and Delete in the edit form', async () => {
+    const { ctx, index } = await ctxFor();
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const habitsSection = [...root.querySelectorAll('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Habits')!;
+    expect(texts(habitsSection as HTMLElement, '.helm-section-actions button')).toEqual(['New habit']);
+    const chip = habitsSection.querySelector('.helm-habit')!;
+    chip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['Edit…', 'Mark done', 'Skip today', 'Pause habit', 'Open note', 'Delete habit…']);
+    Menu.last!.items[0]!.click!();
+    const form = Modal.last!;
+    expect(form.titleEl.textContent).toBe('Edit habit');
+    expect(texts(form.contentEl, '.helm-modal-buttons button')).toEqual(['Active', 'Delete', 'Cancel', 'Save']);
+    const hb = index.allHabits()[0]!;
+    chip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    Menu.last!.items.find((i) => i.title === 'Pause habit')!.click!();
+    await flush(); await flush();
+    expect(index.snapshot.habits.get(hb.id)!.active).toBe(false);
+  });
+});

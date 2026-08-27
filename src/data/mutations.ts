@@ -225,6 +225,18 @@ export class Mutations {
     });
   }
 
+  /** Trash a habit note and take its lines out of today's note; past notes keep their record. */
+  async deleteHabit(id: string): Promise<void> {
+    const h = this.index.snapshot.habits.get(id);
+    if (!h) throw new Error(`Unknown habit ${id}`);
+    if (!this.d.vault.trash) throw new Error('This vault cannot trash files');
+    if (await this.d.vault.exists(this.index.dailyPath(this.today))) {
+      await this.editRegion(this.today, (rc) => ({ ...rc, habits: rc.habits.filter((l) => l.id !== id), morning: rc.morning.filter((l) => l.id !== id), afternoon: rc.afternoon.filter((l) => l.id !== id), evening: rc.evening.filter((l) => l.id !== id) }));
+    }
+    await this.d.vault.trash(h.path);
+    this.index.update(h.path, undefined);
+  }
+
   /** Tick, skip or untick one occurrence of a habit: the day-level line, or the line in a part of the day. */
   async setHabitState(habitId: string, date: IsoDate, state: 'done' | 'skipped' | 'missed', part?: HabitPart): Promise<void> {
     const status: TaskStatus = state === 'done' ? 'done' : state === 'skipped' ? 'cancelled' : 'todo';

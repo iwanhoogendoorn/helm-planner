@@ -13,6 +13,7 @@ import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { habitBadge } from '../fields';
+import { habitMenu } from '../habits';
 import { drawingsButton, targetForDate } from '../drawings';
 import { notesButton } from '../notes';
 
@@ -83,8 +84,9 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
       const hstate = done?.state ?? 'pending';
       return h('button', {
         cls: ['helm-habit', `is-${hstate}`],
-        title: `${hb.title}${part ? ` (${part})` : ''}: streak ${st.streak} · ${Math.round(st.rate30 * 100)}% last 30 days. Click to toggle, shift-click to skip.`,
+        title: `${hb.title}${part ? ` (${part})` : ''}: streak ${st.streak} · ${Math.round(st.rate30 * 100)}% last 30 days. Click to toggle, shift-click to skip, right-click to edit or delete.`,
         onClick: (ev) => { const next = ev.shiftKey ? (hstate === 'skipped' ? 'missed' : 'skipped') : hstate === 'done' ? 'missed' : 'done'; void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, next, part)); },
+        onContextMenu: (ev) => habitMenu(ctx, hb, ev, { date, ...(part ? { part } : {}), state: hstate }),
       }, icon(hstate === 'done' ? 'check' : hstate === 'skipped' ? 'minus' : 'circle'), habitBadge(ctx, hb), h('span', { text: hb.title }), st.streak > 1 ? h('span', { cls: 'helm-streak', text: `🔥${st.streak}` }) : null);
     };
     const dayLevel = habits.filter((hb) => !hb.parts || hb.parts.length === 0);
@@ -92,9 +94,9 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     const occurrences = habits.reduce((n, hb) => n + (hb.parts?.length || 1), 0);
     const doneOcc = snap.completions.filter((c) => c.date === date && c.state === 'done' && habits.some((hb) => hb.id === c.habitId && ((hb.parts?.length ?? 0) === 0 ? c.part === undefined : c.part !== undefined && hb.parts!.includes(c.part)))).length;
     const chips = h('div', { cls: 'helm-habit-chips' }, ...dayLevel.map((hb) => habitChip(hb)));
-    const partedHint = parted.length > 0 ? h('div', { cls: 'helm-hint', text: `${parted.map((hb) => `${hb.title} (${hb.parts!.join(', ')})`).join(' · ')} — ticked in their parts of the day below.` }) : null;
+    const partedHint = parted.length > 0 ? h('div', { cls: 'helm-hint' }, ...parted.map((hb, i) => h('span', {}, i > 0 ? ' · ' : '', h('button', { cls: 'helm-link-btn', text: `${hb.title} (${hb.parts!.join(', ')})`, title: 'Edit this habit', onClick: () => openHabitForm(ctx, hb), onContextMenu: (ev) => habitMenu(ctx, hb, ev, { date }) }))), h('span', { text: ' — ticked in their parts of the day below. Right-click a habit to edit, pause or delete it.' })) : null;
     habitChipsFor = (part) => { const list = parted.filter((hb) => hb.parts!.includes(part)); return list.length === 0 ? null : h('div', { cls: 'helm-habit-chips helm-part-habits' }, ...list.map((hb) => habitChip(hb, part))); };
-    root.appendChild(section('Habits', { count: `${doneOcc}/${occurrences}`, store, key: 'habits', actions: [iconButton('plus', 'New habit', () => openHabitForm(ctx))] },
+    root.appendChild(section('Habits', { count: `${doneOcc}/${occurrences}`, store, key: 'habits', actions: [button('New habit', { icon: 'plus', cls: 'helm-btn-quiet', onClick: () => openHabitForm(ctx) })] },
       habits.length === 0 ? empty('No habits yet.', button('Create one', { onClick: () => openHabitForm(ctx) })) : chips, partedHint));
   }
 
