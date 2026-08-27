@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-08-27
 
 - New drawing / New note dialog: a Location field (folder picker, prefilled
   with the default) and a live preview of the path that will be created.
