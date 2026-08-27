@@ -267,6 +267,7 @@ export class HelmSettingTab extends PluginSettingTab {
     const fixers: (() => Promise<void>)[] = [];
     const summary = this.group(body, { icon: 'wrench', title: 'Setup', subtitle: 'Everything Helm needs, checked. Fix a line with its button, or all of them at once.' });
     const fixAllRow = new Setting(summary.content).setName('Fix everything').setDesc('Creates every missing folder, note and template below and enables installed plugins. Missing plugins open their install page.');
+    fixAllRow.settingEl.addClass('helm-setup-row');
     const rowChip = (setting: Setting, ok: boolean, okText: string, badText: string): void => {
       const c = setting.nameEl.createSpan({ cls: ['helm-schip', ok ? 'helm-schip-ok' : 'helm-schip-warn'].join(' ') });
       c.setText(ok ? okText : badText);
@@ -286,7 +287,7 @@ export class HelmSettingTab extends PluginSettingTab {
     const places = this.group(body, { icon: 'folder-tree', title: 'Folders and notes', subtitle: 'Created empty when missing; change a location in the section it belongs to.' });
     for (const f of data.places) {
       const row = new Setting(places.content).setName(f.name).setDesc(f.path || '— not set —');
-      row.settingEl.addClass('helm-setup-row');
+      row.settingEl.addClass('helm-setup-row', 'helm-setup-path');
       rowChip(row, f.exists, 'found', f.path ? 'missing' : 'not set');
       if (!f.exists && f.path) {
         const fix = f.kind === 'note' ? () => this.host.ensureInboxNote().then(() => undefined) : () => this.host.ensureFolder(f.path).then(() => undefined);
@@ -299,7 +300,7 @@ export class HelmSettingTab extends PluginSettingTab {
     const tpls = this.group(body, { icon: 'file-plus-2', title: 'Templates', subtitle: 'Helm ships a template for each kind; a missing one is written into your templates folder.' });
     for (const t of data.templates) {
       const row = new Setting(tpls.content).setName(t.name).setDesc(t.path ?? `none configured — would be created as ${t.target}`);
-      row.settingEl.addClass('helm-setup-row');
+      row.settingEl.addClass('helm-setup-row', 'helm-setup-path');
       rowChip(row, t.exists, 'found', t.source === 'none' ? 'none' : t.source === 'built-in' ? 'built-in (not in vault)' : 'missing');
       if (!t.exists) {
         const fix = t.kind === 'day' ? () => this.host.writeDailyTemplate(false).then(() => undefined) : () => this.host.writeTemplate(t.kind as PeriodKind, false).then(() => undefined);
