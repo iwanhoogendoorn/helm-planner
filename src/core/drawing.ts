@@ -28,6 +28,7 @@ export interface Drawing {
   projectRefs: string[];
   dates: IsoDate[];
   periodKeys: string[];
+  habitIds: string[];
   /** Wikilink targets found in the text elements and frontmatter (basename, no `.md`). */
   links: string[];
   /** Task ids mentioned anywhere in the text. */
@@ -52,7 +53,7 @@ const unlink = (s: string): string => s.replace(/^\[\[|\]\]$/g, '').split('|')[0
 /** Parse a drawing. Only the frontmatter and the `## Text Elements` section are read; the scene JSON is skipped. */
 export function parseDrawing(path: string, content: string | undefined, mtime?: number): Drawing {
   const kind: Drawing['kind'] = /\.canvas$/i.test(path) ? 'canvas' : 'excalidraw';
-  const d: Drawing = { path, title: drawingTitle(path), kind, taskIds: [], projectRefs: [], dates: [], periodKeys: [], links: [], mentionedTaskIds: [], generated: false, ...(mtime !== undefined ? { mtime } : {}) };
+  const d: Drawing = { path, title: drawingTitle(path), kind, taskIds: [], projectRefs: [], dates: [], periodKeys: [], habitIds: [], links: [], mentionedTaskIds: [], generated: false, ...(mtime !== undefined ? { mtime } : {}) };
   if (!content || kind === 'canvas') return d;
   const doc = parseDocument(content);
   const fm = doc.frontmatter.values;
@@ -60,6 +61,7 @@ export function parseDrawing(path: string, content: string | undefined, mtime?: 
   d.projectRefs = list(fm['helm-project'] ?? fm['helm_project']).map(unlink);
   d.dates = list(fm['helm-date'] ?? fm['helm_date']).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x));
   d.periodKeys = list(fm['helm-period'] ?? fm['helm_period']);
+  d.habitIds = list(fm['helm-habit'] ?? fm['helm_habit']);
   d.generated = /^(true|yes|1)$/i.test(scalar(fm['helm-generated']) ?? '');
   // Text elements: between "## Text Elements" and the next "## " heading or "%%".
   const m = /## Text Elements\s*\n([\s\S]*?)(?:\n## |\n%%|$)/.exec(content);

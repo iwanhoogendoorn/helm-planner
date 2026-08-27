@@ -17,6 +17,7 @@ export const targetForTask = (t: Task): DrawingTarget => ({ kind: 'task', key: t
 export const targetForProject = (id: string, title: string): DrawingTarget => ({ kind: 'project', id, title });
 export const targetForDate = (date: string): DrawingTarget => ({ kind: 'date', date, title: date });
 export const targetForPeriod = (p: Period): DrawingTarget => ({ kind: 'period', key: p.key, title: p.key });
+export const targetForHabit = (hb: { id: string; title: string }): DrawingTarget => ({ kind: 'habit', id: hb.id, title: hb.title });
 
 const when = (d: Drawing, today: string): string => (d.mtime ? humanDate(new Date(d.mtime).toISOString().slice(0, 10), today) : '');
 

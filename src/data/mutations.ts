@@ -846,6 +846,7 @@ export class Mutations {
       case 'project': return { 'helm-project': target.id };
       case 'date': return { 'helm-date': target.date };
       case 'period': return { 'helm-period': target.key };
+      case 'habit': return { 'helm-habit': target.id };
     }
   }
 
@@ -854,6 +855,7 @@ export class Mutations {
     if (target.kind === 'date') return `[[${formatDate(target.date, this.templateConfig().dailyTitleFormat)}]]`;
     if (target.kind === 'period') { const p = parsePeriod(target.key); return p ? `[[${baseName(this.index.periodicPath(p))}]]` : undefined; }
     if (target.kind === 'project') { const p = this.index.project(target.id); return p ? `[[${baseName(p.path)}]]` : undefined; }
+    if (target.kind === 'habit') { const hb = this.index.snapshot.habits.get(target.id); return hb ? `[[${baseName(hb.path)}]]` : undefined; }
     const t = this.index.task(target.key) ?? (target.id ? [...this.index.snapshot.tasks.values()].find((x) => x.id === target.id && x.origin !== 'daily-mirror') : undefined);
     return t ? `[[${baseName(t.path)}]]` : undefined;
   }
@@ -936,6 +938,7 @@ export class Mutations {
     if (!this.settings.embedDrawings || target.kind === 'task') return;
     let notePath: string | undefined;
     if (target.kind === 'project') notePath = this.index.project(target.id)?.path;
+    else if (target.kind === 'habit') notePath = this.index.snapshot.habits.get(target.id)?.path;
     else if (target.kind === 'date') notePath = await this.ensureDailyNote(target.date);
     else { const p = parsePeriod(target.key); if (p) notePath = await this.ensurePeriodicNote(p); }
     if (!notePath) return;
@@ -980,6 +983,7 @@ export class Mutations {
   /** The note a target lives in (project note, daily note, periodic note); tasks have none of their own. */
   private async noteOf(target: DrawingTarget): Promise<string | undefined> {
     if (target.kind === 'project') return this.index.project(target.id)?.path;
+    if (target.kind === 'habit') return this.index.snapshot.habits.get(target.id)?.path;
     if (target.kind === 'date') return this.index.dailyPath(target.date);
     if (target.kind === 'period') { const p = parsePeriod(target.key); return p ? this.index.periodicPath(p) : undefined; }
     return undefined;
@@ -1096,6 +1100,7 @@ export class Mutations {
     if (!this.settings.linkNotes || target.kind === 'task') return;
     let host: string | undefined;
     if (target.kind === 'project') host = this.index.project(target.id)?.path;
+    else if (target.kind === 'habit') host = this.index.snapshot.habits.get(target.id)?.path;
     else if (target.kind === 'date') host = await this.ensureDailyNote(target.date);
     else { const p = parsePeriod(target.key); if (p) host = await this.ensurePeriodicNote(p); }
     if (!host || host === notePath) return;

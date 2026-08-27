@@ -3,6 +3,8 @@ import { Menu } from 'obsidian';
 import type { Habit, HabitPart, IsoDate } from '../core/types';
 import type { UiContext } from './context';
 import { openHabitForm } from './modals/habitForm';
+import { addDrawingItems, targetForHabit } from './drawings';
+import { addNoteItems } from './notes';
 
 export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { date?: IsoDate; part?: HabitPart; state?: 'done' | 'skipped' | 'missed' | 'pending' } = {}): void {
   ev.preventDefault();
@@ -16,6 +18,9 @@ export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { dat
     if (opts.state !== 'skipped') menu.addItem((i) => i.setTitle(`Skip today${label}`).setIcon('minus').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, 'skipped', opts.part))));
     if (opts.state === 'done' || opts.state === 'skipped') menu.addItem((i) => i.setTitle(`Clear${label}`).setIcon('circle').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, 'missed', opts.part))));
   }
+  menu.addSeparator();
+  menu.addItem((i) => { i.setTitle('Notes').setIcon('sticky-note'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addNoteItems(sub, ctx, targetForHabit(hb)); });
+  menu.addItem((i) => { i.setTitle('Drawings').setIcon('pen-tool'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addDrawingItems(sub, ctx, targetForHabit(hb)); });
   menu.addSeparator();
   menu.addItem((i) => i.setTitle(hb.active ? 'Pause habit' : 'Resume habit').setIcon(hb.active ? 'pause' : 'play').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitFields(hb.id, { active: !hb.active }))));
   menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => void ctx.openFile(hb.path)));

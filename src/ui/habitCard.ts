@@ -12,6 +12,9 @@ import { habitOccurrences, habitStats, type HabitDayState, type HabitStats } fro
 import { h, icon } from './dom';
 import { habitBadge } from './fields';
 import { habitMenu } from './habits';
+import { drawingsMenu, targetForHabit } from './drawings';
+import { notesMenu } from './notes';
+import { iconButton } from './dom';
 import type { UiContext } from './context';
 
 const PART_ICON: Record<HabitPart, string> = { morning: 'sunrise', afternoon: 'sun', evening: 'moon' };
@@ -81,10 +84,17 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
     title: `${c.date}: ${c.state}${c.state === 'future' ? '' : ' — click to toggle the day'}`,
     onClick: () => { if (c.state !== 'future') void ctx.run('Habit', () => toggleDay(ctx, hb, c.date, c.state)); },
   }, h('span', { cls: 'helm-habit-cell-label', text: c.label }))));
+  const target = targetForHabit(hb);
+  const nNotes = ctx.index.notesFor(target).length, nDraw = ctx.index.drawingsFor(target).length;
+  const pills = h('span', { cls: 'helm-habit-attach' },
+    nNotes > 0 ? (() => { const b = iconButton('sticky-note', `${nNotes} note${nNotes === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); notesMenu(ctx, target, ev); }, 'helm-task-notes'); b.appendChild(h('span', { cls: 'helm-badge', text: String(nNotes) })); return b; })() : null,
+    nDraw > 0 ? (() => { const b = iconButton('pen-tool', `${nDraw} drawing${nDraw === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); drawingsMenu(ctx, target, ev); }, 'helm-task-drawings'); b.appendChild(h('span', { cls: 'helm-badge', text: String(nDraw) })); return b; })() : null,
+  );
   const meta = h('div', { cls: 'helm-habit-meta' },
     st.streak > 0 ? h('span', { cls: 'helm-habit-streak', text: `🔥 ${st.streak}` }) : h('span', { cls: 'helm-hint', text: 'no streak yet' }),
     h('span', { cls: 'helm-hint', text: `${st.doneThisWeek}/${st.scheduledThisWeek} this week` }),
     hb.parts && hb.parts.length ? h('span', { cls: 'helm-hint', text: hb.parts.join(' · ') }) : null,
+    pills,
   );
   const card = h('div', { cls: ['helm-habit-card', `is-day-${dayState}`, !hb.active && 'is-paused'], onContextMenu: (ev) => habitMenu(ctx, hb, ev, { date, state: dayState === 'done' ? 'done' : dayState === 'skipped' ? 'skipped' : 'pending' }) },
     ticks,

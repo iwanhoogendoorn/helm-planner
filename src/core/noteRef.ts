@@ -18,9 +18,10 @@ export interface NoteRef {
   projectRefs: string[];
   dates: IsoDate[];
   periodKeys: string[];
+  habitIds: string[];
 }
 
-export const HELM_KEYS = ['helm-task', 'helm-project', 'helm-date', 'helm-period'] as const;
+export const HELM_KEYS = ['helm-task', 'helm-project', 'helm-date', 'helm-period', 'helm-habit'] as const;
 
 /** True when a frontmatter object (Obsidian's cache or Helm's parse) carries any attachment key. */
 export function hasHelmKeys(fm: Record<string, unknown> | null | undefined): boolean {
@@ -33,7 +34,7 @@ export function contentHasHelmKeys(content: string): boolean {
   if (!content.startsWith('---')) return false;
   const end = content.indexOf('\n---', 3);
   const head = end === -1 ? content.slice(0, 4000) : content.slice(0, end);
-  return /^helm[-_](task|project|date|period):\s*\S/m.test(head);
+  return /^helm[-_](task|project|date|period|habit):\s*\S/m.test(head);
 }
 
 export const listValues = (v: unknown): string[] => {
@@ -55,6 +56,7 @@ export function parseNoteRef(path: string, fm: Record<string, unknown>, mtime?: 
     projectRefs: listValues(fm['helm-project'] ?? fm['helm_project']).map(unlink),
     dates: listValues(fm['helm-date'] ?? fm['helm_date']).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)),
     periodKeys: listValues(fm['helm-period'] ?? fm['helm_period']),
+    habitIds: listValues(fm['helm-habit'] ?? fm['helm_habit']),
   };
 }
 

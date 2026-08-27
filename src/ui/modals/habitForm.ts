@@ -2,6 +2,8 @@
 import { Modal } from 'obsidian';
 import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitPart } from '../../core/types';
 import { habitColor } from '../../core/habit';
+import { drawingsSection, targetForHabit } from '../drawings';
+import { notesSection } from '../notes';
 import { formatRecurrence, parseRecurrence } from '../../core/recurrence';
 import { WEEKDAY_SHORT } from '../../core/dates';
 import { button, h } from '../dom';
@@ -150,6 +152,7 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
     field('Schedule', '', presets, weekdayRow, nRow, monthRow, understood),
     field('Part of the day', 'pick several for a habit you do more than once a day', partsRow, partsHint),
     field('Colour', 'for the board, the week cells and the charts', colorRow),
+    ...(existing ? [field('Notes', 'attached to this habit', notesSection(ctx, targetForHabit(existing))), field('Drawings', 'attached to this habit', drawingsSection(ctx, targetForHabit(existing)))] : []),
     h('div', { cls: 'helm-grid2' },
       field('Target per week', 'counts against the streak', targetRow),
       field('Grace', 'misses tolerated before a streak breaks', graceRow),

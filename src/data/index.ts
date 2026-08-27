@@ -193,11 +193,11 @@ export class HelmIndex {
     const mtime = this.vault.mtime(path);
     if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
     if (contentHasHelmKeys(content)) { const fm = parseDocument(content).frontmatter.values as Record<string, unknown>; entry.noteRef = parseNoteRef(path, fm, mtime); }
-    const nl = notesSectionLinks(content);
-    if (nl.length > 0) entry.noteLinks = nl;
     const date = this.dateOfPath(path);
     const dl = [...content.matchAll(/!?\[\[([^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]/g)].map((m) => m[1]!.trim()).filter((t) => /\.(excalidraw|canvas)$/i.test(t)).map((t) => t.slice(t.lastIndexOf('/') + 1).replace(/\.(excalidraw|canvas)$/i, ''));
     if (dl.length > 0) entry.drawingLinks = [...new Set(dl)];
+    const nlEarly = notesSectionLinks(content);
+    if (nlEarly.length > 0) entry.noteLinks = nlEarly;
 
     if (isUnder(path, s.habitsFolder)) {
       const h = parseHabit(path, content);
@@ -382,7 +382,7 @@ export class HelmIndex {
 
   /* ── Drawings ↔ tasks / projects / days / periods ───────────────────── */
 
-  private attachments = new Map<string, { taskKeys: Set<string>; projectIds: Set<string>; dates: Set<IsoDate>; periodKeys: Set<string> }>();
+  private attachments = new Map<string, { taskKeys: Set<string>; projectIds: Set<string>; dates: Set<IsoDate>; periodKeys: Set<string>; habitIds: Set<string> }>();
 
   private attachDrawings(): void {
     const snap = this.snapshot;
@@ -390,7 +390,7 @@ export class HelmIndex {
     if (snap.drawings.size === 0) return;
     const byTitle = new Map<string, Drawing[]>();
     for (const d of snap.drawings.values()) byTitle.set(d.title.toLowerCase(), [...(byTitle.get(d.title.toLowerCase()) ?? []), d]);
-    const att = (d: Drawing) => { let a = this.attachments.get(d.path); if (!a) { a = { taskKeys: new Set(), projectIds: new Set(), dates: new Set(), periodKeys: new Set() }; this.attachments.set(d.path, a); } return a; };
+    const att = (d: Drawing) => { let a = this.attachments.get(d.path); if (!a) { a = { taskKeys: new Set(), projectIds: new Set(), dates: new Set(), periodKeys: new Set(), habitIds: new Set() }; this.attachments.set(d.path, a); } return a; };
     const projectsByTitle = new Map<string, Project>();
     for (const p of snap.projects.values()) { projectsByTitle.set(p.title.toLowerCase(), p); projectsByTitle.set(baseName(p.path).toLowerCase(), p); }
     const projectsByFolder = [...snap.projects.values()].filter((p) => p.folder !== '').sort((a, b) => b.folder.length - a.folder.length);
@@ -412,6 +412,7 @@ export class HelmIndex {
       for (const ref of d.projectRefs) { const p = snap.projects.get(ref) ?? projectsByTitle.get(ref.toLowerCase()); if (p) a.projectIds.add(p.id); }
       for (const date of d.dates) a.dates.add(date);
       for (const k of d.periodKeys) { const pk = periodOfText(k); if (pk) a.periodKeys.add(pk); }
+      for (const hid of d.habitIds) if (snap.habits.has(hid)) a.habitIds.add(hid);
       // Where it lives.
       const owner = projectsByFolder.find((p) => isUnder(d.path, p.folder));
       if (owner) a.projectIds.add(owner.id);
@@ -437,6 +438,7 @@ export class HelmIndex {
         if (e.kind === 'daily' && e.date) a.dates.add(e.date);
         else if (e.kind === 'periodic' && e.period) a.periodKeys.add(e.period.key);
         else if (e.kind === 'project' && e.project) a.projectIds.add(e.project.id);
+        else if (e.kind === 'habit' && e.habit) a.habitIds.add(e.habit.id);
       }
     }
   }
@@ -447,13 +449,13 @@ export class HelmIndex {
     return [...this.files.values()].filter((e) => e.drawingLinks?.some((x) => x.toLowerCase() === t)).map((e) => e.path);
   }
 
-  private noteAttachments = new Map<string, { taskKeys: Set<string>; projectIds: Set<string>; dates: Set<IsoDate>; periodKeys: Set<string> }>();
+  private noteAttachments = new Map<string, { taskKeys: Set<string>; projectIds: Set<string>; dates: Set<IsoDate>; periodKeys: Set<string>; habitIds: Set<string> }>();
 
   /** Notes ↔ targets: frontmatter keys, task-text links, and links under a Notes heading of the target's note. */
   private attachNotes(): void {
     const snap = this.snapshot;
     this.noteAttachments = new Map();
-    const att = (path: string) => { let a = this.noteAttachments.get(path); if (!a) { a = { taskKeys: new Set(), projectIds: new Set(), dates: new Set(), periodKeys: new Set() }; this.noteAttachments.set(path, a); } return a; };
+    const att = (path: string) => { let a = this.noteAttachments.get(path); if (!a) { a = { taskKeys: new Set(), projectIds: new Set(), dates: new Set(), periodKeys: new Set(), habitIds: new Set() }; this.noteAttachments.set(path, a); } return a; };
     const projectsByTitle = new Map<string, Project>();
     for (const p of snap.projects.values()) { projectsByTitle.set(p.title.toLowerCase(), p); projectsByTitle.set(baseName(p.path).toLowerCase(), p); }
     const taskById = new Map<string, string>();
@@ -465,6 +467,7 @@ export class HelmIndex {
       for (const ref of n.projectRefs) { const p = snap.projects.get(ref) ?? projectsByTitle.get(ref.toLowerCase()); if (p) a.projectIds.add(p.id); }
       for (const d of n.dates) a.dates.add(d);
       for (const k of n.periodKeys) a.periodKeys.add(k.toUpperCase());
+      for (const hid of n.habitIds) if (snap.habits.has(hid)) a.habitIds.add(hid);
     }
     // Task text links a note.
     for (const t of snap.tasks.values()) {
@@ -485,6 +488,7 @@ export class HelmIndex {
         if (e.kind === 'daily' && e.date) a.dates.add(e.date);
         else if (e.kind === 'periodic' && e.period) a.periodKeys.add(e.period.key.toUpperCase());
         else if (e.kind === 'project' && e.project) a.projectIds.add(e.project.id);
+        else if (e.kind === 'habit' && e.habit) a.habitIds.add(e.habit.id);
       }
     }
   }
@@ -496,9 +500,10 @@ export class HelmIndex {
       const hit = target.kind === 'task' ? a.taskKeys.has(target.key) || (target.id !== undefined && [...a.taskKeys].some((k) => this.snapshot.tasks.get(k)?.id === target.id))
         : target.kind === 'project' ? a.projectIds.has(target.id)
         : target.kind === 'date' ? a.dates.has(target.date)
+        : target.kind === 'habit' ? a.habitIds.has(target.id)
         : a.periodKeys.has(target.key.toUpperCase());
       if (!hit) continue;
-      out.push(this.snapshot.notes.get(path) ?? { path, title: noteTitle(path), taskIds: [], projectRefs: [], dates: [], periodKeys: [], ...(this.vault.mtime(path) !== undefined ? { mtime: this.vault.mtime(path) } : {}) });
+      out.push(this.snapshot.notes.get(path) ?? { path, title: noteTitle(path), taskIds: [], projectRefs: [], dates: [], periodKeys: [], habitIds: [], ...(this.vault.mtime(path) !== undefined ? { mtime: this.vault.mtime(path) } : {}) });
     }
     return out.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
   }
@@ -533,6 +538,7 @@ export class HelmIndex {
       const hit = target.kind === 'task' ? a.taskKeys.has(target.key) || (target.id !== undefined && [...a.taskKeys].some((k) => this.snapshot.tasks.get(k)?.id === target.id))
         : target.kind === 'project' ? a.projectIds.has(target.id)
         : target.kind === 'date' ? a.dates.has(target.date)
+        : target.kind === 'habit' ? a.habitIds.has(target.id)
         : a.periodKeys.has(target.key.toUpperCase());
       if (hit) out.push(d);
     }

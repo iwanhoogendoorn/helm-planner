@@ -197,7 +197,8 @@ export type DrawingTarget =
   | { kind: 'task'; key: string; id?: string; title: string }
   | { kind: 'project'; id: string; title: string }
   | { kind: 'date'; date: IsoDate; title: string }
-  | { kind: 'period'; key: string; title: string };
+  | { kind: 'period'; key: string; title: string }
+  | { kind: 'habit'; id: string; title: string };
 
 export interface Snapshot {
   builtAt: number;

@@ -731,6 +731,23 @@ describe('New drawing / note dialog', () => {
 });
 
 describe('managing habits from Today', () => {
+  it('shows note / drawing pills on a habit card that open the attachment menus, and the edit form lists them', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await vault.write('81 AI/Workout plan.md', '---\nhelm-habit: hab-workout\n---\n# Workout plan\n');
+    index.update('81 AI/Workout plan.md', await vault.read('81 AI/Workout plan.md'));
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const card = [...root.querySelectorAll('.helm-habit-card')].find((c) => c.textContent?.includes('Morning workout'))!;
+    const pill = card.querySelector('.helm-habit-attach .helm-task-notes') as HTMLButtonElement;
+    expect(pill).toBeTruthy();
+    expect(pill.textContent).toBe('1');
+    expect(card.querySelector('.helm-habit-attach .helm-task-drawings')).toBeNull();
+    pill.click();
+    expect(Menu.last!.items.some((i) => i.title.startsWith('Workout plan'))).toBe(true);
+    card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    Menu.last!.items[0]!.click!();
+    const form = Modal.last!;
+    expect(form.contentEl.textContent).toContain('Workout plan');
+  });
   it('has a New habit button, a right-click menu on chips with edit / skip / pause / delete, and Delete in the edit form', async () => {
     const { ctx, index } = await ctxFor();
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
@@ -738,7 +755,7 @@ describe('managing habits from Today', () => {
     expect(texts(habitsSection as HTMLElement, '.helm-section-actions button')).toEqual(['New habit']);
     const chip = habitsSection.querySelector('.helm-habit-card')!;
     chip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    expect(Menu.last!.items.map((i) => i.title)).toEqual(['Edit…', 'Mark done', 'Skip today', 'Pause habit', 'Open note', 'Delete habit…']);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['Edit…', 'Mark done', 'Skip today', 'Notes', 'Drawings', 'Pause habit', 'Open note', 'Delete habit…']);
     Menu.last!.items[0]!.click!();
     const form = Modal.last!;
     expect(form.titleEl.textContent).toBe('Edit habit');
