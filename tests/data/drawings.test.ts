@@ -153,6 +153,7 @@ describe('where attachments go and what they are called', () => {
     expect(dflt).toMatch(/^Excalidraw\/Create guidance for music studies for .*….excalidraw\.md$/);
     expect(dflt.replace(/^Excalidraw\//, '').replace(/\.excalidraw\.md$/, '').length).toBeLessThanOrEqual(60);
     expect(m.drawingPathFor(lt, 'Practice structure')).toBe('Excalidraw/Practice structure.excalidraw.md');
+    expect(m.defaultStemFor({ kind: 'task', key: 'k', title: 'Guidance for [[Zaara Hoogendoorn|Zaara]] and [[Piano]] — see [[Plan#^x]]' })).toBe('Guidance for Zaara and Piano — see Plan');
     expect(m.notePathFor(lt, 'Practice structure', '81 AI/Music')).toBe('81 AI/Music/Practice structure.md');
     expect(m.drawingPathFor({ kind: 'date', date: TODAY, title: TODAY })).toBe('Excalidraw/26, Wednesday, Aug, 2026.excalidraw.md');
     expect(m.drawingPathFor({ kind: 'period', key: '2026-W35', title: '2026-W35' }, 'map')).toBe('Excalidraw/map.excalidraw.md');

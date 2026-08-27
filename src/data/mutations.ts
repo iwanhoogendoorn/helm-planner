@@ -855,7 +855,9 @@ export class Mutations {
   /** The file stem: a name as given, else the target's own title (a task's text cut to 60 characters). */
   defaultStemFor(target: DrawingTarget, name?: string): string {
     if (name?.trim()) return this.safeName(name).slice(0, 120);
-    const base = target.kind === 'date' ? formatDate(target.date, this.templateConfig().dailyTitleFormat) : target.kind === 'period' ? target.key : target.title;
+    const raw = target.kind === 'date' ? formatDate(target.date, this.templateConfig().dailyTitleFormat) : target.kind === 'period' ? target.key : target.title;
+    // `[[Note|label]]` → label, `[[Note]]` → Note, `#tag` stays readable; then squash whitespace.
+    const base = raw.replace(/!?\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_m, t: string, l?: string) => (l ?? t).trim()).replace(/\s+/g, ' ').trim();
     const cut = base.length > 60 ? base.slice(0, 57).replace(/\s+\S*$/, '').trim() + '…' : base;
     return this.safeName(cut);
   }
