@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 — 2026-08-27
 
 - Notes and drawings for habits: the same New / Link existing / Manage
   menus as tasks, days and projects — from a habit card's right-click menu
