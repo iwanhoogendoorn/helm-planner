@@ -208,7 +208,8 @@ export class Mutations {
     return this.editRegion(date, (rc) => {
       const next: RegionContent = { ...rc, habits: [...rc.habits], morning: [...rc.morning], afternoon: [...rc.afternoon], evening: [...rc.evening] };
       // Day-level habits live in the Habits section, in title order; parted habits get one line at the top of each of their parts.
-      const dayLevel = habits.filter((h) => habitOccurrences(h)[0] === undefined);
+      const movedToday = new Set((['morning', 'afternoon', 'evening'] as const).flatMap((p) => rc[p].filter((l) => (l.id ?? '').startsWith('hab-')).map((l) => l.id)));
+      const dayLevel = habits.filter((h) => habitOccurrences(h)[0] === undefined && !movedToday.has(h.id)); // moved into a part for this day: leave it there
       const byId = new Map(rc.habits.map((l) => [l.id, l]));
       const lines: TaskLine[] = dayLevel.map((h) => { const ex = byId.get(h.id); return ex ? { ...ex, text: label(h) } : newTaskLine(label(h), { id: h.id }); });
       for (const l of rc.habits) if (!dayLevel.some((h) => h.id === l.id) && (l.status === 'done' || !habits.some((h) => h.id === l.id))) if (!lines.some((x) => x.id === l.id)) lines.push(l);
@@ -222,6 +223,27 @@ export class Mutations {
           sec.splice(at === -1 ? sec.length : at, 0, newTaskLine(label(h), { id: h.id }));
         }
       }
+      return next;
+    });
+  }
+
+  /**
+   * Put a day-level habit's line into a part of the day (or back into the Habits section) for this
+   * date only: the line moves, its tick state travels with it, and other days are untouched.
+   */
+  async moveHabitForDay(habitId: string, date: IsoDate, part: HabitPart | undefined): Promise<void> {
+    const h = this.index.snapshot.habits.get(habitId);
+    if (h?.parts?.length) throw new Error('This habit already has fixed parts of the day; edit the habit to change them.');
+    const label = h ? `${h.icon ? h.icon + ' ' : ''}${h.title}` : habitId;
+    await this.ensureDailyNote(date);
+    await this.editRegion(date, (rc) => {
+      const sections = ['habits', 'morning', 'afternoon', 'evening'] as const;
+      let line: TaskLine | undefined;
+      const next: RegionContent = { ...rc };
+      for (const s of sections) { const found = rc[s].find((l) => l.id === habitId); if (found && !line) line = found; next[s] = rc[s].filter((l) => l.id !== habitId); }
+      const moved = line ?? newTaskLine(label, { id: habitId });
+      if (part === undefined) next.habits = [...next.habits, moved];
+      else { const list = [...next[part]]; const at = list.findIndex((l) => !(l.id ?? '').startsWith('hab-')); list.splice(at === -1 ? list.length : at, 0, moved); next[part] = list; }
       return next;
     });
   }
@@ -243,8 +265,10 @@ export class Mutations {
     const status: TaskStatus = state === 'done' ? 'done' : state === 'skipped' ? 'cancelled' : 'todo';
     const h = this.index.snapshot.habits.get(habitId);
     const label = h ? `${h.icon ? h.icon + ' ' : ''}${h.title}` : habitId;
-    const sec: Section = part ?? 'habits';
     await this.editRegion(date, (rc) => {
+      // A day-level habit moved into a part of the day for this date is ticked where it sits.
+      const moved = part === undefined && !(h?.parts?.length) ? (['morning', 'afternoon', 'evening'] as const).find((p) => rc[p].some((l) => l.id === habitId) && !rc.habits.some((l) => l.id === habitId)) : undefined;
+      const sec: Section = part ?? moved ?? 'habits';
       const list = [...rc[sec]];
       const idx = list.findIndex((l) => l.id === habitId);
       const base = idx >= 0 ? list[idx]! : newTaskLine(label, { id: habitId });

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- A habit without fixed parts of the day can be moved into the Morning,
+  Afternoon or Evening for one day only: drag its card onto the part, or
+  right-click → *For this day*. Its line moves in that day's note (tick state
+  and all), it shows as a chip in that part with a *morning today* marker on
+  the card, and the next day it is back in the Habits section. Streaks and
+  stats count the moved tick like any other.
+
 ## 1.6.0 — 2026-08-27
 
 - Capture: a *Tags* row of one-click toggles (`#meeting`, `#followup`,

@@ -13,6 +13,7 @@ import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { habitBadge } from '../fields';
+import { dayPartOf } from '../../data/habits';
 import { habitMenu } from '../habits';
 import { habitCard, colourise } from '../habitCard';
 import { drawingsButton, targetForDate } from '../drawings';
@@ -92,9 +93,9 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     };
     const parted = habits.filter((hb) => hb.parts && hb.parts.length > 0);
     const occurrences = habits.reduce((n, hb) => n + (hb.parts?.length || 1), 0);
-    const doneOcc = snap.completions.filter((c) => c.date === date && c.state === 'done' && habits.some((hb) => hb.id === c.habitId && ((hb.parts?.length ?? 0) === 0 ? c.part === undefined : c.part !== undefined && hb.parts!.includes(c.part)))).length;
+    const doneOcc = habits.reduce((n, hb) => n + (hb.parts?.length ? snap.completions.filter((c) => c.date === date && c.state === 'done' && c.habitId === hb.id && c.part !== undefined && hb.parts!.includes(c.part)).length : snap.completions.some((c) => c.date === date && c.state === 'done' && c.habitId === hb.id) ? 1 : 0), 0);
     const board = h('div', { cls: 'helm-habit-board' }, ...habits.map((hb) => habitCard(ctx, hb, date)));
-    habitChipsFor = (part) => { const list = parted.filter((hb) => hb.parts!.includes(part)); return list.length === 0 ? null : h('div', { cls: 'helm-habit-chips helm-part-habits' }, ...list.map((hb) => colourise(habitChip(hb, part), hb))); };
+    habitChipsFor = (part) => { const list = [...parted.filter((hb) => hb.parts!.includes(part)), ...habits.filter((hb) => dayPartOf(hb, snap.completions, date) === part)]; return list.length === 0 ? null : h('div', { cls: 'helm-habit-chips helm-part-habits' }, ...list.map((hb) => colourise(habitChip(hb, part), hb))); };
     root.appendChild(section('Habits', { count: `${doneOcc}/${occurrences}`, store, key: 'habits', actions: [button('New habit', { icon: 'plus', cls: 'helm-btn-quiet', onClick: () => openHabitForm(ctx) })] },
       habits.length === 0 ? empty('No habits yet.', button('Create one', { onClick: () => openHabitForm(ctx) })) : board));
   }
@@ -140,11 +141,13 @@ function itemRow(ctx: UiContext, it: DayItem): HTMLElement {
 
 /** Dropping a task on a part plans it for this day, in that part. */
 function makeDropZone(ctx: UiContext, el: HTMLElement, date: IsoDate, part: DayPart): void {
-  el.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task')) { ev.preventDefault(); el.classList.add('is-dropping'); } });
+  el.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task') || (part !== 'anytime' && ev.dataTransfer?.types.includes('text/helm-habit'))) { ev.preventDefault(); el.classList.add('is-dropping'); } });
   el.addEventListener('dragleave', (ev) => { if (!el.contains(ev.relatedTarget as Node | null)) el.classList.remove('is-dropping'); });
   el.addEventListener('drop', (ev) => {
     ev.preventDefault();
     el.classList.remove('is-dropping');
+    const habitId = ev.dataTransfer?.getData('text/helm-habit');
+    if (habitId && part !== 'anytime') { void ctx.run('Move habit', () => ctx.mutations.moveHabitForDay(habitId, date, part)); return; }
     const key = ev.dataTransfer?.getData('text/helm-task');
     if (!key) return;
     const t = ctx.index.task(key);

@@ -705,3 +705,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-tag-toggle { height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); color: var(--text-accent); font-size: var(--font-ui-smaller); box-shadow: none; cursor: pointer; }
 .helm-tag-toggle:hover { border-color: var(--text-accent); }
 .helm-tag-toggle.is-active { background: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
+
+.helm-habit-card[draggable="true"] { cursor: grab; }
+.helm-habit-card.is-dragging { opacity: 0.4; }
+.helm-habit-moved { background: rgba(var(--hc-rgb), 0.18); color: var(--hc); font-size: 11px; }

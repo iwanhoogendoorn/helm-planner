@@ -70,10 +70,11 @@ function dayStates(h: Habit, completions: HabitCompletion[], today: IsoDate): { 
   const occAt = (d: IsoDate): (HabitPart | undefined)[] => habitOccurrences(h, d);
   const key = (d: IsoDate, part?: HabitPart): string => `${d}|${part ?? ''}`;
   const rec = new Map<string, HabitCompletion['state']>();
+  const anyPart = new Map<IsoDate, HabitCompletion['state']>(); // a line moved into a part of the day, for that day only
   let first: IsoDate | undefined;
-  for (const c of completions) if (c.habitId === h.id) { rec.set(key(c.date, c.part), c.state); if (first === undefined || c.date < first) first = c.date; }
+  for (const c of completions) if (c.habitId === h.id) { rec.set(key(c.date, c.part), c.state); if (c.part !== undefined && !anyPart.has(c.date)) anyPart.set(c.date, c.state); if (first === undefined || c.date < first) first = c.date; }
   // A day-level tick also satisfies a parted habit's single remaining occurrence, and vice versa, so an old note still counts.
-  const stateOf = (d: IsoDate, part?: HabitPart): HabitCompletion['state'] | undefined => rec.get(key(d, part)) ?? (part !== undefined && occAt(d).length === 1 ? rec.get(key(d)) : undefined);
+  const stateOf = (d: IsoDate, part?: HabitPart): HabitCompletion['state'] | undefined => rec.get(key(d, part)) ?? (occAt(d).length === 1 ? (part !== undefined ? rec.get(key(d)) : anyPart.get(d)) : undefined);
   /** Fold the day's occurrences into one state. */
   const stateOn = (d: IsoDate): HabitDayState => {
     if (d > today) return 'future';
@@ -139,6 +140,12 @@ export function habitStats(h: Habit, completions: HabitCompletion[], today: IsoD
     doneThisWeek, scheduledThisWeek: h.targetPerWeek !== undefined ? h.targetPerWeek * occ.length : scheduledThisWeek,
     days,
   };
+}
+
+/** Where a day-level habit's line sits on `date` when it was moved into a part of the day just for that day. */
+export function dayPartOf(h: Habit, completions: HabitCompletion[], date: IsoDate): HabitPart | undefined {
+  if (h.parts && h.parts.length > 0) return undefined;
+  return completions.find((c) => c.habitId === h.id && c.date === date && c.part !== undefined)?.part;
 }
 
 export function daysSince(a: IsoDate, b: IsoDate): number { return diffDays(a, b); }

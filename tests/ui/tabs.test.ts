@@ -879,6 +879,53 @@ describe('New drawing / note dialog', () => {
 });
 
 describe('managing habits from Today', () => {
+  it('moves a day-level habit into a part of the day for one date only: menu, drag-drop, tick where it sits, back to general next day', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await ctx.mutations.schedule('tsk-0001', TODAY, 'afternoon'); // an open task, so every part of the day is drawn
+    let root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const cardOf = (title: string) => [...root.querySelectorAll<HTMLElement>('.helm-habit-card')].find((c) => c.textContent?.includes(title))!;
+    expect(cardOf('Morning workout').getAttribute('draggable')).toBe('true');
+    // Menu → For this day → Morning
+    cardOf('Morning workout').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const forDay = Menu.last!.items.find((i) => i.title === 'For this day')!;
+    expect(forDay.sub!.items.map((i) => i.title)).toEqual(['General (Habits section)', 'Morning', 'Afternoon', 'Evening']);
+    forDay.sub!.items[1]!.click!();
+    await flush(); await flush();
+    let note = await vault.read(dailyPath(TODAY));
+    expect(note).toMatch(/#+ Morning\n+- \[ \] 🏃 Morning workout 🆔 hab-workout/);
+    expect(note.match(/hab-workout/g)).toHaveLength(1);
+    root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    expect(texts(root, '.helm-section.part-morning .helm-part-habits .helm-habit').join()).toContain('Morning workout');
+    expect(cardOf('Morning workout').querySelector('.helm-habit-moved')!.textContent).toBe('morning today');
+    // Ticking from the card ticks the moved line; the board and the chip agree.
+    click(cardOf('Morning workout').querySelector('.helm-habit-tick'));
+    await flush(); await flush();
+    note = await vault.read(dailyPath(TODAY));
+    expect(note).toMatch(/#+ Morning\n+- \[x\] 🏃 Morning workout 🆔 hab-workout/);
+    root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    expect(cardOf('Morning workout').classList.contains('is-day-done')).toBe(true);
+    expect(root.querySelector('.helm-section.part-morning .helm-part-habits .helm-habit')!.classList.contains('is-done')).toBe(true);
+    // Syncing the day again does not re-add a general line.
+    await ctx.mutations.syncHabitsForDay(TODAY);
+    expect((await vault.read(dailyPath(TODAY))).match(/hab-workout/g)).toHaveLength(1);
+    // Drag the card onto the evening: it moves, tick state travels.
+    const evening = root.querySelector<HTMLElement>('.helm-section.part-evening')!;
+    const dt = { types: ['text/helm-habit'], getData: (k: string) => (k === 'text/helm-habit' ? 'hab-workout' : '') };
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: dt });
+    evening.dispatchEvent(ev);
+    await flush(); await flush();
+    note = await vault.read(dailyPath(TODAY));
+    expect(note).toMatch(/#+ Evening\n+- \[x\] 🏃 Morning workout 🆔 hab-workout/);
+    expect(note.match(/hab-workout/g)).toHaveLength(1);
+    // Tomorrow it is a general habit again.
+    await ctx.mutations.syncHabitsForDay('2026-08-27');
+    const tomorrow = await vault.read(dailyPath('2026-08-27'));
+    expect(tomorrow).toMatch(/#+ Habits\n(?:- .*\n)*- \[ \] 🏃 Morning workout 🆔 hab-workout/); // back in the Habits list (title order)
+    expect(tomorrow.match(/hab-workout/g)).toHaveLength(1);
+    void index;
+  });
+
   it('shows note / drawing pills on a habit card that open the attachment menus, and the edit form lists them', async () => {
     const { ctx, index, vault } = await ctxFor();
     await vault.write('81 AI/Workout plan.md', '---\nhelm-habit: hab-workout\n---\n# Workout plan\n');
@@ -903,7 +950,7 @@ describe('managing habits from Today', () => {
     expect(texts(habitsSection as HTMLElement, '.helm-section-actions button')).toEqual(['New habit']);
     const chip = habitsSection.querySelector('.helm-habit-card')!;
     chip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    expect(Menu.last!.items.map((i) => i.title)).toEqual(['Edit…', 'Mark done', 'Skip today', 'Notes', 'Drawings', 'Pause habit', 'Open note', 'Delete habit…']);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['Edit…', 'Mark done', 'Skip today', 'For this day', 'Notes', 'Drawings', 'Pause habit', 'Open note', 'Delete habit…']);
     Menu.last!.items[0]!.click!();
     const form = Modal.last!;
     expect(form.titleEl.textContent).toBe('Edit habit');

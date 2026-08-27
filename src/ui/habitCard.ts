@@ -8,7 +8,7 @@ import type { Habit, HabitPart, IsoDate } from '../core/types';
 import { HABIT_PARTS } from '../core/types';
 import { habitColor } from '../core/habit';
 import { addDays, startOfWeek, WEEKDAY_SHORT } from '../core/dates';
-import { habitOccurrences, habitStats, type HabitDayState, type HabitStats } from '../data/habits';
+import { dayPartOf, habitOccurrences, habitStats, type HabitDayState, type HabitStats } from '../data/habits';
 import { h, icon } from './dom';
 import { habitBadge } from './fields';
 import { habitMenu } from './habits';
@@ -66,7 +66,8 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
   const today = ctx.today();
   const st = habitStats(hb, snap.completions, today, settings.weekStartsOn, 84);
   const occ = habitOccurrences(hb);
-  const stateOf = (part?: HabitPart): 'done' | 'skipped' | 'missed' | 'pending' => { const c = snap.completions.find((x) => x.habitId === hb.id && x.date === date && x.part === part); return c?.state ?? 'pending'; };
+  const movedTo = dayPartOf(hb, snap.completions, date);
+  const stateOf = (part?: HabitPart): 'done' | 'skipped' | 'missed' | 'pending' => { const c = snap.completions.find((x) => x.habitId === hb.id && x.date === date && (x.part === part || (part === undefined && movedTo !== undefined && x.part === movedTo))); return c?.state ?? 'pending'; };
   const toggle = (part: HabitPart | undefined, ev: MouseEvent): void => {
     const s = stateOf(part);
     const next = ev.shiftKey ? (s === 'skipped' ? 'missed' : 'skipped') : s === 'done' ? 'missed' : 'done';
@@ -93,7 +94,7 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
   const meta = h('div', { cls: 'helm-habit-meta' },
     st.streak > 0 ? h('span', { cls: 'helm-habit-streak', text: `🔥 ${st.streak}` }) : h('span', { cls: 'helm-hint', text: 'no streak yet' }),
     h('span', { cls: 'helm-hint', text: `${st.doneThisWeek}/${st.scheduledThisWeek} this week` }),
-    hb.parts && hb.parts.length ? h('span', { cls: 'helm-hint', text: hb.parts.join(' · ') }) : null,
+    hb.parts && hb.parts.length ? h('span', { cls: 'helm-hint', text: hb.parts.join(' · ') }) : movedTo ? h('span', { cls: 'helm-chip helm-habit-moved', text: `${movedTo} today`, title: `Moved to the ${movedTo} for this day only` }) : null,
     pills,
   );
   const card = h('div', { cls: ['helm-habit-card', `is-day-${dayState}`, !hb.active && 'is-paused'], onContextMenu: (ev) => habitMenu(ctx, hb, ev, { date, state: dayState === 'done' ? 'done' : dayState === 'skipped' ? 'skipped' : 'pending' }) },
@@ -103,6 +104,13 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
     h('div', { cls: 'helm-habit-month', title: `${Math.round(st.rate30 * 100)}% of the last 30 days` }, ring(st.rate30)),
   );
   colourise(card, hb);
+  // A day-level habit can be dragged onto a part of the day, for this date only.
+  if (!(hb.parts && hb.parts.length)) {
+    card.setAttribute('draggable', 'true');
+    card.addEventListener('dragstart', (ev) => { ev.dataTransfer?.setData('text/helm-habit', hb.id); if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'; card.classList.add('is-dragging'); });
+    card.addEventListener('dragend', () => card.classList.remove('is-dragging'));
+    card.title = 'Drag onto Morning, Afternoon or Evening to do it there today only';
+  }
   void setIcon; void HABIT_PARTS;
   return card;
 }

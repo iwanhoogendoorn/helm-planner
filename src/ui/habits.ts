@@ -4,6 +4,7 @@ import type { Habit, HabitPart, IsoDate } from '../core/types';
 import type { UiContext } from './context';
 import { openHabitForm } from './modals/habitForm';
 import { addDrawingItems, targetForHabit } from './drawings';
+import { dayPartOf } from '../data/habits';
 import { addNoteItems } from './notes';
 
 export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { date?: IsoDate; part?: HabitPart; state?: 'done' | 'skipped' | 'missed' | 'pending' } = {}): void {
@@ -17,6 +18,17 @@ export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { dat
     if (opts.state !== 'done') menu.addItem((i) => i.setTitle(`Mark done${label}`).setIcon('check').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, 'done', opts.part))));
     if (opts.state !== 'skipped') menu.addItem((i) => i.setTitle(`Skip today${label}`).setIcon('minus').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, 'skipped', opts.part))));
     if (opts.state === 'done' || opts.state === 'skipped') menu.addItem((i) => i.setTitle(`Clear${label}`).setIcon('circle').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, 'missed', opts.part))));
+  }
+  if (opts.date && !(hb.parts && hb.parts.length)) {
+    const date = opts.date;
+    const current = dayPartOf(hb, ctx.index.snapshot.completions, date);
+    menu.addItem((i) => {
+      i.setTitle('For this day').setIcon('sun-moon');
+      const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+      for (const [part, title] of [[undefined, 'General (Habits section)'], ['morning', 'Morning'], ['afternoon', 'Afternoon'], ['evening', 'Evening']] as const) {
+        sub.addItem((j) => { j.setTitle(title).setIcon(part === current ? 'check' : 'circle').onClick(() => void ctx.run('Move habit', () => ctx.mutations.moveHabitForDay(hb.id, date, part))); });
+      }
+    });
   }
   menu.addSeparator();
   menu.addItem((i) => { i.setTitle('Notes').setIcon('sticky-note'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addNoteItems(sub, ctx, targetForHabit(hb)); });
