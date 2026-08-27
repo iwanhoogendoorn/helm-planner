@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Hovering a task no longer nudges the layout: the row's action buttons
+  always take their space and are only revealed on hover (always shown on
+  touch screens), so nothing rewraps or shifts underneath the pointer.
 - Today: finished tasks stay in their part of the day as faded ghost rows
   under the open ones (with a green *N done* chip in the header), instead of
   being swept into a Done section at the bottom — a morning you worked

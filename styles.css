@@ -111,8 +111,12 @@
 .helm-prio.prio-medium { color: var(--color-orange); }
 .helm-prio.prio-low, .helm-prio.prio-lowest { color: var(--text-faint); }
 .helm-task-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-.helm-task-actions { display: none; flex: none; align-items: center; gap: 2px; }
-.helm-task:hover .helm-task-actions, .helm-task:focus-within .helm-task-actions { display: inline-flex; }
+/* Always laid out, only revealed on hover — appearing buttons must never reflow the row or nudge the rows below. */
+.helm-task-actions { display: inline-flex; visibility: hidden; flex: none; align-items: center; gap: 2px; height: 22px; margin-top: 1px; }
+.helm-task:hover .helm-task-actions, .helm-task:focus-within .helm-task-actions { visibility: visible; }
+.helm-task-actions .helm-iconbtn { padding: 3px; height: 22px; }
+.helm-task-actions .helm-iconbtn svg { width: 15px; height: 15px; }
+@media (hover: none) { .helm-task-actions { visibility: visible; } }
 .helm-task-tree { display: contents; }
 
 /* Day header */
