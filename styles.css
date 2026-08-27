@@ -451,8 +451,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 /* Habit form */
 .helm-habit-icon-row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 .helm-habit-icon-preview { width: 56px; height: 56px; border-radius: 12px; background: var(--background-secondary); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
-.helm-habit-icon-preview img, .helm-habit-img { width: 100%; height: 100%; object-fit: contain; }
-.helm-habit .helm-habit-img, .helm-habit-name .helm-habit-img, .helm-chip.habit .helm-habit-img { width: 18px; height: 18px; border-radius: 4px; margin-right: 4px; vertical-align: middle; }
+.helm-habit-img { width: 18px; height: 18px; max-width: 18px; max-height: 18px; object-fit: contain; border-radius: 4px; margin-right: 4px; vertical-align: middle; flex: none; }
+.helm-habit-card .helm-habit-title .helm-habit-img { width: 22px; height: 22px; max-width: 22px; max-height: 22px; }
+.helm-habit-icon-preview img { width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; margin: 0; }
 .helm-habit-emoji { margin-right: 2px; }
 .helm-habit-emoji-big { font-size: 30px; }
 .helm-habit-icon-actions { display: flex; gap: 6px; flex-wrap: wrap; }

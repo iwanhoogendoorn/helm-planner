@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- An uploaded habit icon (PNG) no longer blows up to full size on the habit
+  board, Today's part chips or the Dashboard tracker: it is 18–22 px
+  everywhere except the form's preview box.
+
 ## 1.5.0 — 2026-08-27
 
 - Dashboard → *Habit tracker*: every habit over its whole life, one column
