@@ -146,3 +146,52 @@ export function bundledTemplate(kind: PeriodKind, cfg: TemplateConfig): string {
 
 /** Default file name for a kind's template note. */
 export const TEMPLATE_FILE_NAMES: Record<PeriodKind, string> = { year: 'YEARLY NOTE TEMPLATE.md', quarter: 'QUARTERLY NOTE TEMPLATE.md', month: 'MONTHLY NOTE TEMPLATE.md', week: 'WEEKLY NOTE TEMPLATE.md' };
+
+/** A daily note template in Helm's shape: Habits, then Morning / Afternoon / Evening with time slots, Anytime, and a Daybook. */
+export const DAILY_TEMPLATE = `---
+title: <% tp.file.title %>
+Type: Daily Note
+week: "[[<% moment(tp.file.title, '{D}').format('{W}') %>]]"
+creation_date: <% tp.date.now("YYYY-MM-DD") %>
+tags:
+  - dailynotes
+---
+
+Previous day: [[<% moment(tp.file.title, '{D}').subtract(1, 'd').format('{D}') %>|Yesterday]] · Next day: [[<% moment(tp.file.title, '{D}').add(1, 'd').format('{D}') %>|Tomorrow]]
+
+# Day planner
+
+### Habits
+
+### A. Morning
+
+- [ ] 07:00 - 08:00: 
+- [ ] 08:00 - 09:00: 
+- [ ] 09:00 - 10:00: 
+- [ ] 10:00 - 11:00: 
+- [ ] 11:00 - 12:00: 
+
+### B. Afternoon
+
+- [ ] 12:00 - 13:00: 
+- [ ] 13:00 - 14:00: 
+- [ ] 14:00 - 15:00: 
+- [ ] 15:00 - 16:00: 
+- [ ] 16:00 - 17:00: 
+- [ ] 17:00 - 18:00: 
+
+### C. Evening
+
+- [ ] 18:00 - 19:00: 
+- [ ] 19:00 - 20:00: 
+- [ ] 20:00 - 21:00: 
+
+### D. Anytime
+
+## Daybook
+
+`;
+
+export function bundledDailyTemplate(cfg: TemplateConfig): string {
+  return DAILY_TEMPLATE.replace(/\{D\}/g, cfg.dailyTitleFormat).replace(/\{W\}/g, cfg.formats.week);
+}

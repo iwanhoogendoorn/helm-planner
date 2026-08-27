@@ -30,6 +30,8 @@ export class ObsidianVault implements VaultAdapter {
     await this.app.vault.create(p, content);
   }
 
+  async createFolder(path: string): Promise<void> { await this.mkdirp(normalizePath(path)); }
+
   private async mkdirp(folder: string): Promise<void> {
     const parts = folder.split('/');
     let cur = '';

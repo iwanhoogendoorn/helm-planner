@@ -630,3 +630,5 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-task-actions .helm-task-notes:hover, .helm-task-actions .helm-task-drawings:hover { background: rgba(var(--color-blue-rgb), 0.22); }
 .helm-task-actions .helm-task-notes svg, .helm-task-actions .helm-task-drawings svg { width: 13px; height: 13px; }
 .helm-task-actions .helm-task-notes .helm-badge, .helm-task-actions .helm-task-drawings .helm-badge { position: static; min-width: 0; height: auto; padding: 0; margin: 0; background: transparent; color: inherit; font-size: 11px; font-weight: 600; }
+
+.helm-sgroup-body .setting-item-name .helm-schip { margin-left: 8px; vertical-align: middle; }

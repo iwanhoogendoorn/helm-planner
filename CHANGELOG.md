@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Settings → Setup: a self-repairing checklist — companion plugins (Daily
+  Notes, Tasks, Periodic Notes, Templater, Excalidraw: enabled / disabled /
+  not installed, with Enable or Install), every folder and note Helm uses
+  (Create when missing, Change… jumps to the right section), the daily and
+  periodic templates (Create writes Helm's built-in ones), and one *Fix
+  everything* button. Helm ships a daily note template too now.
 - Double-booking guard: when Capture, Follow up or the task editor has a day
   and a time, Helm checks everything already timed on that day (its tasks,
   mirrored project tasks and your own planner slots), shows an inline

@@ -8,6 +8,7 @@ if (typeof HTMLElement !== 'undefined') {
   proto['createEl'] = function (this: HTMLElement, tag: string, o?: { text?: string; cls?: string; type?: string; placeholder?: string; attr?: Record<string, string> }) { const e = document.createElement(tag); if (o?.text) e.textContent = o.text; if (o?.cls) e.className = o.cls; if (o?.type) (e as HTMLInputElement).type = o.type; if (o?.placeholder) (e as HTMLInputElement).placeholder = o.placeholder; for (const [k, v] of Object.entries(o?.attr ?? {})) e.setAttribute(k, v); this.appendChild(e); return e; };
   proto['createSpan'] = function (this: HTMLElement, o?: { text?: string; cls?: string }) { return (this as unknown as { createEl: (t: string, o?: unknown) => HTMLElement }).createEl('span', o); };
   proto['toggleClass'] = function (this: HTMLElement, c: string, on: boolean) { this.classList.toggle(c, on); return this; };
+  proto['detach'] = function (this: HTMLElement) { this.remove(); };
   proto['show'] = function (this: HTMLElement) { this.style.display = ''; return this; };
   proto['hide'] = function (this: HTMLElement) { this.style.display = 'none'; return this; };
   (globalThis as unknown as Record<string, unknown>)['createDiv'] = (o?: { text?: string; cls?: string }) => (document.createElement('div') as unknown as { createDiv: (o?: unknown) => HTMLElement }).createDiv(o);

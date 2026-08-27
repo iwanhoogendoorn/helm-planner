@@ -134,6 +134,41 @@ export default class HelmPlugin extends Plugin {
   }
 
   excalidrawFolderPath(): string | undefined { return this.excalidrawFolder; }
+
+  /* ── Setup checks ──────────────────────────────────────────────────── */
+
+  pluginStatus(id: string): 'enabled' | 'disabled' | 'missing' {
+    const a = this.app as unknown as { plugins?: { plugins?: Record<string, unknown>; manifests?: Record<string, unknown>; enabledPlugins?: Set<string> }; internalPlugins?: { getPluginById?: (id: string) => { enabled?: boolean } | null; plugins?: Record<string, { enabled?: boolean }> } };
+    if (id.startsWith('core:')) {
+      const cid = id.slice(5);
+      const p = a.internalPlugins?.getPluginById?.(cid) ?? a.internalPlugins?.plugins?.[cid] ?? null;
+      return !p ? 'missing' : p.enabled ? 'enabled' : 'disabled';
+    }
+    if (a.plugins?.plugins?.[id]) return 'enabled';
+    return a.plugins?.manifests?.[id] ? 'disabled' : 'missing';
+  }
+  async enablePlugin(id: string): Promise<void> {
+    const a = this.app as unknown as { plugins?: { enablePluginAndSave?: (id: string) => Promise<void> }; internalPlugins?: { getPluginById?: (id: string) => { enable?: (save: boolean) => Promise<void> } | null } };
+    if (id.startsWith('core:')) { await a.internalPlugins?.getPluginById?.(id.slice(5))?.enable?.(true); return; }
+    await a.plugins?.enablePluginAndSave?.(id);
+  }
+  openPluginInstall(id: string): void {
+    const a = this.app as unknown as { setting?: { openTabById?: (id: string) => void; close?: () => void } };
+    if (id.startsWith('core:')) { a.setting?.openTabById?.('core-plugins'); return; }
+    window.open(`obsidian://show-plugin?id=${encodeURIComponent(id)}`);
+  }
+  dailyTemplatePath(): string | undefined { const p = this.settings.dailyNoteTemplate.trim() || this.daily.template; return p ? (p.endsWith('.md') ? p : `${p}.md`) : undefined; }
+  /** Where a daily template would be written when none is configured. */
+  dailyTemplateTarget(): string { return this.dailyTemplatePath() ?? `${this.templateTargetPath('week').replace(/\/[^/]*$/, '')}/DAILY NOTE TEMPLATE.md`; }
+  async fileExists(path: string): Promise<boolean> { return this.vault.exists(path); }
+  async ensureFolder(path: string): Promise<boolean> { return this.mutations.ensureFolder(path); }
+  async ensureInboxNote(): Promise<boolean> { return this.mutations.ensureInboxNote(); }
+  async writeDailyTemplate(replace: boolean): Promise<'created' | 'replaced' | 'skipped'> {
+    const target = this.dailyTemplateTarget();
+    const r = await this.mutations.writeDailyTemplate(target, { replace });
+    if (!this.dailyTemplatePath()) { this.settings.dailyNoteTemplate = target; await this.saveSettings(); }
+    return r;
+  }
   private excalidrawInstalled(): boolean { return !!(this.app as unknown as { plugins?: { plugins?: Record<string, unknown> } }).plugins?.plugins?.['obsidian-excalidraw-plugin']; }
 
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string } { return this.periodic[kind]; }

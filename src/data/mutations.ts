@@ -24,7 +24,7 @@ import { baseName, type VaultAdapter } from './vault';
 import { habitDue, habitOccurrences } from './habits';
 import { misfiledDate } from './planner';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
-import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates';
+import { bundledTemplate, bundledDailyTemplate, type TemplateConfig } from '../core/periodicTemplates';
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
 import { noteTitle, renderNewNote, listValues, type NoteRef } from '../core/noteRef';
 import type { DrawingTarget } from '../core/types';
@@ -1021,6 +1021,38 @@ export class Mutations {
     }
     const note = await this.noteOf(target);
     if (note && (await this.d.vault.exists(note))) await this.removeEmbed(note, drawingPath);
+  }
+
+  /* ── Setup helpers ─────────────────────────────────────────────────── */
+
+  /** Create a folder when it is missing. Returns true when something was created. */
+  async ensureFolder(path: string): Promise<boolean> {
+    const p = path.replace(/\/+$/, '');
+    if (p === '' || (await this.d.vault.exists(p))) return false;
+    if (this.d.vault.createFolder) await this.d.vault.createFolder(p);
+    else await this.d.vault.write(`${p}/.keep.md`, '');
+    return true;
+  }
+
+  /** Create the inbox note when it is missing. */
+  async ensureInboxNote(): Promise<boolean> {
+    const p = this.settings.inboxNote;
+    if (await this.d.vault.exists(p)) return false;
+    await this.createFile(p, '# Inbox\n\n');
+    return true;
+  }
+
+  /** Write Helm's daily note template to a path (never over an existing note unless told to). */
+  async writeDailyTemplate(path: string, opts: { replace?: boolean } = {}): Promise<'created' | 'replaced' | 'skipped'> {
+    const exists = await this.d.vault.exists(path);
+    if (exists && !opts.replace) return 'skipped';
+    const content = bundledDailyTemplate(this.templateConfig());
+    await this.d.vault.write(path, content);
+    if (!exists && this.d.processTemplate) {
+      const settle = this.d.templateSettleMs ?? 2000;
+      for (let i = 0; i < 2; i++) { await new Promise((r) => setTimeout(r, settle)); if ((await this.d.vault.read(path)) === content) break; await this.d.vault.write(path, content); }
+    }
+    return exists ? 'replaced' : 'created';
   }
 
   /* ── Notes attached to tasks / projects / days / periods ──────────── */

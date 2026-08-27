@@ -16,6 +16,8 @@ export interface VaultAdapter {
   trash?(path: string): Promise<void>;
   /** Write a binary file (icons). */
   writeBinary?(path: string, data: ArrayBuffer): Promise<void>;
+  /** Create a folder (and parents). */
+  createFolder?(path: string): Promise<void>;
   /** Frontmatter of a markdown file without reading it in full (a metadata cache where there is one). */
   frontmatter?(path: string): Record<string, unknown> | undefined;
 }
@@ -41,7 +43,9 @@ export class MemoryVault implements VaultAdapter {
     this.mtimes.set(path, this.clock++);
     this.writes.push(path);
   }
-  async exists(path: string): Promise<boolean> { return this.files.has(path); }
+  folders = new Set<string>();
+  async createFolder(path: string): Promise<void> { this.folders.add(path.replace(/\/+$/, '')); }
+  async exists(path: string): Promise<boolean> { return this.files.has(path) || this.folders.has(path.replace(/\/+$/, '')) || [...this.files.keys()].some((p) => p.startsWith(path.replace(/\/+$/, '') + '/')); }
   mtime(path: string): number | undefined { return this.mtimes.get(path); }
   async rename(from: string, to: string): Promise<void> {
     for (const p of [...this.files.keys()]) {

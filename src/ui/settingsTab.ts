@@ -27,6 +27,15 @@ export interface SettingsHost extends Plugin {
   writeTemplate(kind: PeriodKind, replace: boolean): Promise<'created' | 'replaced' | 'skipped'>;
   createCurrentPeriodicNotes(): Promise<string[]>;
   excalidrawFolderPath(): string | undefined;
+  pluginStatus(id: string): 'enabled' | 'disabled' | 'missing';
+  enablePlugin(id: string): Promise<void>;
+  openPluginInstall(id: string): void;
+  dailyTemplatePath(): string | undefined;
+  dailyTemplateTarget(): string;
+  fileExists(path: string): Promise<boolean>;
+  ensureFolder(path: string): Promise<boolean>;
+  ensureInboxNote(): Promise<boolean>;
+  writeDailyTemplate(replace: boolean): Promise<'created' | 'replaced' | 'skipped'>;
 }
 
 type ChipTone = 'ok' | 'warn' | 'pending';
@@ -36,6 +45,7 @@ type BoolKey = { [K in keyof HelmSettings]: HelmSettings[K] extends boolean ? K 
 type NumKey = 'dailyCapacityMinutes' | 'defaultEffortMinutes' | 'staleProjectDays';
 
 export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
+  { id: 'setup', label: 'Setup', icon: 'wrench' },
   { id: 'folders', label: 'Folders', icon: 'folder' },
   { id: 'daily', label: 'Daily notes', icon: 'calendar-days' },
   { id: 'horizons', label: 'Horizons', icon: 'mountain' },
@@ -46,7 +56,9 @@ export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
 ];
 
 export class HelmSettingTab extends PluginSettingTab {
-  private active = 'folders';
+  private active = 'setup';
+  /** Bumped per render so an async Setup render that finished late is discarded instead of appended twice. */
+  private renderSeq = 0;
   private sectionNavEl!: HTMLElement;
   private bodyEl!: HTMLElement;
 
@@ -192,7 +204,10 @@ export class HelmSettingTab extends PluginSettingTab {
   private renderBody(): void {
     const body = this.bodyEl;
     body.empty();
+    // Any render supersedes a Setup render still in flight (it is async and must not land on another section).
+    this.renderSeq++;
     switch (this.active) {
+      case 'setup': { const seq = this.renderSeq; const scratch = body.createDiv(); scratch.detach(); void this.renderSetup(scratch).then(() => { if (seq === this.renderSeq) body.replaceChildren(...Array.from(scratch.children)); }); break; }
       case 'daily': this.renderDaily(body); break;
       case 'horizons': this.renderHorizons(body); break;
       case 'planning': this.renderPlanning(body); break;
@@ -201,6 +216,91 @@ export class HelmSettingTab extends PluginSettingTab {
       case 'about': this.renderAbout(body); break;
       default: this.renderFolders(body);
     }
+  }
+
+  // ── setup: a checklist that repairs itself ────────────────────────────
+
+  private goTo(section: string): void {
+    this.active = section;
+    for (const el of Array.from(this.sectionNavEl.querySelectorAll('.helm-settings-nav-item'))) el.toggleClass('is-active', el.textContent === NAV_SECTIONS.find((n) => n.id === section)?.label);
+    this.renderBody();
+  }
+
+  private async renderSetup(body: HTMLElement): Promise<void> {
+    const s = this.host.settings;
+    const dc = this.host.dailyConfig();
+    let issues = 0;
+    const summary = this.group(body, { icon: 'wrench', title: 'Setup', subtitle: 'Everything Helm needs, checked. Fix a line with its button, or all of them at once.' });
+    const fixAllRow = new Setting(summary.content).setName('Fix everything').setDesc('Creates every missing folder, note and template below. Plugins are enabled where they are installed; missing ones open the install page.');
+    const fixers: (() => Promise<void>)[] = [];
+
+    const rowChip = (setting: Setting, ok: boolean, okText: string, badText: string): void => {
+      const c = setting.nameEl.createSpan({ cls: ['helm-schip', ok ? 'helm-schip-ok' : 'helm-schip-warn'].join(' ') });
+      c.setText(ok ? okText : badText);
+      if (!ok) issues++;
+    };
+
+    // Companion plugins.
+    const plugins = this.group(body, { icon: 'blocks', title: 'Companion plugins', subtitle: 'Helm works without them, but this is the intended setup.' });
+    const wanted: { id: string; name: string; why: string; needed: boolean }[] = [
+      { id: 'core:daily-notes', name: 'Daily Notes (core)', why: 'Where today lives. Helm reads its folder, format and template.', needed: true },
+      { id: 'obsidian-tasks-plugin', name: 'Tasks', why: 'The task format Helm writes (🆔 📅 ⏳ ✅ 🔁). Optional, but you get its queries and recurrence for free.', needed: false },
+      { id: 'periodic-notes', name: 'Periodic Notes', why: 'Weekly / monthly / quarterly / yearly notes and their templates, which Horizons uses.', needed: false },
+      { id: 'templater-obsidian', name: 'Templater', why: 'Renders the templates when Helm creates a note. Without it Helm fills in the common tags itself.', needed: false },
+      { id: 'obsidian-excalidraw-plugin', name: 'Excalidraw', why: 'Drawings attached to tasks, days, periods and projects.', needed: false },
+    ];
+    for (const w of wanted) {
+      const st = this.host.pluginStatus(w.id);
+      const row = new Setting(plugins.content).setName(w.name).setDesc(w.why);
+      rowChip(row, st === 'enabled', 'enabled', st === 'disabled' ? 'installed, disabled' : w.needed ? 'not installed' : 'not installed (optional)');
+      if (st === 'disabled') { row.addButton((b) => b.setButtonText('Enable').setCta().onClick(async () => { await this.host.enablePlugin(w.id); this.renderBody(); })); fixers.push(() => this.host.enablePlugin(w.id)); }
+      if (st === 'missing') row.addButton((b) => b.setButtonText(w.id.startsWith('core:') ? 'Open core plugins' : 'Install…').onClick(() => this.host.openPluginInstall(w.id)));
+      if (st === 'enabled' && !w.needed) issues -= 0;
+    }
+
+    // Folders and notes.
+    const places = this.group(body, { icon: 'folder-tree', title: 'Folders and notes', subtitle: 'Created empty when missing; change a location in the section it belongs to.' });
+    const folderRows: { name: string; path: string; section: string; kind: 'folder' | 'note' }[] = [
+      { name: 'Projects folder', path: s.projectsFolder, section: 'folders', kind: 'folder' },
+      { name: 'Habits folder', path: s.habitsFolder, section: 'folders', kind: 'folder' },
+      { name: 'Inbox note', path: s.inboxNote, section: 'folders', kind: 'note' },
+      { name: 'Daily notes folder', path: s.dailyNoteFolder.trim() || dc.folder, section: 'daily', kind: 'folder' },
+      ...(['year', 'quarter', 'month', 'week'] as const).map((k) => ({ name: `${PERIOD_LABELS[k]} notes folder`, path: (s[({ year: 'yearlyFolder', quarter: 'quarterlyFolder', month: 'monthlyFolder', week: 'weeklyFolder' } as const)[k]] || this.host.periodicConfigFor(k).folder), section: 'horizons', kind: 'folder' as const })),
+      { name: 'Drawings folder', path: s.drawingsFolder.trim() || this.host.excalidrawFolderPath() || 'Excalidraw', section: 'drawings', kind: 'folder' },
+      { name: 'Notes folder', path: s.notesFolder.trim() || 'Notes', section: 'drawings', kind: 'folder' },
+    ];
+    for (const f of folderRows) {
+      const exists = f.path.trim() !== '' && (await this.host.fileExists(f.path));
+      const row = new Setting(places.content).setName(f.name).setDesc(f.path || '— not set —');
+      rowChip(row, exists, 'found', f.path ? 'missing' : 'not set');
+      if (!exists && f.path) {
+        const fix = f.kind === 'note' && f.name === 'Inbox note' ? () => this.host.ensureInboxNote().then(() => undefined) : () => this.host.ensureFolder(f.path).then(() => undefined);
+        row.addButton((b) => b.setButtonText('Create').setCta().onClick(async () => { await fix(); this.renderBody(); }));
+        fixers.push(fix);
+      }
+      row.addButton((b) => b.setButtonText('Change…').onClick(() => this.goTo(f.section)));
+    }
+
+    // Templates.
+    const tpls = this.group(body, { icon: 'file-plus-2', title: 'Templates', subtitle: 'Helm ships a template for each kind; a missing one is written into your templates folder.' });
+    const dailyPath = this.host.dailyTemplatePath();
+    const dailyExists = dailyPath ? await this.host.fileExists(dailyPath) : false;
+    const dailyRow = new Setting(tpls.content).setName('Daily note template').setDesc(dailyPath ?? `none configured — would be created as ${this.host.dailyTemplateTarget()}`);
+    rowChip(dailyRow, dailyExists, 'found', dailyPath ? 'missing' : 'none');
+    if (!dailyExists) { const fix = () => this.host.writeDailyTemplate(false).then(() => undefined); dailyRow.addButton((b) => b.setButtonText('Create').setCta().onClick(async () => { await fix(); this.renderBody(); })); fixers.push(fix); }
+    dailyRow.addButton((b) => b.setButtonText('Change…').onClick(() => this.goTo('daily')));
+    for (const k of ['year', 'quarter', 'month', 'week'] as const) {
+      const info = await this.host.templateInfo(k);
+      const target = this.host.templateTargetPath(k);
+      const row = new Setting(tpls.content).setName(`${PERIOD_LABELS[k]} note template`).setDesc(info.path ?? `built-in — would be written as ${target}`);
+      rowChip(row, info.exists, 'found', info.source === 'built-in' ? 'built-in (not in vault)' : 'missing');
+      if (!info.exists) { const fix = () => this.host.writeTemplate(k, false).then(() => undefined); row.addButton((b) => b.setButtonText('Create').setCta().onClick(async () => { await fix(); this.renderBody(); })); fixers.push(fix); }
+      row.addButton((b) => b.setButtonText('Change…').onClick(() => this.goTo('horizons')));
+    }
+
+    summary.setChip(issues === 0 ? 'all good' : `${issues} to fix`, issues === 0 ? 'ok' : 'warn');
+    if (fixers.length === 0) fixAllRow.setDesc('Nothing to fix — Helm is ready.');
+    else fixAllRow.addButton((b) => b.setButtonText(`Fix ${fixers.length} item${fixers.length === 1 ? '' : 's'}`).setCta().onClick(async () => { b.setButtonText('Working…'); for (const f of fixers) { try { await f(); } catch (e) { console.warn('[helm] setup fix failed', e); } } this.host.onSettingsChanged(); this.renderBody(); }));
   }
 
   // ── folders ───────────────────────────────────────────────────────────
@@ -357,7 +457,7 @@ export class HelmSettingTab extends PluginSettingTab {
     const list = about.content.createDiv({ cls: 'helm-about-commands' });
     for (const [name, desc] of cmds) { const row = list.createDiv({ cls: 'helm-about-command' }); row.createSpan({ cls: 'helm-about-command-name', text: name }); row.createSpan({ cls: 'helm-about-command-desc', text: desc }); }
     new Setting(about.content).setName('Re-index the vault').setDesc('Rebuild Helm’s picture of projects, tasks, habits and goals from disk.').addButton((b) => b.setButtonText('Re-index').onClick(() => { this.host.onSettingsChanged(); }));
-    new Setting(about.content).setName('Reset to defaults').setDesc('Puts every setting back to its default. Your notes are not touched.').addButton((b) => b.setButtonText('Reset').setWarning().onClick(() => { Object.assign(this.host.settings, DEFAULT_SETTINGS, { excludePaths: [...DEFAULT_SETTINGS.excludePaths], extraFolders: [...DEFAULT_SETTINGS.extraFolders] }); void this.save().then(() => { this.active = 'folders'; this.display(); }); }));
+    new Setting(about.content).setName('Reset to defaults').setDesc('Puts every setting back to its default. Your notes are not touched.').addButton((b) => b.setButtonText('Reset').setWarning().onClick(() => { Object.assign(this.host.settings, DEFAULT_SETTINGS, { excludePaths: [...DEFAULT_SETTINGS.excludePaths], extraFolders: [...DEFAULT_SETTINGS.extraFolders] }); void this.save().then(() => { this.active = 'setup'; this.display(); }); }));
     void TFile;
   }
 }
