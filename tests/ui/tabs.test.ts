@@ -808,3 +808,31 @@ describe('Follow up from the UI', () => {
     expect(row.querySelector('.helm-chip.followup')!.textContent).toContain('follows:');
   });
 });
+
+describe('Capture for another day', () => {
+  it('the Day row is preset to the viewed day; Tomorrow and a typed date override the text; Inbox unplans', async () => {
+    const { ctx, vault } = await ctxFor();
+    openCapture(ctx, { date: TODAY });
+    const m = Modal.last!;
+    const seg = (label: string) => [...m.contentEl.querySelectorAll<HTMLElement>('.helm-capture-day .helm-seg')].find((b) => b.textContent === label)!;
+    expect(seg('Today').classList.contains('is-active')).toBe(true);
+    expect(m.contentEl.querySelector<HTMLInputElement>('.helm-capture-date')!.value).toBe(TODAY);
+    const input = m.contentEl.querySelector<HTMLInputElement>('.helm-capture-input')!;
+    input.value = 'Call the dentist today'; input.dispatchEvent(new Event('input'));
+    click(seg('Tomorrow'));
+    expect(m.contentEl.querySelector('.helm-capture-where')!.textContent).toBe('→ daily note for Tomorrow');
+    expect(seg('Tomorrow').classList.contains('is-active')).toBe(true);
+    const dateInput = m.contentEl.querySelector<HTMLInputElement>('.helm-capture-date')!;
+    expect(dateInput.value).toBe('2026-08-27');
+    dateInput.value = '2026-09-03'; dateInput.dispatchEvent(new Event('change'));
+    expect(m.contentEl.querySelector('.helm-capture-where')!.textContent).toBe('→ daily note for Thu 3 Sep');
+    expect([...m.contentEl.querySelectorAll('.helm-capture-day .helm-chip')].map((c) => c.textContent)).toEqual(['Thu 3 Sep 2026']);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flush(); await flush(); await flush();
+    expect(await vault.read(ctx.index.dailyPath('2026-09-03'))).toContain('Call the dentist');
+    openCapture(ctx, { date: TODAY });
+    const m2 = Modal.last!;
+    click([...m2.contentEl.querySelectorAll<HTMLElement>('.helm-capture-day .helm-seg')].find((b) => b.textContent === 'Inbox'));
+    expect(m2.contentEl.querySelector('.helm-capture-where')!.textContent).toMatch(/^→ inbox/);
+  });
+});

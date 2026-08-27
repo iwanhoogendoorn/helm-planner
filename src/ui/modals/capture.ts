@@ -4,7 +4,7 @@
  */
 import { Modal } from 'obsidian';
 import type { IsoDate, Project, TaskLine } from '../../core/types';
-import { humanDate, minutesToHuman } from '../../core/dates';
+import { addDays, humanDate, minutesToHuman, startOfWeek } from '../../core/dates';
 import { parseCapture } from '../../core/nlp';
 import { formatRecurrence } from '../../core/recurrence';
 import { append, button, chip, h } from '../dom';
@@ -56,6 +56,21 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Call the plumber tomorrow !high #home @Kitchen ~30m', value: defaults.text ?? '' } });
   wikilinkSuggest(ctx, input);
   const preview = h('div', { cls: 'helm-capture-preview' });
+  // Day row: quick picks and a date input, overriding anything the text says.
+  const dayInput = h('input', { cls: 'helm-capture-date', attr: { type: 'date' }, title: 'Any day' });
+  dayInput.addEventListener('change', () => { explicitDate = true; date = /^\d{4}-\d{2}-\d{2}$/.test(dayInput.value) ? dayInput.value : undefined; render(); });
+  const dayRow = h('div', { cls: 'helm-capture-day' });
+  const drawDay = (): void => {
+    const nextWeek = addDays(startOfWeek(today, ctx.settings().weekStartsOn), 7);
+    const picks: [string, IsoDate | undefined, string][] = [['Today', today, today], ['Tomorrow', addDays(today, 1), addDays(today, 1)], ['+2', addDays(today, 2), addDays(today, 2)], ['Next week', nextWeek, nextWeek], ['Inbox', undefined, 'No day — the inbox, or the project only']];
+    dayRow.replaceChildren(
+      h('span', { cls: 'helm-hint', text: 'Day' }),
+      h('span', { cls: 'helm-segmented' }, ...picks.map(([label, d, title]) => h('button', { cls: ['helm-seg', date === d && 'is-active'], text: label, title, onClick: () => { explicitDate = true; date = d; render(); } }))),
+      dayInput,
+      ...(date && ![today, addDays(today, 1), addDays(today, 2), nextWeek].includes(date) ? [chip(humanDate(date, today, { year: true }), 'scheduled')] : []),
+    );
+    dayInput.value = date ?? '';
+  };
   const dest = h('div', { cls: 'helm-capture-dest' });
   const help = h('div', { cls: 'helm-hint', text: 'Dates: today, tomorrow, fri, next week, in 3 days, 1/9, due friday · Part: morning, afternoon, evening, tonight · Priority: !, !!, !!! · Project: @Name · Effort: ~45m · Time: 14:00-15:00 · Repeat: every week' });
 
@@ -78,6 +93,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (time) preview.appendChild(chip(time.end ? `${time.start}–${time.end}` : time.start, 'time'));
     if (c.recurrence) preview.appendChild(chip(formatRecurrence(c.recurrence), 'recurrence'));
     for (const t of c.tags) preview.appendChild(chip(`#${t}`, 'tag'));
+    drawDay();
     dest.replaceChildren();
     const where = project ? `→ project “${project.title}”${phaseId ? ` › ${project.phases.find((p) => p.id === phaseId)?.title ?? ''}` : ''}${date ? ` (and today's plan)` : ''}` : date ? `→ daily note for ${humanDate(date, today)}` : `→ inbox (${ctx.settings().inboxNote})`;
     append(dest, [
@@ -85,7 +101,6 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
       h('span', { cls: 'helm-spacer' }),
       button(project ? 'Change project' : 'Project…', { icon: 'folder', onClick: () => pickProject(ctx, (p, ph) => { project = p; phaseId = ph; render(); }, { phases: true }) }),
       project ? button('', { icon: 'x', title: 'No project', onClick: () => { project = undefined; phaseId = undefined; render(); } }) : null,
-      button(date ? 'Unplan' : 'Plan today', { icon: date ? 'calendar-x' : 'sun', title: date ? 'Keep it unplanned (inbox or project only)' : 'Plan it on today', onClick: () => { explicitDate = true; date = date ? undefined : today; render(); } }),
       date ? h('span', { cls: 'helm-segmented' }, ...(['morning', 'afternoon', 'evening'] as const).map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: p, onClick: () => { explicitPart = true; part = part === p ? undefined : p; render(); } }))) : null,
       date ? h('span', { cls: 'helm-capture-time' }, timeStart, h('span', { cls: 'helm-hint', text: '–' }), timeEnd) : null,
       h('span', { cls: 'helm-capture-effort' }, h('span', { cls: 'helm-hint', text: 'effort' }), effort.el),
@@ -117,7 +132,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (keepOpen) { input.value = ''; render(); input.focus(); }
   }
 
-  root.append(input, preview, dest, help, h('div', { cls: 'helm-modal-buttons' },
+  root.append(input, preview, dayRow, dest, help, h('div', { cls: 'helm-modal-buttons' },
     h('span', { cls: 'helm-hint', text: 'Enter to add · Shift+Enter to add and keep capturing' }),
     h('span', { cls: 'helm-spacer' }),
     button('Cancel', { onClick: () => m.close() }),
