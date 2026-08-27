@@ -5,7 +5,7 @@
 - Capture has a Day row: Today · Tomorrow · +2 · Next week · Inbox, plus a
   date field, preset to the day you are looking at and overriding whatever
   the text says — so a task for another day is one click away from any view.
-- Follow up…: continue a task another day from its menu or the editor —
+- Follow up…: continue a task another day (with time and effort, prefilled from the original) from its menu or the editor —
   own title, day (tomorrow and quick picks), part of the day, and “mark the
   original done”. The follow-up carries #followup and depends on the original
   (⛔ id), so it reads “follows: …”, the original shows “→ Fri 28”, and it is

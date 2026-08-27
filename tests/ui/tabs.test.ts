@@ -801,9 +801,18 @@ describe('Follow up from the UI', () => {
     expect(text.value).toBe(t.text);
     expect(m.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-08-27');
     text.value = 'Next step';
+    const [ts, te] = [...m.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')];
+    expect(ts!.value).toBe(t.time?.start ?? '');
+    ts!.value = '14:00'; ts!.dispatchEvent(new Event('input'));
+    const effortSel = m.contentEl.querySelector<HTMLSelectElement>('.helm-effort-select')!;
+    effortSel.value = '45'; effortSel.dispatchEvent(new Event('change'));
+    expect(te!.value).toBe('14:45');
     click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent?.includes('Create follow-up')));
     await flush(); await flush(); await flush();
-    expect(await vault.read(dailyPath('2026-08-27'))).toMatch(/- \[ \] Next step #followup ⛔ tsk-\w+/);
+    const line = (await vault.read(dailyPath('2026-08-27'))).split('\n').find((l) => l.includes('Next step'))!;
+    expect(line).toMatch(/^- \[ \] 14:00 - 14:45: Next step #followup ⛔ tsk-\w+ ⏱️ 45m/);
+    const fu = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Next step') && x.origin === 'daily')!;
+    expect(fu.part).toBe('afternoon'); // from the time
     const row = taskRow(ctx, [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Next step') && x.origin === 'daily')!);
     expect(row.querySelector('.helm-chip.followup')!.textContent).toContain('follows:');
   });

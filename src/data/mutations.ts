@@ -827,7 +827,10 @@ export class Mutations {
     if (!new RegExp(`(^|\\s)#${tag}(\\s|$)`).test(text)) text = `${text} #${tag}`;
     const fields: Partial<TaskLine> = { ...(opts.fields ?? {}), blockedBy: [...new Set([...(opts.fields?.blockedBy ?? []), id])], priority: opts.fields?.priority ?? src.priority };
     if (src.projectId && src.origin === 'project') await this.addTask({ text, projectId: src.projectId, ...(src.phaseId ? { phaseId: src.phaseId } : {}), date: opts.date, ...(opts.part ? { part: opts.part } : {}), fields });
-    else await this.addTask({ text, date: opts.date, ...(opts.part ?? src.part ? { part: opts.part ?? (src.part === 'anytime' ? undefined : src.part) } : {}), fields });
+    else {
+      const part = opts.part ?? (fields.time ? undefined : src.part && src.part !== 'anytime' ? src.part : undefined);
+      await this.addTask({ text, date: opts.date, ...(part ? { part } : {}), fields });
+    }
     if (opts.markOriginalDone) await this.setStatus(src.key, 'done');
     return { id, date: opts.date };
   }

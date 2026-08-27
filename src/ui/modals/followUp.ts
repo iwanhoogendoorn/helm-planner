@@ -5,7 +5,8 @@ import { addDays, humanDate, startOfWeek } from '../../core/dates';
 import { DAY_PARTS, type DayPart } from '../../core/dailyNote';
 import { PART_LABEL } from '../../core/dailyNote';
 import { button, h } from '../dom';
-import { wikilinkSuggest } from '../fields';
+import { effortField, linkTimes, wikilinkSuggest } from '../fields';
+import { minutesToHuman } from '../../core/dates';
 import type { UiContext } from '../context';
 
 export function openFollowUp(ctx: UiContext, task: Task): void {
@@ -25,10 +26,16 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   const options: [string, string][] = [['Tomorrow', addDays(today, 1)], ['In 2 days', addDays(today, 2)], ['In 3 days', addDays(today, 3)], ['Next week', nextMonday], ['In a week', addDays(today, 7)]];
   const drawPresets = (): void => { presets.replaceChildren(...options.map(([label, d]) => h('button', { cls: ['helm-seg', date === d && 'is-active'], text: label, title: humanDate(d, today, { year: true }), onClick: () => { date = d; dateInput.value = d; drawPresets(); } }))); };
   drawPresets();
-  let part: DayPart | undefined = task.part && task.part !== 'anytime' ? task.part : undefined;
+  // No pick = decided by the time, else the original's part.
+  let part: DayPart | undefined;
   const parts = h('div', { cls: 'helm-segmented' });
-  const drawParts = (): void => { parts.replaceChildren(h('button', { cls: ['helm-seg', part === undefined && 'is-active'], text: 'Anytime', onClick: () => { part = undefined; drawParts(); } }), ...DAY_PARTS.filter((p) => p !== 'anytime').map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: PART_LABEL[p], onClick: () => { part = p; drawParts(); } }))); };
+  const drawParts = (): void => { parts.replaceChildren(h('button', { cls: ['helm-seg', part === undefined && 'is-active'], text: 'By time', title: 'Follows the time, else the original’s part', onClick: () => { part = undefined; drawParts(); } }), ...DAY_PARTS.filter((p) => p !== 'anytime').map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: PART_LABEL[p], onClick: () => { part = p; drawParts(); } }))); };
   drawParts();
+  // Time and effort, prefilled from the original and kept consistent (start + effort → end).
+  const timeStart = h('input', { attr: { type: 'time', value: task.time?.start ?? '' }, title: 'Start time' });
+  const timeEnd = h('input', { attr: { type: 'time', value: task.time?.end ?? '' }, title: 'End time' });
+  const effort = effortField(task.effortMinutes);
+  linkTimes(timeStart, timeEnd, effort);
   const open = !['done', 'cancelled', 'forwarded'].includes(task.status);
   const markDone = h('input', { attr: { type: 'checkbox', checked: open } });
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
@@ -37,6 +44,10 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
     field('Next step', text),
     field('When', h('div', { cls: 'helm-row' }, dateInput), presets),
     field('Part of the day', parts),
+    h('div', { cls: 'helm-grid2' },
+      field('Time', h('span', { cls: 'helm-capture-time' }, timeStart, h('span', { cls: 'helm-hint', text: '–' }), timeEnd)),
+      field('Effort', effort.el),
+    ),
     ...(open ? [h('label', { cls: 'helm-toggle' }, markDone, h('span', { text: 'Mark the original done now' }))] : []),
     h('div', { cls: 'helm-hint', text: `The follow-up gets #${tag} and waits on the original (⛔), so it shows as “follows …” and unblocks when the original is ticked.` }),
     h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button('Create follow-up', { primary: true, icon: 'corner-down-right', onClick: () => void create() })),
@@ -45,7 +56,9 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
     if (text.value.trim() === '') { ctx.notify('Give the follow-up a title.'); text.focus(); return; }
     m.close();
     await ctx.run('Follow up', async () => {
-      const r = await ctx.mutations.followUp(task.key, { text: text.value, date, ...(part ? { part } : {}), markOriginalDone: open && markDone.checked });
+      const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;
+      const eff = effort.get();
+      const r = await ctx.mutations.followUp(task.key, { text: text.value, date, ...(part ? { part } : {}), markOriginalDone: open && markDone.checked, fields: { ...(time ? { time } : {}), ...(eff ? { effortMinutes: eff, effortRaw: minutesToHuman(eff) } : {}) } });
       ctx.notify(`Follow-up planned for ${humanDate(r.date, today)}.`);
     });
   }
