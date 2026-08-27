@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Dashboard line charts: the last date label no longer overprints its
+  neighbour; a regular label that would collide with it is dropped instead.
 - A habit without fixed parts of the day can be moved into the Morning,
   Afternoon or Evening for one day only: drag its card onto the part, or
   right-click → *For this day*. Its line moves in that day's note (tick state

@@ -121,8 +121,15 @@ function lineChartAt(lines: Line[], labels: string[], opts: { height?: number },
     if (l.area) el.appendChild(svg('path', { d: `${d} L${x(l.points.length - 1).toFixed(1)},${y(0)} L0,${y(0)} Z`, class: 'helm-chart-area', style: l.color ? `fill:${l.color}` : '' }));
     el.appendChild(svg('path', { d, class: 'helm-chart-line', style: l.color ? `stroke:${l.color}` : '' }));
   }
-  const every = Math.max(1, Math.ceil((labels.length * 40) / W));
-  labels.forEach((lab, i) => { if (i % every === 0 || i === labels.length - 1) el.appendChild(svg('text', { x: Math.min(W - 20, Math.max(16, x(i))), y: H - 5, class: 'helm-chart-label', 'text-anchor': 'middle' }, lab)); });
+  // Labels every `every` points, plus the last one; a regular label that would collide with the last is dropped.
+  const LABEL_W = 44;
+  const every = Math.max(1, Math.ceil((labels.length * LABEL_W) / W));
+  const last = labels.length - 1;
+  const lx = (i: number): number => Math.min(W - 20, Math.max(16, x(i)));
+  labels.forEach((lab, i) => {
+    if (i !== last && (i % every !== 0 || lx(last) - lx(i) < LABEL_W)) return;
+    el.appendChild(svg('text', { x: lx(i), y: H - 5, class: 'helm-chart-label', 'text-anchor': 'middle' }, lab));
+  });
   el.appendChild(svg('text', { x: 4, y: padT + 9, class: 'helm-chart-value' }, String(max)));
   return el;
 }
