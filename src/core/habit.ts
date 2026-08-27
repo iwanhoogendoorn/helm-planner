@@ -14,7 +14,7 @@
  * ---
  * ```
  */
-import { HABIT_PARTS, type Habit, type HabitPart } from './types';
+import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitPart } from './types';
 import { parseDocument, type Document } from './document';
 import { scalar } from './frontmatter';
 import { parseRecurrence } from './recurrence';
@@ -47,18 +47,29 @@ export function parseHabit(path: string, content: string, fallbackId?: string): 
   const partsRaw = fm['parts'] ?? fm['part'];
   const parts = (Array.isArray(partsRaw) ? partsRaw : typeof partsRaw === 'string' ? partsRaw.replace(/^\[|\]$/g, '').split(',') : []).map((x) => String(x).trim().toLowerCase()).filter((x): x is HabitPart => (HABIT_PARTS as string[]).includes(x));
   if (parts.length > 0) habit.parts = [...new Set(parts)].sort((a, b) => HABIT_PARTS.indexOf(a) - HABIT_PARTS.indexOf(b));
+  const color = (scalar(fm['color']) ?? '').toLowerCase();
+  if ((HABIT_COLORS as string[]).includes(color)) habit.color = color as HabitColor;
   const img = scalar(fm['icon_image']) ?? scalar(fm['image']);
   if (img) habit.iconImage = img.replace(/^\[\[|\]\]$/g, '').replace(/^!\[\[|\]\]$/g, '');
   return habit;
 }
 
-export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; today: string }): string {
+export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor; today: string }): string {
   const fm = ['---', `title: ${h.title}`, 'type: habit', `id: ${h.id}`, `schedule: ${h.schedule}`, 'active: true'];
   if (h.targetPerWeek) fm.push(`target_per_week: ${h.targetPerWeek}`);
   fm.push(`grace_days: ${h.graceDays ?? 0}`);
   if (h.icon) fm.push(`icon: ${h.icon}`);
   if (h.iconImage) fm.push(`icon_image: ${h.iconImage}`);
   if (h.parts && h.parts.length > 0) fm.push(`parts: [${h.parts.join(', ')}]`);
+  if (h.color) fm.push(`color: ${h.color}`);
   fm.push(`creation_date: ${h.today}`, '---', '', `# ${h.title}`, '', 'Why this habit matters:', '', '');
   return fm.join('\n');
+}
+
+/** The habit's accent colour: its own, else a stable pick from its id. */
+export function habitColor(h: { id: string; color?: HabitColor }): HabitColor {
+  if (h.color) return h.color;
+  let x = 0;
+  for (const ch of h.id) x = (x * 31 + ch.charCodeAt(0)) >>> 0;
+  return HABIT_COLORS[x % HABIT_COLORS.length]!;
 }

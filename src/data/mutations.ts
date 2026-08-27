@@ -8,7 +8,7 @@
  *  - Past daily notes are a log: a line is marked `[>]` (forwarded) rather
  *    than removed; mirrors on past days are never rewritten.
  */
-import type { Habit, HabitPart, HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus } from '../core/types';
+import type { Habit, HabitColor, HabitPart, HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus } from '../core/types';
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
 import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
@@ -775,13 +775,13 @@ export class Mutations {
     });
   }
 
-  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[] }): Promise<void> {
+  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor }): Promise<void> {
     const folder = this.settings.habitsFolder.replace(/\/+$/, '');
     const title = spec.title.trim().replace(/[\\/:*?"<>|]/g, '-');
     const path = `${folder ? folder + '/' : ''}${title}.md`;
     if (await this.d.vault.exists(path)) throw new Error(`A note already exists at ${path}`);
     const id = uniqueId('hab', (x) => this.index.snapshot.habits.has(x), this.d.rng);
-    await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}), ...(spec.iconImage ? { iconImage: spec.iconImage } : {}) , ...(spec.parts && spec.parts.length ? { parts: spec.parts } : {}) }));
+    await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}), ...(spec.iconImage ? { iconImage: spec.iconImage } : {}) , ...(spec.parts && spec.parts.length ? { parts: spec.parts } : {}), ...(spec.color ? { color: spec.color } : {}) }));
   }
 
   /** Store an uploaded icon next to the habit notes: `<habitsFolder>/icons/<name>.png`. Returns the vault path. */
@@ -795,7 +795,7 @@ export class Mutations {
     return path;
   }
 
-  async setHabitFields(id: string, fields: { active?: boolean; schedule?: string; title?: string; targetPerWeek?: number | null; graceDays?: number; icon?: string; iconImage?: string | null; parts?: HabitPart[] }): Promise<void> {
+  async setHabitFields(id: string, fields: { active?: boolean; schedule?: string; title?: string; targetPerWeek?: number | null; graceDays?: number; icon?: string; iconImage?: string | null; parts?: HabitPart[]; color?: HabitColor | null }): Promise<void> {
     const h = this.index.snapshot.habits.get(id);
     if (!h) throw new Error('Habit not found');
     const u: Record<string, string | null> = {};
@@ -807,6 +807,7 @@ export class Mutations {
     if (fields.icon !== undefined) u['icon'] = fields.icon;
     if (fields.iconImage !== undefined) u['icon_image'] = fields.iconImage ?? '';
     if (fields.parts !== undefined) (u as Record<string, string | string[] | null | undefined>)['parts'] = fields.parts.length ? fields.parts : undefined;
+    if (fields.color !== undefined) (u as Record<string, string | string[] | null | undefined>)['color'] = fields.color ?? undefined;
     await this.editFile(h.path, (lines) => setFrontmatter(lines, u));
   }
 

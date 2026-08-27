@@ -91,3 +91,14 @@ describe('deleting a habit', () => {
     await expect(m.deleteHabit('hab-nope')).rejects.toThrow(/Unknown habit/);
   });
 });
+
+describe('habit colour', () => {
+  it('parses a valid colour, ignores junk, and picks a stable default from the id', async () => {
+    const { habitColor } = await import('../../src/core/habit');
+    expect(parseHabit('x.md', MEDITATE.replace('grace_days: 0', 'grace_days: 0\ncolor: Blue'))!.color).toBe('blue');
+    expect(parseHabit('x.md', MEDITATE.replace('grace_days: 0', 'grace_days: 0\ncolor: mauve'))!.color).toBeUndefined();
+    expect(habitColor({ id: 'hab-med' })).toBe(habitColor({ id: 'hab-med' }));
+    expect(habitColor({ id: 'hab-med', color: 'red' })).toBe('red');
+    expect(renderHabitNote({ id: 'hab-x', title: 'X', schedule: 'every day', color: 'cyan', today: TODAY })).toContain('color: cyan');
+  });
+});

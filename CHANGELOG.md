@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Habit board on Today: a coloured card per habit — today's tick (one per
+  part for morning/afternoon/evening habits), streak and this-week count,
+  the current week as seven cells you can click to fix a past day, and a
+  30-day ring. Habits get a colour (picked in the form, or assigned from
+  the id) that the part chips, the Review heat map and the Dashboard bars
+  share.
 - Habits are manageable where you see them: a labelled *New habit* button on
   the Habits section, a right-click menu on every habit chip (Edit, Mark
   done / Skip today / Clear, Pause or Resume, Open note, Delete habit…), the

@@ -1,6 +1,7 @@
 /** New / edit habit — click, don't type: emoji grid or PNG icon, schedule presets, weekday toggles. */
 import { Modal } from 'obsidian';
-import { HABIT_PARTS, type Habit, type HabitPart } from '../../core/types';
+import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitPart } from '../../core/types';
+import { habitColor } from '../../core/habit';
 import { formatRecurrence, parseRecurrence } from '../../core/recurrence';
 import { WEEKDAY_SHORT } from '../../core/dates';
 import { button, h } from '../dom';
@@ -104,6 +105,15 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
   };
   drawSchedule();
 
+  // ── Colour ───────────────────────────────────────────────────────────
+  let color: HabitColor | undefined = existing?.color;
+  const colorRow = h('div', { cls: 'helm-swatches' });
+  const drawColors = (): void => {
+    colorRow.replaceChildren(...HABIT_COLORS.map((c) => { const b = h('button', { cls: ['helm-swatch', color === c && 'is-active'], title: c, onClick: () => { color = color === c ? undefined : c; drawColors(); } }); b.style.setProperty('--sw', `var(--color-${c})`); return b; }));
+    if (!color) { const auto = habitColor({ id: existing?.id ?? title.value, ...(color ? { color } : {}) }); colorRow.appendChild(h('span', { cls: 'helm-hint', text: `auto: ${auto}` })); }
+  };
+  drawColors();
+
   // ── Parts of the day ─────────────────────────────────────────────────
   const parts = new Set<HabitPart>(existing?.parts ?? []);
   const partsRow = h('div', { cls: 'helm-segmented' });
@@ -139,6 +149,7 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
     field('Icon', 'click an emoji, or upload a PNG', iconRow, emojiGrid),
     field('Schedule', '', presets, weekdayRow, nRow, monthRow, understood),
     field('Part of the day', 'pick several for a habit you do more than once a day', partsRow, partsHint),
+    field('Colour', 'for the board, the week cells and the charts', colorRow),
     h('div', { cls: 'helm-grid2' },
       field('Target per week', 'counts against the streak', targetRow),
       field('Grace', 'misses tolerated before a streak breaks', graceRow),
@@ -158,8 +169,8 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       if (pendingUpload) image = await ctx.mutations.saveHabitIcon(pendingUpload.name || name, pendingUpload.data, pendingUpload.ext);
       const schedule = formatRecurrence(r);
       const partList = HABIT_PARTS.filter((pt) => parts.has(pt));
-      if (existing) await ctx.mutations.setHabitFields(existing.id, { title: name, schedule, active, graceDays: grace, targetPerWeek: target ?? null, icon: emoji, iconImage: image ?? null, parts: partList });
-      else await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}) });
+      if (existing) await ctx.mutations.setHabitFields(existing.id, { title: name, schedule, active, graceDays: grace, targetPerWeek: target ?? null, icon: emoji, iconImage: image ?? null, parts: partList, color: color ?? null });
+      else await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}), ...(color ? { color } : {}) });
     });
   }
   m.open();

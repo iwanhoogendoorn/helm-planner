@@ -13,6 +13,7 @@ import { periodOf } from '../../core/periods';
 import { progressBar, richText } from '../dom';
 import { habitBadge } from '../fields';
 import { habitMenu } from '../habits';
+import { colourise } from '../habitCard';
 
 export interface ReviewState { collapsed: Map<string, boolean>; checks: Set<string> }
 
@@ -97,7 +98,7 @@ export function renderReview(ctx: UiContext, root: HTMLElement, state: ReviewSta
     habits.length === 0 ? empty('No habits. A habit is a note with “type: habit” in your habits folder.', button('Create one', { onClick: () => openHabitForm(ctx) })) : null,
     ...habits.map((hb) => {
       const st = habitStats(hb, snap.completions, today, settings.weekStartsOn, 84);
-      return h('div', { cls: 'helm-habit-row', title: 'Click to edit, right-click for more', onClick: () => openHabitForm(ctx, hb), onContextMenu: (ev) => habitMenu(ctx, hb, ev, { date: today }) },
+      return colourise(h('div', { cls: 'helm-habit-row', title: 'Click to edit, right-click for more', onClick: () => openHabitForm(ctx, hb), onContextMenu: (ev) => habitMenu(ctx, hb, ev, { date: today }) },
         h('div', { cls: 'helm-habit-row-head' },
           h('span', { cls: 'helm-habit-name' }, habitBadge(ctx, hb), h('span', { text: hb.title })),
           chip(`🔥 ${st.streak}`, 'streak', `Best ${st.bestStreak}`),
@@ -107,7 +108,7 @@ export function renderReview(ctx: UiContext, root: HTMLElement, state: ReviewSta
           h('span', { cls: 'helm-hint', text: hb.schedule.raw }),
         ),
         h('div', { cls: 'helm-heat' }, ...st.days.map((d) => h('span', { cls: ['helm-heat-cell', `is-${d.state}`], title: `${d.date}: ${d.state}` }))),
-      );
+      ), hb);
     }),
   ));
 

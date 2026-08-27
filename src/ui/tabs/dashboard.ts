@@ -7,6 +7,7 @@ import { PART_LABEL } from '../../core/dailyNote';
 import { barChart, donut, gauge, legend, lineChart } from '../charts';
 import { button, chip, h, icon, section } from '../dom';
 import type { UiContext } from '../context';
+import { habitColor } from '../../core/habit';
 import { crumbBar } from '../crumbs';
 import { openDrilldown } from '../modals/drilldown';
 
@@ -152,7 +153,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
 
   // Habits and goals.
   if (s.habits.length > 0) root.appendChild(section('Habit consistency', { store, key: 'habits', count: s.habits.length },
-    barChart(s.habits.map((hb) => ({ key: hb.habit.id, label: `${hb.habit.icon ? hb.habit.icon + ' ' : ''}${hb.habit.title}`, value: Math.round(hb.rate * 100), title: `${hb.habit.title}: ${hb.done}/${hb.scheduled} (${Math.round(hb.rate * 100)}%) · streak ${hb.streak}`, color: hb.rate >= 0.8 ? 'var(--color-green)' : hb.rate >= 0.5 ? 'var(--color-orange)' : 'var(--color-red)' })), { horizontal: true }),
+    barChart(s.habits.map((hb) => ({ key: hb.habit.id, label: `${hb.habit.icon ? hb.habit.icon + ' ' : ''}${hb.habit.title}`, value: Math.round(hb.rate * 100), title: `${hb.habit.title}: ${hb.done}/${hb.scheduled} (${Math.round(hb.rate * 100)}%) · streak ${hb.streak}`, color: `var(--color-${habitColor(hb.habit)})` })), { horizontal: true }),
     h('div', { cls: 'helm-hint', text: 'Percent of scheduled days done in the range.' })));
   if (s.goals.length > 0) root.appendChild(section('Goals', { store, key: 'goals', count: s.goals.length },
     barChart(s.goals.map((g) => ({ key: g.goal.key, label: `${g.goal.periodKey} ${g.goal.text}`, value: Math.round(g.progress * 100), title: `${g.goal.text}: ${Math.round(g.progress * 100)}% · ${g.projects} project(s)`, color: g.goal.status === 'done' ? 'var(--color-green)' : undefined })), { horizontal: true, onClick: (k) => ctx.navigate('horizons', { periodKey: ctx.index.goal(k)?.periodKey ?? '' }) })));

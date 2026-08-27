@@ -59,7 +59,7 @@ describe('Today tab', () => {
     expect(texts(root, '.helm-section-title')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime', 'Done']);
     expect(texts(root, '.helm-section:nth-of-type(2) .helm-task-text')).toEqual(['Start with OIB']);
     expect(texts(root, '.helm-section:nth-of-type(3) .helm-task-text')).toEqual(['Fix router config']);
-    expect(root.querySelector('.helm-habit.is-done')!.textContent).toContain('Morning workout');
+    expect(root.querySelector('.helm-habit-card.is-day-done')!.textContent).toContain('Morning workout');
     expect(root.querySelector('.helm-capacity-label')!.textContent).toContain('3 open · 1 done');
   });
 
@@ -89,7 +89,7 @@ describe('Today tab', () => {
   it('habit chip toggles', async () => {
     const { ctx, vault } = await ctxFor();
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    click([...root.querySelectorAll('.helm-habit')].find((e) => e.textContent?.includes('Evening')));
+    click([...root.querySelectorAll('.helm-habit-card')].find((e) => e.textContent?.includes('Evening'))!.querySelector('.helm-habit-tick'));
     await flush();
     expect(await vault.read(dailyPath(TODAY))).toContain('- [x] Evening reading 🆔 hab-read ✅ 2026-08-26');
   });
@@ -554,8 +554,8 @@ describe('Habit form modal', () => {
     expect(hb.iconImage).toBe('02 PROJECTS/Habits/icons/Hydrate.png');
     // The Today tab shows the image instead of an emoji.
     const today = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    const chip = [...today.querySelectorAll('.helm-habit')].find((c) => c.textContent?.includes('Hydrate'))!;
-    expect(chip.querySelector('img.helm-habit-img')?.getAttribute('src')).toBe('app://02 PROJECTS/Habits/icons/Hydrate.png');
+    const card = [...today.querySelectorAll('.helm-habit-card')].find((c) => c.textContent?.includes('Hydrate'))!;
+    expect(card.querySelector('img.helm-habit-img')?.getAttribute('src')).toBe('app://02 PROJECTS/Habits/icons/Hydrate.png');
   });
 });
 
@@ -736,7 +736,7 @@ describe('managing habits from Today', () => {
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     const habitsSection = [...root.querySelectorAll('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Habits')!;
     expect(texts(habitsSection as HTMLElement, '.helm-section-actions button')).toEqual(['New habit']);
-    const chip = habitsSection.querySelector('.helm-habit')!;
+    const chip = habitsSection.querySelector('.helm-habit-card')!;
     chip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Edit…', 'Mark done', 'Skip today', 'Pause habit', 'Open note', 'Delete habit…']);
     Menu.last!.items[0]!.click!();
@@ -748,5 +748,42 @@ describe('managing habits from Today', () => {
     Menu.last!.items.find((i) => i.title === 'Pause habit')!.click!();
     await flush(); await flush();
     expect(index.snapshot.habits.get(hb.id)!.active).toBe(false);
+  });
+});
+
+describe('habit board', () => {
+  it('renders a coloured card per habit with today’s ticks, seven week cells and a month ring; cells fix past days; part ticks toggle one part', async () => {
+    const MED = '---\ntitle: Meditate\ntype: habit\nid: hab-med\nschedule: every day\nactive: true\ngrace_days: 0\nparts: [morning, evening]\ncolor: purple\n---\n# Meditate\n';
+    const s = await setup({ '02 PROJECTS/Habits/Meditate.md': MED });
+    const ctx = { ...(await ctxFor()).ctx, index: s.index, mutations: s.m };
+    await s.m.syncHabitsForDay(TODAY);
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const cards = [...root.querySelectorAll<HTMLElement>('.helm-habit-card')];
+    expect(cards).toHaveLength(3);
+    const med = cards.find((c) => c.textContent?.includes('Meditate'))!;
+    expect(med.getAttribute('data-color')).toBe('purple');
+    expect(med.style.getPropertyValue('--hc')).toBe('var(--color-purple)');
+    expect(med.querySelectorAll('.helm-habit-tick')).toHaveLength(2);
+    expect(med.querySelectorAll('.helm-habit-cell')).toHaveLength(7);
+    expect(med.querySelector('.helm-habit-ring')).toBeTruthy();
+    const other = cards.find((c) => !c.textContent?.includes('Meditate'))!;
+    expect(other.getAttribute('data-color')).toMatch(/^(green|blue|purple|orange|cyan|pink|yellow|red)$/); // auto-assigned
+    // Tick the morning part only.
+    click(med.querySelectorAll('.helm-habit-tick')[0]);
+    await flush(); await flush();
+    expect(s.index.snapshot.completions.filter((c) => c.habitId === 'hab-med' && c.date === TODAY && c.state === 'done').map((c) => c.part)).toEqual(['morning']);
+    // Click yesterday's cell: the whole day is marked done in yesterday's note.
+    const root2 = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const med2 = [...root2.querySelectorAll<HTMLElement>('.helm-habit-card')].find((c) => c.textContent?.includes('Meditate'))!;
+    const yesterday = [...med2.querySelectorAll<HTMLElement>('.helm-habit-cell')].find((c) => c.title.startsWith('2026-08-25'))!;
+    click(yesterday);
+    await flush(); await flush(); await flush();
+    expect(s.index.snapshot.completions.filter((c) => c.habitId === 'hab-med' && c.date === '2026-08-25' && c.state === 'done').map((c) => c.part).sort()).toEqual(['evening', 'morning']);
+    expect(await s.vault.read(dailyPath('2026-08-25'))).toMatch(/- \[x\] Meditate 🆔 hab-med ✅ 2026-08-25/);
+    // The form offers colour swatches and saves the pick.
+    openHabitForm(ctx, s.index.snapshot.habits.get('hab-med'));
+    const form = Modal.last!;
+    expect(form.contentEl.querySelectorAll('.helm-swatch')).toHaveLength(8);
+    expect(form.contentEl.querySelector('.helm-swatch.is-active')!.getAttribute('title')).toBe('purple');
   });
 });

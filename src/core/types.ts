@@ -154,7 +154,12 @@ export interface Habit {
   iconImage?: string;
   /** Parts of the day the habit is done in; empty = once a day, tracked in the Habits section. */
   parts?: HabitPart[];
+  /** Accent colour (one of HABIT_COLORS); unset → picked from the habit id. */
+  color?: HabitColor;
 }
+
+export type HabitColor = 'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'pink';
+export const HABIT_COLORS: HabitColor[] = ['green', 'blue', 'purple', 'orange', 'cyan', 'pink', 'yellow', 'red'];
 
 export type HabitPart = 'morning' | 'afternoon' | 'evening';
 export const HABIT_PARTS: HabitPart[] = ['morning', 'afternoon', 'evening'];

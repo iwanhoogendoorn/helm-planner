@@ -576,3 +576,45 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 
 .helm-link-btn { background: transparent; border: none; box-shadow: none; padding: 0; height: auto; color: var(--text-muted); text-decoration: underline dotted; cursor: pointer; font-size: inherit; }
 .helm-link-btn:hover { color: var(--text-normal); }
+
+/* Habit board */
+.helm-habit-board { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+.helm-habit-card { --hc: var(--color-green); --hc-rgb: var(--color-green-rgb); display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 8px 12px 8px 10px; border-radius: var(--radius-m); border: 1px solid rgba(var(--hc-rgb), 0.35); border-left: 4px solid var(--hc); background: linear-gradient(90deg, rgba(var(--hc-rgb), 0.10), rgba(var(--hc-rgb), 0.03)); }
+.helm-habit-card.is-day-done { background: linear-gradient(90deg, rgba(var(--hc-rgb), 0.22), rgba(var(--hc-rgb), 0.06)); }
+.helm-habit-card.is-paused { opacity: 0.55; }
+.helm-habit-ticks { display: flex; gap: 4px; }
+.helm-habit-tick { width: 30px; height: 30px; padding: 0; border-radius: 50%; border: 2px solid rgba(var(--hc-rgb), 0.5); background: var(--background-primary); color: var(--hc); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: none; }
+.helm-habit-tick svg { width: 15px; height: 15px; }
+.helm-habit-tick.is-done { background: var(--hc); color: var(--text-on-accent); border-color: var(--hc); }
+.helm-habit-tick.is-skipped { border-style: dashed; color: var(--text-muted); }
+.helm-habit-tick.is-part.is-pending { color: rgba(var(--hc-rgb), 0.9); }
+.helm-habit-tick:hover { transform: scale(1.06); }
+.helm-habit-body { min-width: 0; }
+.helm-habit-title { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.helm-habit-meta { display: flex; gap: 10px; align-items: center; font-size: var(--font-ui-smaller); color: var(--text-muted); flex-wrap: wrap; }
+.helm-habit-streak { color: var(--hc); font-weight: 600; }
+.helm-habit-week { display: grid; grid-template-columns: repeat(7, 22px); gap: 3px; }
+.helm-habit-cell { width: 22px; height: 26px; padding: 0; border-radius: 5px; border: 1px solid rgba(var(--hc-rgb), 0.25); background: var(--background-primary); color: var(--text-faint); font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: none; }
+.helm-habit-cell.is-done { background: var(--hc); border-color: var(--hc); color: var(--text-on-accent); }
+.helm-habit-cell.is-partial { background: linear-gradient(180deg, var(--hc) 50%, var(--background-primary) 50%); border-color: var(--hc); color: var(--text-normal); }
+.helm-habit-cell.is-missed { background: rgba(var(--color-red-rgb), 0.18); border-color: rgba(var(--color-red-rgb), 0.5); color: var(--color-red); }
+.helm-habit-cell.is-skipped { background: var(--background-modifier-border); color: var(--text-muted); }
+.helm-habit-cell.is-off { opacity: 0.45; border-style: dotted; cursor: default; }
+.helm-habit-cell.is-future { opacity: 0.35; cursor: default; }
+.helm-habit-cell.is-pending { border-color: var(--hc); color: var(--hc); }
+.helm-habit-cell.is-today { box-shadow: 0 0 0 2px rgba(var(--hc-rgb), 0.45); }
+.helm-habit-month { display: flex; align-items: center; }
+.helm-habit-ring-bg { fill: none; stroke: rgba(var(--hc-rgb), 0.18); stroke-width: 3; }
+.helm-habit-ring-fg { fill: none; stroke: var(--hc); stroke-width: 3; stroke-linecap: round; }
+.helm-habit-ring-text { font-size: 9px; font-weight: 700; fill: var(--text-normal); }
+/* coloured chips inside parts and coloured heat rows */
+.helm-habit[data-color] { border-color: rgba(var(--hc-rgb), 0.45); }
+.helm-habit[data-color].is-done { background: rgba(var(--hc-rgb), 0.2); color: var(--hc); border-color: var(--hc); }
+.helm-habit-row[data-color] { border-left: 4px solid var(--hc); }
+.helm-habit-row[data-color] .helm-heat-cell.is-done { background: var(--hc); }
+.helm-habit-row[data-color] .helm-heat-cell.is-partial { background: rgba(var(--hc-rgb), 0.5); }
+.helm-swatches { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.helm-swatch { --sw: var(--color-green); width: 26px; height: 26px; border-radius: 50%; padding: 0; border: 2px solid transparent; background: var(--sw); box-shadow: none; cursor: pointer; opacity: 0.75; }
+.helm-swatch:hover { opacity: 1; }
+.helm-swatch.is-active { opacity: 1; border-color: var(--text-normal); transform: scale(1.1); }
+@media (max-width: 720px) { .helm-habit-card { grid-template-columns: auto minmax(0, 1fr); } .helm-habit-week, .helm-habit-month { grid-column: 2; } }
