@@ -179,6 +179,25 @@ describe('Review tab', () => {
 });
 
 describe('Modals', () => {
+  it('capture has quick tag toggles that add and remove the tag in the text', async () => {
+    const { ctx } = await ctxFor();
+    openCapture(ctx);
+    const m = Modal.last!;
+    const input = m.contentEl.querySelector<HTMLInputElement>('input')!;
+    input.value = 'Sync with Bob'; input.dispatchEvent(new Event('input'));
+    expect(texts(m.contentEl, '.helm-tag-toggle')).toEqual(['#meeting', '#followup', '#task']);
+    click([...m.contentEl.querySelectorAll('.helm-tag-toggle')].find((b) => b.textContent === '#meeting'));
+    expect(input.value).toBe('#meeting Sync with Bob');
+    expect(m.contentEl.querySelector('.helm-tag-toggle.is-active')!.textContent).toBe('#meeting');
+    expect(texts(m.contentEl, '.helm-capture-preview .helm-chip.tag, .helm-chip.tag')).toContain('#meeting');
+    click([...m.contentEl.querySelectorAll('.helm-tag-toggle')].find((b) => b.textContent === '#task'));
+    expect(input.value).toBe('#task #meeting Sync with Bob');
+    click([...m.contentEl.querySelectorAll('.helm-tag-toggle')].find((b) => b.textContent === '#meeting'));
+    expect(input.value).toBe('#task Sync with Bob');
+    input.value = 'Plan #Meeting-Room booking #meeting'; input.dispatchEvent(new Event('input')); // typed tag lights up; #Meeting-Room does not count
+    expect(texts(m.contentEl, '.helm-tag-toggle.is-active')).toEqual(['#meeting']);
+  });
+
   it('capture previews and writes', async () => {
     const { ctx, vault } = await ctxFor();
     openCapture(ctx);

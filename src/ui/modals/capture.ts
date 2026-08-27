@@ -74,6 +74,22 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     );
     dayInput.value = date ?? '';
   };
+  // Quick tags: one click puts `#tag` in front of the text, another takes it out again.
+  const tagRow = h('div', { cls: 'helm-capture-tags' });
+  const quickTags = (): string[] => [...new Set((ctx.settings().captureTags ?? '').split(/[,\s]+/).map((t) => t.trim().replace(/^#/, '')).filter(Boolean))];
+  const hasTag = (tag: string): boolean => new RegExp(`(^|\\s)#${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'i').test(input.value);
+  const toggleTag = (tag: string): void => {
+    const re = new RegExp(`(^|\\s)#${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'ig');
+    input.value = hasTag(tag) ? input.value.replace(re, '$1').replace(/\s{2,}/g, ' ').trim() : `#${tag} ${input.value.replace(/^\s+/, '')}`;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  };
+  const drawTags = (): void => {
+    const tags = quickTags();
+    tagRow.style.display = tags.length ? '' : 'none';
+    tagRow.replaceChildren(h('span', { cls: 'helm-hint', text: 'Tags' }), ...tags.map((t) => h('button', { cls: ['helm-tag-toggle', hasTag(t) && 'is-active'], text: `#${t}`, title: hasTag(t) ? `Remove #${t}` : `Add #${t}`, onClick: () => toggleTag(t) })));
+  };
   const dest = h('div', { cls: 'helm-capture-dest' });
   const help = h('div', { cls: 'helm-hint', text: 'Dates: today, tomorrow, fri, next week, in 3 days, 1/9, due friday · Part: morning, afternoon, evening, tonight · Priority: !, !!, !!! · Project: @Name · Effort: ~45m · Time: 14:00-15:00 · Repeat: every week' });
 
@@ -97,6 +113,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (c.recurrence) preview.appendChild(chip(formatRecurrence(c.recurrence), 'recurrence'));
     for (const t of c.tags) preview.appendChild(chip(`#${t}`, 'tag'));
     drawDay();
+    drawTags();
     conflictText = date && time ? (describeConflicts(conflictsFor(ctx.index.snapshot, date, time, ctx.settings(), { effortMinutes: effort.get() })) || undefined) : undefined;
     conflictWarning(conflict, conflictText);
     dest.replaceChildren();
@@ -138,7 +155,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (keepOpen) { input.value = ''; render(); input.focus(); }
   }
 
-  root.append(input, preview, dayRow, conflict, dest, help, h('div', { cls: 'helm-modal-buttons' },
+  root.append(input, preview, dayRow, tagRow, conflict, dest, help, h('div', { cls: 'helm-modal-buttons' },
     h('span', { cls: 'helm-hint', text: 'Enter to add · Shift+Enter to add and keep capturing' }),
     h('span', { cls: 'helm-spacer' }),
     button('Cancel', { onClick: () => m.close() }),

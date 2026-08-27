@@ -699,3 +699,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-ghost { opacity: 0.55; }
 .helm-ghost:hover { opacity: 0.9; }
 .helm-chip.done { background: rgba(var(--color-green-rgb), 0.14); color: var(--color-green); }
+
+/* Quick tags in Capture */
+.helm-capture-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.helm-tag-toggle { height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); color: var(--text-accent); font-size: var(--font-ui-smaller); box-shadow: none; cursor: pointer; }
+.helm-tag-toggle:hover { border-color: var(--text-accent); }
+.helm-tag-toggle.is-active { background: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }

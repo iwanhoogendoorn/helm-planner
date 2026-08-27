@@ -422,6 +422,7 @@ export class HelmSettingTab extends PluginSettingTab {
     const writing = this.group(body, { icon: 'pencil', title: 'Writing', subtitle: 'How Helm writes into your notes.' });
     this.dropdown(writing.content, 'indentUnit', 'Indent for new subtasks', 'Match what your editor uses.', { '\t': 'Tab', '  ': 'Two spaces', '    ': 'Four spaces' });
     this.text(writing.content, 'followupTag', { name: 'Follow-up tag', desc: 'Put on tasks made with “Follow up…”, without the #.', placeholder: 'followup', fallback: 'followup' });
+    this.text(writing.content, 'captureTags', { name: 'Quick tags in Capture', desc: 'One-click toggles under the text, comma separated, without the #. Empty hides the row.', placeholder: 'meeting, followup, task' });
   }
 
   // ── drawings ──────────────────────────────────────────────────────────

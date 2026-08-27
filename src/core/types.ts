@@ -264,6 +264,8 @@ export interface HelmSettings {
   embedDrawings: boolean;
   /** Tag put on follow-up tasks (without #). */
   followupTag: string;
+  /** Tags offered as one-click toggles in Capture, comma separated, without the #. */
+  captureTags: string;
   /** Notes: where new ones go, and whether links are written into the target's note. */
   notesFolder: string;
   projectNotesInProjectFolder: boolean;
@@ -321,6 +323,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   projectDrawingsInProjectFolder: true,
   embedDrawings: true,
   followupTag: 'followup',
+  captureTags: 'meeting, followup, task',
   notesFolder: 'Notes',
   projectNotesInProjectFolder: true,
   linkNotes: true,

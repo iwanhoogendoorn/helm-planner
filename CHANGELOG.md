@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Capture: a *Tags* row of one-click toggles (`#meeting`, `#followup`,
+  `#task` by default — Settings → Planning → Writing → *Quick tags*). One
+  click puts the tag in front of the text, another removes it; typing the
+  tag yourself lights the chip up too.
 - New tasks straight from the calendar, at every scope: a *+* on each week
   column and month cell, a *New task* button in the week / month / quarter /
   year header (lands on today when the period holds it, else its first day),
