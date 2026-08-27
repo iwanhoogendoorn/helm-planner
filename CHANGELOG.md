@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 — 2026-08-27
 
 - Dashboard → *Habit tracker*: every habit over its whole life, one column
   per week, month, quarter or year (switch at the top right), each cell the
