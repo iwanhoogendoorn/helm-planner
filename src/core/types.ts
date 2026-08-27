@@ -156,6 +156,8 @@ export interface Habit {
   parts?: HabitPart[];
   /** Accent colour (one of HABIT_COLORS); unset → picked from the habit id. */
   color?: HabitColor;
+  /** The day the habit started; earlier days are not counted as missed. */
+  created?: IsoDate;
 }
 
 export type HabitColor = 'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'pink';

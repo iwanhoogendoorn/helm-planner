@@ -4,6 +4,7 @@ import { addDays, diffDays, startOfWeek } from '../core/dates';
 import { occursOn } from '../core/recurrence';
 
 export function habitDue(h: Habit, date: IsoDate): boolean {
+  if (h.created !== undefined && date < h.created) return false;
   return h.active && occursOn(h.schedule, date);
 }
 

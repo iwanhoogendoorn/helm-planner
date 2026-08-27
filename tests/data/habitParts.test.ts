@@ -102,3 +102,14 @@ describe('habit colour', () => {
     expect(renderHabitNote({ id: 'hab-x', title: 'X', schedule: 'every day', color: 'cyan', today: TODAY })).toContain('color: cyan');
   });
 });
+
+describe('a habit does not exist before its creation date', () => {
+  it('days before creation_date are off, not missed, so a new habit starts with a clean strip', async () => {
+    const h = parseHabit('x.md', MEDITATE.replace('grace_days: 0', 'grace_days: 0\ncreation_date: 2026-08-25'))!;
+    expect(h.created).toBe('2026-08-25');
+    const st = habitStats(h, [], TODAY, 1, 7);
+    expect(st.days.map((d) => d.state)).toEqual(['off', 'off', 'off', 'off', 'off', 'missed', 'pending']);
+    expect(st.rate7).toBe(0);
+    expect(st.scheduledThisWeek).toBe(2 * 6); // Tue 25 → Sun 30, two occurrences a day
+  });
+});

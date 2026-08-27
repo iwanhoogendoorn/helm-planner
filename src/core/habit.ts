@@ -47,6 +47,8 @@ export function parseHabit(path: string, content: string, fallbackId?: string): 
   const partsRaw = fm['parts'] ?? fm['part'];
   const parts = (Array.isArray(partsRaw) ? partsRaw : typeof partsRaw === 'string' ? partsRaw.replace(/^\[|\]$/g, '').split(',') : []).map((x) => String(x).trim().toLowerCase()).filter((x): x is HabitPart => (HABIT_PARTS as string[]).includes(x));
   if (parts.length > 0) habit.parts = [...new Set(parts)].sort((a, b) => HABIT_PARTS.indexOf(a) - HABIT_PARTS.indexOf(b));
+  const created = scalar(fm['creation_date']) ?? scalar(fm['created']) ?? scalar(fm['start']);
+  if (created && /^\d{4}-\d{2}-\d{2}/.test(created)) habit.created = created.slice(0, 10);
   const color = (scalar(fm['color']) ?? '').toLowerCase();
   if ((HABIT_COLORS as string[]).includes(color)) habit.color = color as HabitColor;
   const img = scalar(fm['icon_image']) ?? scalar(fm['image']);
