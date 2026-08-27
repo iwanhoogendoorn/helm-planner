@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-08-27
 
 - Habits can be done in parts of the day: pick Morning / Afternoon / Evening
   (several for a habit you do twice) in the habit form. Each part gets its
