@@ -592,7 +592,7 @@ describe('Drawings in the UI', () => {
     const btn = today.querySelector('.helm-day-actions .helm-drawings-btn')!;
     expect(btn.querySelector('.helm-badge')!.textContent).toBe('1');
     click(btn);
-    expect(Menu.last!.items.map((i) => i.title)).toEqual([expect.stringContaining('26, Wednesday, Aug, 2026 — sketch'), 'New drawing…', 'Link existing drawing…', 'Manage drawings…']);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual([expect.stringContaining('sketch'), 'New drawing…', 'Link existing drawing…', 'Manage drawings…']);
     const cal = render((r) => renderCalendar(ctx, r, { anchor: TODAY, scope: 'week', collapsed: new Map() } as CalendarState));
     expect(cal.querySelector('.helm-day-actions .helm-drawings-btn .helm-badge')).toBeNull();
     const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Call the plumber' && x.origin !== 'daily-mirror')!;
@@ -709,5 +709,23 @@ describe('habits by part of the day', () => {
     const form = Modal.last!.contentEl;
     const segs = [...form.querySelectorAll('.helm-seg')].filter((b) => ['Once a day', 'Morning', 'Afternoon', 'Evening'].includes(b.textContent ?? ''));
     expect(segs.filter((b) => b.classList.contains('is-active')).map((b) => b.textContent)).toEqual(['Morning', 'Evening']);
+  });
+});
+
+describe('New drawing / note dialog', () => {
+  it('shows the default location and a live path preview; a typed name and a picked folder go through', async () => {
+    const { ctx, vault } = await ctxFor();
+    const { newDrawing } = await import('../../src/ui/drawings');
+    newDrawing(ctx, { kind: 'period', key: '2026-W35', title: '2026-W35' });
+    const m = Modal.last!;
+    const [name, folder] = [...m.contentEl.querySelectorAll<HTMLInputElement>('input')];
+    expect(folder!.value).toBe('Excalidraw');
+    expect(m.contentEl.querySelector('.helm-path-preview')!.textContent).toBe('Excalidraw/2026-W35.excalidraw.md');
+    name!.value = 'map'; name!.dispatchEvent(new Event('input'));
+    folder!.value = '70 OBSIDIAN/70-02 Excalidraw'; folder!.dispatchEvent(new Event('input'));
+    expect(m.contentEl.querySelector('.helm-path-preview')!.textContent).toBe('70 OBSIDIAN/70-02 Excalidraw/map.excalidraw.md');
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Create'));
+    await flush(); await flush();
+    expect(await vault.read('70 OBSIDIAN/70-02 Excalidraw/map.excalidraw.md')).toContain('helm-period: 2026-W35');
   });
 });

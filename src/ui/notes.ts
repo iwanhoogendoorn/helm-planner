@@ -9,33 +9,19 @@ import type { DrawingTarget, Task } from '../core/types';
 import type { NoteRef } from '../core/noteRef';
 import { humanDate } from '../core/dates';
 import { button, h, icon, iconButton } from './dom';
+import { askNameAndLocation } from './fields';
 import type { UiContext } from './context';
 import { targetForTask } from './drawings';
 
 const when = (n: NoteRef, today: string): string => (n.mtime ? humanDate(new Date(n.mtime).toISOString().slice(0, 10), today) : '');
 
-function askName(ctx: UiContext, title: string, placeholder: string, onDone: (name: string | undefined) => void): void {
-  const m = new Modal(ctx.app);
-  m.titleEl.setText(title);
-  m.contentEl.addClass('helm-modal', 'helm-name-modal');
-  const input = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder } });
-  let accepted = false;
-  const accept = (): void => { accepted = true; m.close(); onDone(input.value.trim() || undefined); };
-  input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); accept(); } });
-  m.contentEl.append(
-    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Name' }), input, h('div', { cls: 'helm-hint', text: 'Leave empty to use the default name.' })),
-    h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button('Create', { primary: true, onClick: accept })),
-  );
-  const origClose = m.onClose.bind(m);
-  m.onClose = () => { origClose(); if (!accepted) onDone(undefined); };
-  m.open();
-  ctx.trackModal(m);
-  setTimeout(() => input.focus(), 0);
-}
-
 export function newNote(ctx: UiContext, target: DrawingTarget): void {
-  askName(ctx, `New note for ${target.title}`, target.kind === 'project' ? 'e.g. Decisions, Meeting 3 Sep' : 'e.g. research, notes from the call', (name) => {
-    void ctx.run('New note', async () => { const p = await ctx.mutations.createNote(target, { ...(name ? { name } : {}) }); await ctx.openFile(p); });
+  askNameAndLocation(ctx, {
+    title: `New note for ${target.title}`,
+    placeholder: target.kind === 'project' ? 'e.g. Decisions, Meeting 3 Sep' : 'e.g. research, notes from the call',
+    defaultFolder: ctx.mutations.defaultFolderFor(target, 'note'),
+    preview: (name, folder) => ctx.mutations.notePathFor(target, name, folder),
+    onDone: (r) => { if (!r) return; void ctx.run('New note', async () => { const p = await ctx.mutations.createNote(target, r); await ctx.openFile(p); }); },
   });
 }
 

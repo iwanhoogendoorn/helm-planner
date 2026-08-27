@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- New drawing / New note dialog: a Location field (folder picker, prefilled
+  with the default) and a live preview of the path that will be created.
+  Defaults: a task's drawing or note goes into its project's folder when it
+  has one; the general folder otherwise. A name you type is used as the file
+  name on its own — the task title is no longer prefixed — and default names
+  are cut to 60 characters.
+
 ## 1.2.0 — 2026-08-27
 
 - Habits can be done in parts of the day: pick Morning / Afternoon / Evening

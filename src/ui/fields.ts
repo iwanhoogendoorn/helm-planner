@@ -1,7 +1,7 @@
 /** Shared form fields: an effort dropdown and start/end/effort linking. */
 import { minutesToHuman, parseEffort } from '../core/dates';
 import { h } from './dom';
-import { AbstractInputSuggest, type App } from 'obsidian';
+import { AbstractInputSuggest, Modal, TFolder, type App } from 'obsidian';
 
 export const EFFORT_PRESETS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480];
 
@@ -126,4 +126,53 @@ export class WikilinkSuggest extends AbstractInputSuggest<string> {
 /** Attach `[[` completion to a text input. */
 export function wikilinkSuggest(ctx: { app: App; index: { noteTitles: () => string[] } }, input: HTMLInputElement): WikilinkSuggest {
   return new WikilinkSuggest(ctx.app, input, () => ctx.index.noteTitles());
+}
+
+/** Folder or note picker on a plain text input. */
+export class PathSuggest extends AbstractInputSuggest<string> {
+  constructor(app: App, private input: HTMLInputElement, private kind: 'folder' | 'note', private onPick: (v: string) => void) { super(app, input); }
+  private candidates(): string[] {
+    const vault = this.app.vault as unknown as { getAllLoadedFiles?: () => unknown[]; getMarkdownFiles: () => { path: string }[] };
+    if (this.kind === 'note') return vault.getMarkdownFiles().map((f) => f.path);
+    const loaded = vault.getAllLoadedFiles?.();
+    if (loaded) return loaded.filter((f): f is TFolder => f instanceof TFolder).map((f) => f.path).filter((p) => p !== '/' && p !== '');
+    const out = new Set<string>();
+    for (const f of vault.getMarkdownFiles()) { const parts = f.path.split('/'); for (let i = 1; i < parts.length; i++) out.add(parts.slice(0, i).join('/')); }
+    return [...out];
+  }
+  override getSuggestions(query: string): string[] {
+    const q = query.toLowerCase();
+    return this.candidates().filter((p) => p.toLowerCase().includes(q)).sort((a, b) => a.length - b.length || a.localeCompare(b)).slice(0, 30);
+  }
+  override renderSuggestion(value: string, el: HTMLElement): void { el.setText(value); }
+  override selectSuggestion(value: string): void { this.input.value = value; this.onPick(value); this.close(); }
+}
+
+/** Name + location dialog with a live preview of the resulting path. Resolves undefined on cancel. */
+export function askNameAndLocation(ctx: { app: App; trackModal: (m: { close: () => void; onClose?: () => void }) => void }, o: { title: string; placeholder: string; defaultFolder: string; preview: (name: string, folder: string) => string; onDone: (r: { name?: string; folder?: string } | undefined) => void }): void {
+  const m = new Modal(ctx.app);
+  m.titleEl.setText(o.title);
+  m.contentEl.addClass('helm-modal', 'helm-name-modal');
+  const name = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: o.placeholder } });
+  const folder = h('input', { cls: 'helm-input-wide helm-path-input', attr: { type: 'text', value: o.defaultFolder, placeholder: o.defaultFolder } });
+  const preview = h('div', { cls: 'helm-path-preview' });
+  const update = (): void => { preview.textContent = o.preview(name.value, folder.value); };
+  name.addEventListener('input', update);
+  folder.addEventListener('input', update);
+  new PathSuggest(ctx.app, folder, 'folder', () => update());
+  let accepted = false;
+  const accept = (): void => { accepted = true; m.close(); o.onDone({ ...(name.value.trim() ? { name: name.value.trim() } : {}), ...(folder.value.trim() && folder.value.trim() !== o.defaultFolder ? { folder: folder.value.trim() } : {}) }); };
+  for (const el of [name, folder]) el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); accept(); } });
+  m.contentEl.append(
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Name' }), name, h('div', { cls: 'helm-hint', text: 'Leave empty to name it after the item.' })),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Location' }), folder, h('div', { cls: 'helm-hint', text: 'Start typing to pick a folder.' })),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Will be created as' }), preview),
+    h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), h('button', { cls: 'helm-btn', text: 'Cancel', onClick: () => m.close() }), h('button', { cls: 'helm-btn mod-cta', text: 'Create', onClick: accept })),
+  );
+  const origClose = m.onClose.bind(m);
+  m.onClose = () => { origClose(); if (!accepted) o.onDone(undefined); };
+  update();
+  m.open();
+  ctx.trackModal(m);
+  setTimeout(() => name.focus(), 0);
 }

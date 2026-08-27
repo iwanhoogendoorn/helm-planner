@@ -840,15 +840,30 @@ export class Mutations {
     return true;
   }
 
-  /** Folder and default file name for a new drawing attached to a target. */
-  drawingPathFor(target: DrawingTarget, name?: string): string {
+  /** Where an attachment of a target goes by default: the project's folder for a project or a task in one, else the general folder. */
+  defaultFolderFor(target: DrawingTarget, kind: 'drawing' | 'note'): string {
     const s = this.settings;
-    let folder = s.drawingsFolder.trim() || this.d.excalidrawFolder?.() || 'Excalidraw';
-    if (target.kind === 'project' && s.projectDrawingsInProjectFolder) { const p = this.index.project(target.id); if (p) folder = this.index.projectFolderOf(p) || folder; }
-    folder = folder.replace(/\/+$/, '');
+    const general = kind === 'drawing' ? (s.drawingsFolder.trim() || this.d.excalidrawFolder?.() || 'Excalidraw') : (s.notesFolder.trim() || 'Notes');
+    const inProject = kind === 'drawing' ? s.projectDrawingsInProjectFolder : s.projectNotesInProjectFolder;
+    if (!inProject) return general.replace(/\/+$/, '');
+    let project: Project | undefined;
+    if (target.kind === 'project') project = this.index.project(target.id);
+    if (target.kind === 'task') { const t = this.index.task(target.key) ?? (target.id ? [...this.index.snapshot.tasks.values()].find((x) => x.id === target.id && x.origin !== 'daily-mirror') : undefined); const src = t?.mirrorOf ? this.index.task(t.mirrorOf) : t; if (src?.projectId) project = this.index.project(src.projectId); }
+    return (project ? this.index.projectFolderOf(project) || general : general).replace(/\/+$/, '');
+  }
+
+  /** The file stem: a name as given, else the target's own title (a task's text cut to 60 characters). */
+  defaultStemFor(target: DrawingTarget, name?: string): string {
+    if (name?.trim()) return this.safeName(name).slice(0, 120);
     const base = target.kind === 'date' ? formatDate(target.date, this.templateConfig().dailyTitleFormat) : target.kind === 'period' ? target.key : target.title;
-    const stem = name?.trim() ? (target.kind === 'project' ? name.trim() : `${base} — ${name.trim()}`) : base;
-    return `${folder ? folder + '/' : ''}${this.safeName(stem)}.excalidraw.md`;
+    const cut = base.length > 60 ? base.slice(0, 57).replace(/\s+\S*$/, '').trim() + '…' : base;
+    return this.safeName(cut);
+  }
+
+  /** Folder and file name for a new drawing attached to a target; `folder` overrides the default. */
+  drawingPathFor(target: DrawingTarget, name?: string, folder?: string): string {
+    const dir = (folder?.trim() || this.defaultFolderFor(target, 'drawing')).replace(/\/+$/, '');
+    return `${dir ? dir + '/' : ''}${this.defaultStemFor(target, name)}.excalidraw.md`;
   }
 
   private async uniquePath(path: string): Promise<string> {
@@ -858,10 +873,10 @@ export class Mutations {
   }
 
   /** Create a blank drawing for a target (through Excalidraw when present, else a minimal file) and embed it in the target's note. */
-  async createDrawing(target: DrawingTarget, opts: { name?: string } = {}): Promise<string> {
+  async createDrawing(target: DrawingTarget, opts: { name?: string; folder?: string } = {}): Promise<string> {
     let id: string | undefined;
     if (target.kind === 'task') id = await this.ensureId(target.key);
-    const path = await this.uniquePath(this.drawingPathFor(target, opts.name));
+    const path = await this.uniquePath(this.drawingPathFor(target, opts.name, opts.folder));
     const frontmatter: Record<string, string> = this.attachmentFrontmatter(target, id);
     const tplPath = this.settings.drawingTemplate.trim();
     let content: string | undefined;
@@ -973,14 +988,10 @@ export class Mutations {
 
   notesFor(target: DrawingTarget): NoteRef[] { return this.index.notesFor(target); }
 
-  /** Folder and file name for a new note attached to a target. */
-  notePathFor(target: DrawingTarget, name?: string): string {
-    const s = this.settings;
-    let folder = (s.notesFolder.trim() || 'Notes').replace(/\/+$/, '');
-    if (target.kind === 'project' && s.projectNotesInProjectFolder) { const p = this.index.project(target.id); if (p) folder = this.index.projectFolderOf(p) || folder; }
-    const base = target.kind === 'date' ? formatDate(target.date, this.templateConfig().dailyTitleFormat) : target.kind === 'period' ? target.key : target.title;
-    const stem = name?.trim() ? (target.kind === 'project' ? name.trim() : `${base} — ${name.trim()}`) : `${base} — note`;
-    return `${folder ? folder + '/' : ''}${this.safeName(stem).slice(0, 120)}.md`;
+  /** Folder and file name for a new note attached to a target; `folder` overrides the default. */
+  notePathFor(target: DrawingTarget, name?: string, folder?: string): string {
+    const dir = (folder?.trim() || this.defaultFolderFor(target, 'note')).replace(/\/+$/, '');
+    return `${dir ? dir + '/' : ''}${this.defaultStemFor(target, name)}.md`;
   }
 
   private async uniqueNotePath(path: string): Promise<string> {
@@ -997,10 +1008,10 @@ export class Mutations {
   }
 
   /** Create a note for a target, with the attachment key in its frontmatter, and link it from the target's note. */
-  async createNote(target: DrawingTarget, opts: { name?: string } = {}): Promise<string> {
+  async createNote(target: DrawingTarget, opts: { name?: string; folder?: string } = {}): Promise<string> {
     let id: string | undefined;
     if (target.kind === 'task') { id = await this.ensureId(target.key); target = { ...target, key: this.index.task(id)?.key ?? id, id }; }
-    const path = await this.uniqueNotePath(this.notePathFor(target, opts.name));
+    const path = await this.uniqueNotePath(this.notePathFor(target, opts.name, opts.folder));
     const fm = this.attachmentFrontmatter(target, id);
     const content = renderNewNote({ title: noteTitle(path), target: fm, forLabel: await this.forLabel(target), today: this.today });
     await this.d.vault.write(path, content);

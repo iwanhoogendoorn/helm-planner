@@ -36,20 +36,20 @@ describe('creating, linking, unlinking and deleting notes', () => {
   it('creates a note with the key and a For line, lists it under Notes in the target note; project notes sit in the project folder', async () => {
     const { m, vault, index } = await setup();
     const p = await m.createNote({ kind: 'period', key: '2026-W35', title: '2026-W35' }, { name: 'retro' });
-    expect(p).toBe('Notes/2026-W35 — retro.md');
+    expect(p).toBe('Notes/retro.md');
     const c = await vault.read(p);
-    expect(c).toMatch(/^---\nhelm-period: 2026-W35\nrelated: "\[\[2026-W35\]\]"\ncreated: 2026-08-26\n---\n\n# 2026-W35 — retro\n\n> For: \[\[2026-W35\]\]/);
-    expect(await vault.read('Weekly Notes/2026-W35.md')).toMatch(/## Notes\n\n- \[\[2026-W35 — retro\]\]/);
-    expect(index.notesFor({ kind: 'period', key: '2026-W35', title: '' }).map((n) => n.title)).toEqual(['2026-W35 — retro']);
+    expect(c).toMatch(/^---\nhelm-period: 2026-W35\nrelated: "\[\[2026-W35\]\]"\ncreated: 2026-08-26\n---\n\n# retro\n\n> For: \[\[2026-W35\]\]/);
+    expect(await vault.read('Weekly Notes/2026-W35.md')).toMatch(/## Notes\n\n- \[\[retro\]\]/);
+    expect(index.notesFor({ kind: 'period', key: '2026-W35', title: '' }).map((n) => n.title)).toEqual(['retro']);
     const q = await m.createNote({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Decisions' });
     expect(q).toBe('02 PROJECTS/Kitchen Remodel/Decisions.md');
     expect(await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')).toContain('- [[Decisions]]');
     const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId !== undefined && x.status !== 'done')!;
     const n = await m.createNote({ kind: 'task', key: t.key, title: t.text });
-    expect(n).toBe(`Notes/${t.text} — note.md`);
+    expect(n).toBe(`${index.projectFolderOf(index.project(t.projectId!)!)}/${t.text}.md`); // a project task's note lives with the project
     expect(await vault.read(n)).toMatch(/helm-task: tsk-\w+/);
     const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === t.text && x.origin === 'project')!;
-    expect(index.notesFor({ kind: 'task', key: t2.key, id: t2.id, title: '' }).map((x) => x.title)).toEqual([`${t.text} — note`]);
+    expect(index.notesFor({ kind: 'task', key: t2.key, id: t2.id, title: '' }).map((x) => x.title)).toEqual([`${t.text}`]);
   });
   it('links an existing note (creating frontmatter when missing), unlinks it, and deletes with link cleanup', async () => {
     const { m, vault, index } = await setup({ '10 PERSONAL/Reading list.md': '# Reading list\n\n- a book\n' });

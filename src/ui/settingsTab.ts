@@ -8,7 +8,8 @@
  * Reusing that name for our section nav made Obsidian hoist it into the
  * sidebar on the first open after startup — hence `sectionNavEl`.
  */
-import { AbstractInputSuggest, PluginSettingTab, Setting, setIcon, TFile, TFolder, type App, type Plugin, type TextComponent } from 'obsidian';
+import { PluginSettingTab, Setting, setIcon, TFile, type App, type Plugin, type TextComponent } from 'obsidian';
+import { PathSuggest } from './fields';
 import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
 import type { PeriodKind } from '../core/periods';
 
@@ -43,26 +44,6 @@ export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
   { id: 'view', label: 'View', icon: 'layout-dashboard' },
   { id: 'about', label: 'About', icon: 'info' },
 ];
-
-/** Folder or note picker on a plain text input. */
-class PathSuggest extends AbstractInputSuggest<string> {
-  constructor(app: App, private input: HTMLInputElement, private kind: 'folder' | 'note', private onPick: (v: string) => void) { super(app, input); }
-  private candidates(): string[] {
-    const vault = this.app.vault as unknown as { getAllLoadedFiles?: () => unknown[]; getMarkdownFiles: () => { path: string }[] };
-    if (this.kind === 'note') return vault.getMarkdownFiles().map((f) => f.path);
-    const loaded = vault.getAllLoadedFiles?.();
-    if (loaded) return loaded.filter((f): f is TFolder => f instanceof TFolder).map((f) => f.path).filter((p) => p !== '/' && p !== '');
-    const out = new Set<string>();
-    for (const f of vault.getMarkdownFiles()) { const parts = f.path.split('/'); for (let i = 1; i < parts.length; i++) out.add(parts.slice(0, i).join('/')); }
-    return [...out];
-  }
-  override getSuggestions(query: string): string[] {
-    const q = query.toLowerCase();
-    return this.candidates().filter((p) => p.toLowerCase().includes(q)).sort((a, b) => a.length - b.length || a.localeCompare(b)).slice(0, 30);
-  }
-  override renderSuggestion(value: string, el: HTMLElement): void { el.setText(value); }
-  override selectSuggestion(value: string): void { this.input.value = value; this.onPick(value); this.close(); }
-}
 
 export class HelmSettingTab extends PluginSettingTab {
   private active = 'folders';

@@ -571,3 +571,5 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-task-notes { position: relative; }
 .helm-task-notes .helm-badge { position: absolute; top: -4px; right: -6px; }
 .helm-notes-btn { position: relative; }
+
+.helm-path-preview { font-family: var(--font-monospace); font-size: var(--font-ui-smaller); color: var(--text-muted); word-break: break-all; padding: 6px 8px; background: var(--background-secondary); border-radius: var(--radius-s); }

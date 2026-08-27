@@ -37,12 +37,12 @@ describe('creating drawings', () => {
   it('names and places a drawing by target, writes helm-* frontmatter, embeds it in the note, and the index sees it', async () => {
     const { m, vault, index } = await setup();
     const p = await m.createDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, { name: 'map' });
-    expect(p).toBe('Excalidraw/2026-W35 — map.excalidraw.md');
+    expect(p).toBe('Excalidraw/map.excalidraw.md');
     const c = await vault.read(p);
     expect(c).toContain('helm-period: 2026-W35');
     expect(c).toContain('excalidraw-plugin: parsed');
-    expect(await vault.read('Weekly Notes/2026-W35.md')).toMatch(/## Diagrams\n\n!\[\[2026-W35 — map\.excalidraw\]\]/);
-    expect(index.drawingsFor({ kind: 'period', key: '2026-W35', title: '' }).map((d) => d.title)).toEqual(['2026-W35 — map']);
+    expect(await vault.read('Weekly Notes/2026-W35.md')).toMatch(/## Diagrams\n\n!\[\[map\.excalidraw\]\]/);
+    expect(index.drawingsFor({ kind: 'period', key: '2026-W35', title: '' }).map((d) => d.title)).toEqual(['map']);
     // Project drawings go in the project folder; a second one with the same name gets a number.
     const q1 = await m.createDrawing({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Architecture' });
     const q2 = await m.createDrawing({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Architecture' });
@@ -86,7 +86,7 @@ describe('deleting and linking drawings', () => {
   it('deleting a drawing trashes it and removes its embed (and an emptied Diagrams heading) from the note', async () => {
     const { m, vault, index } = await setup();
     const p = await m.createDrawing({ kind: 'period', key: '2026-W35', title: '2026-W35' }, { name: 'map' });
-    expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('![[2026-W35 — map.excalidraw]]');
+    expect(await vault.read('Weekly Notes/2026-W35.md')).toContain('![[map.excalidraw]]');
     await m.deleteDrawing(p);
     expect(vault.trashed).toContain(p);
     const week = await vault.read('Weekly Notes/2026-W35.md');
@@ -132,7 +132,34 @@ describe('deleting and linking drawings', () => {
     expect(await vault.read(p)).not.toContain('helm-period');
     await m.linkDrawing({ kind: 'period', key: '2026-08', title: '2026-08' }, p);
     expect(await vault.read(p)).toContain('helm-period: 2026-08');
-    expect(await vault.read('Monthly Notes/2026-08.md')).toContain('![[2026-W35 — x.excalidraw]]');
+    expect(await vault.read('Monthly Notes/2026-08.md')).toContain('![[x.excalidraw]]');
   });
 });
 
+
+describe('where attachments go and what they are called', () => {
+  it('task in a project → project folder; loose task → general folder; a given name stands alone; long titles are cut; folder override wins', async () => {
+    const { m, index, vault } = await setup({ '01 INBOX/Inbox.md': '# Inbox\n\n- [ ] Create guidance for music studies for Zaara and me — 2026-2027 music practice structure (Iwan & Zaara)\n- [ ] Pay invoice\n' });
+    const pt = [...index.snapshot.tasks.values()].find((t) => t.origin === 'project' && t.projectId === 'prj-kitchen' && t.status !== 'done')!;
+    const project = { kind: 'task' as const, key: pt.key, title: pt.text };
+    expect(m.defaultFolderFor(project, 'drawing')).toBe('02 PROJECTS/Kitchen Remodel');
+    expect(m.defaultFolderFor(project, 'note')).toBe('02 PROJECTS/Kitchen Remodel');
+    expect(m.drawingPathFor(project, 'Layout')).toBe('02 PROJECTS/Kitchen Remodel/Layout.excalidraw.md');
+    const loose = [...index.snapshot.tasks.values()].find((t) => t.text.startsWith('Create guidance'))!;
+    const lt = { kind: 'task' as const, key: loose.key, title: loose.text };
+    expect(m.defaultFolderFor(lt, 'drawing')).toBe('Excalidraw');
+    expect(m.defaultFolderFor(lt, 'note')).toBe('Notes');
+    const dflt = m.drawingPathFor(lt);
+    expect(dflt).toMatch(/^Excalidraw\/Create guidance for music studies for .*….excalidraw\.md$/);
+    expect(dflt.replace(/^Excalidraw\//, '').replace(/\.excalidraw\.md$/, '').length).toBeLessThanOrEqual(60);
+    expect(m.drawingPathFor(lt, 'Practice structure')).toBe('Excalidraw/Practice structure.excalidraw.md');
+    expect(m.notePathFor(lt, 'Practice structure', '81 AI/Music')).toBe('81 AI/Music/Practice structure.md');
+    expect(m.drawingPathFor({ kind: 'date', date: TODAY, title: TODAY })).toBe('Excalidraw/26, Wednesday, Aug, 2026.excalidraw.md');
+    expect(m.drawingPathFor({ kind: 'period', key: '2026-W35', title: '2026-W35' }, 'map')).toBe('Excalidraw/map.excalidraw.md');
+    const p = await m.createDrawing(lt, { name: 'Practice structure', folder: '81 AI/Music' });
+    expect(p).toBe('81 AI/Music/Practice structure.excalidraw.md');
+    expect(await vault.read(p)).toMatch(/helm-task: tsk-\w+/);
+    const n = await m.createNote(project, { name: 'Decisions' });
+    expect(n).toBe('02 PROJECTS/Kitchen Remodel/Decisions.md');
+  });
+});
