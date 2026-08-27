@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.1 — 2026-08-27
 
 - Dashboard line charts: the last date label no longer overprints its
   neighbour; a regular label that would collide with it is dropped instead.
