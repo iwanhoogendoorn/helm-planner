@@ -6,7 +6,10 @@
   menus as tasks, days and projects — from a habit card's right-click menu
   and the habit form. Attachments carry `helm-habit: hab-…`, `related` links
   back to the habit note, and the habit note lists them under *Notes* /
-  *Diagrams*; the card shows small count pills that open them.
+  *Diagrams*; the card shows small count pills that open them. The New habit
+  form takes them too: queue *New note… / Link note… / New drawing… / Link
+  drawing…* while filling it in and they are created or linked the moment the
+  habit is.
 - Settings → Setup: a self-repairing checklist — companion plugins (Daily
   Notes, Tasks, Periodic Notes, Templater, Excalidraw: enabled / disabled /
   not installed, with Enable or Install), every folder and note Helm uses

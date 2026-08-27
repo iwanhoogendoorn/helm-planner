@@ -775,13 +775,14 @@ export class Mutations {
     });
   }
 
-  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor }): Promise<void> {
+  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor }): Promise<string> {
     const folder = this.settings.habitsFolder.replace(/\/+$/, '');
     const title = spec.title.trim().replace(/[\\/:*?"<>|]/g, '-');
     const path = `${folder ? folder + '/' : ''}${title}.md`;
     if (await this.d.vault.exists(path)) throw new Error(`A note already exists at ${path}`);
     const id = uniqueId('hab', (x) => this.index.snapshot.habits.has(x), this.d.rng);
     await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}), ...(spec.iconImage ? { iconImage: spec.iconImage } : {}) , ...(spec.parts && spec.parts.length ? { parts: spec.parts } : {}), ...(spec.color ? { color: spec.color } : {}) }));
+    return id;
   }
 
   /** Store an uploaded icon next to the habit notes: `<habitsFolder>/icons/<name>.png`. Returns the vault path. */

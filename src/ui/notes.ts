@@ -35,13 +35,18 @@ class NotePicker extends FuzzySuggestModal<{ path: string; title: string }> {
   onChooseItem(n: { path: string; title: string }): void { this.onPick(n); }
 }
 
-export function linkExistingNote(ctx: UiContext, target: DrawingTarget): void {
-  const attached = new Set(ctx.index.notesFor(target).map((n) => n.path));
-  const items = ctx.index.linkableNotes().filter((n) => !attached.has(n.path));
+/** Choose a linkable note that is not in `exclude`. */
+export function pickNote(ctx: UiContext, exclude: Set<string>, onPick: (n: { path: string; title: string }) => void): void {
+  const items = ctx.index.linkableNotes().filter((n) => !exclude.has(n.path));
   if (items.length === 0) { ctx.notify('No notes left to link.'); return; }
-  const m = new NotePicker(ctx, items, (n) => void ctx.run('Link note', async () => { await ctx.mutations.linkNote(target, n.path); ctx.notify(`Linked “${n.title}” to ${target.title}.`); }));
+  const m = new NotePicker(ctx, items, onPick);
   m.open();
   ctx.trackModal(m);
+}
+
+export function linkExistingNote(ctx: UiContext, target: DrawingTarget): void {
+  const attached = new Set(ctx.index.notesFor(target).map((n) => n.path));
+  pickNote(ctx, attached, (n) => void ctx.run('Link note', async () => { await ctx.mutations.linkNote(target, n.path); ctx.notify(`Linked “${n.title}” to ${target.title}.`); }));
 }
 
 export function addNoteItems(menu: Menu, ctx: UiContext, target: DrawingTarget): void {

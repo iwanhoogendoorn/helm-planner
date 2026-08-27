@@ -530,6 +530,46 @@ describe('Habit form modal', () => {
     expect(note).toContain('icon: 🇪🇸');
   });
 
+  it('queues notes and drawings on a new habit and creates / links them once the habit exists', async () => {
+    const { ctx, vault, index } = await ctxFor();
+    await vault.write('10 PERSONAL/Reading list.md', '# Reading list\n');
+    index.update('10 PERSONAL/Reading list.md', await vault.read('10 PERSONAL/Reading list.md'));
+    openHabitForm(ctx);
+    const form = Modal.last!;
+    const root = form.contentEl;
+    const nameInput = root.querySelector<HTMLInputElement>('input[type="text"]')!;
+    nameInput.value = 'Read daily'; nameInput.dispatchEvent(new Event('input'));
+    expect(texts(root, '.helm-pending-actions button')).toEqual(['New note…', 'Link note…', 'New drawing…', 'Link drawing…']);
+    // Link an existing note: the picker lists the vault's linkable notes; choosing one queues it.
+    click([...root.querySelectorAll('.helm-pending-actions button')].find((b) => b.textContent?.includes('Link note')));
+    const picker = Modal.last! as unknown as { getItems: () => { path: string; title: string }[]; onChooseItem: (n: { path: string; title: string }) => void };
+    picker.onChooseItem(picker.getItems().find((n) => n.title === 'Reading list')!);
+    // A new drawing: the name dialog previews the path with the habit's name; accepting queues it.
+    click([...root.querySelectorAll('.helm-pending-actions button')].find((b) => b.textContent?.includes('New drawing')));
+    const dlg = Modal.last!;
+    expect(dlg.contentEl.querySelector('.helm-path-preview')!.textContent).toBe('Excalidraw/Read daily.excalidraw.md');
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Create'));
+    expect(texts(root, '.helm-pending')).toEqual(['Reading list×', 'New drawing: Read daily×']);
+    // Removing a queued item, then re-adding it, keeps the rest.
+    click(root.querySelectorAll('.helm-pending-remove')[0]);
+    expect(texts(root, '.helm-pending')).toEqual(['New drawing: Read daily×']);
+    click([...root.querySelectorAll('.helm-pending-actions button')].find((b) => b.textContent?.includes('Link note')));
+    const picker2 = Modal.last! as unknown as typeof picker;
+    picker2.onChooseItem(picker2.getItems().find((n) => n.title === 'Reading list')!);
+    click([...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Create habit')));
+    await flush(); await flush(); await flush();
+    const hb = [...index.snapshot.habits.values()].find((x) => x.title === 'Read daily')!;
+    expect(hb).toBeTruthy();
+    const target = { kind: 'habit' as const, id: hb.id, title: hb.title };
+    expect(index.notesFor(target).map((n) => n.title)).toEqual(['Reading list']);
+    expect(index.drawingsFor(target).map((d) => d.title)).toEqual(['Read daily']);
+    expect(await vault.read('10 PERSONAL/Reading list.md')).toMatch(new RegExp(`helm-habit: ${hb.id}\\nrelated: "\\[\\[Read daily\\]\\]"`));
+    expect(await vault.read('Excalidraw/Read daily.excalidraw.md')).toContain(`helm-habit: ${hb.id}`);
+    const note = await vault.read('02 PROJECTS/Habits/Read daily.md');
+    expect(note).toContain('- [[Reading list]]');
+    expect(note).toContain('![[Read daily.excalidraw]]');
+  });
+
   it('stores an uploaded PNG under the habits icons folder and links it from the note', async () => {
     const { ctx, vault, index } = await ctxFor();
     openHabitForm(ctx);

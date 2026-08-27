@@ -42,13 +42,18 @@ class DrawingPicker extends FuzzySuggestModal<Drawing> {
   onChooseItem(d: Drawing): void { this.onPick(d); }
 }
 
-export function linkExisting(ctx: UiContext, target: DrawingTarget): void {
-  const attached = new Set(ctx.index.drawingsFor(target).map((d) => d.path));
-  const items = ctx.index.allDrawings().filter((d) => !attached.has(d.path) && d.kind === 'excalidraw');
+/** Choose an Excalidraw drawing that is not in `exclude`. */
+export function pickDrawing(ctx: UiContext, exclude: Set<string>, onPick: (d: Drawing) => void): void {
+  const items = ctx.index.allDrawings().filter((d) => !exclude.has(d.path) && d.kind === 'excalidraw');
   if (items.length === 0) { ctx.notify('Every drawing in the vault is already attached here.'); return; }
-  const m = new DrawingPicker(ctx, items, (d) => void ctx.run('Link drawing', async () => { await ctx.mutations.linkDrawing(target, d.path); ctx.notify(`Linked “${d.title}” to ${target.title}.`); }));
+  const m = new DrawingPicker(ctx, items, onPick);
   m.open();
   ctx.trackModal(m);
+}
+
+export function linkExisting(ctx: UiContext, target: DrawingTarget): void {
+  const attached = new Set(ctx.index.drawingsFor(target).map((d) => d.path));
+  pickDrawing(ctx, attached, (d) => void ctx.run('Link drawing', async () => { await ctx.mutations.linkDrawing(target, d.path); ctx.notify(`Linked “${d.title}” to ${target.title}.`); }));
 }
 
 /** Fill a menu with the drawings of a target and the ways to add one. */

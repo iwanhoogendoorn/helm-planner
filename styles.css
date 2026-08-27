@@ -647,3 +647,11 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-habit-attach .helm-task-notes, .helm-habit-attach .helm-task-drawings { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 6px 0 4px; border-radius: 10px; background: rgba(var(--hc-rgb), 0.15); color: var(--hc); border: none; box-shadow: none; }
 .helm-habit-attach svg { width: 12px; height: 12px; }
 .helm-habit-attach .helm-badge { position: static; min-width: 0; height: auto; padding: 0; margin: 0; background: transparent; color: inherit; font-size: 11px; font-weight: 600; }
+
+.helm-pending-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.helm-pending-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.helm-pending { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 8px; border-radius: 13px; background: var(--background-modifier-hover); font-size: var(--font-ui-smaller); }
+.helm-pending-icon { display: inline-flex; color: var(--text-muted); }
+.helm-pending-icon svg { width: 13px; height: 13px; }
+.helm-pending-remove { width: 18px; height: 18px; padding: 0; border: none; border-radius: 50%; background: transparent; box-shadow: none; color: var(--text-muted); line-height: 1; cursor: pointer; }
+.helm-pending-remove:hover { background: var(--background-modifier-border); color: var(--text-normal); }

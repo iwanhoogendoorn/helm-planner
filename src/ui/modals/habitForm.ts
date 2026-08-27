@@ -1,9 +1,10 @@
 /** New / edit habit — click, don't type: emoji grid or PNG icon, schedule presets, weekday toggles. */
-import { Modal } from 'obsidian';
+import { Modal, setIcon } from 'obsidian';
 import { HABIT_COLORS, HABIT_COLOR_HEX, HABIT_PARTS, type Habit, type HabitColor, type HabitPart } from '../../core/types';
 import { habitColor } from '../../core/habit';
-import { drawingsSection, targetForHabit } from '../drawings';
-import { notesSection } from '../notes';
+import { drawingsSection, pickDrawing, targetForHabit } from '../drawings';
+import { notesSection, pickNote } from '../notes';
+import { askNameAndLocation } from '../fields';
 import { formatRecurrence, parseRecurrence } from '../../core/recurrence';
 import { WEEKDAY_SHORT } from '../../core/dates';
 import { button, h } from '../dom';
@@ -130,6 +131,50 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
   drawParts();
 
   // ── Target and grace ─────────────────────────────────────────────────
+  // New habit: attachments chosen now, created / linked right after the habit note exists.
+  type Pending = { kind: 'note' | 'drawing'; mode: 'new' | 'link'; label: string; name?: string; folder?: string; path?: string };
+  const pending: Pending[] = [];
+  const pendingList = h('div', { cls: 'helm-pending-list' });
+  const provisional = (): { kind: 'habit'; id: string; title: string } => ({ kind: 'habit', id: 'hab-new', title: title.value.trim() || 'New habit' });
+  const drawPending = (): void => {
+    pendingList.replaceChildren(...pending.map((x, i) => {
+      const chip = h('span', { cls: ['helm-pending', `is-${x.kind}`] });
+      const ic = h('span', { cls: 'helm-pending-icon' }); setIcon(ic, x.kind === 'note' ? 'sticky-note' : 'pen-tool');
+      chip.append(ic, h('span', { text: x.label }), h('button', { cls: 'helm-pending-remove', title: 'Remove', text: '×', onClick: () => { pending.splice(i, 1); drawPending(); } }));
+      return chip;
+    }));
+    pendingList.style.display = pending.length ? '' : 'none';
+  };
+  const queueNew = (kind: 'note' | 'drawing'): void => {
+    const t = provisional();
+    askNameAndLocation(ctx, {
+      title: `New ${kind} for ${t.title}`,
+      placeholder: kind === 'note' ? 'e.g. why this matters, routine' : 'e.g. routine, mind map',
+      defaultFolder: ctx.mutations.defaultFolderFor(t, kind),
+      preview: (name, folder) => (kind === 'note' ? ctx.mutations.notePathFor(t, name, folder) : ctx.mutations.drawingPathFor(t, name, folder)),
+      onDone: (r) => { if (!r) return; pending.push({ kind, mode: 'new', label: `New ${kind}: ${r.name ?? t.title}`, ...r }); drawPending(); },
+    });
+  };
+  const queueLink = (kind: 'note' | 'drawing'): void => {
+    const taken = new Set(pending.filter((x) => x.mode === 'link').map((x) => x.path!));
+    if (kind === 'note') pickNote(ctx, taken, (n) => { pending.push({ kind, mode: 'link', label: n.title, path: n.path }); drawPending(); });
+    else pickDrawing(ctx, taken, (d) => { pending.push({ kind, mode: 'link', label: d.title, path: d.path }); drawPending(); });
+  };
+  const pendingRow = h('div', { cls: 'helm-pending-actions' },
+    button('New note…', { icon: 'file-plus', onClick: () => queueNew('note') }),
+    button('Link note…', { icon: 'link', onClick: () => queueLink('note') }),
+    button('New drawing…', { icon: 'pen-tool', onClick: () => queueNew('drawing') }),
+    button('Link drawing…', { icon: 'link', onClick: () => queueLink('drawing') }),
+  );
+  drawPending();
+  const applyPending = async (id: string, name: string): Promise<void> => {
+    const t = targetForHabit({ id, title: name });
+    for (const x of pending) {
+      if (x.kind === 'note') await (x.mode === 'new' ? ctx.mutations.createNote(t, { ...(x.name ? { name: x.name } : {}), ...(x.folder ? { folder: x.folder } : {}) }) : ctx.mutations.linkNote(t, x.path!));
+      else await (x.mode === 'new' ? ctx.mutations.createDrawing(t, { ...(x.name ? { name: x.name } : {}), ...(x.folder ? { folder: x.folder } : {}) }) : ctx.mutations.linkDrawing(t, x.path!));
+    }
+  };
+
   let target: number | undefined = existing?.targetPerWeek;
   let grace = existing?.graceDays ?? 0;
   let active = existing ? existing.active : true;
@@ -153,7 +198,7 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
     field('Part of the day', 'pick several for a habit you do more than once a day', partsRow, partsHint),
     field('Colour', 'for the board, the week cells and the charts', colorRow),
     ...(existing ? [field('Notes', 'attached to this habit', notesSection(ctx, targetForHabit(existing))), field('Drawings', 'attached to this habit', drawingsSection(ctx, targetForHabit(existing)))]
-      : [field('Notes & drawings', '', h('div', { cls: 'helm-hint helm-attach-later', text: 'Available once the habit is saved — right-click its card, or open Edit…' }))]),
+      : [field('Notes & drawings', 'created or linked as soon as the habit is', pendingRow, pendingList)]),
     h('div', { cls: 'helm-grid2' },
       field('Target per week', 'counts against the streak', targetRow),
       field('Grace', 'misses tolerated before a streak breaks', graceRow),
@@ -174,7 +219,10 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       const schedule = formatRecurrence(r);
       const partList = HABIT_PARTS.filter((pt) => parts.has(pt));
       if (existing) await ctx.mutations.setHabitFields(existing.id, { title: name, schedule, active, graceDays: grace, targetPerWeek: target ?? null, icon: emoji, iconImage: image ?? null, parts: partList, color: color ?? null });
-      else await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}), ...(color ? { color } : {}) });
+      else {
+        const id = await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}), ...(color ? { color } : {}) });
+        await applyPending(id, name);
+      }
     });
   }
   m.open();
