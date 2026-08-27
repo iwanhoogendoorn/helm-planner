@@ -286,10 +286,10 @@ export class Mutations {
     return uniqueId('tsk', (id) => this.index.snapshot.tasks.has(id), this.d.rng);
   }
 
-  /** Make sure a source task carries a 🆔; returns the (possibly new) key. */
+  /** Make sure a source task carries a 🆔; returns the id (never the index key, which may carry a `~n` suffix). */
   async ensureId(key: string): Promise<string> {
     const t = this.fresh(key);
-    if (t.id) return key;
+    if (t.id) return t.id;
     const id = this.newTaskId();
     await this.editFile(t.path, (lines) => {
       const tl = this.lineOf(lines, t);
@@ -372,7 +372,7 @@ export class Mutations {
       return;
     }
     // Project or note task: ⏳ on the source + a mirror line in the day's note.
-    if (date !== undefined) { const k = await this.ensureId(key); t = this.fresh(k); }
+    if (date !== undefined) { const id = await this.ensureId(key); t = this.fresh(this.index.task(id)?.key ?? key); }
     await this.editFile(t.path, (lines) => {
       const tl = this.lineOf(lines, t);
       if (date === undefined) delete tl.scheduled; else tl.scheduled = date;
@@ -511,7 +511,7 @@ export class Mutations {
       const p = this.index.project(spec.projectId);
       if (!p) throw new Error('Project not found');
       let id: string | undefined;
-      if (spec.date) { id = this.newTaskId(); fields.id = id; fields.scheduled = spec.date; }
+      if (spec.date) { id = fields.id ?? this.newTaskId(); fields.id = id; fields.scheduled = spec.date; }
       const line = newTaskLine(spec.text, fields);
       await this.editFile(p.path, (lines, doc) => {
         const at = this.projectInsertPoint(lines, doc, p, spec.phaseId);
@@ -858,21 +858,30 @@ export class Mutations {
    * `⛔ <original id>` (blocked until the original is done), in the original's project and
    * phase when it has one, else in the day's note. Optionally ticks the original now.
    */
-  async followUp(key: string, opts: { text?: string; date: IsoDate; part?: DayPart; markOriginalDone?: boolean; fields?: Partial<TaskLine> }): Promise<{ id: string; date: IsoDate }> {
+  async followUp(key: string, opts: { text?: string; date: IsoDate; part?: DayPart; markOriginalDone?: boolean; fields?: Partial<TaskLine> }): Promise<{ id: string; date: IsoDate; followUpId: string }> {
     const id = await this.ensureId(key);
     const orig = this.fresh(this.index.task(id)?.key ?? key);
     const src = orig.mirrorOf ? this.fresh(orig.mirrorOf) : orig;
     const tag = (this.settings.followupTag.trim() || 'followup').replace(/^#/, '');
     let text = (opts.text?.trim() || src.text).trim();
     if (!new RegExp(`(^|\\s)#${tag}(\\s|$)`).test(text)) text = `${text} #${tag}`;
-    const fields: Partial<TaskLine> = { ...(opts.fields ?? {}), blockedBy: [...new Set([...(opts.fields?.blockedBy ?? []), id])], priority: opts.fields?.priority ?? src.priority };
+    const followUpId = this.newTaskId();
+    const fields: Partial<TaskLine> = { ...(opts.fields ?? {}), id: followUpId, blockedBy: [...new Set([...(opts.fields?.blockedBy ?? []), id])], priority: opts.fields?.priority ?? src.priority };
     if (src.projectId && src.origin === 'project') await this.addTask({ text, projectId: src.projectId, ...(src.phaseId ? { phaseId: src.phaseId } : {}), date: opts.date, ...(opts.part ? { part: opts.part } : {}), fields });
     else {
       const part = opts.part ?? (fields.time ? undefined : src.part && src.part !== 'anytime' ? src.part : undefined);
       await this.addTask({ text, date: opts.date, ...(part ? { part } : {}), fields });
     }
+    // Whatever was attached to the original travels along: the same notes and drawings, now tied to both tasks.
+    const from: DrawingTarget = { kind: 'task', key: src.key, id, title: src.text };
+    const created = [...this.index.snapshot.tasks.values()].find((t) => t.id === followUpId && t.origin !== 'daily-mirror');
+    if (created) {
+      const to: DrawingTarget = { kind: 'task', key: created.key, id: followUpId, title: created.text };
+      for (const d of this.index.drawingsFor(from)) if (d.kind === 'excalidraw') await this.linkDrawing(to, d.path);
+      for (const n of this.index.notesFor(from)) await this.linkNote(to, n.path);
+    }
     if (opts.markOriginalDone) await this.setStatus(src.key, 'done');
-    return { id, date: opts.date };
+    return { id, date: opts.date, followUpId };
   }
 
   /* ── Drawings ──────────────────────────────────────────────────────── */

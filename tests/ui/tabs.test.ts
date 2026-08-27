@@ -1023,7 +1023,7 @@ describe('Follow up from the UI', () => {
     click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent?.includes('Create follow-up')));
     await flush(); await flush(); await flush();
     const line = (await vault.read(dailyPath('2026-08-27'))).split('\n').find((l) => l.includes('Next step'))!;
-    expect(line).toMatch(/^- \[ \] 14:00 - 14:45: Next step #followup ⛔ tsk-\w+ ⏱️ 45m/);
+    expect(line).toMatch(/^- \[ \] 14:00 - 14:45: Next step #followup 🆔 tsk-\w+ ⛔ tsk-\w+ ⏱️ 45m/);
     const fu = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Next step') && x.origin === 'daily')!;
     expect(fu.part).toBe('afternoon'); // from the time
     const row = taskRow(ctx, [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Next step') && x.origin === 'daily')!);

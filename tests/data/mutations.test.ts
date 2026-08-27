@@ -505,7 +505,7 @@ describe('follow up', () => {
     const r = await m.followUp(orig.key, { text: 'Continue with OIB: networking module', date: '2026-08-28', part: 'morning', markOriginalDone: true });
     expect(r.id).toMatch(/^tsk-/);
     const friday = await vault.read(dailyPath('2026-08-28'));
-    expect(friday).toMatch(new RegExp(`- \\[ \\] Continue with OIB: networking module #followup ⛔ ${r.id}`));
+    expect(friday).toMatch(new RegExp(`- \\[ \\] Continue with OIB: networking module #followup 🆔 tsk-\\w+ ⛔ ${r.id}`));
     const yesterday = await vault.read(dailyPath('2026-08-25'));
     expect(yesterday).toMatch(new RegExp(`- \\[x\\] .*🆔 ${r.id}.*✅ \\d{4}-\\d{2}-\\d{2}`));
     const fu = [...index.snapshot.tasks.values()].find((t) => t.text.startsWith('Continue with OIB'))!;

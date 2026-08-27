@@ -54,7 +54,7 @@ const SYMBOL_ALT = ['🆔', '⛔', '➕', '🛫', '⏳', '📅', '✅', '❌', '
 const SYMBOL_RE = new RegExp(`(${SYMBOL_ALT})`, 'gu');
 const DATE_RE = /^\s*(\d{4}-\d{2}-\d{2})(?=\s|$)/u;
 const ID_RE = /^\s*([A-Za-z0-9][\w-]*)(?=\s|$)/u;
-const IDS_RE = /^\s*([A-Za-z0-9][\w-]*(?:\s*,\s*[A-Za-z0-9][\w-]*)*)(?=\s|$)/u;
+const IDS_RE = /^\s*([A-Za-z0-9][\w-]*(?:~\d+)?(?:\s*,\s*[A-Za-z0-9][\w-]*(?:~\d+)?)*)(?=\s|$)/u; // `~n` = an index key written by mistake; parsed as the id
 const LINK_RE = /^\s*(\[\[[^\]]+\]\])/u;
 const EFFORT_RE = /^\s*((?:\d+h)?(?:\d+m)?)(?=\s|$)/u;
 const TAG_RE = /(?:^|[\s(])#([\p{L}\p{N}_\-/]+)/gu;
@@ -119,7 +119,7 @@ export function parseTaskLine(line: string): TaskLine | undefined {
     cursor = t.end;
     switch (t.symbol) {
       case '🆔': if (out.id === undefined) out.id = t.value; else pushUnknown(out.unknown, body.slice(t.start, t.end), t.start); break;
-      case '⛔': out.blockedBy.push(...t.value.split(/\s*,\s*/).filter(Boolean)); break;
+      case '⛔': out.blockedBy.push(...t.value.split(/\s*,\s*/).filter(Boolean).map((x) => x.replace(/~\d+$/, ''))); break;
       case '➕': out.created = t.value; break;
       case '🛫': out.start = t.value; break;
       case '⏳': out.scheduled = t.value; break;

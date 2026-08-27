@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Follow-ups: the original's notes and drawings are linked to the new task
+  too. A follow-up of a task whose id appears in more than one note (a
+  carried-over line, say) referenced an internal key like `tsk-abc~5`,
+  which then showed as raw text instead of the follow chip — fixed, and such
+  lines written earlier now parse as the plain id.
+
 ## 1.6.1 — 2026-08-27
 
 - Dashboard line charts: the last date label no longer overprints its
