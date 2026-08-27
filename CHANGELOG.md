@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- A carried-over task put on today no longer stays in “Needs attention”: the
+  forwarded `[>]` record it leaves in yesterday's note is not open work.
+- `[[` completion in every task input (Capture, Inbox, task editor, quick add,
+  project form, goals): note titles of the vault are offered as you type,
+  drawings as `Title.excalidraw`; picking one closes the link and keeps the
+  rest of the line.
+
 ## 1.0.0 — 2026-08-26
 
 First finished release. Everything below since 0.4.2 ships in it.

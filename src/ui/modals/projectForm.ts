@@ -8,6 +8,7 @@ import { newTaskLine, serialiseTaskLine } from '../../core/taskLine';
 import { formatRecurrence } from '../../core/recurrence';
 import { button, chip, h, icon, iconButton } from '../dom';
 import type { UiContext } from '../context';
+import { wikilinkSuggest } from '../fields';
 import { periodChoices } from '../tabs/horizons';
 
 export interface DraftTask { text: string }
@@ -78,6 +79,7 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; perio
       iconButton('x', 'Remove', () => { list.splice(i, 1); draw(); }),
     )));
     const input = h('input', { cls: 'helm-quickadd-input', attr: { type: 'text', placeholder } });
+    wikilinkSuggest(ctx, input);
     const add = (): void => {
       if (input.value.trim() === '') return;
       list.push({ text: input.value.trim() });

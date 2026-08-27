@@ -502,6 +502,14 @@ export class HelmIndex {
     return out.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
   }
 
+  /** Titles of every markdown note in the vault (for `[[` completion), drawings included by their bare title. */
+  noteTitles(): string[] {
+    const out = new Set<string>();
+    for (const p of this.allNoteTitles.values()) out.add(noteTitle(p));
+    for (const d of this.snapshot.drawings.values()) out.add(d.kind === 'canvas' ? `${d.title}.canvas` : `${d.title}.excalidraw`);
+    return [...out].sort((a, b) => a.localeCompare(b));
+  }
+
   /** Every markdown note in the vault that could be linked (not Helm's own project / daily / periodic notes, not drawings). */
   linkableNotes(): { path: string; title: string }[] {
     return [...this.allNoteTitles.values()].filter((p) => { const e = this.files.get(p); return !e || e.kind === 'note' || e.kind === 'drawing' ? !isDrawingPath(p) && !(e && e.kind !== 'note') : false; }).map((p) => ({ path: p, title: noteTitle(p) })).sort((a, b) => a.title.localeCompare(b.title));

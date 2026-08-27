@@ -8,8 +8,9 @@ import { addDays, diffDays, startOfWeek } from '../core/dates';
 import { isTerminal, priorityRank } from '../core/taskLine';
 import { PROJECT_PRIORITY_RANK } from '../core/project';
 
+/** Open = still to be done here. A forwarded `[>]` line is the record of a move, not work. */
 export function isOpen(t: Task): boolean {
-  return !isTerminal(t.status);
+  return !isTerminal(t.status) && t.status !== 'forwarded';
 }
 
 export function isBlocked(t: Task, snap: Snapshot): boolean {

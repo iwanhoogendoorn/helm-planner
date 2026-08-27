@@ -5,6 +5,7 @@ import { parseCapture } from '../../core/nlp';
 import { inboxItems } from '../../data/planner';
 import { button, empty, h, icon, section } from '../dom';
 import type { UiContext } from '../context';
+import { wikilinkSuggest } from '../fields';
 import { crumbBar } from '../crumbs';
 import { taskRow } from '../taskRow';
 import { pickProject } from '../menus';
@@ -19,6 +20,7 @@ export function renderInbox(ctx: UiContext, root: HTMLElement, state: InboxState
   root.appendChild(crumbBar(ctx, 'inbox', []));
 
   const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Capture: Call the plumber tomorrow !high #home @Kitchen ~30m' } });
+  wikilinkSuggest(ctx, input);
   input.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' || input.value.trim() === '') return;
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);

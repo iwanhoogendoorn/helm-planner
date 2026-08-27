@@ -6,6 +6,7 @@ import { yearPeriod } from '../../core/periods';
 import { horizons, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../../data/planner';
 import { button, chip, empty, h, icon, iconButton, progressBar, richText, section } from '../dom';
 import type { UiContext } from '../context';
+import { wikilinkSuggest } from '../fields';
 import { pickProject } from '../menus';
 import { openTaskEditor } from '../modals/taskEditor';
 import { openProjectForm } from '../modals/projectForm';
@@ -104,6 +105,7 @@ function periodDetail(ctx: UiContext, hp: HorizonPeriod, state: HorizonsState): 
   // Goals.
   const goalsBody: HTMLElement[] = hp.goals.map((g) => goalRow(ctx, g, hp));
   const add = h('input', { cls: 'helm-quickadd-input', attr: { type: 'text', placeholder: `Add a goal for ${p.label}…` } });
+  wikilinkSuggest(ctx, add);
   add.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && add.value.trim() !== '') { const v = add.value; add.value = ''; void ctx.run('Add goal', () => ctx.mutations.addGoal(p.key, v)); }
   });

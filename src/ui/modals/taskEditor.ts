@@ -10,7 +10,7 @@ import { drawingsSection, targetForTask } from '../drawings';
 import { notesSection } from '../notes';
 import { STATUS_LABELS, pickProject } from '../menus';
 import { DAY_PARTS, PART_LABEL } from '../../core/dailyNote';
-import { effortField, linkTimes } from '../fields';
+import { effortField, linkTimes , wikilinkSuggest } from '../fields';
 
 export function openTaskEditor(ctx: UiContext, task: Task): void {
   const src = task.origin === 'daily-mirror' && task.mirrorOf ? ctx.index.task(task.mirrorOf) ?? task : task;
@@ -21,6 +21,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   const today = ctx.today();
 
   const text = h('input', { cls: 'helm-input-wide', attr: { type: 'text', value: src.text } });
+  wikilinkSuggest(ctx, text);
   const status = h('select');
   for (const s of Object.keys(STATUS_LABELS) as TaskStatus[]) status.appendChild(h('option', { text: STATUS_LABELS[s].label, attr: { value: s, selected: src.status === s } }));
   const priority = h('select');

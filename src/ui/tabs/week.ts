@@ -5,6 +5,7 @@ import { weekView, type DayPart, DAY_PARTS } from '../../data/planner';
 import { PART_LABEL } from '../../core/dailyNote';
 import { button, chip, h, icon, iconButton, section } from '../dom';
 import type { UiContext } from '../context';
+import { wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
 import { openPlanDay } from '../modals/planDay';
 import { openCapture } from '../modals/capture';
@@ -42,6 +43,7 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
   const wp = periodOf(w.start, 'week');
   const goals = ctx.index.allGoals().filter((g) => g.periodKey === wp.key).map((g) => goalProgress(snap, g, today, settings));
   const goalInput = h('input', { cls: 'helm-quickadd-input', attr: { type: 'text', placeholder: `Add a goal for week ${wk.week}…` } });
+  wikilinkSuggest(ctx, goalInput);
   goalInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && goalInput.value.trim() !== '') { const v = goalInput.value; goalInput.value = ''; void ctx.run('Add goal', () => ctx.mutations.addGoal(wp.key, v)); } });
   root.appendChild(section(`Goals for week ${wk.week}`, { count: goals.length, store: state.collapsed, key: 'goals', actions: [button('Open week note', { icon: 'file-text', onClick: () => void ctx.run('Open', async () => { const p = await ctx.mutations.ensurePeriodicNote(wp); await ctx.openFile(p); }) })] },
     ...goals.map((g) => h('div', { cls: ['helm-goal', g.goal.status === 'done' && 'is-done'] },

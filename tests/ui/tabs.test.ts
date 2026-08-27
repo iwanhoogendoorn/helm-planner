@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Menu, Modal, Notice } from '../stubs/obsidian';
+import { AbstractInputSuggest, Menu, Modal, Notice } from '../stubs/obsidian';
 import { setup, TODAY, dailyPath } from '../data/fixture';
 import type { UiContext, TabId } from '../../src/ui/context';
 import { renderToday } from '../../src/ui/tabs/today';
@@ -650,5 +650,39 @@ describe('Notes in the UI', () => {
     expect(taskRow(ctx, t2).querySelector('.helm-task-notes .helm-badge')!.textContent).toBe('1');
     const detail = render((r) => renderProjects(ctx, r, { projectId: t2.projectId!, filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
     expect(texts(detail, '.helm-section-title')).toContain('Notes');
+  });
+});
+
+describe('[[ completion in task inputs', () => {
+  it('offers vault note titles after [[ at the caret, closes the link on pick, and is attached to Capture', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await vault.write('10 PERSONAL/Test note.md', '# Test note\n');
+    index.update('10 PERSONAL/Test note.md', '# Test note\n');
+    const { wikilinkSuggest } = await import('../../src/ui/fields');
+    const input = document.createElement('input');
+    input.type = 'text';
+    document.body.appendChild(input);
+    const sg = wikilinkSuggest(ctx, input);
+    input.value = 'Create [[Te'; input.setSelectionRange(11, 11);
+    expect(sg.getSuggestions(input.value)).toEqual(expect.arrayContaining(['Test note']));
+    expect(sg.getSuggestions(input.value).some((t) => /Kitchen Remodel/.test(t))).toBe(false); // prefix match wins; contains-matches only when they contain "te"
+    input.value = 'Create [[k'; input.setSelectionRange(10, 10);
+    expect(sg.getSuggestions(input.value)[0]).toBe('Kitchen Remodel');
+    input.value = 'No link here'; input.setSelectionRange(12, 12);
+    expect(sg.getSuggestions(input.value)).toEqual([]);
+    input.value = 'Create [[Te'; input.setSelectionRange(11, 11);
+    let fired = 0; input.addEventListener('input', () => fired++);
+    sg.selectSuggestion('Test note');
+    expect(input.value).toBe('Create [[Test note]]');
+    expect(input.selectionStart).toBe('Create [[Test note]]'.length);
+    expect(fired).toBe(1);
+    input.value = 'Create [[Te]] today'; input.setSelectionRange(11, 11);
+    sg.selectSuggestion('Test note');
+    expect(input.value).toBe('Create [[Test note]] today');
+    // Drawings are offered with their extension so the link resolves.
+    expect(index.noteTitles().some((t) => t.endsWith('.excalidraw'))).toBe(false);
+    const before = AbstractInputSuggest.instances.length;
+    openCapture(ctx);
+    expect(AbstractInputSuggest.instances.length).toBe(before + 1);
   });
 });

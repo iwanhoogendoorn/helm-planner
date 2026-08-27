@@ -1,6 +1,7 @@
 /** Shared form fields: an effort dropdown and start/end/effort linking. */
 import { minutesToHuman, parseEffort } from '../core/dates';
 import { h } from './dom';
+import { AbstractInputSuggest, type App } from 'obsidian';
 
 export const EFFORT_PRESETS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480];
 
@@ -77,4 +78,52 @@ export function effortRaw(minutes: number): string { return minutesToHuman(minut
 export function habitBadge(ctx: { resourceUrl: (p: string) => string | undefined }, hb: { icon?: string; iconImage?: string }): HTMLElement | null {
   if (hb.iconImage) { const url = ctx.resourceUrl(hb.iconImage); if (url) return h('img', { cls: 'helm-habit-img', attr: { src: url, alt: '' } }); }
   return hb.icon ? h('span', { cls: 'helm-habit-emoji', text: hb.icon }) : null;
+}
+
+/**
+ * `[[` completion inside a task text input: after `[[` the note titles of the
+ * vault are offered (drawings as `Title.excalidraw`); picking one closes the
+ * link and moves the caret past it. Only the link being typed is touched.
+ */
+export class WikilinkSuggest extends AbstractInputSuggest<string> {
+  constructor(app: App, private input: HTMLInputElement, private titles: () => string[]) { super(app, input); this.limit = 30; }
+  /** The `[[…` being typed at the caret, if any. */
+  private linkAtCaret(): { start: number; query: string } | undefined {
+    const caret = this.input.selectionStart ?? this.input.value.length;
+    const before = this.input.value.slice(0, caret);
+    const i = before.lastIndexOf('[[');
+    if (i === -1) return undefined;
+    const after = before.slice(i + 2);
+    if (after.includes(']]') || after.includes('[[')) return undefined;
+    return { start: i, query: after };
+  }
+  override getSuggestions(_query: string): string[] {
+    const o = this.linkAtCaret();
+    if (!o) return [];
+    const q = o.query.toLowerCase();
+    const all = this.titles();
+    const starts = all.filter((t) => t.toLowerCase().startsWith(q));
+    const contains = q === '' ? [] : all.filter((t) => !t.toLowerCase().startsWith(q) && t.toLowerCase().includes(q));
+    return [...starts, ...contains].slice(0, 30);
+  }
+  override renderSuggestion(value: string, el: HTMLElement): void { el.setText(value); }
+  override selectSuggestion(value: string): void {
+    const o = this.linkAtCaret();
+    if (!o) return;
+    const caret = this.input.selectionStart ?? this.input.value.length;
+    const v = this.input.value;
+    const tail = v.slice(caret);
+    const closeAlready = tail.startsWith(']]');
+    const next = `${v.slice(0, o.start)}[[${value}]]${closeAlready ? tail.slice(2) : tail.startsWith(' ') || tail === '' ? tail : ` ${tail}`}`;
+    this.input.value = next;
+    const pos = o.start + value.length + 4;
+    this.input.setSelectionRange(pos, pos);
+    this.input.dispatchEvent(new Event('input', { bubbles: true }));
+    this.close();
+  }
+}
+
+/** Attach `[[` completion to a text input. */
+export function wikilinkSuggest(ctx: { app: App; index: { noteTitles: () => string[] } }, input: HTMLInputElement): WikilinkSuggest {
+  return new WikilinkSuggest(ctx.app, input, () => ctx.index.noteTitles());
 }

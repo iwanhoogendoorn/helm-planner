@@ -8,6 +8,7 @@ import { monthPeriod, periodOf, quarterPeriod, weekPeriod, yearPeriod, type Peri
 import { horizonPeriod, tasksByDay, type DayBucket, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../../data/planner';
 import { button, chip, h, icon, iconButton, progressBar, richText, section } from '../dom';
 import type { UiContext } from '../context';
+import { wikilinkSuggest } from '../fields';
 import { renderWeek } from './week';
 import { openPlanDay } from '../modals/planDay';
 import { openProjectForm } from '../modals/projectForm';
@@ -206,6 +207,7 @@ function projectChip(ctx: UiContext, p: ProjectHealth): HTMLElement {
 function goalsSection(ctx: UiContext, hp: HorizonPeriod, state: CalendarState): HTMLElement {
   const p = hp.period;
   const add = h('input', { cls: 'helm-quickadd-input', attr: { type: 'text', placeholder: `Add a goal for ${p.label}…` } });
+  wikilinkSuggest(ctx, add);
   add.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && add.value.trim() !== '') { const v = add.value; add.value = ''; void ctx.run('Add goal', () => ctx.mutations.addGoal(p.key, v)); } });
   return section(`Goals for ${p.label}`, { count: hp.goals.length, store: state.collapsed, key: `goals:${p.kind}` },
     ...hp.goals.map((g) => h('div', { cls: ['helm-goal', g.goal.status === 'done' && 'is-done'] },

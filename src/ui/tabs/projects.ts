@@ -7,6 +7,7 @@ import { compareProjects, isOpen, projectHealth, type ProjectHealth } from '../.
 import { parseCapture } from '../../core/nlp';
 import { button, chip, empty, h, icon, iconButton, progressBar, section } from '../dom';
 import type { UiContext } from '../context';
+import { wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
 import { openProjectForm } from '../modals/projectForm';
 import { openCapture } from '../modals/capture';
@@ -205,6 +206,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
 
 function quickAdd(ctx: UiContext, placeholder: string, onSubmit: (text: string) => void, iconName = 'plus'): HTMLElement {
   const input = h('input', { cls: 'helm-quickadd-input', attr: { type: 'text', placeholder } });
+  wikilinkSuggest(ctx, input);
   input.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && input.value.trim() !== '') { const v = input.value; input.value = ''; onSubmit(v); }
     if (ev.key === 'Escape') input.blur();

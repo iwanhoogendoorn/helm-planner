@@ -473,3 +473,25 @@ describe('archiving and deleting projects', () => {
     expect(index.snapshot.projects.size).toBe(2);
   });
 });
+
+describe('a carried-over task put on today', () => {
+  it('moves into today, leaves a forwarded record behind, and is no longer offered as carried over', async () => {
+    const { setup, TODAY, dailyPath } = await import('./fixture');
+    const { candidates, dayPlan } = await import('../../src/data/planner');
+    const { m, vault, index, settings } = await setup();
+    const y = [...index.snapshot.tasks.values()].find((t) => t.origin === 'daily' && t.noteDate === '2026-08-25' && t.status === 'todo' && t.section !== 'outside')!;
+    expect(candidates(index.snapshot, TODAY, settings, TODAY).some((c) => c.task.key === y.key && c.reason === 'scheduled-past')).toBe(true);
+    await m.schedule(y.key, TODAY);
+    const yesterday = await vault.read(dailyPath('2026-08-25'));
+    expect(yesterday).toMatch(new RegExp(`- \\[>\\] .*${y.text.slice(0, 12)}`));
+    const today = await vault.read(dailyPath(TODAY));
+    expect(today).toContain(y.text);
+    const cands = candidates(index.snapshot, TODAY, settings, TODAY);
+    expect(cands.filter((c) => c.task.text === y.text)).toEqual([]);
+    const plan = dayPlan(index.snapshot, TODAY, settings);
+    expect(plan.items.filter((i) => i.display.text === y.text)).toHaveLength(1);
+    const yPlan = dayPlan(index.snapshot, '2026-08-25', settings);
+    expect(yPlan.items.filter((i) => i.display.text === y.text && i.display.status === 'forwarded')).toHaveLength(1);
+    expect(yPlan.openCount).toBe(yPlan.items.filter((i) => ['todo', 'doing', 'waiting'].includes(i.task.status)).length);
+  });
+});

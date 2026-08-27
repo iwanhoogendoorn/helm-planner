@@ -11,7 +11,7 @@ import { append, button, chip, h } from '../dom';
 import type { UiContext } from '../context';
 import { pickProject } from '../menus';
 import { partOfTime } from '../../core/dailyNote';
-import { effortField, linkTimes } from '../fields';
+import { effortField, linkTimes, wikilinkSuggest } from '../fields';
 
 export interface CaptureDefaults {
   date?: IsoDate;
@@ -54,6 +54,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   };
 
   const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Call the plumber tomorrow !high #home @Kitchen ~30m', value: defaults.text ?? '' } });
+  wikilinkSuggest(ctx, input);
   const preview = h('div', { cls: 'helm-capture-preview' });
   const dest = h('div', { cls: 'helm-capture-dest' });
   const help = h('div', { cls: 'helm-hint', text: 'Dates: today, tomorrow, fri, next week, in 3 days, 1/9, due friday · Part: morning, afternoon, evening, tonight · Priority: !, !!, !!! · Project: @Name · Effort: ~45m · Time: 14:00-15:00 · Repeat: every week' });
