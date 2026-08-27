@@ -800,7 +800,7 @@ describe('Follow up from the UI', () => {
     const text = m.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;
     expect(text.value).toBe(t.text);
     expect(m.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-08-27');
-    expect(m.contentEl.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false); // never quietly ticks the original
+    expect(m.contentEl.querySelector('input[type="checkbox"]')).toBeNull(); // nothing in the dialog can change the original
     text.value = 'Next step';
     const [ts, te] = [...m.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')];
     expect(ts!.value).toBe(t.time?.start ?? '');

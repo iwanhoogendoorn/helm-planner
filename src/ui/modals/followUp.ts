@@ -47,9 +47,6 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   timeStart.addEventListener('input', checkConflicts);
   timeEnd.addEventListener('input', checkConflicts);
   effort.onChange(checkConflicts);
-  const open = !['done', 'cancelled', 'forwarded'].includes(task.status);
-  // Off by default: a follow-up must never quietly change the original. Tick it when the first step is really finished.
-  const markDone = h('input', { attr: { type: 'checkbox' } });
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
   root.append(
     h('div', { cls: 'helm-hint' }, h('span', { text: 'Continues: ' }), h('strong', { text: task.text })),
@@ -61,8 +58,7 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
       field('Effort', effort.el),
     ),
     conflict,
-    ...(open ? [h('label', { cls: 'helm-toggle' }, markDone, h('span', { text: 'Also tick the original as done (it then moves to the Done list of its day)' }))] : []),
-    h('div', { cls: 'helm-hint', text: `The follow-up gets #${tag} and waits on the original (⛔), so it shows as “follows …” and unblocks when the original is ticked.` }),
+    h('div', { cls: 'helm-hint', text: `The follow-up gets #${tag} and waits on the original (⛔), so it shows as “follows …” and unblocks when the original is ticked. The original itself is left exactly as it is.` }),
     h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button('Create follow-up', { primary: true, icon: 'corner-down-right', onClick: () => void create() })),
   );
   async function create(): Promise<void> {
@@ -72,8 +68,8 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
     await ctx.run('Follow up', async () => {
       const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;
       const eff = effort.get();
-      const r = await ctx.mutations.followUp(task.key, { text: text.value, date, ...(part ? { part } : {}), markOriginalDone: open && markDone.checked, fields: { ...(time ? { time } : {}), ...(eff ? { effortMinutes: eff, effortRaw: minutesToHuman(eff) } : {}) } });
-      ctx.notify(`Follow-up planned for ${humanDate(r.date, today)}${open && markDone.checked ? ' · original ticked as done' : ''}.`);
+      const r = await ctx.mutations.followUp(task.key, { text: text.value, date, ...(part ? { part } : {}), fields: { ...(time ? { time } : {}), ...(eff ? { effortMinutes: eff, effortRaw: minutesToHuman(eff) } : {}) } });
+      ctx.notify(`Follow-up planned for ${humanDate(r.date, today)}.`);
     });
   }
   text.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); void create(); } });
