@@ -610,7 +610,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-habit-row[data-color] .helm-heat-cell.is-done { background: var(--hc); }
 .helm-habit-row[data-color] .helm-heat-cell.is-partial { background: rgba(var(--hc-rgb), 0.5); }
 .helm-swatches { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.helm-swatch { --sw: var(--color-green); width: 26px; height: 26px; border-radius: 50%; padding: 0; border: 2px solid transparent; background: var(--sw); box-shadow: none; cursor: pointer; opacity: 0.75; }
+.helm-swatch, .modal .helm-swatch, button.helm-swatch { --sw: var(--color-green); width: 26px; height: 26px; border-radius: 50%; padding: 0; border: 2px solid transparent; background: var(--sw); box-shadow: none; cursor: pointer; opacity: 0.75; }
 .helm-swatch:hover { opacity: 1; }
 .helm-swatch.is-active { opacity: 1; border-color: var(--text-normal); transform: scale(1.1); }
 @media (max-width: 720px) { .helm-habit-card { grid-template-columns: auto minmax(0, 1fr); } .helm-habit-week, .helm-habit-month { grid-column: 2; } }

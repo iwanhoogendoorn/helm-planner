@@ -1,6 +1,6 @@
 /** New / edit habit — click, don't type: emoji grid or PNG icon, schedule presets, weekday toggles. */
 import { Modal } from 'obsidian';
-import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitPart } from '../../core/types';
+import { HABIT_COLORS, HABIT_COLOR_HEX, HABIT_PARTS, type Habit, type HabitColor, type HabitPart } from '../../core/types';
 import { habitColor } from '../../core/habit';
 import { drawingsSection, targetForHabit } from '../drawings';
 import { notesSection } from '../notes';
@@ -111,7 +111,7 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
   let color: HabitColor | undefined = existing?.color;
   const colorRow = h('div', { cls: 'helm-swatches' });
   const drawColors = (): void => {
-    colorRow.replaceChildren(...HABIT_COLORS.map((c) => { const b = h('button', { cls: ['helm-swatch', color === c && 'is-active'], title: c, onClick: () => { color = color === c ? undefined : c; drawColors(); } }); b.style.setProperty('--sw', `var(--color-${c})`); return b; }));
+    colorRow.replaceChildren(...HABIT_COLORS.map((c) => { const b = h('button', { cls: ['helm-swatch', color === c && 'is-active'], title: c, onClick: () => { color = color === c ? undefined : c; drawColors(); } }); b.style.setProperty('--sw', `var(--color-${c}, ${HABIT_COLOR_HEX[c]})`); b.style.background = 'var(--sw)'; return b; }));
     if (!color) { const auto = habitColor({ id: existing?.id ?? title.value, ...(color ? { color } : {}) }); colorRow.appendChild(h('span', { cls: 'helm-hint', text: `auto: ${auto}` })); }
   };
   drawColors();
@@ -152,7 +152,8 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
     field('Schedule', '', presets, weekdayRow, nRow, monthRow, understood),
     field('Part of the day', 'pick several for a habit you do more than once a day', partsRow, partsHint),
     field('Colour', 'for the board, the week cells and the charts', colorRow),
-    ...(existing ? [field('Notes', 'attached to this habit', notesSection(ctx, targetForHabit(existing))), field('Drawings', 'attached to this habit', drawingsSection(ctx, targetForHabit(existing)))] : []),
+    ...(existing ? [field('Notes', 'attached to this habit', notesSection(ctx, targetForHabit(existing))), field('Drawings', 'attached to this habit', drawingsSection(ctx, targetForHabit(existing)))]
+      : [field('Notes & drawings', '', h('div', { cls: 'helm-hint helm-attach-later', text: 'Available once the habit is saved — right-click its card, or open Edit…' }))]),
     h('div', { cls: 'helm-grid2' },
       field('Target per week', 'counts against the streak', targetRow),
       field('Grace', 'misses tolerated before a streak breaks', graceRow),

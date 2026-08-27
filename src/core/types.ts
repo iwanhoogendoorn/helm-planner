@@ -162,6 +162,8 @@ export interface Habit {
 
 export type HabitColor = 'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'pink';
 export const HABIT_COLORS: HabitColor[] = ['green', 'blue', 'purple', 'orange', 'cyan', 'pink', 'yellow', 'red'];
+/** Obsidian's default accent values, for themes that do not define --color-*. */
+export const HABIT_COLOR_HEX: Record<HabitColor, string> = { green: '#08b94e', blue: '#086ddd', purple: '#7852ee', orange: '#ec7500', cyan: '#00bfbc', pink: '#d53984', yellow: '#e0ac00', red: '#e93147' };
 
 export type HabitPart = 'morning' | 'afternoon' | 'evening';
 export const HABIT_PARTS: HabitPart[] = ['morning', 'afternoon', 'evening'];
