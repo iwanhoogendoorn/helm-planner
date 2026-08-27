@@ -259,8 +259,9 @@ export class HelmIndex {
     const keyOfLine = new Map<number, string>();
     for (const dt of doc.tasks) {
       const sec = sectionOfLine.get(dt.line);
-      if (sec === 'habits' && date !== undefined && dt.task.id) {
-        entry.completions.push({ habitId: dt.task.id, date, path, line: dt.line, state: dt.task.status === 'done' ? 'done' : dt.task.status === 'cancelled' ? 'skipped' : 'missed' });
+      // Habit lines: the Habits section, or a `hab-…` line inside a part of the day (one occurrence per part).
+      if (date !== undefined && dt.task.id && (sec === 'habits' || (dt.task.id.startsWith('hab-') && (sec === 'morning' || sec === 'afternoon' || sec === 'evening')))) {
+        entry.completions.push({ habitId: dt.task.id, date, path, line: dt.line, state: dt.task.status === 'done' ? 'done' : dt.task.status === 'cancelled' ? 'skipped' : 'missed', ...(sec !== 'habits' ? { part: sec } : {}) });
         continue;
       }
       if (dt.task.text.trim() === '' && dt.task.unknown.length === 0) continue; // empty planner slot

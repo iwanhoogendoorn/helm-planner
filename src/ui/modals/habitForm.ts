@@ -1,6 +1,6 @@
 /** New / edit habit — click, don't type: emoji grid or PNG icon, schedule presets, weekday toggles. */
 import { Modal } from 'obsidian';
-import type { Habit } from '../../core/types';
+import { HABIT_PARTS, type Habit, type HabitPart } from '../../core/types';
 import { formatRecurrence, parseRecurrence } from '../../core/recurrence';
 import { WEEKDAY_SHORT } from '../../core/dates';
 import { button, h } from '../dom';
@@ -104,6 +104,19 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
   };
   drawSchedule();
 
+  // ── Parts of the day ─────────────────────────────────────────────────
+  const parts = new Set<HabitPart>(existing?.parts ?? []);
+  const partsRow = h('div', { cls: 'helm-segmented' });
+  const partsHint = h('div', { cls: 'helm-hint' });
+  const drawParts = (): void => {
+    partsRow.replaceChildren(
+      h('button', { cls: ['helm-seg', parts.size === 0 && 'is-active'], text: 'Once a day', onClick: () => { parts.clear(); drawParts(); } }),
+      ...HABIT_PARTS.map((pt) => h('button', { cls: ['helm-seg', parts.has(pt) && 'is-active'], text: pt.charAt(0).toUpperCase() + pt.slice(1), onClick: () => { if (parts.has(pt)) parts.delete(pt); else parts.add(pt); drawParts(); } })),
+    );
+    partsHint.textContent = parts.size === 0 ? 'One tick a day, in the Habits section of the daily note.' : `${parts.size} tick${parts.size === 1 ? '' : 's'} a day — a line at the top of the ${[...parts].sort((a, b) => HABIT_PARTS.indexOf(a) - HABIT_PARTS.indexOf(b)).join(', ')} section${parts.size === 1 ? '' : 's'}. The day counts as done when every tick is done.`;
+  };
+  drawParts();
+
   // ── Target and grace ─────────────────────────────────────────────────
   let target: number | undefined = existing?.targetPerWeek;
   let grace = existing?.graceDays ?? 0;
@@ -125,6 +138,7 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
     field('Name', '', title),
     field('Icon', 'click an emoji, or upload a PNG', iconRow, emojiGrid),
     field('Schedule', '', presets, weekdayRow, nRow, monthRow, understood),
+    field('Part of the day', 'pick several for a habit you do more than once a day', partsRow, partsHint),
     h('div', { cls: 'helm-grid2' },
       field('Target per week', 'counts against the streak', targetRow),
       field('Grace', 'misses tolerated before a streak breaks', graceRow),
@@ -143,8 +157,9 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       let image = iconImage;
       if (pendingUpload) image = await ctx.mutations.saveHabitIcon(pendingUpload.name || name, pendingUpload.data, pendingUpload.ext);
       const schedule = formatRecurrence(r);
-      if (existing) await ctx.mutations.setHabitFields(existing.id, { title: name, schedule, active, graceDays: grace, targetPerWeek: target ?? null, icon: emoji, iconImage: image ?? null });
-      else await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}) });
+      const partList = HABIT_PARTS.filter((pt) => parts.has(pt));
+      if (existing) await ctx.mutations.setHabitFields(existing.id, { title: name, schedule, active, graceDays: grace, targetPerWeek: target ?? null, icon: emoji, iconImage: image ?? null, parts: partList });
+      else await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}) });
     });
   }
   m.open();

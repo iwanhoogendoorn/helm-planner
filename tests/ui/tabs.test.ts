@@ -686,3 +686,28 @@ describe('[[ completion in task inputs', () => {
     expect(AbstractInputSuggest.instances.length).toBe(before + 1);
   });
 });
+
+describe('habits by part of the day', () => {
+  it('Today shows a parted habit as chips inside its parts (not in the Habits row), counts occurrences, and the form has part toggles', async () => {
+    const MED = '---\ntitle: Meditate\ntype: habit\nid: hab-med\nschedule: every day\nactive: true\ngrace_days: 0\nparts: [morning, evening]\n---\n# Meditate\n';
+    const s = await setup({ '02 PROJECTS/Habits/Meditate.md': MED });
+    const ctx = { ...(await ctxFor()).ctx, index: s.index, mutations: s.m };
+    await s.m.syncHabitsForDay(TODAY);
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const habitsSection = [...root.querySelectorAll('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Habits')!;
+    expect(habitsSection.querySelector('.helm-section-count')?.textContent ?? habitsSection.textContent).toContain('0/4');
+    expect([...habitsSection.querySelectorAll('.helm-habit')].map((e) => e.textContent)).not.toContain(expect.stringContaining('Meditate'));
+    const morning = [...root.querySelectorAll('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Morning')!;
+    const chip = [...morning.querySelectorAll('.helm-part-habits .helm-habit')].find((e) => e.textContent?.includes('Meditate'))!;
+    expect(chip).toBeTruthy();
+    click(chip);
+    await flush(); await flush();
+    expect(s.index.snapshot.completions.some((c) => c.habitId === 'hab-med' && c.date === TODAY && c.part === 'morning' && c.state === 'done')).toBe(true);
+    const evening = [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Evening')!;
+    expect(evening.querySelector('.helm-part-habits .helm-habit.is-missed, .helm-part-habits .helm-habit.is-pending')).toBeTruthy();
+    openHabitForm(ctx, s.index.snapshot.habits.get('hab-med'));
+    const form = Modal.last!.contentEl;
+    const segs = [...form.querySelectorAll('.helm-seg')].filter((b) => ['Once a day', 'Morning', 'Afternoon', 'Evening'].includes(b.textContent ?? ''));
+    expect(segs.filter((b) => b.classList.contains('is-active')).map((b) => b.textContent)).toEqual(['Morning', 'Evening']);
+  });
+});

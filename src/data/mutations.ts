@@ -8,9 +8,9 @@
  *  - Past daily notes are a log: a line is marked `[>]` (forwarded) rather
  *    than removed; mirrors on past days are never rewritten.
  */
-import type { HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus } from '../core/types';
+import type { Habit, HabitPart, HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus } from '../core/types';
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
-import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent } from '../core/dailyNote';
+import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, addMonths, diffDays, formatDate } from '../core/dates';
 import { nextOccurrence } from '../core/recurrence';
@@ -21,7 +21,7 @@ import { renderHabitNote } from '../core/habit';
 import { columnWidth } from '../core/tree';
 import type { HelmIndex } from './index';
 import { baseName, type VaultAdapter } from './vault';
-import { habitDue } from './habits';
+import { habitDue, habitOccurrences } from './habits';
 import { misfiledDate } from './planner';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
 import { bundledTemplate, type TemplateConfig } from '../core/periodicTemplates';
@@ -203,29 +203,43 @@ export class Mutations {
   async syncHabitsForDay(date: IsoDate, habitIds?: string[]): Promise<boolean> {
     const habits = this.index.allHabits().filter((h) => (habitIds ? habitIds.includes(h.id) : habitDue(h, date))).sort((a, b) => a.title.localeCompare(b.title));
     if (habits.length === 0 && !habitIds) return false;
+    const label = (h: Habit): string => `${h.icon ? h.icon + ' ' : ''}${h.title}`;
     return this.editRegion(date, (rc) => {
+      const next: RegionContent = { ...rc, habits: [...rc.habits], morning: [...rc.morning], afternoon: [...rc.afternoon], evening: [...rc.evening] };
+      // Day-level habits live in the Habits section, in title order; parted habits get one line at the top of each of their parts.
+      const dayLevel = habits.filter((h) => habitOccurrences(h)[0] === undefined);
       const byId = new Map(rc.habits.map((l) => [l.id, l]));
-      const lines: TaskLine[] = [];
+      const lines: TaskLine[] = dayLevel.map((h) => { const ex = byId.get(h.id); return ex ? { ...ex, text: label(h) } : newTaskLine(label(h), { id: h.id }); });
+      for (const l of rc.habits) if (!dayLevel.some((h) => h.id === l.id) && (l.status === 'done' || !habits.some((h) => h.id === l.id))) if (!lines.some((x) => x.id === l.id)) lines.push(l);
+      next.habits = lines;
       for (const h of habits) {
-        const ex = byId.get(h.id);
-        lines.push(ex ? { ...ex, text: `${h.icon ? h.icon + ' ' : ''}${h.title}` } : newTaskLine(`${h.icon ? h.icon + ' ' : ''}${h.title}`, { id: h.id }));
+        for (const part of h.parts ?? []) {
+          const sec = next[part];
+          const idx = sec.findIndex((l) => l.id === h.id);
+          if (idx >= 0) { sec[idx] = { ...sec[idx]!, text: label(h) }; continue; }
+          const at = sec.findIndex((l) => !(l.id ?? '').startsWith('hab-'));
+          sec.splice(at === -1 ? sec.length : at, 0, newTaskLine(label(h), { id: h.id }));
+        }
       }
-      // Keep ticked lines for habits no longer scheduled.
-      for (const l of rc.habits) if (!habits.some((h) => h.id === l.id) && l.status === 'done') lines.push(l);
-      return { ...rc, habits: lines };
+      return next;
     });
   }
 
-  async setHabitState(habitId: string, date: IsoDate, state: 'done' | 'skipped' | 'missed'): Promise<void> {
+  /** Tick, skip or untick one occurrence of a habit: the day-level line, or the line in a part of the day. */
+  async setHabitState(habitId: string, date: IsoDate, state: 'done' | 'skipped' | 'missed', part?: HabitPart): Promise<void> {
     const status: TaskStatus = state === 'done' ? 'done' : state === 'skipped' ? 'cancelled' : 'todo';
     const h = this.index.snapshot.habits.get(habitId);
+    const label = h ? `${h.icon ? h.icon + ' ' : ''}${h.title}` : habitId;
+    const sec: Section = part ?? 'habits';
     await this.editRegion(date, (rc) => {
-      const idx = rc.habits.findIndex((l) => l.id === habitId);
-      const base = idx >= 0 ? rc.habits[idx]! : newTaskLine(h ? `${h.icon ? h.icon + ' ' : ''}${h.title}` : habitId, { id: habitId });
+      const list = [...rc[sec]];
+      const idx = list.findIndex((l) => l.id === habitId);
+      const base = idx >= 0 ? list[idx]! : newTaskLine(label, { id: habitId });
       const next = withStatus(base, status, date);
-      const habits = [...rc.habits];
-      if (idx >= 0) habits[idx] = next; else habits.push(next);
-      return { ...rc, habits };
+      if (idx >= 0) list[idx] = next;
+      else if (part) { const at = list.findIndex((l) => !(l.id ?? '').startsWith('hab-')); list.splice(at === -1 ? list.length : at, 0, next); }
+      else list.push(next);
+      return { ...rc, [sec]: list };
     });
   }
 
@@ -749,13 +763,13 @@ export class Mutations {
     });
   }
 
-  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string }): Promise<void> {
+  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[] }): Promise<void> {
     const folder = this.settings.habitsFolder.replace(/\/+$/, '');
     const title = spec.title.trim().replace(/[\\/:*?"<>|]/g, '-');
     const path = `${folder ? folder + '/' : ''}${title}.md`;
     if (await this.d.vault.exists(path)) throw new Error(`A note already exists at ${path}`);
     const id = uniqueId('hab', (x) => this.index.snapshot.habits.has(x), this.d.rng);
-    await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}), ...(spec.iconImage ? { iconImage: spec.iconImage } : {}) }));
+    await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}), ...(spec.iconImage ? { iconImage: spec.iconImage } : {}) , ...(spec.parts && spec.parts.length ? { parts: spec.parts } : {}) }));
   }
 
   /** Store an uploaded icon next to the habit notes: `<habitsFolder>/icons/<name>.png`. Returns the vault path. */
@@ -769,7 +783,7 @@ export class Mutations {
     return path;
   }
 
-  async setHabitFields(id: string, fields: { active?: boolean; schedule?: string; title?: string; targetPerWeek?: number | null; graceDays?: number; icon?: string; iconImage?: string | null }): Promise<void> {
+  async setHabitFields(id: string, fields: { active?: boolean; schedule?: string; title?: string; targetPerWeek?: number | null; graceDays?: number; icon?: string; iconImage?: string | null; parts?: HabitPart[] }): Promise<void> {
     const h = this.index.snapshot.habits.get(id);
     if (!h) throw new Error('Habit not found');
     const u: Record<string, string | null> = {};
@@ -780,6 +794,7 @@ export class Mutations {
     if (fields.graceDays !== undefined) u['grace_days'] = String(fields.graceDays);
     if (fields.icon !== undefined) u['icon'] = fields.icon;
     if (fields.iconImage !== undefined) u['icon_image'] = fields.iconImage ?? '';
+    if (fields.parts !== undefined) (u as Record<string, string | string[] | null | undefined>)['parts'] = fields.parts.length ? fields.parts : undefined;
     await this.editFile(h.path, (lines) => setFrontmatter(lines, u));
   }
 

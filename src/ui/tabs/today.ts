@@ -1,5 +1,5 @@
 /** The cockpit: one day, split into parts, and the two rituals around it. */
-import type { IsoDate, Task } from '../../core/types';
+import type { Habit, HabitPart, IsoDate, Task } from '../../core/types';
 import { addDays, humanDate, minutesToHuman } from '../../core/dates';
 import { candidates, dayPlan, DAY_PARTS, type Candidate, type DayItem, type DayPart } from '../../data/planner';
 import { habitDue, habitStats } from '../../data/habits';
@@ -22,6 +22,7 @@ const PART_ICON: Record<DayPart, string> = { morning: 'sunrise', afternoon: 'sun
 
 export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState): void {
   const today = ctx.today();
+  let habitChipsFor: (part: HabitPart) => HTMLElement | null = () => null;
   const settings = ctx.settings();
   const snap = ctx.index.snapshot;
   const date = state.date;
@@ -75,19 +76,26 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   // Habits.
   const habits = ctx.index.allHabits().filter((hb) => habitDue(hb, date) || snap.completions.some((c) => c.habitId === hb.id && c.date === date));
   if (habits.length > 0 || ctx.index.allHabits().length === 0) {
-    const chips = h('div', { cls: 'helm-habit-chips' });
-    for (const hb of habits) {
-      const done = snap.completions.find((c) => c.habitId === hb.id && c.date === date);
+    /** A chip for one occurrence of a habit (day-level, or one part of the day). */
+    const habitChip = (hb: Habit, part?: HabitPart): HTMLElement => {
+      const done = snap.completions.find((c) => c.habitId === hb.id && c.date === date && c.part === part);
       const st = habitStats(hb, snap.completions, today, settings.weekStartsOn, 14);
       const hstate = done?.state ?? 'pending';
-      chips.appendChild(h('button', {
+      return h('button', {
         cls: ['helm-habit', `is-${hstate}`],
-        title: `${hb.title}: streak ${st.streak} · ${Math.round(st.rate30 * 100)}% last 30 days. Click to toggle, shift-click to skip.`,
-        onClick: (ev) => { const next = ev.shiftKey ? (hstate === 'skipped' ? 'missed' : 'skipped') : hstate === 'done' ? 'missed' : 'done'; void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, next)); },
-      }, icon(hstate === 'done' ? 'check' : hstate === 'skipped' ? 'minus' : 'circle'), habitBadge(ctx, hb), h('span', { text: hb.title }), st.streak > 1 ? h('span', { cls: 'helm-streak', text: `🔥${st.streak}` }) : null));
-    }
-    root.appendChild(section('Habits', { count: `${habits.filter((hb) => snap.completions.some((c) => c.habitId === hb.id && c.date === date && c.state === 'done')).length}/${habits.length}`, store, key: 'habits', actions: [iconButton('plus', 'New habit', () => openHabitForm(ctx))] },
-      habits.length === 0 ? empty('No habits yet.', button('Create one', { onClick: () => openHabitForm(ctx) })) : chips));
+        title: `${hb.title}${part ? ` (${part})` : ''}: streak ${st.streak} · ${Math.round(st.rate30 * 100)}% last 30 days. Click to toggle, shift-click to skip.`,
+        onClick: (ev) => { const next = ev.shiftKey ? (hstate === 'skipped' ? 'missed' : 'skipped') : hstate === 'done' ? 'missed' : 'done'; void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, next, part)); },
+      }, icon(hstate === 'done' ? 'check' : hstate === 'skipped' ? 'minus' : 'circle'), habitBadge(ctx, hb), h('span', { text: hb.title }), st.streak > 1 ? h('span', { cls: 'helm-streak', text: `🔥${st.streak}` }) : null);
+    };
+    const dayLevel = habits.filter((hb) => !hb.parts || hb.parts.length === 0);
+    const parted = habits.filter((hb) => hb.parts && hb.parts.length > 0);
+    const occurrences = habits.reduce((n, hb) => n + (hb.parts?.length || 1), 0);
+    const doneOcc = snap.completions.filter((c) => c.date === date && c.state === 'done' && habits.some((hb) => hb.id === c.habitId && ((hb.parts?.length ?? 0) === 0 ? c.part === undefined : c.part !== undefined && hb.parts!.includes(c.part)))).length;
+    const chips = h('div', { cls: 'helm-habit-chips' }, ...dayLevel.map((hb) => habitChip(hb)));
+    const partedHint = parted.length > 0 ? h('div', { cls: 'helm-hint', text: `${parted.map((hb) => `${hb.title} (${hb.parts!.join(', ')})`).join(' · ')} — ticked in their parts of the day below.` }) : null;
+    habitChipsFor = (part) => { const list = parted.filter((hb) => hb.parts!.includes(part)); return list.length === 0 ? null : h('div', { cls: 'helm-habit-chips helm-part-habits' }, ...list.map((hb) => habitChip(hb, part))); };
+    root.appendChild(section('Habits', { count: `${doneOcc}/${occurrences}`, store, key: 'habits', actions: [iconButton('plus', 'New habit', () => openHabitForm(ctx))] },
+      habits.length === 0 ? empty('No habits yet.', button('Create one', { onClick: () => openHabitForm(ctx) })) : chips, partedHint));
   }
 
   // The day, by part. Each part is a drop zone.
@@ -97,7 +105,8 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   }
   for (const part of DAY_PARTS) {
     const items = plan.byPart[part].filter((it) => it.display.status !== 'done' && it.display.status !== 'cancelled');
-    if (items.length === 0 && (isPast || (openItems.length === 0 && part !== 'anytime'))) continue;
+    const partHabits = part !== 'anytime' ? habitChipsFor(part) : null;
+    if (items.length === 0 && !partHabits && (isPast || (openItems.length === 0 && part !== 'anytime'))) continue;
     const minutes = items.reduce((s, it) => s + (it.display.effortMinutes ?? settings.defaultEffortMinutes), 0);
     const sec = section(PART_LABEL[part], {
       count: items.length, store, key: `part:${part}`, cls: `part-${part}`,
@@ -105,7 +114,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
         minutes > 0 ? chip(minutesToHuman(minutes), 'effort') : null,
         iconButton('plus', `Add a task to the ${PART_LABEL[part].toLowerCase()}`, () => openCapture(ctx, { date, part: part === 'anytime' ? undefined : part })),
       ],
-    }, ...items.map((it) => itemRow(ctx, it)), items.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
+    }, partHabits, ...items.map((it) => itemRow(ctx, it)), items.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
     sec.querySelector('.helm-section-head')?.prepend(icon(PART_ICON[part], 'helm-part-icon'));
     makeDropZone(ctx, sec, date, part);
     root.appendChild(sec);

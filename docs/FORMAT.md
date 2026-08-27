@@ -140,6 +140,7 @@ target_per_week: 4           # optional
 grace_days: 1                # misses tolerated before a streak breaks
 icon: 🏃                     # optional emoji
 icon_image: 02 PROJECTS/Habits/icons/Morning workout.png   # optional; uploaded PNGs land here
+parts: [morning, evening]    # optional; one tick per part, lines live in those sections
 ```
 
 When both are set the image wins. Uploads are stored as-is (a 256×256 PNG

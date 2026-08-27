@@ -14,7 +14,7 @@
  * ---
  * ```
  */
-import type { Habit } from './types';
+import { HABIT_PARTS, type Habit, type HabitPart } from './types';
 import { parseDocument, type Document } from './document';
 import { scalar } from './frontmatter';
 import { parseRecurrence } from './recurrence';
@@ -44,17 +44,21 @@ export function parseHabit(path: string, content: string, fallbackId?: string): 
   if (tpw && Number(tpw) > 0) habit.targetPerWeek = Number(tpw);
   const icon = scalar(fm['icon']);
   if (icon) habit.icon = icon;
+  const partsRaw = fm['parts'] ?? fm['part'];
+  const parts = (Array.isArray(partsRaw) ? partsRaw : typeof partsRaw === 'string' ? partsRaw.replace(/^\[|\]$/g, '').split(',') : []).map((x) => String(x).trim().toLowerCase()).filter((x): x is HabitPart => (HABIT_PARTS as string[]).includes(x));
+  if (parts.length > 0) habit.parts = [...new Set(parts)].sort((a, b) => HABIT_PARTS.indexOf(a) - HABIT_PARTS.indexOf(b));
   const img = scalar(fm['icon_image']) ?? scalar(fm['image']);
   if (img) habit.iconImage = img.replace(/^\[\[|\]\]$/g, '').replace(/^!\[\[|\]\]$/g, '');
   return habit;
 }
 
-export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; today: string }): string {
+export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; today: string }): string {
   const fm = ['---', `title: ${h.title}`, 'type: habit', `id: ${h.id}`, `schedule: ${h.schedule}`, 'active: true'];
   if (h.targetPerWeek) fm.push(`target_per_week: ${h.targetPerWeek}`);
   fm.push(`grace_days: ${h.graceDays ?? 0}`);
   if (h.icon) fm.push(`icon: ${h.icon}`);
   if (h.iconImage) fm.push(`icon_image: ${h.iconImage}`);
+  if (h.parts && h.parts.length > 0) fm.push(`parts: [${h.parts.join(', ')}]`);
   fm.push(`creation_date: ${h.today}`, '---', '', `# ${h.title}`, '', 'Why this habit matters:', '', '');
   return fm.join('\n');
 }

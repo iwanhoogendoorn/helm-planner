@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Habits can be done in parts of the day: pick Morning / Afternoon / Evening
+  (several for a habit you do twice) in the habit form. Each part gets its
+  own checkbox line at the top of that section in the daily note; Today shows
+  the chips inside the parts; a day counts as done when every tick is done
+  (some done = partial), streaks and rates roll up per day and per week from
+  the occurrences. Once-a-day habits stay in the Habits section as before.
+
 ## 1.1.0 — 2026-08-27
 
 - A carried-over task put on today no longer stays in “Needs attention”: the

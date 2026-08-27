@@ -152,7 +152,12 @@ export interface Habit {
   icon?: string;
   /** Vault path of an image icon (e.g. a 256×256 PNG). */
   iconImage?: string;
+  /** Parts of the day the habit is done in; empty = once a day, tracked in the Habits section. */
+  parts?: HabitPart[];
 }
+
+export type HabitPart = 'morning' | 'afternoon' | 'evening';
+export const HABIT_PARTS: HabitPart[] = ['morning', 'afternoon', 'evening'];
 
 export interface HabitCompletion {
   habitId: string;
@@ -160,6 +165,8 @@ export interface HabitCompletion {
   path: string;
   line: number;
   state: 'done' | 'skipped' | 'missed';
+  /** Which occurrence of the day this line is; undefined = the day-level line in the Habits section. */
+  part?: HabitPart;
 }
 
 export interface Diagnostic {
