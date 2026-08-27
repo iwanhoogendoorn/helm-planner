@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.2 — 2026-08-28
 
 - Follow-ups: the original's notes and drawings are linked to the new task
   too. A follow-up of a task whose id appears in more than one note (a
