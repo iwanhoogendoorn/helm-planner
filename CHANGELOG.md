@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-08-27
 
 - A carried-over task put on today no longer stays in “Needs attention”: the
   forwarded `[>]` record it leaves in yesterday's note is not open work.
