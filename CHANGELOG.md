@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 — 2026-08-27
 
 - Capture: a *Tags* row of one-click toggles (`#meeting`, `#followup`,
   `#task` by default — Settings → Planning → Writing → *Quick tags*). One
