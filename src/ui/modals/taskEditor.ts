@@ -9,6 +9,8 @@ import type { UiContext } from '../context';
 import { drawingsSection, targetForTask } from '../drawings';
 import { notesSection } from '../notes';
 import { openFollowUp } from './followUp';
+import { conflictWarning } from '../fields';
+import { conflictsFor, describeConflicts } from '../../data/conflicts';
 import { STATUS_LABELS, pickProject } from '../menus';
 import { DAY_PARTS, PART_LABEL } from '../../core/dailyNote';
 import { effortField, linkTimes , wikilinkSuggest } from '../fields';
@@ -35,6 +37,18 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   const timeStart = h('input', { attr: { type: 'time', value: src.time?.start ?? '' } });
   const timeEnd = h('input', { attr: { type: 'time', value: src.time?.end ?? '' } });
   linkTimes(timeStart, timeEnd, effort);
+  const conflict = h('div', { cls: 'helm-conflict' });
+  let conflictText: string | undefined;
+  const checkConflicts = (): void => {
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(scheduled.value) ? scheduled.value : undefined;
+    const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;
+    conflictText = day && time ? (describeConflicts(conflictsFor(ctx.index.snapshot, day, time, ctx.settings(), { effortMinutes: effort.get(), excludeKeys: [task.key, src.key, ...(src.id ? [src.id] : []), ...(task.mirrorOf ? [task.mirrorOf] : [])] })) || undefined) : undefined;
+    conflictWarning(conflict, conflictText);
+  };
+  for (const el of [timeStart, timeEnd, scheduled]) el.addEventListener('input', checkConflicts);
+  scheduled.addEventListener('change', checkConflicts);
+  effort.onChange(checkConflicts);
+  setTimeout(checkConflicts, 0);
   const blockedBy = h('input', { attr: { type: 'text', placeholder: 'tsk-abc123, tsk-def456', value: src.blockedBy.join(', ') } });
   const onDay = task.noteDate !== undefined && task.section !== 'outside';
   const partSel = h('select');
@@ -47,6 +61,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     field('Text', text),
     h('div', { cls: 'helm-grid2' }, field('Status', status), field('Priority', priority)),
     h('div', { cls: 'helm-grid3' }, field('Planned for', h('div', { cls: 'helm-row' }, scheduled, partSel)), field('Due', due), field('Start (not before)', start)),
+    conflict,
     h('div', { cls: 'helm-grid3' }, field('Effort', effort.el), field('Time block', h('div', { cls: 'helm-row' }, timeStart, timeEnd)), field('Repeat', recurrence)),
     field('Blocked by (ids)', blockedBy),
     where,
@@ -79,6 +94,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     const rv = recurrence.value.trim();
     if (rv === '') { if (src.recurrence) patch.recurrence = undefined; }
     else if (rv !== src.recurrence?.raw) { const r = parseRecurrence(rv); if (!r.parsed) { ctx.notify(`I do not understand “${rv}”. Try “every week on monday”.`); return; } patch.recurrence = { ...r, raw: formatRecurrence(r) }; }
+    if (conflictText && !window.confirm(`This overlaps ${conflictText}.\n\nSave anyway?`)) return;
     const ts = timeStart.value;
     const te = timeEnd.value;
     if (ts === '') { if (src.time) patch.time = undefined; }

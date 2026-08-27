@@ -11,7 +11,8 @@ import { append, button, chip, h } from '../dom';
 import type { UiContext } from '../context';
 import { pickProject } from '../menus';
 import { partOfTime } from '../../core/dailyNote';
-import { effortField, linkTimes, wikilinkSuggest } from '../fields';
+import { conflictWarning, effortField, linkTimes, wikilinkSuggest } from '../fields';
+import { conflictsFor, describeConflicts } from '../../data/conflicts';
 
 export interface CaptureDefaults {
   date?: IsoDate;
@@ -60,6 +61,8 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   const dayInput = h('input', { cls: 'helm-capture-date', attr: { type: 'date' }, title: 'Any day' });
   dayInput.addEventListener('change', () => { explicitDate = true; date = /^\d{4}-\d{2}-\d{2}$/.test(dayInput.value) ? dayInput.value : undefined; render(); });
   const dayRow = h('div', { cls: 'helm-capture-day' });
+  const conflict = h('div', { cls: 'helm-conflict' });
+  let conflictText: string | undefined;
   const drawDay = (): void => {
     const nextWeek = addDays(startOfWeek(today, ctx.settings().weekStartsOn), 7);
     const picks: [string, IsoDate | undefined, string][] = [['Today', today, today], ['Tomorrow', addDays(today, 1), addDays(today, 1)], ['+2', addDays(today, 2), addDays(today, 2)], ['Next week', nextWeek, nextWeek], ['Inbox', undefined, 'No day — the inbox, or the project only']];
@@ -94,6 +97,8 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (c.recurrence) preview.appendChild(chip(formatRecurrence(c.recurrence), 'recurrence'));
     for (const t of c.tags) preview.appendChild(chip(`#${t}`, 'tag'));
     drawDay();
+    conflictText = date && time ? (describeConflicts(conflictsFor(ctx.index.snapshot, date, time, ctx.settings(), { effortMinutes: effort.get() })) || undefined) : undefined;
+    conflictWarning(conflict, conflictText);
     dest.replaceChildren();
     const where = project ? `→ project “${project.title}”${phaseId ? ` › ${project.phases.find((p) => p.id === phaseId)?.title ?? ''}` : ''}${date ? ` (and today's plan)` : ''}` : date ? `→ daily note for ${humanDate(date, today)}` : `→ inbox (${ctx.settings().inboxNote})`;
     append(dest, [
@@ -116,6 +121,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   async function submit(keepOpen: boolean): Promise<void> {
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);
     if (c.text.trim() === '') return;
+    if (conflictText && !window.confirm(`This overlaps ${conflictText}.\n\nAdd it anyway?`)) return;
     const fields: Partial<TaskLine> = { priority: c.priority };
     if (c.due) fields.due = c.due;
     const eff = effort.get() ?? c.effortMinutes;
@@ -132,7 +138,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (keepOpen) { input.value = ''; render(); input.focus(); }
   }
 
-  root.append(input, preview, dayRow, dest, help, h('div', { cls: 'helm-modal-buttons' },
+  root.append(input, preview, dayRow, conflict, dest, help, h('div', { cls: 'helm-modal-buttons' },
     h('span', { cls: 'helm-hint', text: 'Enter to add · Shift+Enter to add and keep capturing' }),
     h('span', { cls: 'helm-spacer' }),
     button('Cancel', { onClick: () => m.close() }),

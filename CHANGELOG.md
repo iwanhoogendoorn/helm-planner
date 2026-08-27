@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Double-booking guard: when Capture, Follow up or the task editor has a day
+  and a time, Helm checks everything already timed on that day (its tasks,
+  mirrored project tasks and your own planner slots), shows an inline
+  “Overlaps 14:00–15:00 Team meeting” warning, and asks before writing.
+  Without an end time the effort (or the default effort) decides the length.
 - Capture has a Day row: Today · Tomorrow · +2 · Next week · Inbox, plus a
   date field, preset to the day you are looking at and overriding whatever
   the text says — so a task for another day is one click away from any view.

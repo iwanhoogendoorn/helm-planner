@@ -176,3 +176,10 @@ export function askNameAndLocation(ctx: { app: App; trackModal: (m: { close: () 
   ctx.trackModal(m);
   setTimeout(() => name.focus(), 0);
 }
+
+/** An inline conflict warning; empty when there is nothing to say. Returns the current conflict text for a confirm. */
+export function conflictWarning(el: HTMLElement, text: string | undefined): void {
+  el.replaceChildren();
+  el.style.display = text ? '' : 'none';
+  if (text) el.append(h('span', { cls: 'helm-conflict-icon', text: '⚠' }), h('span', { text: ` Overlaps ${text}` }));
+}

@@ -5,7 +5,8 @@ import { addDays, humanDate, startOfWeek } from '../../core/dates';
 import { DAY_PARTS, type DayPart } from '../../core/dailyNote';
 import { PART_LABEL } from '../../core/dailyNote';
 import { button, h } from '../dom';
-import { effortField, linkTimes, wikilinkSuggest } from '../fields';
+import { conflictWarning, effortField, linkTimes, wikilinkSuggest } from '../fields';
+import { conflictsFor, describeConflicts } from '../../data/conflicts';
 import { minutesToHuman } from '../../core/dates';
 import type { UiContext } from '../context';
 
@@ -20,11 +21,11 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   wikilinkSuggest(ctx, text);
   let date = addDays(today, 1);
   const dateInput = h('input', { attr: { type: 'date', value: date } });
-  dateInput.addEventListener('change', () => { if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput.value)) { date = dateInput.value; drawPresets(); } });
+  dateInput.addEventListener('change', () => { if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput.value)) { date = dateInput.value; drawPresets(); checkConflicts(); } });
   const presets = h('div', { cls: 'helm-presets' });
   const nextMonday = addDays(startOfWeek(today, ctx.settings().weekStartsOn), 7);
   const options: [string, string][] = [['Tomorrow', addDays(today, 1)], ['In 2 days', addDays(today, 2)], ['In 3 days', addDays(today, 3)], ['Next week', nextMonday], ['In a week', addDays(today, 7)]];
-  const drawPresets = (): void => { presets.replaceChildren(...options.map(([label, d]) => h('button', { cls: ['helm-seg', date === d && 'is-active'], text: label, title: humanDate(d, today, { year: true }), onClick: () => { date = d; dateInput.value = d; drawPresets(); } }))); };
+  const drawPresets = (): void => { presets.replaceChildren(...options.map(([label, d]) => h('button', { cls: ['helm-seg', date === d && 'is-active'], text: label, title: humanDate(d, today, { year: true }), onClick: () => { date = d; dateInput.value = d; drawPresets(); checkConflicts(); } }))); };
   drawPresets();
   // No pick = decided by the time, else the original's part.
   let part: DayPart | undefined;
@@ -36,6 +37,16 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   const timeEnd = h('input', { attr: { type: 'time', value: task.time?.end ?? '' }, title: 'End time' });
   const effort = effortField(task.effortMinutes);
   linkTimes(timeStart, timeEnd, effort);
+  const conflict = h('div', { cls: 'helm-conflict' });
+  let conflictText: string | undefined;
+  const checkConflicts = (): void => {
+    const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;
+    conflictText = time ? (describeConflicts(conflictsFor(ctx.index.snapshot, date, time, ctx.settings(), { effortMinutes: effort.get(), excludeKeys: [task.key, ...(task.id ? [task.id] : []), ...(task.mirrorOf ? [task.mirrorOf] : [])] })) || undefined) : undefined;
+    conflictWarning(conflict, conflictText);
+  };
+  timeStart.addEventListener('input', checkConflicts);
+  timeEnd.addEventListener('input', checkConflicts);
+  effort.onChange(checkConflicts);
   const open = !['done', 'cancelled', 'forwarded'].includes(task.status);
   const markDone = h('input', { attr: { type: 'checkbox', checked: open } });
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
@@ -48,12 +59,14 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
       field('Time', h('span', { cls: 'helm-capture-time' }, timeStart, h('span', { cls: 'helm-hint', text: '–' }), timeEnd)),
       field('Effort', effort.el),
     ),
+    conflict,
     ...(open ? [h('label', { cls: 'helm-toggle' }, markDone, h('span', { text: 'Mark the original done now' }))] : []),
     h('div', { cls: 'helm-hint', text: `The follow-up gets #${tag} and waits on the original (⛔), so it shows as “follows …” and unblocks when the original is ticked.` }),
     h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button('Create follow-up', { primary: true, icon: 'corner-down-right', onClick: () => void create() })),
   );
   async function create(): Promise<void> {
     if (text.value.trim() === '') { ctx.notify('Give the follow-up a title.'); text.focus(); return; }
+    if (conflictText && !window.confirm(`This overlaps ${conflictText}.\n\nCreate it anyway?`)) return;
     m.close();
     await ctx.run('Follow up', async () => {
       const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;
@@ -63,6 +76,7 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
     });
   }
   text.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); void create(); } });
+  checkConflicts();
   m.open();
   ctx.trackModal(m);
   setTimeout(() => { text.focus(); text.select(); }, 0);

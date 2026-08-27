@@ -845,3 +845,39 @@ describe('Capture for another day', () => {
     expect(m2.contentEl.querySelector('.helm-capture-where')!.textContent).toMatch(/^→ inbox/);
   });
 });
+
+describe('double-booking guard', () => {
+  it('Capture warns inline when the time overlaps and asks before adding; the follow-up dialog warns too', async () => {
+    const { ctx, m, vault, index } = await ctxFor();
+    await m.addTask({ text: 'Dentist', date: TODAY, fields: { time: { start: '10:00', end: '11:00' } } });
+    openCapture(ctx, { date: TODAY });
+    const cap = Modal.last!;
+    const input = cap.contentEl.querySelector<HTMLInputElement>('.helm-capture-input')!;
+    input.value = 'Haircut 10:30-11:00'; input.dispatchEvent(new Event('input'));
+    expect(cap.contentEl.querySelector<HTMLElement>('.helm-conflict')!.textContent).toBe('⚠ Overlaps 10:00–11:00 Dentist');
+    const confirms: string[] = [];
+    const orig = window.confirm;
+    window.confirm = (msg?: string) => { confirms.push(msg ?? ''); return false; };
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flush(); await flush();
+    expect(confirms[0]).toContain('overlaps 10:00–11:00 Dentist');
+    expect(await vault.read(dailyPath(TODAY))).not.toContain('Haircut');
+    window.confirm = () => true;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flush(); await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('10:30 - 11:00: Haircut');
+    window.confirm = orig;
+    // Follow-up: overlapping time on the chosen day shows the same warning.
+    const { openFollowUp } = await import('../../src/ui/modals/followUp');
+    const dentist = [...index.snapshot.tasks.values()].find((t) => t.text === 'Dentist')!;
+    openFollowUp(ctx, dentist);
+    const fu = Modal.last!;
+    click([...fu.contentEl.querySelectorAll<HTMLElement>('.helm-seg')].find((b) => b.textContent === 'Today') ?? fu.contentEl.querySelector('.helm-seg'));
+    const dateInput = fu.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!;
+    dateInput.value = TODAY; dateInput.dispatchEvent(new Event('change'));
+    const [ts] = [...fu.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')];
+    ts!.value = '10:45'; ts!.dispatchEvent(new Event('input'));
+    expect(fu.contentEl.querySelector<HTMLElement>('.helm-conflict')!.textContent).toContain('Haircut');
+    expect(fu.contentEl.querySelector<HTMLElement>('.helm-conflict')!.textContent).not.toContain('Dentist'); // itself excluded
+  });
+});
