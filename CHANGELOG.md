@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.7.0 — 2026-08-28
 
 - Search: the magnifier in the header (or the *Search everything* command)
   opens one search over tasks, projects, goals, habits, notes and drawings.
