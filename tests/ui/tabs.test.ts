@@ -465,6 +465,19 @@ describe('Horizons tab', () => {
 });
 
 describe('Dashboard tab', () => {
+  it('opens on this week and on daily-note tasks, with a filter for where the numbers come from', async () => {
+    const { ctx } = await ctxFor();
+    const state = defaultDashboardState();
+    expect([state.preset, state.source]).toEqual(['week', 'daily']);
+    const root = render((r) => renderDashboard(ctx, r, state));
+    expect(texts(root, '.helm-crumb')).toEqual(['Dashboard', 'This week']);
+    const sel = [...root.querySelectorAll<HTMLSelectElement>('.helm-dash-filters select')].find((s) => s.value === 'daily')!;
+    expect([...sel.options].map((o) => o.text)).toEqual(['Daily notes only', 'Daily + project notes', 'Every note']);
+    sel.value = 'daily-project';
+    sel.dispatchEvent(new Event('change'));
+    expect(state.source).toBe('daily-project');
+  });
+
   it('renders KPIs, charts, projects table and drills into a bar', async () => {
     const { ctx, vault } = await ctxFor();
     void vault;
@@ -864,7 +877,7 @@ describe('Breadcrumbs are consistent across tabs', () => {
     }
     // Trails: Review shows this week's time trail, Dashboard its range, Calendar the anchor's period.
     expect(texts(render(tabs[4]![1]), '.helm-crumb')).toEqual(['Review', '2026', 'Q3', 'Aug', 'W35']);
-    expect(texts(render(tabs[6]![1]), '.helm-crumb')).toEqual(['Dashboard', '30 days']);
+    expect(texts(render(tabs[6]![1]), '.helm-crumb')).toEqual(['Dashboard', 'This week']);
     expect(texts(render(tabs[1]![1]), '.helm-crumb')).toEqual(['Calendar', '2026', 'Q3', 'Aug', 'W35']);
   });
 });

@@ -6,12 +6,17 @@
 import type { Goal, Habit, HelmSettings, IsoDate, Project, Snapshot, Task } from '../core/types';
 import { addDays, diffDays, isoWeekday, startOfWeek } from '../core/dates';
 import { habitStats } from './habits';
+import { sourceOf } from './search';
 import { goalProgress, isOpen, projectHealth, type DayPart } from './planner';
 import { parsePeriod, periodContains } from '../core/periods';
+
+/** Which notes the numbers come from: only what you wrote on a day, that plus project notes, or everything Helm scans. */
+export type StatsSource = 'daily' | 'daily-project' | 'all';
 
 export interface StatsFilter {
   from: IsoDate;
   to: IsoDate;
+  source?: StatsSource;
   projectId?: string;
   area?: string;
   tag?: string;
@@ -54,6 +59,7 @@ function inRange(d: IsoDate | undefined, f: StatsFilter): boolean {
 }
 
 export function computeStats(snap: Snapshot, f: StatsFilter, today: IsoDate, settings: HelmSettings): DashboardStats {
+  const source: StatsSource = f.source ?? 'daily';
   const period = f.periodKey ? parsePeriod(f.periodKey) : undefined;
   const projectMatches = (p: Project | undefined): boolean => {
     if (f.projectId && (!p || (p.id !== f.projectId && p.parentId !== f.projectId))) return false;
@@ -66,6 +72,7 @@ export function computeStats(snap: Snapshot, f: StatsFilter, today: IsoDate, set
   for (const t of snap.tasks.values()) {
     if (t.origin === 'daily-mirror' || t.origin === 'goal') continue;
     if (t.origin === 'daily' && t.section === 'outside' && t.text === '') continue;
+    if (source !== 'all') { const src = sourceOf(t); if (src !== 'daily' && !(source === 'daily-project' && src === 'project')) continue; }
     const p = t.projectId ? snap.projects.get(t.projectId) : undefined;
     if ((f.projectId || f.area || period) && !projectMatches(p)) continue;
     if (f.tag && !t.tags.map((x) => x.toLowerCase()).includes(f.tag.toLowerCase())) continue;

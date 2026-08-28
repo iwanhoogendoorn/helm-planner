@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Dashboard: a filter for **where the numbers come from** — *Daily notes
+  only* (the new default), *Daily + project notes*, or *Every note*. Counting
+  every stray task in every note made the totals meaningless; now the KPIs,
+  charts and tables answer “what did I actually plan and do”.
+- Dashboard opens on **This week** instead of the last 30 days.
+
 - *Link existing note…* now finds every note in the vault, including project,
   periodic and habit notes — a song, book or recipe kept as a project note is
   a note like any other, and the picker says which kind it is. Only drawings

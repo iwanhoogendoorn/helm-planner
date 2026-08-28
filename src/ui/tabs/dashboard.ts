@@ -7,7 +7,7 @@ import { formatRecurrence } from '../../core/recurrence';
 import { colourise } from '../habitCard';
 import { habitBadge } from '../fields';
 import { MONTH_SHORT } from '../../core/dates';
-import { computeStats, filterOptions, type Series, type StatsFilter } from '../../data/stats';
+import { computeStats, filterOptions, type Series, type StatsFilter, type StatsSource } from '../../data/stats';
 import { PART_LABEL } from '../../core/dailyNote';
 import { barChart, donut, gauge, legend, lineChart } from '../charts';
 import { button, chip, h, icon, section } from '../dom';
@@ -27,13 +27,15 @@ export interface DashboardState {
   area?: string;
   tag?: string;
   periodKey?: string;
+  /** Which notes the numbers come from. */
+  source: StatsSource;
   /** Column size of the all-time habit tracker. */
   habitScope: PeriodKind;
   collapsed: Map<string, boolean>;
 }
 
 export function defaultDashboardState(): DashboardState {
-  return { preset: '30d', habitScope: 'month', collapsed: new Map() };
+  return { preset: 'week', source: 'daily', habitScope: 'month', collapsed: new Map() };
 }
 
 function rangeFor(state: DashboardState, today: IsoDate, weekStartsOn: 1 | 7): { from: IsoDate; to: IsoDate } {
@@ -58,7 +60,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   const settings = ctx.settings();
   const snap = ctx.index.snapshot;
   const range = rangeFor(state, today, settings.weekStartsOn);
-  const filter: StatsFilter = { from: range.from, to: range.to, ...(state.projectId ? { projectId: state.projectId } : {}), ...(state.area ? { area: state.area } : {}), ...(state.tag ? { tag: state.tag } : {}), ...(state.periodKey ? { periodKey: state.periodKey } : {}) };
+  const filter: StatsFilter = { from: range.from, to: range.to, source: state.source, ...(state.projectId ? { projectId: state.projectId } : {}), ...(state.area ? { area: state.area } : {}), ...(state.tag ? { tag: state.tag } : {}), ...(state.periodKey ? { periodKey: state.periodKey } : {}) };
   const s = computeStats(snap, filter, today, settings);
   const opts = filterOptions(snap);
   const refresh = (): void => ctx.refresh();
@@ -77,10 +79,12 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   const tagSel = h('select', { cls: 'helm-select-inline', onChange: (ev) => { state.tag = (ev.target as HTMLSelectElement).value || undefined; refresh(); } });
   tagSel.appendChild(h('option', { text: 'All tags', attr: { value: '' } }));
   for (const t of opts.tags) tagSel.appendChild(h('option', { text: `#${t}`, attr: { value: t, selected: state.tag === t } }));
+  const sourceSel = h('select', { cls: 'helm-select-inline', title: 'Which notes the numbers come from', onChange: (ev) => { state.source = (ev.target as HTMLSelectElement).value as StatsSource; refresh(); } });
+  for (const [k, label] of [['daily', 'Daily notes only'], ['daily-project', 'Daily + project notes'], ['all', 'Every note']] as [StatsSource, string][]) sourceSel.appendChild(h('option', { text: label, attr: { value: k, selected: state.source === k } }));
   const periodSel = h('select', { cls: 'helm-select-inline', onChange: (ev) => { state.periodKey = (ev.target as HTMLSelectElement).value || undefined; refresh(); } });
   periodSel.appendChild(h('option', { text: 'Any horizon', attr: { value: '' } }));
   for (const key of [periodOf(today, 'year').key, periodOf(today, 'quarter').key, periodOf(today, 'month').key]) periodSel.appendChild(h('option', { text: `Bound to ${key}`, attr: { value: key, selected: state.periodKey === key } }));
-  const bar = h('div', { cls: 'helm-toolbar helm-dash-filters' }, icon('filter'), presetSel, projSel, areaSel, tagSel, periodSel);
+  const bar = h('div', { cls: 'helm-toolbar helm-dash-filters' }, icon('filter'), presetSel, sourceSel, projSel, areaSel, tagSel, periodSel);
   if (state.preset === 'custom') {
     bar.append(
       h('input', { attr: { type: 'date', value: range.from }, onChange: (ev) => { state.from = (ev.target as HTMLInputElement).value; refresh(); } }),
