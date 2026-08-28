@@ -180,36 +180,56 @@ describe('Review tab', () => {
 });
 
 describe('Modals', () => {
-  it('search: groups hits by kind, arrows move the selection, Enter opens, and a task row can be edited', async () => {
-    const { ctx, nav, opened } = await ctxFor();
-    openSearch(ctx);
+  it('search: starting points, grouped hits, keyboard, and acting on a result without leaving', async () => {
+    const { ctx, nav, opened, vault } = await ctxFor();
+    await ctx.mutations.schedule('tsk-0001', TODAY);
+    openSearch(ctx, '');
     const m = Modal.last!;
     const input = m.contentEl.querySelector<HTMLInputElement>('.helm-search-input')!;
-    expect(m.contentEl.querySelector('.helm-empty')!.textContent).toContain('Type to search');
+    // Nothing typed: what is late, what is on today, what was touched last.
+    expect(texts(m.contentEl, '.helm-search-group').map((x) => x.replace(/\d+$/, ''))).toEqual(['Overdue', 'Today']);
+    expect(texts(m.contentEl, '.helm-search-row .helm-search-title')).toContain('Draft chapter list'); // the one planned for today
+    expect(m.contentEl.querySelector('.helm-search-summary')!.textContent).toContain('Where you left off');
+    // Typing searches; hits are grouped by kind, best first.
     input.value = 'chapter'; input.dispatchEvent(new Event('input'));
-    expect(texts(m.contentEl, '.helm-search-group')).toEqual(['Tasks3']);
-    expect(texts(m.contentEl, '.helm-search-row .helm-search-title')).toEqual(['Chapter 1', 'Chapter 2', 'Draft chapter list']);
+    expect(texts(m.contentEl, '.helm-search-group')).toEqual(['Tasks3', 'Create']);
+    expect(texts(m.contentEl, '.helm-search-row .helm-search-title')).toEqual(['Chapter 1', 'Chapter 2', 'Draft chapter list', 'Capture “chapter”…']);
     expect(m.contentEl.querySelectorAll('.helm-search-row')[0]!.classList.contains('is-selected')).toBe(true);
-    // Arrow down twice, Enter opens the third hit's note at its line.
+    // A filter chip toggles its token in and out of the query.
+    click([...m.contentEl.querySelectorAll('.helm-search-chips button')].find((b) => b.textContent === 'Open'));
+    expect(input.value).toBe('chapter is:open');
+    expect(m.contentEl.querySelector('.helm-search-chips .is-active')!.textContent).toBe('Open');
+    click([...m.contentEl.querySelectorAll('.helm-search-chips button')].find((b) => b.textContent === 'Open'));
+    expect(input.value).toBe('chapter');
+    // Ticking a task off the list writes to the note and the list stays open.
+    click(m.contentEl.querySelectorAll('.helm-search-row')[0]!.querySelector('.helm-check'));
+    await flush(); await flush();
+    expect(await vault.read('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')).toMatch(/- \[x\] Chapter 1/);
+    expect(Modal.last).toBe(m);
+    // Arrows then Enter open the third hit's note at its line.
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-    expect(m.contentEl.querySelectorAll('.helm-search-row')[2]!.classList.contains('is-selected')).toBe(true);
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     expect(opened.at(-1)).toBe('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md');
-    // A project hit navigates to the Projects tab instead of opening a file.
-    openSearch(ctx, 'kitchen');
-    const m2 = Modal.last!;
-    expect(texts(m2.contentEl, '.helm-search-group')).toContain('Projects1');
-    click([...m2.contentEl.querySelectorAll('.helm-search-row')].find((r) => r.querySelector('.helm-search-title')?.textContent === 'Kitchen Remodel'));
-    expect(nav.at(-1)).toEqual({ tab: 'projects', opts: { projectId: 'prj-kitchen' } });
-    // The pencil on a task hit opens the editor.
+    // ⌘Enter opens the row's action menu instead of the note.
     openSearch(ctx, 'chapter');
+    const m2 = Modal.last!;
+    m2.contentEl.querySelector('.helm-search-input')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true }));
+    expect(Menu.last!.items.map((i) => i.title)).toContain('Follow up…');
+    // A project hit navigates to its tab; the group header narrows the query.
+    openSearch(ctx, 'kitchen');
     const m3 = Modal.last!;
-    click(m3.contentEl.querySelector('.helm-search-row button[aria-label="Edit task"]'));
-    expect(Modal.last!.titleEl.textContent).toBe('Edit task');
-    // Nothing matching says so.
+    click([...m3.contentEl.querySelectorAll('.helm-search-group')].find((g) => g.textContent?.startsWith('Projects')));
+    expect(m3.contentEl.querySelector<HTMLInputElement>('.helm-search-input')!.value).toBe('kitchen kind:project');
+    click([...m3.contentEl.querySelectorAll('.helm-search-row')].find((r) => r.querySelector('.helm-search-title')?.textContent === 'Kitchen Remodel'));
+    expect(nav.at(-1)).toEqual({ tab: 'projects', opts: { projectId: 'prj-kitchen' } });
+    // Nothing matching still offers to capture the words.
     openSearch(ctx, 'zzzznothing');
-    expect(Modal.last!.contentEl.querySelector('.helm-empty')!.textContent).toContain('Nothing matches');
+    const m4 = Modal.last!;
+    expect(texts(m4.contentEl, '.helm-search-row .helm-search-title')).toEqual(['Capture “zzzznothing”…']);
+    click(m4.contentEl.querySelector('.helm-search-row'));
+    expect(Modal.last!.titleEl.textContent).toBe('Capture');
+    expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('input')!.value).toBe('zzzznothing');
   });
 
   it('task editor: a link added in the Links section shows at once, lands in the Text field and is written on Save', async () => {

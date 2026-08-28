@@ -102,6 +102,32 @@ function scoreOf(words: string[], title: string, other: string): number | undefi
   return score;
 }
 
+/** The typed words with the filter tokens taken out, in the original case — what a capture would use. */
+export function queryWords(raw: string): string {
+  return raw.trim().split(/\s+/).filter((tok) => {
+    if (!tok) return false;
+    if (tok.startsWith('#') || tok.startsWith('@')) return false;
+    const m = /^([a-z]+):(.*)$/i.exec(tok);
+    if (!m) return true;
+    const f = m[1]!.toLowerCase();
+    const v = m[2]!.toLowerCase();
+    if ((f === 'kind' || f === 'type' || f === 'in') && KIND_ALIAS[v]) return false;
+    if (f === 'is' && ['open', 'done', 'blocked', 'waiting', 'overdue'].includes(v)) return false;
+    if ((f === 'due' || f === 'on') && v !== '') return false;
+    return true;
+  }).join(' ');
+}
+
+/** Add a `field:value` token, or take it out when it is already there; another value of the same field is replaced. */
+export function toggleToken(raw: string, token: string): string {
+  const tokens = raw.trim().split(/\s+/).filter(Boolean);
+  const lower = token.toLowerCase();
+  if (tokens.some((t) => t.toLowerCase() === lower)) return tokens.filter((t) => t.toLowerCase() !== lower).join(' ');
+  const field = /^([a-z]+):/i.exec(token)?.[1]?.toLowerCase();
+  const kept = field === 'is' || field === 'due' || field === 'on' ? tokens.filter((t) => !new RegExp(`^${field}:`, 'i').test(t)) : tokens;
+  return [...kept, token].join(' ');
+}
+
 function taskSubtitle(t: Task, snap: Snapshot): string {
   const bits: string[] = [];
   if (t.projectId) { const p = snap.projects.get(t.projectId); if (p) bits.push(p.title); }
@@ -125,6 +151,29 @@ function statusOk(t: Task, snap: Snapshot, status: StatusFilter | undefined, tod
  * Rank everything that matches. Words must all appear (title first, other fields as a weak match);
  * `#tag`, `@project`, `is:`, `due:`, `on:` and `kind:` narrow it down.
  */
+export function taskHit(t: Task, snap: Snapshot, score = 0): SearchHit {
+  const title = plainLabel(t.text) || t.text;
+  return { kind: 'task', id: t.key, title, subtitle: taskSubtitle(t, snap), path: t.path, line: t.line, score, task: t };
+}
+
+export interface HitGroup { label: string; icon: string; hits: SearchHit[] }
+
+/** What to show before anything is typed: what is late, what is on today, what you touched last. */
+export function startingPoints(snap: Snapshot, today: IsoDate): HitGroup[] {
+  const open = [...snap.tasks.values()].filter((t) => t.origin !== 'daily-mirror' && isOpen(t));
+  const overdue = open.filter((t) => t.due !== undefined && t.due < today).sort((a, b) => (a.due ?? '').localeCompare(b.due ?? '')).slice(0, 6);
+  const todays = open.filter((t) => (t.scheduled ?? t.noteDate) === today).sort((a, b) => (a.time?.start ?? '~').localeCompare(b.time?.start ?? '~')).slice(0, 8);
+  const recent: SearchHit[] = [
+    ...[...snap.notes.values()].map((n) => ({ kind: 'note' as const, id: n.path, title: n.title, subtitle: n.path, path: n.path, score: n.mtime ?? 0, note: n })),
+    ...[...snap.drawings.values()].map((d) => ({ kind: 'drawing' as const, id: d.path, title: d.title, subtitle: d.path, path: d.path, score: d.mtime ?? 0, drawing: d })),
+  ].sort((a, b) => b.score - a.score).slice(0, 6);
+  return [
+    { label: 'Overdue', icon: 'alert-triangle', hits: overdue.map((t) => taskHit(t, snap)) },
+    { label: 'Today', icon: 'sun', hits: todays.map((t) => taskHit(t, snap)) },
+    { label: 'Recently edited', icon: 'history', hits: recent },
+  ].filter((g) => g.hits.length > 0);
+}
+
 export function search(snap: Snapshot, raw: string, opts: { today: IsoDate; limit?: number }): SearchHit[] {
   const q = parseQuery(raw, opts.today);
   const limit = opts.limit ?? 60;
@@ -148,7 +197,7 @@ export function search(snap: Snapshot, raw: string, opts: { today: IsoDate; limi
       const sub = taskSubtitle(t, snap);
       const s = q.words.length === 0 ? 20 : scoreOf(q.words, title, `${sub} ${t.tags.join(' ')} ${t.path}`);
       if (s === undefined) continue;
-      out.push({ kind: 'task', id: t.key, title, subtitle: sub, path: t.path, line: t.line, score: s + (isOpen(t) ? 8 : 0), task: t });
+      out.push(taskHit(t, snap, s + (isOpen(t) ? 8 : 0)));
     }
   }
   if (want('project') && !taskOnly) {

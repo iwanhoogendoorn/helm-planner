@@ -10,6 +10,14 @@
   `#tag`, `@project`, `is:open|done|blocked|waiting|overdue`,
   `due:today|week|<date>`, `on:<date>` and `kind:task|note|drawing|…`. The
   dialog sizes itself to the window instead of spilling out of its own box.
+- Search works as a workflow, not just a lookup: it opens on what is overdue,
+  what is planned for today and what you edited last; one-click filter chips
+  (Open, Overdue, Due this week, Today, and by kind); a checkbox on every task
+  hit to tick it off without leaving; ⌘/Ctrl+Enter (or right-click, or the ⋯
+  button) for the full task menu — schedule, part of the day, follow up,
+  notes, drawings, links; clicking a group header narrows to that kind; and
+  when nothing fits, *Capture “…”* turns what you typed into a new task. The
+  query is remembered while Obsidian stays open.
 - Follow-ups no longer add `#followup` on their own: the ⛔ link to the
   original is what makes one, and the tag is a toggle in the *Follow up…*
   dialog (off unless you switch it on). A task that waits on another shows

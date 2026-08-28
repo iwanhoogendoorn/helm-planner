@@ -742,3 +742,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-search-main { min-width: 0; flex: 1 1 auto; }
 .helm-search-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .helm-search-sub { font-size: var(--font-ui-smaller); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helm-search-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 2px; }
+.helm-search-chips .helm-tag-toggle { height: 22px; padding: 0 9px; }
+.helm-search-group.is-clickable { cursor: pointer; }
+.helm-search-group.is-clickable:hover { color: var(--text-normal); }
+.helm-search-row .helm-check { flex: none; margin-top: 0; }
+.helm-search-row.is-create .helm-search-title { color: var(--text-accent); }

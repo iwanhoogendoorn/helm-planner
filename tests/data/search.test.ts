@@ -60,3 +60,25 @@ describe('searching everything', () => {
     expect(keys).not.toContain('daily-mirror');
   });
 });
+
+describe('search as a workflow', () => {
+  it('offers starting points before anything is typed', async () => {
+    const { index, m } = await setup();
+    const { startingPoints } = await import('../../src/data/search');
+    await m.schedule('tsk-0001', TODAY);
+    const groups = startingPoints(index.snapshot, TODAY);
+    expect(groups.map((g) => g.label)).toEqual(['Overdue', 'Today']);
+    expect(groups[1]!.hits.map((x) => x.title)).toContain('Draft chapter list');
+    expect(groups[0]!.hits.every((x) => x.task!.due! < TODAY)).toBe(true);
+  });
+
+  it('toggles filter tokens and keeps the plain words for a capture', async () => {
+    const { queryWords, toggleToken } = await import('../../src/data/search');
+    expect(toggleToken('chapter', 'is:open')).toBe('chapter is:open');
+    expect(toggleToken('chapter is:open', 'is:open')).toBe('chapter');
+    expect(toggleToken('chapter is:open', 'is:overdue')).toBe('chapter is:overdue'); // same field replaces
+    expect(toggleToken('a kind:task', 'kind:note')).toBe('a kind:task kind:note'); // kinds stack
+    expect(queryWords('Call the Plumber #urgent @Kitchen is:open due:week kind:task')).toBe('Call the Plumber');
+    expect(queryWords('is:open')).toBe('');
+  });
+});
