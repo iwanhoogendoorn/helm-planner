@@ -24,7 +24,11 @@ describe('note attachments', () => {
     expect(index.snapshot.notes.has('81 AI/Certs research.md')).toBe(true);
     expect(index.snapshot.notes.has('30 HOUSE/Plumber quotes.md')).toBe(false); // unindexed, still found by the link
     expect(index.linkableNotes().map((n) => n.title)).toEqual(expect.arrayContaining(['Certs research', 'Plumber quotes', 'Reading list', 'Backlog Tasks']));
-    expect(index.linkableNotes().map((n) => n.title)).not.toContain('Kitchen Remodel');
+    // A project note is linkable too — plenty of people keep real content in one — and says what it is.
+    expect(index.linkableNotes().find((n) => n.title === 'Kitchen Remodel')).toEqual({ path: '02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md', title: 'Kitchen Remodel', kind: 'project' });
+    expect(index.linkableNotes().find((n) => n.title === 'Reading list')!.kind).toBeUndefined(); // a plain note carries no label
+    expect(index.linkableNotes().some((n) => n.path.includes('70-06 Daily Notes'))).toBe(false); // days are attached to as days
+    expect(index.linkableNotes().some((n) => n.path.endsWith('.excalidraw.md'))).toBe(false);
     // A keyed note outside the scanned folders is picked up when it changes.
     await vault.write('99 ELSEWHERE/Later.md', NOTE('helm-date: 2026-08-26'));
     index.update('99 ELSEWHERE/Later.md', await vault.read('99 ELSEWHERE/Later.md'));

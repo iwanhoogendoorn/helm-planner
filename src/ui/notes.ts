@@ -25,18 +25,20 @@ export function newNote(ctx: UiContext, target: DrawingTarget): void {
   });
 }
 
-class NotePicker extends FuzzySuggestModal<{ path: string; title: string }> {
-  constructor(ctx: UiContext, private items: { path: string; title: string }[], private onPick: (n: { path: string; title: string }) => void) {
+type PickableNote = { path: string; title: string; kind?: string };
+
+class NotePicker extends FuzzySuggestModal<PickableNote> {
+  constructor(ctx: UiContext, private items: PickableNote[], private onPick: (n: PickableNote) => void) {
     super(ctx.app);
     this.setPlaceholder('Note to link…');
   }
-  getItems(): { path: string; title: string }[] { return this.items; }
-  getItemText(n: { path: string; title: string }): string { return `${n.title}  ·  ${n.path}`; }
-  onChooseItem(n: { path: string; title: string }): void { this.onPick(n); }
+  getItems(): PickableNote[] { return this.items; }
+  getItemText(n: PickableNote): string { return `${n.title}  ·  ${n.kind ? `${n.kind}  ·  ` : ''}${n.path}`; }
+  onChooseItem(n: PickableNote): void { this.onPick(n); }
 }
 
 /** Choose a linkable note that is not in `exclude`. */
-export function pickNote(ctx: UiContext, exclude: Set<string>, onPick: (n: { path: string; title: string }) => void): void {
+export function pickNote(ctx: UiContext, exclude: Set<string>, onPick: (n: PickableNote) => void): void {
   const items = ctx.index.linkableNotes().filter((n) => !exclude.has(n.path));
   if (items.length === 0) { ctx.notify('No notes left to link.'); return; }
   const m = new NotePicker(ctx, items, onPick);

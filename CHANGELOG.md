@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- *Link existing note…* now finds every note in the vault, including project,
+  periodic and habit notes — a song, book or recipe kept as a project note is
+  a note like any other, and the picker says which kind it is. Only drawings
+  and real daily notes stay out (a day is attached to as a day).
+
 ## 1.10.0 — 2026-08-28
 
 - Dragging a timed task into another part of the day retimes it: it takes the

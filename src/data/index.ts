@@ -516,9 +516,20 @@ export class HelmIndex {
     return [...out].sort((a, b) => a.localeCompare(b));
   }
 
-  /** Every markdown note in the vault that could be linked (not Helm's own project / daily / periodic notes, not drawings). */
-  linkableNotes(): { path: string; title: string }[] {
-    return [...this.allNoteTitles.values()].filter((p) => { const e = this.files.get(p); return !e || e.kind === 'note' || e.kind === 'drawing' ? !isDrawingPath(p) && !(e && e.kind !== 'note') : false; }).map((p) => ({ path: p, title: noteTitle(p) })).sort((a, b) => a.title.localeCompare(b.title));
+  /**
+   * Every markdown note that can be attached to something: anything in the vault except drawings and
+   * daily notes (a day is attached to as a day). Project, periodic and habit notes count — plenty of
+   * people keep real content in them — and carry their kind so a picker can say what they are.
+   */
+  linkableNotes(): { path: string; title: string; kind?: FileKind }[] {
+    const out: { path: string; title: string; kind?: FileKind }[] = [];
+    for (const p of this.allNoteTitles.values()) {
+      if (isDrawingPath(p)) continue;
+      const kind = this.files.get(p)?.kind;
+      if (kind === 'daily' || kind === 'drawing' || this.dateOfPath(p) !== undefined) continue; // a day is attached to as a day, parsed or not
+      out.push({ path: p, title: noteTitle(p), ...(kind && kind !== 'note' ? { kind } : {}) });
+    }
+    return out.sort((a, b) => a.title.localeCompare(b.title));
   }
 
   /** Paths of notes whose Notes heading links a note by title. */
