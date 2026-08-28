@@ -23,7 +23,7 @@ import { columnWidth } from '../core/tree';
 import type { HelmIndex } from './index';
 import { baseName, type VaultAdapter } from './vault';
 import { habitDue, habitOccurrences } from './habits';
-import { isOpen, misfiledDate } from './planner';
+import { misfiledDate } from './planner';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
 import { bundledTemplate, bundledDailyTemplate, type TemplateConfig } from '../core/periodicTemplates';
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
@@ -884,7 +884,7 @@ export class Mutations {
       const part = opts.part ?? (fields.time ? undefined : src.part && src.part !== 'anytime' ? src.part : undefined);
       await this.addTask({ text, date: opts.date, ...(part ? { part } : {}), fields });
     }
-    // Unfinished subtasks come along to the follow-up; the finished ones stay as the original's record.
+    // The subtasks come along to the follow-up, finished ones included — a done subtask stays done.
     const made = [...this.index.snapshot.tasks.values()].find((t) => t.id === followUpId && t.origin !== 'daily-mirror');
     if (made) await this.moveSubtasks(src.key, made.key);
     // Whatever was attached to the original travels along: the same notes and drawings, now tied to both tasks.
@@ -899,13 +899,10 @@ export class Mutations {
     return { id, date: opts.date, followUpId };
   }
 
-  /**
-   * Move a task's unfinished subtasks (with everything nested under them) so they sit under another
-   * task. Finished ones stay where they are — they are the record of what was done.
-   */
+  /** Move every subtask of a task (with everything nested under them) so they sit under another task. */
   async moveSubtasks(fromKey: string, toKey: string): Promise<number> {
     const src = this.fresh(fromKey);
-    const kids = src.childKeys.map((k) => this.index.task(k)).filter((c): c is Task => c !== undefined && isOpen(c));
+    const kids = src.childKeys.map((k) => this.index.task(k)).filter((c): c is Task => c !== undefined);
     if (kids.length === 0) return 0;
     const unit = this.settings.indentUnit || '\t';
     const baseIndent = kids[0]!.raw.indent;

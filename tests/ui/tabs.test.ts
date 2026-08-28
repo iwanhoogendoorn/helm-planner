@@ -1247,6 +1247,25 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('takes the subtasks along, done ones included', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    await m.addTask({ text: 'Ship the draft', date: TODAY, part: 'morning' });
+    const parent = [...index.snapshot.tasks.values()].find((x) => x.text === 'Ship the draft')!;
+    await m.addTask({ text: 'Proof it', parentKey: parent.key });
+    await m.addTask({ text: 'Send it', parentKey: parent.key });
+    const proof = index.task(parent.key)!.childKeys.map((k) => index.task(k)!)[0]!;
+    await m.setStatus(proof.key, 'done');
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const el = root.querySelector<HTMLElement>('.helm-section.part-evening')!;
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? index.task(parent.key)!.key : '') } });
+    el.dispatchEvent(ev);
+    await flush(); await flush(); await flush();
+    const note = await vault.read(dailyPath(TODAY));
+    expect(note).toMatch(/#+ Evening\n(?:.*\n)*?- \[ \] Ship the draft\n\t- \[x\] Proof it[^\n]*\n\t- \[ \] Send it/);
+    expect(note.split('# Morning')[1]?.split('#')[0] ?? '').not.toContain('Proof it');
+  });
+
   it('gives a timed task the first free slot in the part it lands in, keeping its length', async () => {
     const { ctx, m, index, vault } = await ctxFor();
     await m.addTask({ text: 'Review links', date: TODAY, part: 'evening', fields: { time: { start: '21:00', end: '22:00' } } });
@@ -1273,7 +1292,7 @@ describe('dragging a task between parts of the day', () => {
     const task = [...index.snapshot.tasks.values()].find((x) => x.text === 'Tidy desk')!;
     const el = root.querySelector<HTMLElement>('.helm-section.part-afternoon')!;
     const ev = new Event('drop', { bubbles: true, cancelable: true });
-    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: () => task.key } });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? task.key : '') } });
     el.dispatchEvent(ev);
     await flush(); await flush(); await flush();
     const note = await vault.read(dailyPath(TODAY));

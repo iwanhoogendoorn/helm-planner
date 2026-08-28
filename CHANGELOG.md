@@ -4,8 +4,11 @@
 
 - Subtasks: *Add subtask…* in a task's menu writes an indented line under it in
   the same note (Shift+Enter keeps the dialog open for the next one).
-- A follow-up takes the unfinished subtasks with it — nested ones and all —
-  while the finished ones stay behind as the original's record.
+- Subtasks travel with their task, always: dragging it to another part of the
+  day, scheduling it for another day and creating a follow-up all take the
+  whole subtree along — finished subtasks included, still ticked. Moving a
+  task between parts used to leave its subtasks behind, and the day's
+  time-ordering could split a task from them.
 - A finished subtask keeps its place under its parent **and** shows among the
   day's done work, marked with a ↳, so nothing you completed goes missing.
 

@@ -299,7 +299,14 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
 
   const replacements = new Map<number, string>();
   const removals = new Set<number>();
-  const inserts: Record<Section, string[]> = { habits: [], morning: [], afternoon: [], evening: [], anytime: [] };
+  // Lines to add, grouped so a task and the subtasks under it are placed together.
+  const inserts: Record<Section, string[][]> = { habits: [], morning: [], afternoon: [], evening: [], anytime: [] };
+  const addInsert = (sec: Section, l: TaskLine): void => {
+    const groups = inserts[sec];
+    const last = groups[groups.length - 1];
+    if (l.raw.indent !== '' && last) last.push(render(l));
+    else groups.push([render(l)]);
+  };
   const keptIndexes = new Set<number>();
   for (const sec of SECTION_ORDER) {
     for (const l of next[sec]) {
@@ -308,11 +315,12 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
         keptIndexes.add(prev.index);
         const text = render(l);
         if (text !== lines[prev.index]) replacements.set(prev.index, l.raw.indent === '' && /^[ \t]+/.test(lines[prev.index]!) ? lines[prev.index]!.match(/^[ \t]*/)![0] + text : text);
+        inserts[sec].push([]); // a kept line breaks the run, so the next subtask starts its own group
       } else if (prev) {
         keptIndexes.add(prev.index);
         removals.add(prev.index);
-        inserts[sec].push(render(l));
-      } else inserts[sec].push(render(l));
+        addInsert(sec, l);
+      } else addInsert(sec, l);
     }
   }
   for (const idx of allIndexes) if (!keptIndexes.has(idx)) removals.add(idx);
@@ -322,13 +330,14 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
 
   // Insert per section, re-scanning after each change.
   for (const sec of SECTION_ORDER) {
-    if (inserts[sec].length === 0) continue;
+    const groups = inserts[sec].filter((g) => g.length > 0);
+    if (groups.length === 0) continue;
     const r = findRegion(lines, settings).region;
     const info = r?.sections[sec];
     if (info && info.line >= 0) {
-      for (const text of inserts[sec]) {
+      for (const group of groups) {
         const cur = findRegion(lines, settings).region!.sections[sec];
-        lines.splice(insertionIndexInSection(lines, cur, text), 0, text);
+        lines.splice(insertionIndexInSection(lines, cur, group[0]!), 0, ...group);
       }
     } else {
       const at = newSectionPoint(lines, sec, r ?? region, settings);
@@ -338,7 +347,7 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
       const pad = region.adopted;
       const before = pad && at.index > 0 && lines[at.index - 1]!.trim() !== '' ? [''] : [];
       const after = pad && at.index < lines.length && lines[at.index]!.trim() !== '' ? [''] : [];
-      lines.splice(at.index, 0, ...before, heading, ...inserts[sec], ...after);
+      lines.splice(at.index, 0, ...before, heading, ...groups.flat(), ...after);
     }
   }
 
@@ -406,11 +415,17 @@ export function regionLines(c: RegionContent): { line: TaskLine; part: DayPart }
 }
 
 /** Remove every line matching `pred` from every part; returns the removed lines. */
+/** Take matching lines out of the day, each with the subtasks indented under it. */
 export function removeLines(c: RegionContent, pred: (l: TaskLine, part: DayPart) => boolean): TaskLine[] {
   const removed: TaskLine[] = [];
   for (const p of DAY_PARTS) {
     const keep: TaskLine[] = [];
-    for (const l of c[p]) { if (pred(l, p)) removed.push(l); else keep.push(l); }
+    let subtreeOf: string | undefined; // indent of the line being taken, while its children follow
+    for (const l of c[p]) {
+      if (subtreeOf !== undefined && l.raw.indent.length > subtreeOf.length) { removed.push(l); continue; }
+      subtreeOf = undefined;
+      if (pred(l, p)) { removed.push(l); subtreeOf = l.raw.indent; } else keep.push(l);
+    }
     c[p] = keep;
   }
   return removed;
