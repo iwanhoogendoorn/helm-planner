@@ -6,7 +6,8 @@
   readable label (host and path); the task menu's *Links* submenu opens,
   adds (*Add link…*: URL + optional label, written as a markdown link that
   Tasks understands) and removes links; the task editor has a Links
-  section; rows show a link-count pill. As many links as you like.
+  section that updates at once and saves with the task; rows show a
+  link-count pill. As many links as you like.
 
 ## 1.6.2 — 2026-08-28
 

@@ -179,6 +179,33 @@ describe('Review tab', () => {
 });
 
 describe('Modals', () => {
+  it('task editor: a link added in the Links section shows at once, lands in the Text field and is written on Save', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await ctx.mutations.addTask({ text: 'Chase UC3', date: TODAY, part: 'morning' });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Chase UC3')!;
+    openTaskEditor(ctx, t);
+    const ed = Modal.last!;
+    const textInput = ed.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;
+    expect(ed.contentEl.querySelector('.helm-attach-section')!.textContent).toContain('No links yet.');
+    click([...ed.contentEl.querySelectorAll('.helm-attach-section button')].find((b) => b.textContent?.includes('Add link')));
+    const dlg = Modal.last!;
+    const inputs = dlg.contentEl.querySelectorAll<HTMLInputElement>('input');
+    inputs[0]!.value = 'http://www.iwanhoogendoorn.nl'; inputs[1]!.value = 'My website';
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
+    expect(texts(ed.contentEl, '.helm-attach-row a')).toEqual(['My website']); // immediately, no save needed
+    expect(textInput.value).toBe('Chase UC3 [My website](http://www.iwanhoogendoorn.nl)');
+    expect((await vault.read(dailyPath(TODAY)))).not.toContain('iwanhoogendoorn'); // nothing written yet
+    click(ed.contentEl.querySelector('.helm-attach-row button[aria-label="Remove this link"]'));
+    expect(ed.contentEl.querySelector('.helm-attach-section')!.textContent).toContain('No links yet.');
+    click([...ed.contentEl.querySelectorAll('.helm-attach-section button')].find((b) => b.textContent?.includes('Add link')));
+    const d2 = Modal.last!.contentEl.querySelectorAll<HTMLInputElement>('input');
+    d2[0]!.value = 'https://jira.example.com/browse/RSC-1';
+    click([...Modal.last!.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
+    click([...ed.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('Chase UC3 [jira.example.com/browse/RSC-1](https://jira.example.com/browse/RSC-1)');
+  });
+
   it('task links: bare URLs render as labelled anchors; the menu opens, adds and removes links; the row shows a pill', async () => {
     const { ctx, index, vault } = await ctxFor();
     await ctx.mutations.addTask({ text: 'Chase UC3 https://jira.example.com/browse/RSC-1', date: TODAY, part: 'morning' });

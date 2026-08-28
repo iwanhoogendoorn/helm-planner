@@ -68,7 +68,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     where,
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Notes' }), notesSection(ctx, targetForTask(task))),
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Drawings' }), drawingsSection(ctx, targetForTask(task))),
-    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Links' }), linksSection(ctx, task)),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Links' }), linksSection(ctx, { get: () => text.value, set: (v) => { text.value = v; text.dispatchEvent(new Event('input', { bubbles: true })); } })),
     h('div', { cls: 'helm-modal-buttons' },
       button('Follow up…', { icon: 'corner-down-right', cls: 'helm-btn-quiet', title: 'Continue this task another day', onClick: () => { m.close(); openFollowUp(ctx, task); } }),
       button('Move to project…', { icon: 'folder-input', onClick: () => pickProject(ctx, (p, phaseId) => { m.close(); void ctx.run('Move', () => ctx.mutations.moveToProject(src.key, p.id, phaseId)); }, { phases: true }) }),
