@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.0 — 2026-08-28
 
 - Moving a task to another day now takes the part of the day with it: every
   date in the task menu (Today, Tomorrow, Next week) opens onto *Morning /
