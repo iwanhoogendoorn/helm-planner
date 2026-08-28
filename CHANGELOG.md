@@ -10,7 +10,8 @@
   task between parts used to leave its subtasks behind, and the day's
   time-ordering could split a task from them.
 - A finished subtask keeps its place under its parent **and** shows among the
-  day's done work, marked with a ↳, so nothing you completed goes missing.
+  day's done work, carrying a *part of ‹task›* chip that opens the parent — so
+  it can never read as a subtask of the row above it.
 
 ## 1.11.0 — 2026-08-28
 

@@ -754,5 +754,5 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-source-pills .helm-tag-toggle { height: 24px; }
 .helm-dash-sources { margin-top: -2px; }
 .helm-dash-sources .helm-hint { margin-right: 2px; }
-.helm-task.is-subtask::before, .helm-ghost.is-subtask > .helm-task::before { content: '↳'; color: var(--text-faint); margin-right: 2px; }
-.helm-ghost.is-subtask, .helm-task.is-subtask { padding-left: 14px; }
+.helm-chip.subtask-of { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; background: var(--background-modifier-border); color: var(--text-muted); border: none; height: auto; }
+.helm-chip.subtask-of svg { width: 11px; height: 11px; }

@@ -546,7 +546,9 @@ describe('Dashboard tab', () => {
     expect(texts(root, '.helm-section-title')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
     // 'Collect diagrams' is a finished subtask: under its parent, and again as a ghost among the morning's done work.
     expect(texts(root, '.helm-section.part-morning .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams', 'Collect diagrams']);
-    expect(texts(root, '.helm-section.part-morning .helm-ghost.is-subtask .helm-task-text')).toEqual(['Collect diagrams']);
+    const ghost = [...root.querySelectorAll('.helm-section.part-morning .helm-ghost')].find((r) => r.querySelector('.helm-chip.subtask-of'))!;
+    expect(ghost.querySelector('.helm-task-text')!.textContent).toBe('Collect diagrams');
+    expect(ghost.querySelector('.helm-chip.subtask-of')!.textContent).toBe('part of Draft chapter list'); // says whose subtask it is
     const evening = root.querySelector('.helm-section.part-evening')!;
     const dt = { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? `tsk-0001@${TODAY}` : '') };
     const ev = new Event('drop', { bubbles: true, cancelable: true });

@@ -14,6 +14,7 @@ import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { habitBadge } from '../fields';
 import { dayPartOf } from '../../data/habits';
+import { plainLabel, shortLabel } from '../../core/label';
 import { preferredSlot } from '../../data/conflicts';
 import { habitMenu } from '../habits';
 import { habitCard, colourise } from '../habitCard';
@@ -111,7 +112,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     // Finished tasks stay in their part as ghosts, so a part you worked through does not read as an empty morning.
     const doneItems = plan.byPart[part].filter((it) => it.display.status === 'done' || it.display.status === 'cancelled');
     // Subtasks that got done still sit under their parent; they also show here, so the day's record is complete.
-    const doneSubtasks = plan.byPart[part].flatMap((it) => it.display.childKeys.map((k) => snap.tasks.get(k)).filter((c): c is Task => c !== undefined && (c.status === 'done' || c.status === 'cancelled')));
+    const doneSubtasks = plan.byPart[part].flatMap((it) => it.display.childKeys.map((k) => snap.tasks.get(k)).filter((c): c is Task => c !== undefined && (c.status === 'done' || c.status === 'cancelled')).map((c) => ({ child: c, parent: it.display })));
     const partHabits = part !== 'anytime' ? habitChipsFor(part) : null;
     if (items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && !partHabits && (isPast || (openItems.length === 0 && part !== 'anytime'))) continue;
     const minutes = items.reduce((s, it) => s + (it.display.effortMinutes ?? settings.defaultEffortMinutes), 0);
@@ -124,7 +125,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
       ],
     }, partHabits, ...items.map((it) => itemRow(ctx, it)),
       ...doneItems.map((it) => { const row = taskRow(ctx, it.display, { showDate: 'none' }); row.classList.add('helm-ghost'); return row; }),
-      ...doneSubtasks.map((c) => { const row = taskRow(ctx, c, { showDate: 'none' }); row.classList.add('helm-ghost', 'is-subtask'); return row; }),
+      ...doneSubtasks.map(({ child, parent }) => subtaskGhost(ctx, child, parent)),
       items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
     sec.querySelector('.helm-section-head')?.prepend(icon(PART_ICON[part], 'helm-part-icon'));
     makeDropZone(ctx, sec, date, part);
@@ -163,6 +164,16 @@ function makeDropZone(ctx: UiContext, el: HTMLElement, date: IsoDate, part: DayP
       if (slot) await ctx.mutations.updateTask(key, { time: slot });
     });
   });
+}
+
+/** A finished subtask listed among the day's done work: it names the task it belongs to, so it cannot read as the row above's child. */
+function subtaskGhost(ctx: UiContext, child: Task, parent: Task): HTMLElement {
+  const row = taskRow(ctx, child, { showDate: 'none' });
+  row.classList.add('helm-ghost');
+  const main = row.querySelector('.helm-task-main') ?? row;
+  const meta = main.querySelector('.helm-task-meta') ?? main.appendChild(h('div', { cls: 'helm-task-meta' }));
+  meta.appendChild(h('button', { cls: 'helm-chip subtask-of', title: `Subtask of “${plainLabel(parent.text)}” — click to open`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(parent.path, parent.line); } }, icon('corner-down-right'), h('span', { cls: 'helm-chip-label', text: `part of ${shortLabel(parent.text, 40)}` })));
+  return row;
 }
 
 /** Where a dragged, timed task should sit in its new part: the first free slot, keeping its length. */
