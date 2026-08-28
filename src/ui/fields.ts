@@ -57,11 +57,19 @@ const toHhmm = (min: number): string => `${String(Math.floor(((min % 1440) + 144
  *  end changes → effort = end − start
  */
 export function linkTimes(start: HTMLInputElement, end: HTMLInputElement, effort: EffortField): void {
+  let previousStart = start.value;
   start.addEventListener('input', () => {
+    const from = previousStart;
+    previousStart = start.value;
     if (!start.value) return;
     const e = effort.get();
-    if (e !== undefined) end.value = toHhmm(toMin(start.value) + e);
-    else if (end.value && toMin(end.value) > toMin(start.value)) effort.set(toMin(end.value) - toMin(start.value));
+    if (e !== undefined) { end.value = toHhmm(toMin(start.value) + e); return; }
+    if (!end.value) return;
+    // No estimate: moving the start moves the whole block, so the end can never be left behind it.
+    const duration = from && toMin(end.value) > toMin(from) ? toMin(end.value) - toMin(from) : undefined;
+    if (duration !== undefined) end.value = toHhmm(toMin(start.value) + duration);
+    else if (toMin(end.value) > toMin(start.value)) effort.set(toMin(end.value) - toMin(start.value));
+    else end.value = '';
   });
   effort.onChange(() => {
     const e = effort.get();

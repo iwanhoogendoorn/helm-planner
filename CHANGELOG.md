@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Moving a task's start time now moves its end with it. Picking a part of
+  the day (or *Move to …*) on a task with times but no estimate used to set
+  the start and leave the old end behind it — 18:00–10:00.
+
 ## 1.8.0 — 2026-08-28
 
 - Picking a part of the day now sets the time with it: Capture, *Follow up…*

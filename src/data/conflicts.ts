@@ -17,7 +17,8 @@ export function bookingsOn(snap: Snapshot, date: IsoDate, settings: HelmSettings
     if (!t.time || seen.has(t.key) || t.text.trim() === '' || t.status === 'cancelled' || t.status === 'forwarded') return;
     seen.add(t.key);
     const start = toMin(t.time.start);
-    const end = t.time.end ? toMin(t.time.end) : start + (t.effortMinutes ?? settings.defaultEffortMinutes);
+    const ended = t.time.end ? toMin(t.time.end) : undefined;
+    const end = ended !== undefined && ended > start ? ended : start + (t.effortMinutes ?? settings.defaultEffortMinutes);
     out.push({ key: t.key, label: t.text, start: t.time.start, end: toHhmm(end), task: t });
   };
   for (const it of plan.items) add(it.display.time ? it.display : it.task);
