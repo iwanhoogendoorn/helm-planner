@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.8.0 — 2026-08-28
 
 - Picking a part of the day now sets the time with it: Capture, *Follow up…*
   and the task editor jump the block to the first **free** slot in that part
