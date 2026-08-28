@@ -12,7 +12,7 @@ import type { UiContext } from '../context';
 import { pickProject } from '../menus';
 import { partOfTime } from '../../core/dailyNote';
 import { conflictWarning, effortField, linkTimes, wikilinkSuggest } from '../fields';
-import { conflictsFor, describeConflicts, freeSlotOn, partWindow } from '../../data/conflicts';
+import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot } from '../../data/conflicts';
 
 export interface CaptureDefaults {
   date?: IsoDate;
@@ -51,7 +51,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     const s = ctx.settings();
     if (!date) return partWindow(p, s).from;
     const notBefore = date === today ? ctx.now() : undefined;
-    return freeSlotOn(ctx.index.snapshot, date, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, ...(notBefore ? { notBefore } : {}) }) ?? partWindow(p, s).from;
+    return preferredSlot(ctx.index.snapshot, date, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, ...(notBefore ? { notBefore } : {}) });
   };
   timeEnd.addEventListener('input', () => { if (programmatic) return; timeTouched = true; });
   linkTimes(timeStart, timeEnd, effort);

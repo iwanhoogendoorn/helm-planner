@@ -50,6 +50,11 @@ const render = (fn: (root: HTMLElement) => void): HTMLElement => { const root = 
 const texts = (root: HTMLElement, sel: string): string[] => [...root.querySelectorAll<HTMLElement>(sel)].map((e) => e.textContent?.trim() ?? '');
 const click = (el: Element | null | undefined): void => { if (!el) throw new Error('element missing'); el.dispatchEvent(new MouseEvent('click', { bubbles: true })); };
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+/** Wait for something the UI does asynchronously (a FileReader, a chain of awaits) instead of guessing at flushes. */
+const waitFor = async <T>(get: () => T | null | undefined, what = 'condition', tries = 200): Promise<T> => {
+  for (let i = 0; i < tries; i++) { const v = get(); if (v !== null && v !== undefined && v !== false) return v as T; await flush(); }
+  throw new Error(`waitFor: ${what} never happened`);
+};
 
 beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; });
 
@@ -819,12 +824,12 @@ describe('Habit form modal', () => {
     const png = new File([new Uint8Array([137, 80, 78, 71])], 'water-drop.png', { type: 'image/png' });
     Object.defineProperty(file, 'files', { value: [png] });
     file.dispatchEvent(new Event('change'));
-    await flush(); await flush();
-    expect(root.querySelector('.helm-habit-icon-preview img')).not.toBeNull();
+    await waitFor(() => root.querySelector('.helm-habit-icon-preview img'), 'the icon preview');
     click([...root.querySelectorAll('.helm-seg')].find((b) => b.textContent === 'Every N days'));
     click([...root.querySelectorAll('.helm-seg')].find((b) => b.textContent === '3'));
     click([...root.querySelectorAll('button')].find((b) => b.textContent?.includes('Create habit')));
-    await flush(); await flush(); await flush();
+    await waitFor(() => vault.binaries.size > 0, 'the icon to be written');
+    await waitFor(() => vault.files.has('02 PROJECTS/Habits/Hydrate.md'), 'the habit note');
     expect([...vault.binaries.keys()]).toEqual(['02 PROJECTS/Habits/icons/Hydrate.png']);
     const note = await vault.read('02 PROJECTS/Habits/Hydrate.md');
     expect(note).toContain('icon_image: 02 PROJECTS/Habits/icons/Hydrate.png');
@@ -1217,6 +1222,42 @@ describe('Capture for another day', () => {
     const m2 = Modal.last!;
     click([...m2.contentEl.querySelectorAll<HTMLElement>('.helm-capture-day .helm-seg')].find((b) => b.textContent === 'Inbox'));
     expect(m2.contentEl.querySelector('.helm-capture-where')!.textContent).toMatch(/^→ inbox/);
+  });
+});
+
+describe('dragging a task between parts of the day', () => {
+  it('gives a timed task the first free slot in the part it lands in, keeping its length', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    await m.addTask({ text: 'Review links', date: TODAY, part: 'evening', fields: { time: { start: '21:00', end: '22:00' } } });
+    await m.addTask({ text: 'Standup', date: TODAY, part: 'morning', fields: { time: { start: '08:00', end: '08:30' } } });
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const drop = (part: string, key: string): void => {
+      const el = root.querySelector<HTMLElement>(`.helm-section.part-${part}`)!;
+      const ev = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? key : '') } });
+      el.dispatchEvent(ev);
+    };
+    const task = [...index.snapshot.tasks.values()].find((x) => x.text === 'Review links')!;
+    drop('morning', task.key);
+    await flush(); await flush(); await flush();
+    const note = await vault.read(dailyPath(TODAY));
+    expect(note).toMatch(/#+ Morning\n(?:.*\n)*?- \[ \] 08:30 - 09:30: Review links/); // after the standup, still an hour long
+    expect(note).not.toContain('21:00 - 22:00');
+  });
+
+  it('leaves a task without a time alone', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    await m.addTask({ text: 'Tidy desk', date: TODAY, part: 'evening' });
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const task = [...index.snapshot.tasks.values()].find((x) => x.text === 'Tidy desk')!;
+    const el = root.querySelector<HTMLElement>('.helm-section.part-afternoon')!;
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: () => task.key } });
+    el.dispatchEvent(ev);
+    await flush(); await flush(); await flush();
+    const note = await vault.read(dailyPath(TODAY));
+    expect(note).toMatch(/#+ Afternoon\n(?:.*\n)*?- \[ \] Tidy desk/);
+    expect(note).not.toMatch(/- \[ \] \d\d:\d\d.*Tidy desk/);
   });
 });
 

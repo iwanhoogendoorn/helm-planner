@@ -6,7 +6,7 @@ import { DAY_PARTS, type DayPart } from '../../core/dailyNote';
 import { PART_LABEL } from '../../core/dailyNote';
 import { button, h } from '../dom';
 import { conflictWarning, effortField, linkTimes, wikilinkSuggest } from '../fields';
-import { conflictsFor, describeConflicts, freeSlotOn, partWindow } from '../../data/conflicts';
+import { conflictsFor, describeConflicts, freeSlotOn, preferredSlot } from '../../data/conflicts';
 import { minutesToHuman } from '../../core/dates';
 import type { UiContext } from '../context';
 import { plainLabel } from '../../core/label';
@@ -38,7 +38,7 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   const slotFor = (p: 'morning' | 'afternoon' | 'evening'): string => {
     const s = ctx.settings();
     const notBefore = date === today ? ctx.now() : undefined;
-    return freeSlotOn(ctx.index.snapshot, date, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, ...(notBefore ? { notBefore } : {}) }) ?? partWindow(p, s).from;
+    return preferredSlot(ctx.index.snapshot, date, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, ...(notBefore ? { notBefore } : {}) });
   };
   const drawParts = (): void => { parts.replaceChildren(h('button', { cls: ['helm-seg', part === undefined && 'is-active'], text: 'By time', title: 'Follows the time, else the original’s part', onClick: () => { part = undefined; drawParts(); } }), ...DAY_PARTS.filter((p) => p !== 'anytime').map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: PART_LABEL[p], onClick: () => { part = p; drawParts(); setStart(slotFor(p)); } }))); };
   drawParts();

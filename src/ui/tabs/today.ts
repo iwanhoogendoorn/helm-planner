@@ -14,6 +14,7 @@ import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { habitBadge } from '../fields';
 import { dayPartOf } from '../../data/habits';
+import { preferredSlot } from '../../data/conflicts';
 import { habitMenu } from '../habits';
 import { habitCard, colourise } from '../habitCard';
 import { drawingsButton, targetForDate } from '../drawings';
@@ -152,8 +153,25 @@ function makeDropZone(ctx: UiContext, el: HTMLElement, date: IsoDate, part: DayP
     if (!key) return;
     const t = ctx.index.task(key);
     const onThisDay = t && (t.noteDate === date || t.scheduled === date);
-    void ctx.run('Move', () => (onThisDay ? ctx.mutations.setPart(key, part) : ctx.mutations.schedule(key, date, part)));
+    void ctx.run('Move', async () => {
+      await (onThisDay ? ctx.mutations.setPart(key, part) : ctx.mutations.schedule(key, date, part));
+      // A timed task keeps its length but takes the first free slot in the part it landed in.
+      const slot = t?.time && part !== 'anytime' ? retimeFor(ctx, t, date, part) : undefined;
+      if (slot) await ctx.mutations.updateTask(key, { time: slot });
+    });
   });
+}
+
+/** Where a dragged, timed task should sit in its new part: the first free slot, keeping its length. */
+function retimeFor(ctx: UiContext, t: Task, date: IsoDate, part: DayPart): { start: string; end?: string } | undefined {
+  const s = ctx.settings();
+  const toMin = (hhmm: string): number => { const [hh, mm] = hhmm.split(':').map(Number); return (hh ?? 0) * 60 + (mm ?? 0); };
+  const toHhmm = (m: number): string => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const length = t.time?.end ? Math.max(5, toMin(t.time.end) - toMin(t.time.start)) : (t.effortMinutes ?? s.defaultEffortMinutes);
+  const notBefore = date === ctx.today() ? ctx.now() : undefined;
+  const start = preferredSlot(ctx.index.snapshot, date, s, { part, effortMinutes: length, excludeKeys: [t.key, ...(t.id ? [t.id] : []), ...(t.mirrorOf ? [t.mirrorOf] : [])], ...(notBefore ? { notBefore } : {}) });
+  if (t.time && t.time.start === start) return undefined;
+  return { start, ...(t.time?.end ? { end: toHhmm(toMin(start) + length) } : {}) };
 }
 
 function reasonLabel(c: Candidate): string {

@@ -12,7 +12,7 @@ import { linksSection } from '../links';
 import { linkLabel, linksIn, textWithoutLinks } from '../../core/links';
 import { openFollowUp } from './followUp';
 import { conflictWarning } from '../fields';
-import { conflictsFor, describeConflicts, freeSlotOn, partWindow } from '../../data/conflicts';
+import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot } from '../../data/conflicts';
 import { STATUS_LABELS, pickProject } from '../menus';
 import { DAY_PARTS, PART_LABEL, type DayPart } from '../../core/dailyNote';
 import { effortField, linkTimes , wikilinkSuggest } from '../fields';
@@ -69,7 +69,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     const s = ctx.settings();
     const excl = [task.key, src.key, ...(src.id ? [src.id] : [])];
     const notBefore = day === ctx.today() ? ctx.now() : undefined;
-    setStart(day ? freeSlotOn(ctx.index.snapshot, day, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, excludeKeys: excl, ...(notBefore ? { notBefore } : {}) }) ?? partWindow(p, s).from : partWindow(p, s).from);
+    setStart(day ? preferredSlot(ctx.index.snapshot, day, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, excludeKeys: excl, ...(notBefore ? { notBefore } : {}) }) : partWindow(p, s).from);
   });
   const where = h('div', { cls: 'helm-hint', text: locationLabel(ctx, src) });
 

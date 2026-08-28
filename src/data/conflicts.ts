@@ -69,3 +69,14 @@ export function freeSlotOn(snap: Snapshot, date: IsoDate, settings: HelmSettings
   }
   return undefined;
 }
+
+/**
+ * The slot to offer for a part of the day: the first free one after `notBefore`, else the first free
+ * one at all (a part that has already passed is still a deliberate choice), else the part's start.
+ */
+export function preferredSlot(snap: Snapshot, date: IsoDate, settings: HelmSettings, opts: { part?: DayPart; effortMinutes?: number; notBefore?: string; excludeKeys?: string[] } = {}): string {
+  const { notBefore, ...rest } = opts;
+  return (notBefore ? freeSlotOn(snap, date, settings, { ...rest, notBefore }) : undefined)
+    ?? freeSlotOn(snap, date, settings, rest)
+    ?? partWindow(opts.part, settings).from;
+}
