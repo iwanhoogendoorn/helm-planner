@@ -5,6 +5,7 @@ import { h, icon, iconButton } from '../dom';
 import type { UiContext } from '../context';
 import { openTaskEditor } from './taskEditor';
 
+const SHOWN = 60;
 const HELP = '#tag · @project · is:open/done/blocked/overdue · due:today/week/2026-09-01 · on:tomorrow · kind:task/project/note/drawing/habit/goal';
 
 /** Where a hit lives: the plugin view when it has a home there, else the note. */
@@ -29,11 +30,12 @@ export function openSearch(ctx: UiContext, initial = ''): void {
   const draw = (): void => {
     list.replaceChildren();
     const q = input.value;
-    hits = search(ctx.index.snapshot, q, { today: ctx.today(), limit: 60 });
+    const all = search(ctx.index.snapshot, q, { today: ctx.today(), limit: 500 });
+    hits = all.slice(0, SHOWN);
     if (selected >= hits.length) selected = Math.max(0, hits.length - 1);
     if (q.trim() === '') { summary.textContent = HELP; list.appendChild(h('div', { cls: 'helm-empty' }, h('p', { text: 'Type to search across tasks, projects, goals, habits, notes and drawings.' }))); return; }
     if (hits.length === 0) { summary.textContent = HELP; list.appendChild(h('div', { cls: 'helm-empty' }, h('p', { text: `Nothing matches “${q.trim()}”.` }))); return; }
-    summary.textContent = `${hits.length} result${hits.length === 1 ? '' : 's'} · ↑↓ to move, Enter to open`;
+    summary.textContent = `${all.length} result${all.length === 1 ? '' : 's'}${all.length > hits.length ? ` · showing the best ${hits.length}` : ''} · ↑↓ to move, Enter to open`;
     let i = 0;
     for (const kind of SEARCH_KINDS) {
       const group = hits.filter((x) => x.kind === kind);
