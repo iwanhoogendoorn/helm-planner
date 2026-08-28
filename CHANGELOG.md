@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- *Needs attention* only appears on days you are actually working on — today
+  and the week after it. Opening a day a month out listed everything late
+  today as *carried over*, which was noise: it will have been dealt with long
+  before that day arrives.
 - *Add link…* copes with what people actually type: the URL and Label boxes
   filled the wrong way round are swapped for you, and an address without its
   `https://` gets one. When neither box holds an address the dialog says so

@@ -1,6 +1,6 @@
 /** The cockpit: one day, split into parts, and the two rituals around it. */
 import type { Habit, HabitPart, IsoDate, Task } from '../../core/types';
-import { addDays, humanDate, minutesToHuman } from '../../core/dates';
+import { addDays, diffDays, humanDate, minutesToHuman } from '../../core/dates';
 import { candidates, dayPlan, DAY_PARTS, type Candidate, type DayItem, type DayPart } from '../../data/planner';
 import { habitDue, habitStats } from '../../data/habits';
 import { PART_LABEL } from '../../core/dailyNote';
@@ -67,8 +67,10 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
 
   const store = state.collapsed;
 
-  // Needs attention: overdue and carried-over items (only when looking at today or the future).
-  if (!isPast) {
+  // Needs attention: overdue and carried-over items. Only worth showing for the days you are actually
+  // working on — a month out, everything late today will have been dealt with long before.
+  const withinPlanningReach = !isPast && diffDays(today, date) <= ATTENTION_DAYS;
+  if (withinPlanningReach) {
     const cands = candidates(snap, date, settings, today).filter((c) => c.reason === 'overdue' || c.reason === 'scheduled-past');
     if (cands.length > 0) {
       root.appendChild(section('Needs attention', { count: cands.length, store, key: 'attention', cls: 'is-attention', actions: [button('Plan day', { icon: 'list-plus', onClick: () => openPlanDay(ctx, date) })] },
@@ -187,6 +189,9 @@ function retimeFor(ctx: UiContext, t: Task, date: IsoDate, part: DayPart): { sta
   if (t.time && t.time.start === start) return undefined;
   return { start, ...(t.time?.end ? { end: toHhmm(toMin(start) + length) } : {}) };
 }
+
+/** How far ahead carried-over work is still worth offering: today and the week after it. */
+const ATTENTION_DAYS = 7;
 
 function reasonLabel(c: Candidate): string {
   switch (c.reason) {

@@ -75,6 +75,18 @@ describe('Today tab', () => {
     expect(root.querySelector('.helm-capacity-label')!.textContent).toContain('3 open · 1 done');
   });
 
+  it('stops offering carried-over work on days beyond the coming week', async () => {
+    const { ctx } = await ctxFor();
+    const has = (date: string): boolean => {
+      const root = render((r) => renderToday(ctx, r, { date, collapsed: new Map() }));
+      return texts(root, '.helm-section-title').includes('Needs attention');
+    };
+    expect(has(TODAY)).toBe(true);
+    expect(has('2026-09-02')).toBe(true); // a week out: still worth planning onto
+    expect(has('2026-09-28')).toBe(false); // a month out: those tasks will be long gone
+    expect(has('2026-08-25')).toBe(false); // a past day was never offered any
+  });
+
   it('renders today with attention items and an empty plan call-to-action', async () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
