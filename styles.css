@@ -752,3 +752,5 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-datepicker-parts { flex-wrap: wrap; }
 .helm-source-pills { display: inline-flex; flex-wrap: wrap; gap: 5px; }
 .helm-source-pills .helm-tag-toggle { height: 24px; }
+.helm-dash-sources { margin-top: -2px; }
+.helm-dash-sources .helm-hint { margin-right: 2px; }

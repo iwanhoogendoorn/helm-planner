@@ -91,7 +91,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   const periodSel = h('select', { cls: 'helm-select-inline', onChange: (ev) => { state.periodKey = (ev.target as HTMLSelectElement).value || undefined; refresh(); } });
   periodSel.appendChild(h('option', { text: 'Any horizon', attr: { value: '' } }));
   for (const key of [periodOf(today, 'year').key, periodOf(today, 'quarter').key, periodOf(today, 'month').key]) periodSel.appendChild(h('option', { text: `Bound to ${key}`, attr: { value: key, selected: state.periodKey === key } }));
-  const bar = h('div', { cls: 'helm-toolbar helm-dash-filters' }, icon('filter'), presetSel, projSel, areaSel, tagSel, periodSel, sourceRow);
+  const bar = h('div', { cls: 'helm-toolbar helm-dash-filters' }, icon('filter'), presetSel, projSel, areaSel, tagSel, periodSel);
   if (state.preset === 'custom') {
     bar.append(
       h('input', { attr: { type: 'date', value: range.from }, onChange: (ev) => { state.from = (ev.target as HTMLInputElement).value; refresh(); } }),
@@ -101,6 +101,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   bar.append(h('span', { cls: 'helm-spacer' }), h('span', { cls: 'helm-hint', text: `${humanDate(range.from)} – ${humanDate(range.to, undefined, { year: true })} · ${s.days} days` }));
   if (state.projectId || state.area || state.tag || state.periodKey) bar.appendChild(button('Clear', { icon: 'x', onClick: () => { state.projectId = undefined; state.area = undefined; state.tag = undefined; state.periodKey = undefined; refresh(); } }));
   root.appendChild(bar);
+  root.appendChild(h('div', { cls: 'helm-toolbar helm-dash-sources' }, icon('layers'), h('span', { cls: 'helm-hint', text: 'Counting tasks in' }), sourceRow));
 
   // KPIs.
   const kpi = (value: string | number, label: string, cls = '', onClick?: () => void): HTMLElement => h('button', { cls: ['helm-stat', cls, onClick && 'is-clickable'], onClick }, h('div', { cls: 'helm-stat-value', text: String(value) }), h('div', { cls: 'helm-stat-label', text: label }));

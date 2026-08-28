@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Dashboard: pills for **where the counted tasks live** — *Daily notes* (on
+- Dashboard: a *Counting tasks in* row of pills under the filters for **where
+  the counted tasks live** — *Daily notes* (on
   by default), *Project notes*, *Tasks in other notes*, *Inbox* — each switched
   on or off on its own, and the last one on stays on. Counting every stray
   task in every note made the totals meaningless; now the KPIs, charts and
