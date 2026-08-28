@@ -193,7 +193,7 @@ describe('Modals', () => {
     inputs[0]!.value = 'http://www.iwanhoogendoorn.nl'; inputs[1]!.value = 'My website';
     click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
     expect(texts(ed.contentEl, '.helm-attach-row a')).toEqual(['My website']); // immediately, no save needed
-    expect(textInput.value).toBe('Chase UC3 [My website](http://www.iwanhoogendoorn.nl)');
+    expect(textInput.value).toBe('Chase UC3'); // the Text field never shows raw links
     expect((await vault.read(dailyPath(TODAY)))).not.toContain('iwanhoogendoorn'); // nothing written yet
     click(ed.contentEl.querySelector('.helm-attach-row button[aria-label="Remove this link"]'));
     expect(ed.contentEl.querySelector('.helm-attach-section')!.textContent).toContain('No links yet.');
@@ -204,6 +204,17 @@ describe('Modals', () => {
     click([...ed.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
     await flush(); await flush();
     expect(await vault.read(dailyPath(TODAY))).toContain('Chase UC3 [jira.example.com/browse/RSC-1](https://jira.example.com/browse/RSC-1)');
+    // Reopening: clean text, the link listed; editing the text keeps the link on the line.
+    const t2 = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Chase UC3'))!;
+    openTaskEditor(ctx, t2);
+    const ed2 = Modal.last!;
+    const ti2 = ed2.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;
+    expect(ti2.value).toBe('Chase UC3');
+    expect(texts(ed2.contentEl, '.helm-attach-row a')).toEqual(['jira.example.com/browse/RSC-1']);
+    ti2.value = 'Chase UC3 again';
+    click([...ed2.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('Chase UC3 again [jira.example.com/browse/RSC-1](https://jira.example.com/browse/RSC-1)');
   });
 
   it('task links: bare URLs render as labelled anchors; the menu opens, adds and removes links; the row shows a pill', async () => {

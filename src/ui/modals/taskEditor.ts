@@ -9,6 +9,7 @@ import type { UiContext } from '../context';
 import { drawingsSection, targetForTask } from '../drawings';
 import { notesSection } from '../notes';
 import { linksSection } from '../links';
+import { linkLabel, linksIn, textWithoutLinks } from '../../core/links';
 import { openFollowUp } from './followUp';
 import { conflictWarning } from '../fields';
 import { conflictsFor, describeConflicts } from '../../data/conflicts';
@@ -24,7 +25,9 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   root.addClass('helm-modal', 'helm-task-editor');
   const today = ctx.today();
 
-  const text = h('input', { cls: 'helm-input-wide', attr: { type: 'text', value: src.text } });
+  // Links are kept out of the Text field and managed in the Links section; Save puts them back on the line.
+  let links = linksIn(src.text);
+  const text = h('input', { cls: 'helm-input-wide', attr: { type: 'text', value: textWithoutLinks(src.text) } });
   wikilinkSuggest(ctx, text);
   const status = h('select');
   for (const s of Object.keys(STATUS_LABELS) as TaskStatus[]) status.appendChild(h('option', { text: STATUS_LABELS[s].label, attr: { value: s, selected: src.status === s } }));
@@ -68,7 +71,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     where,
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Notes' }), notesSection(ctx, targetForTask(task))),
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Drawings' }), drawingsSection(ctx, targetForTask(task))),
-    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Links' }), linksSection(ctx, { get: () => text.value, set: (v) => { text.value = v; text.dispatchEvent(new Event('input', { bubbles: true })); } })),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Links' }), linksSection(ctx, { list: () => links, add: (url, label) => { links = [...links.filter((l) => l.url !== url), { url, label: label?.trim() || linkLabel(url), raw: `[${label?.trim() || linkLabel(url)}](${url})` }]; }, remove: (url) => { links = links.filter((l) => l.url !== url); } })),
     h('div', { cls: 'helm-modal-buttons' },
       button('Follow up…', { icon: 'corner-down-right', cls: 'helm-btn-quiet', title: 'Continue this task another day', onClick: () => { m.close(); openFollowUp(ctx, task); } }),
       button('Move to project…', { icon: 'folder-input', onClick: () => pickProject(ctx, (p, phaseId) => { m.close(); void ctx.run('Move', () => ctx.mutations.moveToProject(src.key, p.id, phaseId)); }, { phases: true }) }),
@@ -82,7 +85,9 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
 
   async function save(): Promise<void> {
     const patch: Partial<TaskLine> & { scheduled?: IsoDate | undefined } = {};
-    const t = text.value.trim();
+    // Typed-in links stay where they are; the ones managed in the Links section are appended.
+    const typed = linksIn(text.value).map((l) => l.url);
+    const t = [text.value.trim(), ...links.filter((l) => !typed.includes(l.url)).map((l) => l.raw)].filter(Boolean).join(' ');
     if (t !== src.text) patch.text = t;
     if (status.value !== src.status) patch.status = status.value as TaskStatus;
     if (priority.value !== src.priority) patch.priority = priority.value as Priority;

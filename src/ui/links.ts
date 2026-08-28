@@ -1,7 +1,7 @@
 /** Links on a task: open, add, remove — from the row pill, the task menu and the editor. */
 import { Menu, Modal } from 'obsidian';
 import type { Task } from '../core/types';
-import { addLinkToText, linkLabel, linksIn, removeLinkFromText } from '../core/links';
+import { linkLabel, linksIn, type TaskLink } from '../core/links';
 import type { UiContext } from './context';
 import { button, h, iconButton } from './dom';
 
@@ -76,18 +76,18 @@ export function linksIndicator(ctx: UiContext, t: Task): HTMLElement | null {
  * text (not the vault), redrawn at once, and land in the note when the editor saves — so a Save
  * can never overwrite a link added a moment earlier.
  */
-export function linksSection(ctx: UiContext, text: { get: () => string; set: (t: string) => void }): HTMLElement {
+export function linksSection(ctx: UiContext, links: { list: () => TaskLink[]; add: (url: string, label?: string) => void; remove: (url: string) => void }): HTMLElement {
   const root = h('div', { cls: 'helm-attach-section' });
   const draw = (): void => {
-    const links = linksIn(text.get());
+    const list = links.list();
     root.replaceChildren(
-      ...links.map((l) => h('div', { cls: 'helm-attach-row' },
+      ...list.map((l) => h('div', { cls: 'helm-attach-row' },
         h('a', { cls: 'external-link helm-link', text: l.label, attr: { href: l.url, target: '_blank', rel: 'noopener' }, title: l.url }),
         h('span', { cls: 'helm-spacer' }),
-        iconButton('x', 'Remove this link', () => { text.set(removeLinkFromText(text.get(), l.url)); draw(); }),
+        iconButton('x', 'Remove this link', () => { links.remove(l.url); draw(); }),
       )),
-      ...(links.length === 0 ? [h('div', { cls: 'helm-hint', text: 'No links yet.' })] : []),
-      h('div', { cls: 'helm-drawing-actions' }, button('Add link…', { icon: 'link', cls: 'helm-btn-quiet', onClick: () => askLink(ctx, (r) => { if (r) { text.set(addLinkToText(text.get(), r.url, r.label)); draw(); } }) })),
+      ...(list.length === 0 ? [h('div', { cls: 'helm-hint', text: 'No links yet.' })] : []),
+      h('div', { cls: 'helm-drawing-actions' }, button('Add link…', { icon: 'link', cls: 'helm-btn-quiet', onClick: () => askLink(ctx, (r) => { if (r) { links.add(r.url, r.label); draw(); } }) })),
     );
   };
   draw();
