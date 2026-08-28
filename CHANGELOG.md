@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.12.0 — 2026-08-28
 
 - Subtasks: *Add subtask…* in a task's menu writes an indented line under it in
   the same note (Shift+Enter keeps the dialog open for the next one).
