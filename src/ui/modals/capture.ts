@@ -12,7 +12,7 @@ import type { UiContext } from '../context';
 import { pickProject } from '../menus';
 import { partOfTime } from '../../core/dailyNote';
 import { conflictWarning, effortField, linkTimes, wikilinkSuggest } from '../fields';
-import { conflictsFor, describeConflicts } from '../../data/conflicts';
+import { conflictsFor, describeConflicts, freeSlotOn, partWindow } from '../../data/conflicts';
 
 export interface CaptureDefaults {
   date?: IsoDate;
@@ -44,6 +44,15 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   let programmatic = false;
   const poke = (el: HTMLInputElement): void => { programmatic = true; try { el.dispatchEvent(new Event('input')); } finally { programmatic = false; } };
   timeStart.addEventListener('input', () => { if (programmatic) return; timeTouched = true; timeAuto = false; });
+  /** Put the block at `hhmm` (end follows from the effort) without it counting as the user typing. */
+  const setStart = (hhmm: string): void => { timeStart.value = hhmm; timeTouched = true; timeAuto = false; poke(timeStart); render(); };
+  /** The first free slot in a part of the day — or its plain start time when the day is unknown. */
+  const slotFor = (p: 'morning' | 'afternoon' | 'evening'): string => {
+    const s = ctx.settings();
+    if (!date) return partWindow(p, s).from;
+    const notBefore = date === today ? ctx.now() : undefined;
+    return freeSlotOn(ctx.index.snapshot, date, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, ...(notBefore ? { notBefore } : {}) }) ?? partWindow(p, s).from;
+  };
   timeEnd.addEventListener('input', () => { if (programmatic) return; timeTouched = true; });
   linkTimes(timeStart, timeEnd, effort);
   effort.onChange(() => render());
@@ -115,7 +124,8 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     drawDay();
     drawTags();
     conflictText = date && time ? (describeConflicts(conflictsFor(ctx.index.snapshot, date, time, ctx.settings(), { effortMinutes: effort.get() })) || undefined) : undefined;
-    conflictWarning(conflict, conflictText);
+    const free = conflictText && date ? freeSlotOn(ctx.index.snapshot, date, ctx.settings(), { ...(part ? { part } : {}), effortMinutes: effort.get() ?? ctx.settings().defaultEffortMinutes, notBefore: time?.start ?? (date === today ? ctx.now() : undefined) }) : undefined;
+    conflictWarning(conflict, conflictText, free ? { time: free, onPick: () => setStart(free) } : undefined);
     dest.replaceChildren();
     const where = project ? `→ project “${project.title}”${phaseId ? ` › ${project.phases.find((p) => p.id === phaseId)?.title ?? ''}` : ''}${date ? ` (and today's plan)` : ''}` : date ? `→ daily note for ${humanDate(date, today)}` : `→ inbox (${ctx.settings().inboxNote})`;
     append(dest, [
@@ -123,7 +133,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
       h('span', { cls: 'helm-spacer' }),
       button(project ? 'Change project' : 'Project…', { icon: 'folder', onClick: () => pickProject(ctx, (p, ph) => { project = p; phaseId = ph; render(); }, { phases: true }) }),
       project ? button('', { icon: 'x', title: 'No project', onClick: () => { project = undefined; phaseId = undefined; render(); } }) : null,
-      date ? h('span', { cls: 'helm-segmented' }, ...(['morning', 'afternoon', 'evening'] as const).map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: p, onClick: () => { explicitPart = true; part = part === p ? undefined : p; render(); } }))) : null,
+      date ? h('span', { cls: 'helm-segmented' }, ...(['morning', 'afternoon', 'evening'] as const).map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: p, onClick: () => { explicitPart = true; const on = part !== p; part = on ? p : undefined; if (on) { setStart(slotFor(p)); return; } render(); } }))) : null,
       date ? h('span', { cls: 'helm-capture-time' }, timeStart, h('span', { cls: 'helm-hint', text: '–' }), timeEnd) : null,
       h('span', { cls: 'helm-capture-effort' }, h('span', { cls: 'helm-hint', text: 'effort' }), effort.el),
     ]);

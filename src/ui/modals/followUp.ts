@@ -6,7 +6,7 @@ import { DAY_PARTS, type DayPart } from '../../core/dailyNote';
 import { PART_LABEL } from '../../core/dailyNote';
 import { button, h } from '../dom';
 import { conflictWarning, effortField, linkTimes, wikilinkSuggest } from '../fields';
-import { conflictsFor, describeConflicts } from '../../data/conflicts';
+import { conflictsFor, describeConflicts, freeSlotOn, partWindow } from '../../data/conflicts';
 import { minutesToHuman } from '../../core/dates';
 import type { UiContext } from '../context';
 import { plainLabel } from '../../core/label';
@@ -33,7 +33,14 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   // No pick = decided by the time, else the original's part.
   let part: DayPart | undefined;
   const parts = h('div', { cls: 'helm-segmented' });
-  const drawParts = (): void => { parts.replaceChildren(h('button', { cls: ['helm-seg', part === undefined && 'is-active'], text: 'By time', title: 'Follows the time, else the original’s part', onClick: () => { part = undefined; drawParts(); } }), ...DAY_PARTS.filter((p) => p !== 'anytime').map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: PART_LABEL[p], onClick: () => { part = p; drawParts(); } }))); };
+  const setStart = (hhmm: string): void => { timeStart.value = hhmm; timeStart.dispatchEvent(new Event('input')); checkConflicts(); };
+  /** The first free slot in a part of the day, else its plain start time. */
+  const slotFor = (p: 'morning' | 'afternoon' | 'evening'): string => {
+    const s = ctx.settings();
+    const notBefore = date === today ? ctx.now() : undefined;
+    return freeSlotOn(ctx.index.snapshot, date, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, ...(notBefore ? { notBefore } : {}) }) ?? partWindow(p, s).from;
+  };
+  const drawParts = (): void => { parts.replaceChildren(h('button', { cls: ['helm-seg', part === undefined && 'is-active'], text: 'By time', title: 'Follows the time, else the original’s part', onClick: () => { part = undefined; drawParts(); } }), ...DAY_PARTS.filter((p) => p !== 'anytime').map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: PART_LABEL[p], onClick: () => { part = p; drawParts(); setStart(slotFor(p)); } }))); };
   drawParts();
   // Time and effort, prefilled from the original and kept consistent (start + effort → end).
   const timeStart = h('input', { attr: { type: 'time', value: task.time?.start ?? '' }, title: 'Start time' });
@@ -45,7 +52,9 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   const checkConflicts = (): void => {
     const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;
     conflictText = time ? (describeConflicts(conflictsFor(ctx.index.snapshot, date, time, ctx.settings(), { effortMinutes: effort.get(), excludeKeys: [task.key, ...(task.id ? [task.id] : []), ...(task.mirrorOf ? [task.mirrorOf] : [])] })) || undefined) : undefined;
-    conflictWarning(conflict, conflictText);
+    const excl = [task.key, ...(task.id ? [task.id] : [])];
+    const free = conflictText ? freeSlotOn(ctx.index.snapshot, date, ctx.settings(), { ...(part ? { part } : {}), effortMinutes: effort.get() ?? ctx.settings().defaultEffortMinutes, notBefore: timeStart.value || (date === today ? ctx.now() : undefined), excludeKeys: excl }) : undefined;
+    conflictWarning(conflict, conflictText, free ? { time: free, onPick: () => setStart(free) } : undefined);
   };
   timeStart.addEventListener('input', checkConflicts);
   timeEnd.addEventListener('input', checkConflicts);

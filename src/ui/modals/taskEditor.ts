@@ -12,9 +12,9 @@ import { linksSection } from '../links';
 import { linkLabel, linksIn, textWithoutLinks } from '../../core/links';
 import { openFollowUp } from './followUp';
 import { conflictWarning } from '../fields';
-import { conflictsFor, describeConflicts } from '../../data/conflicts';
+import { conflictsFor, describeConflicts, freeSlotOn, partWindow } from '../../data/conflicts';
 import { STATUS_LABELS, pickProject } from '../menus';
-import { DAY_PARTS, PART_LABEL } from '../../core/dailyNote';
+import { DAY_PARTS, PART_LABEL, type DayPart } from '../../core/dailyNote';
 import { effortField, linkTimes , wikilinkSuggest } from '../fields';
 
 export function openTaskEditor(ctx: UiContext, task: Task): void {
@@ -47,8 +47,11 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     const day = /^\d{4}-\d{2}-\d{2}$/.test(scheduled.value) ? scheduled.value : undefined;
     const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;
     conflictText = day && time ? (describeConflicts(conflictsFor(ctx.index.snapshot, day, time, ctx.settings(), { effortMinutes: effort.get(), excludeKeys: [task.key, src.key, ...(src.id ? [src.id] : []), ...(task.mirrorOf ? [task.mirrorOf] : [])] })) || undefined) : undefined;
-    conflictWarning(conflict, conflictText);
+    const excl = [task.key, src.key, ...(src.id ? [src.id] : [])];
+    const free = conflictText && day ? freeSlotOn(ctx.index.snapshot, day, ctx.settings(), { ...(partSel.value !== 'anytime' ? { part: partSel.value as DayPart } : {}), effortMinutes: effort.get() ?? ctx.settings().defaultEffortMinutes, notBefore: timeStart.value, excludeKeys: excl }) : undefined;
+    conflictWarning(conflict, conflictText, free ? { time: free, onPick: () => setStart(free) } : undefined);
   };
+  const setStart = (hhmm: string): void => { timeStart.value = hhmm; timeStart.dispatchEvent(new Event('input')); checkConflicts(); };
   for (const el of [timeStart, timeEnd, scheduled]) el.addEventListener('input', checkConflicts);
   scheduled.addEventListener('change', checkConflicts);
   effort.onChange(checkConflicts);
@@ -58,6 +61,16 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   const partSel = h('select');
   for (const p of DAY_PARTS) partSel.appendChild(h('option', { text: PART_LABEL[p], attr: { value: p, selected: (task.part ?? 'anytime') === p } }));
   partSel.disabled = !onDay;
+  // Choosing a part moves the block to the first free slot in it (its start time when the day is unknown).
+  partSel.addEventListener('change', () => {
+    const p = partSel.value as DayPart;
+    if (p === 'anytime') { checkConflicts(); return; }
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(scheduled.value) ? scheduled.value : undefined;
+    const s = ctx.settings();
+    const excl = [task.key, src.key, ...(src.id ? [src.id] : [])];
+    const notBefore = day === ctx.today() ? ctx.now() : undefined;
+    setStart(day ? freeSlotOn(ctx.index.snapshot, day, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, excludeKeys: excl, ...(notBefore ? { notBefore } : {}) }) ?? partWindow(p, s).from : partWindow(p, s).from);
+  });
   const where = h('div', { cls: 'helm-hint', text: locationLabel(ctx, src) });
 
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);

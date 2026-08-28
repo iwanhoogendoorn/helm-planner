@@ -1,5 +1,6 @@
 /** Time conflicts: what is already booked on a day at a given time. */
 import type { HelmSettings, IsoDate, Snapshot, Task } from '../core/types';
+import type { DayPart } from '../core/dailyNote';
 import { dayPlan } from './planner';
 
 export interface Booking { key: string; label: string; start: string; end: string; task: Task }
@@ -34,4 +35,36 @@ export function conflictsFor(snap: Snapshot, date: IsoDate, time: { start: strin
 
 export function describeConflicts(cs: Booking[]): string {
   return cs.map((c) => `${c.start}–${c.end} ${c.label.length > 40 ? c.label.slice(0, 39) + '…' : c.label}`).join(' · ');
+}
+
+/** The clock window a part of the day covers; `anytime` (or nothing) is the whole working day. */
+export function partWindow(part: DayPart | undefined, settings: HelmSettings): { from: string; to: string } {
+  const dayStarts = settings.dayStarts || '08:00';
+  const dayEnds = settings.dayEnds || '22:00';
+  if (part === 'morning') return { from: dayStarts, to: settings.morningEnds };
+  if (part === 'afternoon') return { from: settings.morningEnds, to: settings.afternoonEnds };
+  if (part === 'evening') return { from: settings.afternoonEnds, to: dayEnds };
+  return { from: dayStarts, to: dayEnds };
+}
+
+/**
+ * The first free start time on a day: inside the part's window (or the whole day), long enough for
+ * `effortMinutes`, after everything already booked and never in the past when the day is today.
+ * Undefined when the window is full.
+ */
+export function freeSlotOn(snap: Snapshot, date: IsoDate, settings: HelmSettings, opts: { part?: DayPart; effortMinutes?: number; notBefore?: string; excludeKeys?: string[] } = {}): string | undefined {
+  const win = partWindow(opts.part, settings);
+  const need = opts.effortMinutes ?? settings.defaultEffortMinutes;
+  const skip = new Set(opts.excludeKeys ?? []);
+  const booked = bookingsOn(snap, date, settings).filter((b) => !skip.has(b.key) && !skip.has(b.task.mirrorOf ?? ''));
+  const end = toMin(win.to);
+  let at = Math.max(toMin(win.from), opts.notBefore ? toMin(opts.notBefore) : 0);
+  at = Math.ceil(at / 5) * 5;
+  for (let guard = 0; guard < 300; guard++) {
+    const clash = booked.find((b) => toMin(b.start) < at + need && toMin(b.end) > at);
+    if (!clash) return at + need <= end ? toHhmm(at) : undefined;
+    at = Math.ceil(toMin(clash.end) / 5) * 5;
+    if (at + need > end) return undefined;
+  }
+  return undefined;
 }

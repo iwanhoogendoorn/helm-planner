@@ -1206,7 +1206,8 @@ describe('double-booking guard', () => {
     const cap = Modal.last!;
     const input = cap.contentEl.querySelector<HTMLInputElement>('.helm-capture-input')!;
     input.value = 'Haircut 10:30-11:00'; input.dispatchEvent(new Event('input'));
-    expect(cap.contentEl.querySelector<HTMLElement>('.helm-conflict')!.textContent).toBe('⚠ Overlaps 10:00–11:00 Dentist');
+    expect(cap.contentEl.querySelector<HTMLElement>('.helm-conflict')!.textContent).toContain('⚠ Overlaps 10:00–11:00 Dentist');
+    expect(cap.contentEl.querySelector('.helm-conflict-fix')!.textContent).toBe('Move to 11:00'); // the first slot that fits
     const confirms: string[] = [];
     const orig = window.confirm;
     window.confirm = (msg?: string) => { confirms.push(msg ?? ''); return false; };

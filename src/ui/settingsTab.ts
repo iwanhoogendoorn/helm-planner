@@ -353,8 +353,10 @@ export class HelmSettingTab extends PluginSettingTab {
 
     const parts = this.group(body, { icon: 'sun', title: 'Parts of the day', subtitle: 'Timed lines fall into Morning, Afternoon or Evening by their start time.', chip: { text: `${s.morningEnds} · ${s.afternoonEnds}`, tone: 'pending' } });
     const partsChip = (): void => parts.setChip(`${s.morningEnds} · ${s.afternoonEnds}`, 'pending');
+    this.text(parts.content, 'dayStarts', { name: 'Day starts at', desc: 'When the morning begins — the first time Helm suggests.', placeholder: '08:00', fallback: '08:00', type: 'time' });
     this.text(parts.content, 'morningEnds', { name: 'Morning ends at', placeholder: '12:00', fallback: '12:00', type: 'time', after: partsChip });
     this.text(parts.content, 'afternoonEnds', { name: 'Afternoon ends at', placeholder: '18:00', fallback: '18:00', type: 'time', after: partsChip });
+    this.text(parts.content, 'dayEnds', { name: 'Day ends at', desc: 'The last time Helm will suggest for a slot.', placeholder: '22:00', fallback: '22:00', type: 'time' });
 
     const beh = this.group(body, { icon: 'wand-sparkles', title: 'Behaviour', subtitle: 'What Helm does on its own while you work.' });
     this.toggle(beh.content, 'autoMoveRecurring', 'Move spawned recurrences to their date', 'When a recurring task is ticked, the next occurrence lands in the same note dated later. Helm moves it into the right day’s note.', 'Only occurrences dated today or later move automatically; older ones are left for the “Move recurring tasks to their next date” command, which moves everything.');

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Picking a part of the day now sets the time with it: Capture, *Follow up…*
+  and the task editor jump the block to the first **free** slot in that part
+  (18:00 for an empty evening, 19:20 when something runs until then), never
+  earlier than now on today. Falls back to the part's start time when the day
+  is not known yet.
+- The overlap warning now offers a way out: *Move to 11:00* — the first gap
+  after the clash that is long enough for the task's effort.
+- Settings → Parts of the day: *Day starts at* (08:00) and *Day ends at*
+  (22:00) bound the morning and the evening, and the slot search.
+
 ## 1.7.0 — 2026-08-28
 
 - Search: the magnifier in the header (or the *Search everything* command)

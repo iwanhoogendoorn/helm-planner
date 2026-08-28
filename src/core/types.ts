@@ -239,6 +239,9 @@ export interface HelmSettings {
   /** The heading whose section holds the day plan. */
   planHeading: string;
   /** Parts of the day: HH:MM boundaries. */
+  /** The day's working window, used for part start times and free-slot suggestions. */
+  dayStarts: string;
+  dayEnds: string;
   morningEnds: string;
   afternoonEnds: string;
   /** Stamp ➕ created on tasks Helm creates. */
@@ -306,6 +309,8 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   regionPlacement: 'before-first-heading',
   regionAnchor: '## Helm',
   planHeading: '## Plan',
+  dayStarts: '08:00',
+  dayEnds: '22:00',
   morningEnds: '12:00',
   afternoonEnds: '18:00',
   writeCreatedDate: false,

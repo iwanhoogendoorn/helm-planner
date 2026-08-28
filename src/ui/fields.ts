@@ -178,8 +178,10 @@ export function askNameAndLocation(ctx: { app: App; trackModal: (m: { close: () 
 }
 
 /** An inline conflict warning; empty when there is nothing to say. Returns the current conflict text for a confirm. */
-export function conflictWarning(el: HTMLElement, text: string | undefined): void {
+export function conflictWarning(el: HTMLElement, text: string | undefined, suggest?: { time: string; onPick: () => void }): void {
   el.replaceChildren();
   el.style.display = text ? '' : 'none';
-  if (text) el.append(h('span', { cls: 'helm-conflict-icon', text: '⚠' }), h('span', { text: ` Overlaps ${text}` }));
+  if (!text) return;
+  el.append(h('span', { cls: 'helm-conflict-icon', text: '⚠' }), h('span', { text: ` Overlaps ${text}` }));
+  if (suggest) el.append(h('button', { cls: 'helm-btn helm-conflict-fix', text: `Move to ${suggest.time}`, title: 'The first free slot that fits', onClick: (ev) => { ev.preventDefault(); suggest.onPick(); } }));
 }
