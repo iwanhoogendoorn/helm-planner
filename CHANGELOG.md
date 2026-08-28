@@ -8,7 +8,8 @@
   opens (a project or goal lands on its tab, everything else in its note),
   and a task hit can be edited straight from the list. Narrow it down with
   `#tag`, `@project`, `is:open|done|blocked|waiting|overdue`,
-  `due:today|week|<date>`, `on:<date>` and `kind:task|note|drawing|…`.
+  `due:today|week|<date>`, `on:<date>` and `kind:task|note|drawing|…`. The
+  dialog sizes itself to the window instead of spilling out of its own box.
 - Follow-ups no longer add `#followup` on their own: the ⛔ link to the
   original is what makes one, and the tag is a toggle in the *Follow up…*
   dialog (off unless you switch it on). A task that waits on another shows
