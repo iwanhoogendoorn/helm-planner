@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.9.0 — 2026-08-28
 
 - Ticking a habit without fixed parts now files it under the part of the day
   you are in — checked, exactly as it looks when you drag it there — instead
