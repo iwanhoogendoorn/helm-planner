@@ -2,6 +2,13 @@
 
 ## 1.10.0 — 2026-08-28
 
+- Dragging a timed task into another part of the day retimes it: it takes the
+  first free slot there and keeps its length (21:00–22:00 dropped on a morning
+  with a standup until 08:30 becomes 08:30–09:30). Tasks without a time are
+  moved as they were, and Anytime leaves the clock alone.
+- Picking a part whose hours have already passed now offers its first free
+  slot rather than giving up on the day — the same rule in Capture, *Follow
+  up…*, the task editor and drag-and-drop.
 - Moving a task to another day now takes the part of the day with it: every
   date in the task menu (Today, Tomorrow, Next week) opens onto *Morning /
   Afternoon / Evening / Anytime*, with *Keep the ‹part›* first so a plain
