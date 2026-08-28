@@ -2,10 +2,11 @@
 
 ## Unreleased
 
-- Dashboard: a filter for **where the numbers come from** — *Daily notes
-  only* (the new default), *Daily + project notes*, or *Every note*. Counting
-  every stray task in every note made the totals meaningless; now the KPIs,
-  charts and tables answer “what did I actually plan and do”.
+- Dashboard: pills for **where the counted tasks live** — *Daily notes* (on
+  by default), *Project notes*, *Tasks in other notes*, *Inbox* — each switched
+  on or off on its own, and the last one on stays on. Counting every stray
+  task in every note made the totals meaningless; now the KPIs, charts and
+  tables answer “what did I actually plan and do”.
 - Dashboard opens on **This week** instead of the last 30 days.
 
 - *Link existing note…* now finds every note in the vault, including project,

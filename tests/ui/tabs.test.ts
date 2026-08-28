@@ -465,17 +465,23 @@ describe('Horizons tab', () => {
 });
 
 describe('Dashboard tab', () => {
-  it('opens on this week and on daily-note tasks, with a filter for where the numbers come from', async () => {
+  it('opens on this week and on daily-note tasks, with pills to add the other places tasks live', async () => {
     const { ctx } = await ctxFor();
     const state = defaultDashboardState();
-    expect([state.preset, state.source]).toEqual(['week', 'daily']);
-    const root = render((r) => renderDashboard(ctx, r, state));
+    expect([state.preset, state.sources]).toEqual(['week', ['daily']]);
+    let root = render((r) => renderDashboard(ctx, r, state));
     expect(texts(root, '.helm-crumb')).toEqual(['Dashboard', 'This week']);
-    const sel = [...root.querySelectorAll<HTMLSelectElement>('.helm-dash-filters select')].find((s) => s.value === 'daily')!;
-    expect([...sel.options].map((o) => o.text)).toEqual(['Daily notes only', 'Daily + project notes', 'Every note']);
-    sel.value = 'daily-project';
-    sel.dispatchEvent(new Event('change'));
-    expect(state.source).toBe('daily-project');
+    expect(texts(root, '.helm-source-pills button')).toEqual(['Daily notes', 'Project notes', 'Tasks in other notes', 'Inbox']);
+    expect(texts(root, '.helm-source-pills .is-active')).toEqual(['Daily notes']);
+    click([...root.querySelectorAll('.helm-source-pills button')].find((b) => b.textContent === 'Project notes'));
+    expect(state.sources).toEqual(['daily', 'project']);
+    root = render((r) => renderDashboard(ctx, r, state));
+    expect(texts(root, '.helm-source-pills .is-active')).toEqual(['Daily notes', 'Project notes']);
+    click([...root.querySelectorAll('.helm-source-pills button')].find((b) => b.textContent === 'Daily notes'));
+    expect(state.sources).toEqual(['project']); // daily notes can be switched off …
+    root = render((r) => renderDashboard(ctx, r, state));
+    click([...root.querySelectorAll('.helm-source-pills button')].find((b) => b.textContent === 'Project notes'));
+    expect(state.sources).toEqual(['project']); // … but the last one on stays on
   });
 
   it('renders KPIs, charts, projects table and drills into a bar', async () => {
