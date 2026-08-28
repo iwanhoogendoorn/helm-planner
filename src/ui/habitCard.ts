@@ -8,6 +8,7 @@ import type { Habit, HabitPart, IsoDate } from '../core/types';
 import { HABIT_PARTS } from '../core/types';
 import { habitColor } from '../core/habit';
 import { addDays, startOfWeek, WEEKDAY_SHORT } from '../core/dates';
+import { partOfTime } from '../core/dailyNote';
 import { dayPartOf, habitOccurrences, habitStats, type HabitDayState, type HabitStats } from '../data/habits';
 import { h, icon } from './dom';
 import { habitBadge } from './fields';
@@ -57,7 +58,14 @@ function ring(fraction: number, size = 30): SVGSVGElement {
 /** Cycle a whole day: everything done → cleared; otherwise everything done. */
 async function toggleDay(ctx: UiContext, hb: Habit, date: IsoDate, state: HabitDayState): Promise<void> {
   const next: 'done' | 'missed' = state === 'done' ? 'missed' : 'done';
-  for (const part of habitOccurrences(hb)) await ctx.mutations.setHabitState(hb.id, date, next, part);
+  for (const part of habitOccurrences(hb)) await ctx.mutations.setHabitState(hb.id, date, next, part, placeInNow(ctx, date));
+}
+
+/** Ticking a day-level habit today files it under the part of the day you are in. */
+function placeInNow(ctx: UiContext, date: IsoDate): { placeIn?: HabitPart } {
+  if (date !== ctx.today()) return {};
+  const p = partOfTime(ctx.now(), ctx.settings());
+  return p === 'anytime' ? {} : { placeIn: p };
 }
 
 export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement {
@@ -71,7 +79,7 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
   const toggle = (part: HabitPart | undefined, ev: MouseEvent): void => {
     const s = stateOf(part);
     const next = ev.shiftKey ? (s === 'skipped' ? 'missed' : 'skipped') : s === 'done' ? 'missed' : 'done';
-    void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, next, part));
+    void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, next, part, placeInNow(ctx, date)));
   };
   const ticks = h('div', { cls: 'helm-habit-ticks' }, ...occ.map((part) => {
     const s = stateOf(part);

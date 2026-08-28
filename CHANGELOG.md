@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Ticking a habit without fixed parts now files it under the part of the day
+  you are in — checked, exactly as it looks when you drag it there — instead
+  of only sitting in the Habits list. Unticking leaves the line where it is,
+  and tomorrow the habit is general again.
 - Moving a task's start time now moves its end with it. Picking a part of
   the day (or *Move to …*) on a task with times but no estimate used to set
   the start and leave the old end behind it — 18:00–10:00.

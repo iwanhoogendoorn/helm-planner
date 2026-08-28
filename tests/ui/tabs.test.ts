@@ -1010,6 +1010,27 @@ describe('New drawing / note dialog', () => {
 });
 
 describe('managing habits from Today', () => {
+  it('ticking a habit files it under the part of the day you are in, checked, and unticking leaves it there', async () => {
+    const { ctx, vault, index } = await ctxFor(); // the test clock says 14:37 → afternoon
+    let root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const cardOf = (title: string) => [...root.querySelectorAll<HTMLElement>('.helm-habit-card')].find((c) => c.textContent?.includes(title))!;
+    click(cardOf('Morning workout').querySelector('.helm-habit-tick'));
+    await flush(); await flush();
+    const note = await vault.read(dailyPath(TODAY));
+    expect(note).toMatch(/#+ Afternoon\n+- \[x\] 🏃 Morning workout 🆔 hab-workout/);
+    expect(note.match(/hab-workout/g)).toHaveLength(1); // not left behind in the Habits list as well
+    root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const chip = root.querySelector('.helm-section.part-afternoon .helm-part-habits .helm-habit')!;
+    expect(chip.textContent).toContain('Morning workout');
+    expect(chip.classList.contains('is-done')).toBe(true);
+    expect(cardOf('Morning workout').querySelector('.helm-habit-moved')!.textContent).toBe('afternoon today');
+    // Unticking keeps the line where it is, just not ticked.
+    click(cardOf('Morning workout').querySelector('.helm-habit-tick'));
+    await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toMatch(/#+ Afternoon\n+- \[ \] 🏃 Morning workout 🆔 hab-workout/);
+    void index;
+  });
+
   it('moves a day-level habit into a part of the day for one date only: menu, drag-drop, tick where it sits, back to general next day', async () => {
     const { ctx, index, vault } = await ctxFor();
     await ctx.mutations.schedule('tsk-0001', TODAY, 'afternoon'); // an open task, so every part of the day is drawn

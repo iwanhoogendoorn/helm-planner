@@ -262,22 +262,32 @@ export class Mutations {
   }
 
   /** Tick, skip or untick one occurrence of a habit: the day-level line, or the line in a part of the day. */
-  async setHabitState(habitId: string, date: IsoDate, state: 'done' | 'skipped' | 'missed', part?: HabitPart): Promise<void> {
+  /**
+   * Tick, skip or clear a habit for a day. `part` names the occurrence of a habit that has parts;
+   * `opts.placeIn` puts a day-level habit's line into that part of the day when it is ticked, so a
+   * habit you did this morning shows up — checked — among the morning's work.
+   */
+  async setHabitState(habitId: string, date: IsoDate, state: 'done' | 'skipped' | 'missed', part?: HabitPart, opts: { placeIn?: HabitPart } = {}): Promise<void> {
     const status: TaskStatus = state === 'done' ? 'done' : state === 'skipped' ? 'cancelled' : 'todo';
     const h = this.index.snapshot.habits.get(habitId);
     const label = h ? `${h.icon ? h.icon + ' ' : ''}${h.title}` : habitId;
+    const dayLevel = !(h?.parts?.length);
     await this.editRegion(date, (rc) => {
+      const parts = ['morning', 'afternoon', 'evening'] as const;
       // A day-level habit moved into a part of the day for this date is ticked where it sits.
-      const moved = part === undefined && !(h?.parts?.length) ? (['morning', 'afternoon', 'evening'] as const).find((p) => rc[p].some((l) => l.id === habitId) && !rc.habits.some((l) => l.id === habitId)) : undefined;
-      const sec: Section = part ?? moved ?? 'habits';
+      const moved = part === undefined && dayLevel ? parts.find((p) => rc[p].some((l) => l.id === habitId) && !rc.habits.some((l) => l.id === habitId)) : undefined;
+      const placeIn = part === undefined && dayLevel && moved === undefined && state === 'done' ? opts.placeIn : undefined;
+      const sec: Section = part ?? moved ?? placeIn ?? 'habits';
+      const from = placeIn ? rc.habits.find((l) => l.id === habitId) : undefined;
       const list = [...rc[sec]];
       const idx = list.findIndex((l) => l.id === habitId);
-      const base = idx >= 0 ? list[idx]! : newTaskLine(label, { id: habitId });
+      const base = idx >= 0 ? list[idx]! : from ?? newTaskLine(label, { id: habitId });
       const next = withStatus(base, status, date);
       if (idx >= 0) list[idx] = next;
-      else if (part) { const at = list.findIndex((l) => !(l.id ?? '').startsWith('hab-')); list.splice(at === -1 ? list.length : at, 0, next); }
+      else if (part || placeIn) { const at = list.findIndex((l) => !(l.id ?? '').startsWith('hab-')); list.splice(at === -1 ? list.length : at, 0, next); }
       else list.push(next);
-      return { ...rc, [sec]: list };
+      // Placing it in a part takes it out of the general Habits list; it goes back there tomorrow.
+      return { ...rc, [sec]: list, ...(placeIn ? { habits: rc.habits.filter((l) => l.id !== habitId) } : {}) };
     });
   }
 
