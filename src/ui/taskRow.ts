@@ -10,6 +10,7 @@ import { followsOf, followUpsOf, isBlocked, isOpen } from '../data/planner';
 import { drawingsIndicator } from './drawings';
 import { notesIndicator } from './notes';
 import { linksIndicator } from './links';
+import { linksIn, textWithoutLinks } from '../core/links';
 import { taskLabel } from './context';
 
 export interface RowOptions {
@@ -70,7 +71,8 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   const line1 = h('div', { cls: 'helm-task-line' });
   if (t.time) line1.appendChild(h('span', { cls: 'helm-time', text: t.time.end ? `${t.time.start}–${t.time.end}` : t.time.start }));
   if (t.priority !== 'normal') line1.appendChild(h('span', { cls: ['helm-prio', `prio-${t.priority}`], text: PRIORITY_LABEL[t.priority] ?? '', title: `Priority: ${t.priority}` }));
-  line1.appendChild(h('span', { cls: 'helm-task-text' }, richText(taskLabel(t), (target) => ctx.openLink(target, t.path))));
+  const shown = textWithoutLinks(taskLabel(t));
+  line1.appendChild(h('span', { cls: 'helm-task-text' }, richText(shown === '' ? taskLabel(t) : shown, (target) => ctx.openLink(target, t.path))));
   main.appendChild(line1);
 
   const meta = h('div', { cls: 'helm-task-meta' });
@@ -94,6 +96,8 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (t.effortMinutes !== undefined) meta.appendChild(chip(minutesToHuman(t.effortMinutes), 'effort'));
   if (t.recurrence) meta.appendChild(chip(formatRecurrence(t.recurrence), 'recurrence', t.recurrence.parsed ? '' : 'Unrecognised rule'));
   const fuTag = (ctx.settings().followupTag.trim() || 'followup').replace(/^#/, '');
+  // Links live in the line but are shown as pills, like notes and drawings.
+  for (const l of linksIn(t.text)) meta.appendChild(h('a', { cls: 'helm-chip link', text: l.label, title: l.url, attr: { href: l.url, target: '_blank', rel: 'noopener' }, onClick: (ev) => ev.stopPropagation() }));
   const follows = followsOf(snap, t, fuTag);
   if (follows) meta.appendChild(h('button', { cls: 'helm-chip followup', title: `Continues “${follows.text}” — click to open`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(follows.path, follows.line); } }, icon('corner-down-right'), h('span', { text: `follows: ${follows.text.length > 40 ? follows.text.slice(0, 39) + '…' : follows.text}${isOpen(follows) ? ' (open)' : ''}` })));
   else if (blocked) meta.appendChild(chip('blocked', 'blocked', `Waiting on ${t.blockedBy.join(', ')}`));

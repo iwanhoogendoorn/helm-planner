@@ -40,3 +40,10 @@ export function removeLinkFromText(text: string, url: string): string {
   if (!existing) return text;
   return text.replace(existing.raw, '').replace(/\s{2,}/g, ' ').trim();
 }
+
+/** The text with every link taken out — what a row shows when links are drawn as pills instead. */
+export function textWithoutLinks(text: string): string {
+  let out = text;
+  for (const l of linksIn(text)) out = out.replace(l.raw, '');
+  return out.replace(/\s{2,}/g, ' ').trim();
+}

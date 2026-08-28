@@ -212,7 +212,8 @@ describe('Modals', () => {
     let t = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Chase UC3'))!;
     let root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     const row = () => [...root.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.textContent?.includes('Chase UC3'))!;
-    const a = row().querySelector<HTMLAnchorElement>('.helm-task-text a.external-link')!;
+    expect(row().querySelector('.helm-task-text')!.textContent).toBe('Chase UC3'); // the URL is not in the text …
+    const a = row().querySelector<HTMLAnchorElement>('.helm-task-meta a.helm-chip.link')!; // … it is a pill under it
     expect(a.textContent).toBe('jira.example.com/browse/RSC-1');
     expect(a.getAttribute('href')).toBe('https://jira.example.com/browse/RSC-1');
     expect(row().querySelector('.helm-task-links .helm-badge')!.textContent).toBe('1');
@@ -232,6 +233,8 @@ describe('Modals', () => {
     t = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Chase UC3'))!;
     root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     expect(row().querySelector('.helm-task-links .helm-badge')!.textContent).toBe('2');
+    expect(texts(row(), '.helm-task-meta a.helm-chip.link')).toEqual(['NAT docs', 'jira.example.com/browse/RSC-1']);
+    expect(row().querySelector('.helm-task-text')!.textContent).toBe('Chase UC3');
     click(row().querySelector('button[aria-label="More…"]'));
     const rm = Menu.last!.items.find((i) => i.title === 'Links')!.sub!.items.find((i) => i.title === 'Remove link')!;
     expect(rm.sub!.items.map((i) => i.title)).toEqual(['NAT docs', 'jira.example.com/browse/RSC-1']);

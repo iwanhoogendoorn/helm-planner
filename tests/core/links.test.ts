@@ -20,3 +20,11 @@ describe('task links', () => {
     expect(removeLinkFromText('Nothing', 'https://x.io/t/1')).toBe('Nothing');
   });
 });
+
+describe('text without links', () => {
+  it('strips markdown links and bare URLs and tidies the spaces', async () => {
+    const { textWithoutLinks } = await import('../../src/core/links');
+    expect(textWithoutLinks('UC3 || Hi. https://x.io/a [Jira](https://j.io/b) done')).toBe('UC3 || Hi. done');
+    expect(textWithoutLinks('[only](https://x.io)')).toBe('');
+  });
+});
