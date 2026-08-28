@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.13.0 — 2026-08-28
 
 - A note created, renamed or moved anywhere outside Helm's scanned folders —
   the vault root, say — is now linkable straight away. Its name reached the
