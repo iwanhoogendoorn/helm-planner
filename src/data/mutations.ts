@@ -873,6 +873,8 @@ export class Mutations {
     const id = await this.ensureId(key);
     const orig = this.fresh(this.index.task(id)?.key ?? key);
     const src = orig.mirrorOf ? this.fresh(orig.mirrorOf) : orig;
+    // A task with subtasks is moved, never followed up: two copies of the same subtree is a mess nobody can reconcile.
+    if (src.childKeys.length > 0) throw new Error('This task has subtasks — move it to another day instead of following it up.');
     const tag = (this.settings.followupTag.trim() || 'followup').replace(/^#/, '');
     let text = (opts.text?.trim() || src.text).trim();
     // The tag is only ever added when asked for; the ⛔ link is what makes it a follow-up.
@@ -884,9 +886,6 @@ export class Mutations {
       const part = opts.part ?? (fields.time ? undefined : src.part && src.part !== 'anytime' ? src.part : undefined);
       await this.addTask({ text, date: opts.date, ...(part ? { part } : {}), fields });
     }
-    // The subtasks come along to the follow-up, finished ones included — a done subtask stays done.
-    const made = [...this.index.snapshot.tasks.values()].find((t) => t.id === followUpId && t.origin !== 'daily-mirror');
-    if (made) await this.moveSubtasks(src.key, made.key);
     // Whatever was attached to the original travels along: the same notes and drawings, now tied to both tasks.
     const from: DrawingTarget = { kind: 'task', key: src.key, id, title: src.text };
     const created = [...this.index.snapshot.tasks.values()].find((t) => t.id === followUpId && t.origin !== 'daily-mirror');
@@ -897,32 +896,6 @@ export class Mutations {
     }
     if (opts.markOriginalDone) await this.setStatus(src.key, 'done');
     return { id, date: opts.date, followUpId };
-  }
-
-  /** Move every subtask of a task (with everything nested under them) so they sit under another task. */
-  async moveSubtasks(fromKey: string, toKey: string): Promise<number> {
-    const src = this.fresh(fromKey);
-    const kids = src.childKeys.map((k) => this.index.task(k)).filter((c): c is Task => c !== undefined);
-    if (kids.length === 0) return 0;
-    const unit = this.settings.indentUnit || '\t';
-    const baseIndent = kids[0]!.raw.indent;
-    let cut: string[] = [];
-    await this.editFile(src.path, (lines) => {
-      // Bottom-up, so earlier ranges keep their line numbers.
-      const ranges = kids.map((k) => this.subtreeRange(lines, k)).sort((a, b) => b.start - a.start);
-      for (const r of ranges) { cut = [...lines.slice(r.start, r.end), ...cut]; lines.splice(r.start, r.end - r.start); }
-      return true;
-    });
-    if (cut.length === 0) return 0;
-    const dst = this.fresh(toKey); // line numbers have moved if both tasks share a file
-    const indent = dst.raw.indent + unit;
-    const moved = cut.map((l) => indent + (l.startsWith(baseIndent) ? l.slice(baseIndent.length) : l.replace(/^\s+/, '')));
-    await this.editFile(dst.path, (lines) => {
-      const { end } = this.subtreeRange(lines, this.fresh(toKey));
-      lines.splice(end, 0, ...moved);
-      return true;
-    });
-    return kids.length;
   }
 
   /* ── Links ─────────────────────────────────────────────────────────── */

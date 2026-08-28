@@ -54,14 +54,14 @@ export class ButtonComponent { buttonEl: HTMLButtonElement; constructor(el: HTML
 export class ExtraButtonComponent { extraSettingsEl: HTMLElement; constructor(el: HTMLElement) { this.extraSettingsEl = el.createDiv({ cls: 'clickable-icon extra-setting-button' }); } setIcon(i: string): this { this.extraSettingsEl.setAttribute('data-icon', i); return this; } setTooltip(): this { return this; } onClick(cb: () => unknown): this { this.extraSettingsEl.addEventListener('click', () => cb()); return this; } }
 export class AbstractInputSuggest<T> { constructor(public app: unknown, public inputEl: HTMLInputElement) { AbstractInputSuggest.instances.push(this as AbstractInputSuggest<unknown>); } getSuggestions(_q: string): T[] { return []; } renderSuggestion(_v: T, _el: HTMLElement): void {} selectSuggestion(_v: T): void {} close(): void {} static instances: AbstractInputSuggest<unknown>[] = []; }
 export class Menu {
-  items: { title: string; click?: () => void; sub?: Menu }[] = [];
+  items: { title: string; click?: () => void; sub?: Menu; disabled?: boolean }[] = [];
   static last: Menu | undefined;
-  addItem(fn: (i: MenuItem) => void): this { const it = new MenuItem(); fn(it); this.items.push({ title: it.title, click: it.clickFn, sub: it.sub }); return this; }
+  addItem(fn: (i: MenuItem) => void): this { const it = new MenuItem(); fn(it); this.items.push({ title: it.title, click: it.clickFn, sub: it.sub, disabled: it.disabled }); return this; }
   addSeparator(): this { return this; }
   showAtMouseEvent(): void { Menu.last = this; }
   showAtPosition(): void { Menu.last = this; }
 }
-class MenuItem { title = ''; clickFn?: () => void; sub?: Menu; setTitle(t: string): this { this.title = t; return this; } setIcon(): this { return this; } setChecked(): this { return this; } setWarning(): this { return this; } onClick(f: () => void): this { this.clickFn = f; return this; } setSubmenu(): Menu { this.sub = new Menu(); return this.sub; } }
+class MenuItem { title = ''; disabled = false; clickFn?: () => void; sub?: Menu; setTitle(t: string): this { this.title = t; return this; } setIcon(): this { return this; } setChecked(): this { return this; } setDisabled(d = true): this { this.disabled = d; return this; } setWarning(): this { return this; } onClick(f: () => void): this { this.clickFn = f; return this; } setSubmenu(): Menu { this.sub = new Menu(); return this.sub; } }
 export class TFile { path = ''; stat = { mtime: 0 }; }
 export class TFolder { path = ''; }
 export class MarkdownView {}

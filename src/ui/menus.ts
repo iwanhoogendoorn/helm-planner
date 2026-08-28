@@ -62,7 +62,10 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   const menu = new Menu();
   menu.addItem((i) => i.setTitle('Edit…').setIcon('pencil').onClick(() => opts.onEdit ? opts.onEdit() : openTaskEditor(ctx, task)));
   menu.addItem((i) => i.setTitle('Add subtask…').setIcon('list-plus').onClick(() => openSubtask(ctx, task)));
-  menu.addItem((i) => i.setTitle('Follow up…').setIcon('corner-down-right').onClick(() => openFollowUp(ctx, task)));
+  const hasSubtasks = task.childKeys.length > 0;
+  menu.addItem((i) => hasSubtasks
+    ? i.setTitle('Follow up… — move it instead (it has subtasks)').setIcon('corner-down-right').setDisabled(true)
+    : i.setTitle('Follow up…').setIcon('corner-down-right').onClick(() => openFollowUp(ctx, task)));
   menu.addSeparator();
   addScheduleItems(menu, ctx, task);
   const onADay = task.noteDate !== undefined || task.scheduled !== undefined;

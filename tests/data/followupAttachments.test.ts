@@ -32,11 +32,11 @@ describe('follow-ups of tasks with attachments and duplicated keys', () => {
 
   it('the notes and drawings of the original are linked to the follow-up as well', async () => {
     const { m, vault, index } = await setup({
-      '81 AI/Cert research.md': '---\nhelm-task: tsk-0001\n---\n# Cert research\n',
-      'Excalidraw/cert map.excalidraw.md': DRAW('helm-task: tsk-0001'),
+      '81 AI/Cert research.md': '---\nhelm-task: tsk-0002\n---\n# Cert research\n',
+      'Excalidraw/cert map.excalidraw.md': DRAW('helm-task: tsk-0002'),
     });
-    const orig = index.task('tsk-0001')!;
-    const from = { kind: 'task' as const, key: orig.key, id: 'tsk-0001', title: orig.text };
+    const orig = index.task('tsk-0002')!;
+    const from = { kind: 'task' as const, key: orig.key, id: 'tsk-0002', title: orig.text };
     expect(index.notesFor(from).map((n) => n.title)).toEqual(['Cert research']);
     expect(index.drawingsFor(from).map((d) => d.title)).toEqual(['cert map']);
     const r = await m.followUp(orig.key, { text: 'Continue cert research', date: '2026-08-28' });
@@ -46,8 +46,8 @@ describe('follow-ups of tasks with attachments and duplicated keys', () => {
     expect(index.notesFor(to).map((n) => n.title)).toEqual(['Cert research']);
     expect(index.drawingsFor(to).map((d) => d.title)).toEqual(['cert map']);
     // Both tasks are keyed in the frontmatter; the original keeps its attachments.
-    expect(await vault.read('81 AI/Cert research.md')).toMatch(new RegExp(`helm-task:\\n  - tsk-0001\\n  - ${r.followUpId}\\n`));
-    expect(await vault.read('Excalidraw/cert map.excalidraw.md')).toMatch(new RegExp(`helm-task:\\n  - tsk-0001\\n  - ${r.followUpId}\\n`));
+    expect(await vault.read('81 AI/Cert research.md')).toMatch(new RegExp(`helm-task:\\n  - tsk-0002\\n  - ${r.followUpId}\\n`));
+    expect(await vault.read('Excalidraw/cert map.excalidraw.md')).toMatch(new RegExp(`helm-task:\\n  - tsk-0002\\n  - ${r.followUpId}\\n`));
     expect(index.notesFor(from).map((n) => n.title)).toEqual(['Cert research']);
   });
 });

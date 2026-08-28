@@ -26,7 +26,7 @@ describe('deleting a follow-up leaves the original alone', () => {
   });
   it('project original: deleting the follow-up (project line or its mirror) keeps the original and its mirror', async () => {
     const { m, vault, index } = await setup();
-    const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'project' && t.projectId === 'prj-book' && t.status !== 'done')!;
+    const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'project' && t.projectId === 'prj-book' && t.status !== 'done' && t.childKeys.length === 0)!;
     await m.schedule(orig.key, TODAY);
     const o2 = [...index.snapshot.tasks.values()].find((t) => t.text === orig.text && t.origin === 'project')!;
     const before = text(await vault.read(orig.path), o2.id!).length;

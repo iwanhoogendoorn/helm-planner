@@ -4,11 +4,15 @@
 
 - Subtasks: *Add subtask…* in a task's menu writes an indented line under it in
   the same note (Shift+Enter keeps the dialog open for the next one).
-- Subtasks travel with their task, always: dragging it to another part of the
-  day, scheduling it for another day and creating a follow-up all take the
-  whole subtree along — finished subtasks included, still ticked. Moving a
-  task between parts used to leave its subtasks behind, and the day's
-  time-ordering could split a task from them.
+- Subtasks travel with their task: dragging it to another part of the day and
+  scheduling it for another day take the whole subtree along, finished
+  subtasks included and still ticked. Moving a task between parts used to
+  leave its subtasks behind, and the day's time-ordering could split a task
+  from them.
+- A task that has subtasks is moved, not followed up: *Follow up…* is off for
+  it (“move it instead”), which keeps one subtree in one place. A subtask
+  itself follows up like any other task — the new one lands on its day as a
+  normal top-level task, linked back to the subtask.
 - A finished subtask keeps its place under its parent **and** shows among the
   day's done work, carrying a *part of ‹task›* chip that opens the parent — so
   it can never read as a subtask of the row above it.

@@ -1249,6 +1249,24 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('offers Follow up… on a subtask but not on the task that has it', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.addTask({ text: 'Ship the draft', date: TODAY, part: 'morning' });
+    const parent = [...index.snapshot.tasks.values()].find((x) => x.text === 'Ship the draft')!;
+    await m.addTask({ text: 'Proof it', parentKey: parent.key });
+    const fresh = index.task(parent.key)!;
+    taskMenu(ctx, fresh, new MouseEvent('contextmenu'));
+    const parentItem = Menu.last!.items.find((i) => i.title.startsWith('Follow up'))!;
+    expect(parentItem.title).toBe('Follow up… — move it instead (it has subtasks)');
+    expect(parentItem.disabled).toBe(true);
+    expect(parentItem.click).toBeUndefined();
+    const kid = index.task(fresh.childKeys[0]!)!;
+    taskMenu(ctx, kid, new MouseEvent('contextmenu'));
+    const kidItem = Menu.last!.items.find((i) => i.title.startsWith('Follow up'))!;
+    expect(kidItem.title).toBe('Follow up…'); // a subtask follows up like any other task
+    expect(kidItem.disabled).toBe(false);
+  });
+
   it('deleting a finished subtask from the day\'s done list removes it from under its parent too', async () => {
     const { ctx, m, index, vault } = await ctxFor();
     await m.addTask({ text: 'Ship the draft', date: TODAY, part: 'morning' });

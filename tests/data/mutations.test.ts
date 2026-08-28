@@ -525,7 +525,7 @@ describe('follow up', () => {
   it('project task: the follow-up joins the same project and phase and is mirrored onto the day', async () => {
     const { setup, dailyPath } = await import('./fixture');
     const { m, vault, index } = await setup();
-    const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'project' && t.projectId === 'prj-book' && t.phaseId !== undefined && t.status !== 'done')!;
+    const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'project' && t.projectId === 'prj-book' && t.phaseId !== undefined && t.status !== 'done' && t.childKeys.length === 0)!;
     const r = await m.followUp(orig.key, { text: 'Second draft of the outline', date: '2026-08-28' });
     const note = await vault.read(orig.path);
     const line = note.split('\n').find((l) => l.includes('Second draft of the outline'))!;

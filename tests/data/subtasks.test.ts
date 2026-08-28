@@ -16,26 +16,28 @@ describe('subtasks', () => {
     expect(kid.parentKey).toBe(fresh.key);
   });
 
-  it('hands every subtask to a follow-up, finished ones included, keeping their state and nesting', async () => {
-    const { m, vault, index } = await setup();
+  it('refuses a follow-up on a task that has subtasks — that one gets moved instead', async () => {
+    const { m, index } = await setup();
     const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'daily' && t.noteDate === '2026-08-25' && t.status === 'todo' && t.section !== 'outside')!;
-    await m.addTask({ text: 'Read the docs', parentKey: orig.key });
-    await m.addTask({ text: 'Draw the diagram', parentKey: orig.key });
-    const done = index.task(orig.key)!.childKeys.map((k) => index.task(k)!).find((t) => t.text === 'Read the docs')!;
-    await m.setStatus(done.key, 'done');
-    const keep = index.task(orig.key)!.childKeys.map((k) => index.task(k)!).find((t) => t.text === 'Draw the diagram')!;
-    await m.addTask({ text: 'Pick the colours', parentKey: keep.key });
+    await m.addTask({ text: 'Sub one', parentKey: orig.key });
+    await expect(m.followUp(index.task(orig.key)!.key, { text: 'Carry on', date: '2026-08-28' })).rejects.toThrow(/subtasks/i);
+  });
 
-    const r = await m.followUp(orig.key, { text: 'Carry on', date: '2026-08-28' });
+  it('follows up a subtask like any other task: a normal task on the new day, linked back to it', async () => {
+    const { m, vault, index } = await setup();
+    const parent = [...index.snapshot.tasks.values()].find((t) => t.origin === 'daily' && t.noteDate === '2026-08-25' && t.status === 'todo' && t.section !== 'outside')!;
+    await m.addTask({ text: 'Read the docs', parentKey: parent.key });
+    const kid = index.task(parent.key)!.childKeys.map((k) => index.task(k)!)[0]!;
+    const r = await m.followUp(kid.key, { text: 'Finish the docs', date: '2026-08-28' });
     const friday = await vault.read(dailyPath('2026-08-28'));
-    expect(friday).toMatch(/- \[ \] Carry on[^\n]*\n\s+- \[x\] Read the docs[^\n]*\n\s+- \[ \] Draw the diagram\n\s+\s+- \[ \] Pick the colours/);
-    const yesterday = await vault.read(dailyPath('2026-08-25'));
-    expect(yesterday).not.toContain('Read the docs'); // everything moved, done or not
-    expect(yesterday).not.toContain('Draw the diagram');
-    const byId = (id: string) => [...index.snapshot.tasks.values()].find((t) => t.id === id && t.origin !== 'daily-mirror')!;
-    expect(byId(r.followUpId).childKeys.map((k) => index.task(k)!.text)).toEqual(['Read the docs', 'Draw the diagram']);
-    expect(index.task(byId(r.followUpId).childKeys[0]!)!.status).toBe('done'); // a done subtask stays done
-    expect(byId(r.id).childKeys).toEqual([]);
+    expect(friday).toMatch(new RegExp(`^- \\[ \\] Finish the docs 🆔 tsk-\\w+ ⛔ ${r.id}$`, 'm')); // top level, not indented
+    const fu = [...index.snapshot.tasks.values()].find((t) => t.id === r.followUpId && t.origin !== 'daily-mirror')!;
+    expect(fu.depth).toBe(0);
+    expect(fu.parentKey).toBeUndefined();
+    // The subtask itself stays where it is, now carrying an id so the follow-up can point at it.
+    const stillThere = [...index.snapshot.tasks.values()].find((t) => t.id === r.id)!;
+    expect(stillThere.depth).toBe(1);
+    expect((await vault.read(dailyPath('2026-08-25'))).match(/Read the docs/g)).toHaveLength(1);
   });
 
   it('moves a task within the day and to another day with its subtasks', async () => {
@@ -54,9 +56,4 @@ describe('subtasks', () => {
     expect(friday).toMatch(/- \[ \] .*Start with OIB[^\n]*\n\t- \[ \] Sub A\n\t- \[ \] Sub B/);
   });
 
-  it('moves nothing when a task has no subtasks', async () => {
-    const { m, index } = await setup();
-    const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'daily' && t.noteDate === '2026-08-25' && t.status === 'todo' && t.section !== 'outside')!;
-    expect(await m.moveSubtasks(orig.key, orig.key)).toBe(0);
-  });
 });
