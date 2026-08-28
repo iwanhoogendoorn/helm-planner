@@ -110,19 +110,22 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     const items = plan.byPart[part].filter((it) => it.display.status !== 'done' && it.display.status !== 'cancelled');
     // Finished tasks stay in their part as ghosts, so a part you worked through does not read as an empty morning.
     const doneItems = plan.byPart[part].filter((it) => it.display.status === 'done' || it.display.status === 'cancelled');
+    // Subtasks that got done still sit under their parent; they also show here, so the day's record is complete.
+    const doneSubtasks = plan.byPart[part].flatMap((it) => it.display.childKeys.map((k) => snap.tasks.get(k)).filter((c): c is Task => c !== undefined && (c.status === 'done' || c.status === 'cancelled')));
     const partHabits = part !== 'anytime' ? habitChipsFor(part) : null;
-    if (items.length === 0 && doneItems.length === 0 && !partHabits && (isPast || (openItems.length === 0 && part !== 'anytime'))) continue;
+    if (items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && !partHabits && (isPast || (openItems.length === 0 && part !== 'anytime'))) continue;
     const minutes = items.reduce((s, it) => s + (it.display.effortMinutes ?? settings.defaultEffortMinutes), 0);
     const sec = section(PART_LABEL[part], {
       count: items.length, store, key: `part:${part}`, cls: `part-${part}`,
       actions: [
-        doneItems.length > 0 ? chip(`${doneItems.length} done`, 'done', `${doneItems.length} finished in the ${PART_LABEL[part].toLowerCase()}`) : null,
+        doneItems.length + doneSubtasks.length > 0 ? chip(`${doneItems.length + doneSubtasks.length} done`, 'done', `${doneItems.length + doneSubtasks.length} finished in the ${PART_LABEL[part].toLowerCase()}`) : null,
         minutes > 0 ? chip(minutesToHuman(minutes), 'effort') : null,
         iconButton('plus', `Add a task to the ${PART_LABEL[part].toLowerCase()}`, () => openCapture(ctx, { date, part: part === 'anytime' ? undefined : part })),
       ],
     }, partHabits, ...items.map((it) => itemRow(ctx, it)),
       ...doneItems.map((it) => { const row = taskRow(ctx, it.display, { showDate: 'none' }); row.classList.add('helm-ghost'); return row; }),
-      items.length === 0 && doneItems.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
+      ...doneSubtasks.map((c) => { const row = taskRow(ctx, c, { showDate: 'none' }); row.classList.add('helm-ghost', 'is-subtask'); return row; }),
+      items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
     sec.querySelector('.helm-section-head')?.prepend(icon(PART_ICON[part], 'helm-part-icon'));
     makeDropZone(ctx, sec, date, part);
     root.appendChild(sec);

@@ -544,7 +544,9 @@ describe('Dashboard tab', () => {
     await ctx.mutations.schedule('tsk-0001', TODAY, 'morning');
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     expect(texts(root, '.helm-section-title')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
-    expect(texts(root, '.helm-section.part-morning .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams']);
+    // 'Collect diagrams' is a finished subtask: under its parent, and again as a ghost among the morning's done work.
+    expect(texts(root, '.helm-section.part-morning .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams', 'Collect diagrams']);
+    expect(texts(root, '.helm-section.part-morning .helm-ghost.is-subtask .helm-task-text')).toEqual(['Collect diagrams']);
     const evening = root.querySelector('.helm-section.part-evening')!;
     const dt = { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? `tsk-0001@${TODAY}` : '') };
     const ev = new Event('drop', { bubbles: true, cancelable: true });
@@ -1182,8 +1184,8 @@ describe('Follow up from the UI', () => {
     const { ctx, index, vault } = await ctxFor();
     const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'daily' && x.noteDate === '2026-08-25' && x.status === 'todo' && x.section !== 'outside')!;
     click(taskRow(ctx, t).querySelector('button[aria-label="More…"]'));
-    expect(Menu.last!.items.map((i) => i.title).slice(0, 2)).toEqual(['Edit…', 'Follow up…']);
-    Menu.last!.items[1]!.click!();
+    expect(Menu.last!.items.map((i) => i.title).slice(0, 3)).toEqual(['Edit…', 'Add subtask…', 'Follow up…']);
+    Menu.last!.items[2]!.click!();
     const m = Modal.last!;
     expect(m.titleEl.textContent).toBe('Follow up');
     const text = m.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;

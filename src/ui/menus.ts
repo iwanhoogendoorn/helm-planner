@@ -7,6 +7,7 @@ import { addDrawingItems, targetForTask } from './drawings';
 import { addNoteItems } from './notes';
 import { addLinkItems } from './links';
 import { openFollowUp } from './modals/followUp';
+import { openSubtask } from './modals/subtask';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
@@ -60,6 +61,7 @@ export const STATUS_LABELS: Record<TaskStatus, { label: string; icon: string }> 
 export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onEdit?: () => void } = {}): void {
   const menu = new Menu();
   menu.addItem((i) => i.setTitle('Edit…').setIcon('pencil').onClick(() => opts.onEdit ? opts.onEdit() : openTaskEditor(ctx, task)));
+  menu.addItem((i) => i.setTitle('Add subtask…').setIcon('list-plus').onClick(() => openSubtask(ctx, task)));
   menu.addItem((i) => i.setTitle('Follow up…').setIcon('corner-down-right').onClick(() => openFollowUp(ctx, task)));
   menu.addSeparator();
   addScheduleItems(menu, ctx, task);

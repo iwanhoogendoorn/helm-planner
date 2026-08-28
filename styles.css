@@ -754,3 +754,5 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-source-pills .helm-tag-toggle { height: 24px; }
 .helm-dash-sources { margin-top: -2px; }
 .helm-dash-sources .helm-hint { margin-right: 2px; }
+.helm-task.is-subtask::before, .helm-ghost.is-subtask > .helm-task::before { content: '↳'; color: var(--text-faint); margin-right: 2px; }
+.helm-ghost.is-subtask, .helm-task.is-subtask { padding-left: 14px; }
