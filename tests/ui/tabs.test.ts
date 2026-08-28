@@ -75,16 +75,19 @@ describe('Today tab', () => {
     expect(root.querySelector('.helm-capacity-label')!.textContent).toContain('3 open · 1 done');
   });
 
-  it('stops offering carried-over work on days beyond the coming week', async () => {
-    const { ctx } = await ctxFor();
-    const has = (date: string): boolean => {
+  it('keeps overdue work on every day but stops offering carried-over work after next week', async () => {
+    const { ctx } = await ctxFor(); // TODAY is Wed 26 Aug, weeks start on Monday
+    const reasons = (date: string): string[] => {
       const root = render((r) => renderToday(ctx, r, { date, collapsed: new Map() }));
-      return texts(root, '.helm-section-title').includes('Needs attention');
+      const sec = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === 'Needs attention');
+      return sec ? texts(sec, '.helm-chip.reason') : [];
     };
-    expect(has(TODAY)).toBe(true);
-    expect(has('2026-09-02')).toBe(true); // a week out: still worth planning onto
-    expect(has('2026-09-28')).toBe(false); // a month out: those tasks will be long gone
-    expect(has('2026-08-25')).toBe(false); // a past day was never offered any
+    expect(reasons(TODAY)).toEqual(expect.arrayContaining(['overdue', 'carried over']));
+    expect(reasons('2026-09-06')).toEqual(expect.arrayContaining(['carried over'])); // the end of next week: still planning territory
+    const far = reasons('2026-09-28');
+    expect(far).toContain('overdue');        // a broken promise stays broken, however far out you look
+    expect(far).not.toContain('carried over'); // soft slippage does not follow you into next month
+    expect(reasons('2026-08-25')).toEqual([]); // a past day was never offered any
   });
 
   it('renders today with attention items and an empty plan call-to-action', async () => {

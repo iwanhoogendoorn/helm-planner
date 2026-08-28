@@ -2,10 +2,12 @@
 
 ## Unreleased
 
-- *Needs attention* only appears on days you are actually working on — today
-  and the week after it. Opening a day a month out listed everything late
-  today as *carried over*, which was noise: it will have been dealt with long
-  before that day arrives.
+- *Needs attention* separates a broken promise from soft slippage. Something
+  **overdue** shows on every day you open, however far out, until you move it
+  to a day on or after today — planning it forward is what clears it.
+  **Carried-over** work (late, but with no date it promised) is only offered
+  while you are still planning that stretch: the rest of this week and all of
+  next. Opening a day a month out used to list everything late today.
 - *Add link…* copes with what people actually type: the URL and Label boxes
   filled the wrong way round are swapped for you, and an address without its
   `https://` gets one. When neither box holds an address the dialog says so

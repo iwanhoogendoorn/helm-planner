@@ -1,6 +1,6 @@
 /** The cockpit: one day, split into parts, and the two rituals around it. */
 import type { Habit, HabitPart, IsoDate, Task } from '../../core/types';
-import { addDays, diffDays, humanDate, minutesToHuman } from '../../core/dates';
+import { addDays, humanDate, minutesToHuman, startOfWeek } from '../../core/dates';
 import { candidates, dayPlan, DAY_PARTS, type Candidate, type DayItem, type DayPart } from '../../data/planner';
 import { habitDue, habitStats } from '../../data/habits';
 import { PART_LABEL } from '../../core/dailyNote';
@@ -67,11 +67,13 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
 
   const store = state.collapsed;
 
-  // Needs attention: overdue and carried-over items. Only worth showing for the days you are actually
-  // working on — a month out, everything late today will have been dealt with long before.
-  const withinPlanningReach = !isPast && diffDays(today, date) <= ATTENTION_DAYS;
-  if (withinPlanningReach) {
-    const cands = candidates(snap, date, settings, today).filter((c) => c.reason === 'overdue' || c.reason === 'scheduled-past');
+  // Needs attention. Something past its due date is broken until it is dealt with, so it shows on any
+  // day you open. Carried-over work — late, but with no date it promised — is only offered while you
+  // are still planning that stretch: the rest of this week and all of next.
+  const planningHorizon = addDays(startOfWeek(today, settings.weekStartsOn), 13);
+  const stillPlanning = date <= planningHorizon;
+  if (!isPast) {
+    const cands = candidates(snap, date, settings, today).filter((c) => c.reason === 'overdue' || (c.reason === 'scheduled-past' && stillPlanning));
     if (cands.length > 0) {
       root.appendChild(section('Needs attention', { count: cands.length, store, key: 'attention', cls: 'is-attention', actions: [button('Plan day', { icon: 'list-plus', onClick: () => openPlanDay(ctx, date) })] },
         ...cands.slice(0, 12).map((c) => taskRow(ctx, c.task, { reason: reasonLabel(c), draggable: true, quickAction: { icon: 'arrow-down-to-line', title: `Pull onto ${humanDate(date, today)}`, onClick: (t) => void ctx.run('Schedule', () => ctx.mutations.schedule(t.key, date)) } })),
@@ -189,9 +191,6 @@ function retimeFor(ctx: UiContext, t: Task, date: IsoDate, part: DayPart): { sta
   if (t.time && t.time.start === start) return undefined;
   return { start, ...(t.time?.end ? { end: toHhmm(toMin(start) + length) } : {}) };
 }
-
-/** How far ahead carried-over work is still worth offering: today and the week after it. */
-const ATTENTION_DAYS = 7;
 
 function reasonLabel(c: Candidate): string {
   switch (c.reason) {
