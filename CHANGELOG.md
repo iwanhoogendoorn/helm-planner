@@ -18,6 +18,11 @@
   notes, drawings, links; clicking a group header narrows to that kind; and
   when nothing fits, *Capture “…”* turns what you typed into a new task. The
   query is remembered while Obsidian stays open.
+- Search says where a task lives — *Daily note*, *Project · <name>*, *Inbox*
+  or *Other note · <note>* — and `in:daily`, `in:project`, `in:inbox`,
+  `in:note` (with chips for the first three) narrow the results to one of
+  them. `kind:` still picks what sort of thing to look for; `in:` picks which
+  note a task sits in.
 - Follow-ups no longer add `#followup` on their own: the ⛔ link to the
   original is what makes one, and the tag is a toggle in the *Follow up…*
   dialog (off unless you switch it on). A task that waits on another shows

@@ -198,6 +198,7 @@ describe('Modals', () => {
     // A filter chip toggles its token in and out of the query.
     click([...m.contentEl.querySelectorAll('.helm-search-chips button')].find((b) => b.textContent === 'Open'));
     expect(input.value).toBe('chapter is:open');
+    expect(texts(m.contentEl, '.helm-search-chips button')).toContain('In daily notes');
     expect(m.contentEl.querySelector('.helm-search-chips .is-active')!.textContent).toBe('Open');
     click([...m.contentEl.querySelectorAll('.helm-search-chips button')].find((b) => b.textContent === 'Open'));
     expect(input.value).toBe('chapter');

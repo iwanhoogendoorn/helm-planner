@@ -9,8 +9,8 @@ import { openCapture } from './capture';
 import { taskMenu } from '../menus';
 
 const SHOWN = 60;
-const HELP = '#tag · @project · is:open/done/blocked/overdue · due:today/week/2026-09-01 · on:tomorrow · kind:task/project/note/drawing/habit/goal';
-const CHIPS: [string, string][] = [['is:open', 'Open'], ['is:overdue', 'Overdue'], ['due:week', 'Due this week'], ['on:today', 'Today'], ['kind:task', 'Tasks'], ['kind:project', 'Projects'], ['kind:note', 'Notes'], ['kind:drawing', 'Drawings']];
+const HELP = '#tag · @project · is:open/done/blocked/overdue · in:daily/project/inbox/note · due:today/week/2026-09-01 · on:tomorrow · kind:task/project/note/drawing/habit/goal';
+const CHIPS: [string, string][] = [['is:open', 'Open'], ['is:overdue', 'Overdue'], ['due:week', 'Due this week'], ['on:today', 'Today'], ['in:daily', 'In daily notes'], ['in:project', 'In projects'], ['in:note', 'In other notes'], ['kind:note', 'Note files'], ['kind:drawing', 'Drawings']];
 
 /** The query survives closing the dialog, so search → act → search again picks up where you were. */
 let lastQuery = '';

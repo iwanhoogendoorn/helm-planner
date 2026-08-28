@@ -5,6 +5,7 @@ import type { NoteRef } from '../core/noteRef';
 import { plainLabel } from '../core/label';
 import { addDays } from '../core/dates';
 import { isBlocked, isOpen } from './planner';
+import { baseName } from './vault';
 
 export type SearchKind = 'task' | 'project' | 'goal' | 'habit' | 'note' | 'drawing';
 export const SEARCH_KINDS: SearchKind[] = ['task', 'project', 'goal', 'habit', 'note', 'drawing'];
@@ -12,6 +13,16 @@ export const KIND_LABEL: Record<SearchKind, string> = { task: 'Tasks', project: 
 export const KIND_ICON: Record<SearchKind, string> = { task: 'check-square', project: 'folder', goal: 'mountain', habit: 'repeat', note: 'sticky-note', drawing: 'pen-tool' };
 
 export type StatusFilter = 'open' | 'done' | 'blocked' | 'waiting' | 'overdue';
+/** Where a task lives: a daily note, a project note, the inbox, a goal, or any other note Helm scans. */
+export type SourceFilter = 'daily' | 'project' | 'inbox' | 'note' | 'goal';
+const SOURCE_ALIAS: Record<string, SourceFilter> = {
+  daily: 'daily', day: 'daily', dailies: 'daily', 'daily-note': 'daily', 'daily-notes': 'daily',
+  project: 'project', projects: 'project',
+  inbox: 'inbox',
+  note: 'note', notes: 'note', other: 'note', elsewhere: 'note',
+  goal: 'goal', goals: 'goal',
+};
+export const SOURCE_LABEL: Record<SourceFilter, string> = { daily: 'Daily note', project: 'Project', inbox: 'Inbox', note: 'Other note', goal: 'Goal' };
 
 export interface Query {
   words: string[];
@@ -19,6 +30,7 @@ export interface Query {
   projects: string[];
   kinds: SearchKind[];
   status?: StatusFilter;
+  source?: SourceFilter;
   /** `due:` — on or before this day. */
   dueBy?: IsoDate;
   /** `on:` — planned for exactly this day. */
@@ -77,7 +89,8 @@ export function parseQuery(raw: string, today: IsoDate): Query {
       const [, field, value] = colon as unknown as [string, string, string];
       const f = field.toLowerCase();
       const v = value.toLowerCase();
-      if ((f === 'kind' || f === 'type' || f === 'in') && KIND_ALIAS[v]) { q.kinds.push(KIND_ALIAS[v]!); continue; }
+      if ((f === 'kind' || f === 'type') && KIND_ALIAS[v]) { q.kinds.push(KIND_ALIAS[v]!); continue; }
+      if ((f === 'in' || f === 'from' || f === 'source') && SOURCE_ALIAS[v]) { q.source = SOURCE_ALIAS[v]!; continue; }
       if (f === 'is' && ['open', 'done', 'blocked', 'waiting', 'overdue'].includes(v)) { q.status = v as StatusFilter; continue; }
       if (f === 'due') { const d = resolveDate(v, today); if (d) { q.dueBy = d; continue; } }
       if (f === 'on') { const d = resolveDate(v, today); if (d) { q.on = d; continue; } }
@@ -111,7 +124,8 @@ export function queryWords(raw: string): string {
     if (!m) return true;
     const f = m[1]!.toLowerCase();
     const v = m[2]!.toLowerCase();
-    if ((f === 'kind' || f === 'type' || f === 'in') && KIND_ALIAS[v]) return false;
+    if ((f === 'kind' || f === 'type') && KIND_ALIAS[v]) return false;
+    if ((f === 'in' || f === 'from' || f === 'source') && v !== '') return false;
     if (f === 'is' && ['open', 'done', 'blocked', 'waiting', 'overdue'].includes(v)) return false;
     if ((f === 'due' || f === 'on') && v !== '') return false;
     return true;
@@ -124,13 +138,25 @@ export function toggleToken(raw: string, token: string): string {
   const lower = token.toLowerCase();
   if (tokens.some((t) => t.toLowerCase() === lower)) return tokens.filter((t) => t.toLowerCase() !== lower).join(' ');
   const field = /^([a-z]+):/i.exec(token)?.[1]?.toLowerCase();
-  const kept = field === 'is' || field === 'due' || field === 'on' ? tokens.filter((t) => !new RegExp(`^${field}:`, 'i').test(t)) : tokens;
+  const kept = field === 'is' || field === 'due' || field === 'on' || field === 'in' ? tokens.filter((t) => !new RegExp(`^${field}:`, 'i').test(t)) : tokens;
   return [...kept, token].join(' ');
+}
+
+/** Which of the five homes a task sits in (a mirrored copy counts as its source). */
+export function sourceOf(t: Task): SourceFilter {
+  if (t.origin === 'project') return 'project';
+  if (t.origin === 'inbox') return 'inbox';
+  if (t.origin === 'goal') return 'goal';
+  if (t.origin === 'daily' || t.origin === 'daily-mirror') return 'daily';
+  return 'note';
 }
 
 function taskSubtitle(t: Task, snap: Snapshot): string {
   const bits: string[] = [];
-  if (t.projectId) { const p = snap.projects.get(t.projectId); if (p) bits.push(p.title); }
+  const src = sourceOf(t);
+  if (src === 'project') { const p = t.projectId ? snap.projects.get(t.projectId) : undefined; bits.push(p ? `Project · ${p.title}` : 'Project'); }
+  else if (src === 'note') bits.push(`Other note · ${baseName(t.path)}`);
+  else bits.push(SOURCE_LABEL[src]);
   const when = t.scheduled ?? t.noteDate;
   if (when) bits.push(when);
   if (t.due) bits.push(`due ${t.due}`);
@@ -177,9 +203,9 @@ export function startingPoints(snap: Snapshot, today: IsoDate): HitGroup[] {
 export function search(snap: Snapshot, raw: string, opts: { today: IsoDate; limit?: number }): SearchHit[] {
   const q = parseQuery(raw, opts.today);
   const limit = opts.limit ?? 60;
-  if (q.empty && q.kinds.length === 0 && q.tags.length === 0 && q.projects.length === 0 && !q.status && !q.dueBy && !q.on) return [];
+  if (q.empty && q.kinds.length === 0 && q.tags.length === 0 && q.projects.length === 0 && !q.status && !q.source && !q.dueBy && !q.on) return [];
   const want = (k: SearchKind): boolean => q.kinds.length === 0 || q.kinds.includes(k);
-  const taskOnly = q.tags.length > 0 || q.projects.length > 0 || q.status !== undefined || q.dueBy !== undefined || q.on !== undefined;
+  const taskOnly = q.tags.length > 0 || q.projects.length > 0 || q.source !== undefined || q.status !== undefined || q.dueBy !== undefined || q.on !== undefined;
   const out: SearchHit[] = [];
 
   if (want('task')) {
@@ -190,6 +216,7 @@ export function search(snap: Snapshot, raw: string, opts: { today: IsoDate; limi
         const p = t.projectId ? snap.projects.get(t.projectId) : undefined;
         if (!p || !q.projects.every((needle) => p.title.toLowerCase().includes(needle))) continue;
       }
+      if (q.source && sourceOf(t) !== q.source) continue;
       if (!statusOk(t, snap, q.status, opts.today)) continue;
       if (q.dueBy && !(t.due !== undefined && t.due <= q.dueBy)) continue;
       if (q.on && (t.scheduled ?? t.noteDate) !== q.on) continue;

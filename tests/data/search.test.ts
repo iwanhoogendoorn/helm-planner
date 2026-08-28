@@ -82,3 +82,26 @@ describe('search as a workflow', () => {
     expect(queryWords('is:open')).toBe('');
   });
 });
+
+describe('where a task lives', () => {
+  it('names the source in the subtitle and filters on it with in:', async () => {
+    const { index } = await setup();
+    const s = index.snapshot;
+    const { search: find } = await import('../../src/data/search');
+    const sub = (q: string, title: string): string | undefined => find(s, q, { today: TODAY }).find((x) => x.title === title)?.subtitle;
+    expect(sub('draft chapter', 'Draft chapter list')).toContain('Project · Oracle Book Writing');
+    expect(sub('plumber', 'Call the plumber')).toContain('Inbox');
+    expect(sub('learn rust', 'Learn Rust')).toBe('Other note · Backlog Tasks');
+    expect(sub('router config', 'Fix router config')).toContain('Daily note');
+    const daily = find(s, 'in:daily', { today: TODAY });
+    expect(daily.length).toBeGreaterThan(0);
+    expect(daily.every((x) => x.task!.origin === 'daily' || x.task!.origin === 'daily-mirror')).toBe(true);
+    expect(find(s, 'in:note', { today: TODAY }).map((x) => x.title)).toEqual(['Learn Rust']);
+    expect(find(s, 'in:inbox', { today: TODAY }).every((x) => x.task!.origin === 'inbox')).toBe(true);
+    expect(find(s, 'chapter in:project', { today: TODAY }).every((x) => x.task!.origin === 'project')).toBe(true);
+    expect(find(s, 'in:daily', { today: TODAY }).every((x) => x.kind === 'task')).toBe(true); // a source filter is about tasks
+    const { queryWords, toggleToken } = await import('../../src/data/search');
+    expect(queryWords('rust in:note')).toBe('rust');
+    expect(toggleToken('a in:daily', 'in:note')).toBe('a in:note'); // one source at a time
+  });
+});
