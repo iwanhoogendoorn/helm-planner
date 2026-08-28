@@ -1249,6 +1249,30 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('deleting a finished subtask from the day\'s done list removes it from under its parent too', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    await m.addTask({ text: 'Ship the draft', date: TODAY, part: 'morning' });
+    const parent = [...index.snapshot.tasks.values()].find((x) => x.text === 'Ship the draft')!;
+    await m.addTask({ text: 'Proof it', parentKey: parent.key });
+    const proof = index.task(parent.key)!.childKeys.map((k) => index.task(k)!)[0]!;
+    await m.setStatus(proof.key, 'done');
+    let root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const rows = () => texts(root, '.helm-section.part-morning .helm-task-text');
+    expect(rows()).toEqual(['Ship the draft', 'Proof it', 'Proof it']); // under its parent, and in the done list
+    // Delete it from the ghost row: it is the same task, so both go.
+    const ghost = [...root.querySelectorAll<HTMLElement>('.helm-section.part-morning .helm-ghost')].find((r) => r.querySelector('.helm-chip.subtask-of'))!;
+    const confirmOrig = window.confirm;
+    window.confirm = () => true;
+    try {
+      click(ghost.querySelector('button[aria-label="More…"]'));
+      Menu.last!.items.find((i) => i.title.startsWith('Delete'))!.click!();
+      await flush(); await flush();
+    } finally { window.confirm = confirmOrig; }
+    expect(await vault.read(dailyPath(TODAY))).not.toContain('Proof it');
+    root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    expect(rows()).toEqual(['Ship the draft']); // gone from both places, parent untouched
+  });
+
   it('takes the subtasks along, done ones included', async () => {
     const { ctx, m, index, vault } = await ctxFor();
     await m.addTask({ text: 'Ship the draft', date: TODAY, part: 'morning' });
