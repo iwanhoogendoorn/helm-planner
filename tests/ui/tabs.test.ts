@@ -13,6 +13,7 @@ import { openPlanDay } from '../../src/ui/modals/planDay';
 import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { openSearch } from '../../src/ui/modals/search';
+import { taskMenu } from '../../src/ui/menus';
 import { taskRow } from '../../src/ui/taskRow';
 import { openProjectForm, parsePhases } from '../../src/ui/modals/projectForm';
 import { openHabitForm } from '../../src/ui/modals/habitForm';
@@ -1216,6 +1217,33 @@ describe('Capture for another day', () => {
     const m2 = Modal.last!;
     click([...m2.contentEl.querySelectorAll<HTMLElement>('.helm-capture-day .helm-seg')].find((b) => b.textContent === 'Inbox'));
     expect(m2.contentEl.querySelector('.helm-capture-where')!.textContent).toMatch(/^→ inbox/);
+  });
+});
+
+describe('moving a task to another day', () => {
+  it('every day in the task menu opens onto the parts of the day, and the date picker offers them too', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    const t = index.task('tsk-0001')!;
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    const tomorrow = Menu.last!.items.find((i) => i.title === 'Tomorrow')!;
+    expect(tomorrow.sub!.items.map((i) => i.title)).toEqual(['Just move it', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
+    tomorrow.sub!.items[1]!.click!(); // Morning
+    await flush(); await flush();
+    const note = await vault.read(dailyPath('2026-08-27'));
+    expect(note).toMatch(/#+ Morning\n+- \[ \] .*Draft chapter list/);
+    // A task that already sits in a part offers to keep it.
+    const moved = [...index.snapshot.tasks.values()].find((x) => x.id === 'tsk-0001' && x.origin === 'daily-mirror')!;
+    taskMenu(ctx, moved, new MouseEvent('contextmenu'));
+    expect(Menu.last!.items.find((i) => i.title === 'Tomorrow')!.sub!.items[0]!.title).toBe('Keep the morning');
+    // Pick a date… opens the picker with a part row.
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    Menu.last!.items.find((i) => i.title === 'Pick a date…')!.click!();
+    const picker = Modal.last!;
+    expect(texts(picker.contentEl, '.helm-datepicker-parts button')).toEqual(['Keep', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
+    click([...picker.contentEl.querySelectorAll('.helm-datepicker-parts button')].find((b) => b.textContent === 'Evening'));
+    click([...picker.contentEl.querySelectorAll('.helm-presets button')].find((b) => b.textContent === '+2 days'));
+    await flush(); await flush();
+    expect(await vault.read(dailyPath('2026-08-28'))).toMatch(/#+ Evening\n+- \[ \] .*Draft chapter list/);
   });
 });
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Moving a task to another day now takes the part of the day with it: every
+  date in the task menu (Today, Tomorrow, Next week) opens onto *Morning /
+  Afternoon / Evening / Anytime*, with *Keep the ‹part›* first so a plain
+  move is still one click away. *Pick a date…* has the same choice as a row
+  in the dialog.
+
 ## 1.9.0 — 2026-08-28
 
 - Ticking a habit without fixed parts now files it under the part of the day

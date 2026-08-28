@@ -749,3 +749,4 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-search-row .helm-check { flex: none; margin-top: 0; }
 .helm-search-row.is-create .helm-search-title { color: var(--text-accent); }
 .helm-conflict-fix { height: 22px; padding: 0 8px; margin-left: 8px; font-size: var(--font-ui-smaller); }
+.helm-datepicker-parts { flex-wrap: wrap; }

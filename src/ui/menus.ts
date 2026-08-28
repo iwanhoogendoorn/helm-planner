@@ -10,7 +10,7 @@ import { openFollowUp } from './modals/followUp';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
-import { DAY_PARTS, PART_LABEL } from '../core/dailyNote';
+import { DAY_PARTS, PART_LABEL, type DayPart } from '../core/dailyNote';
 
 export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): { label: string; date: IsoDate | undefined; icon: string }[] {
   const nextWeek = addDays(startOfWeek(today, weekStartsOn), 7);
@@ -23,16 +23,28 @@ export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): { label: s
   ];
 }
 
+/**
+ * Dates to move a task to. Each day opens onto the parts of the day, so “tomorrow morning” is one
+ * hover away; the first entry keeps whatever part the task already has.
+ */
 export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task): void {
   const today = ctx.today();
+  const move = (date: IsoDate | undefined, part?: DayPart): void => void ctx.run(date ? 'Schedule' : 'Unschedule', () => ctx.mutations.schedule(task.key, date, part));
+  const partIcon = (p: DayPart): string => (p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock');
   for (const o of scheduleOptions(today, ctx.settings().weekStartsOn)) {
-    menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => {
-      if ((o.date as unknown) === 'pick') {
-        openDatePicker(ctx, { title: `Schedule “${task.text}”`, initial: task.scheduled ?? task.noteDate ?? today }, (d) => void ctx.run('Schedule', () => ctx.mutations.schedule(task.key, d)));
-        return;
-      }
-      void ctx.run(o.date ? 'Schedule' : 'Unschedule', () => ctx.mutations.schedule(task.key, o.date));
-    }));
+    if ((o.date as unknown) === 'pick') {
+      menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => openDatePicker(ctx, { title: `Schedule “${task.text}”`, initial: task.scheduled ?? task.noteDate ?? today, parts: true }, (d, part) => move(d, part))));
+      continue;
+    }
+    if (o.date === undefined) { menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => move(undefined))); continue; }
+    const date = o.date;
+    menu.addItem((i) => {
+      i.setTitle(o.label).setIcon(o.icon);
+      const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+      sub.addItem((j) => j.setTitle(task.part && task.part !== 'anytime' ? `Keep the ${task.part}` : 'Just move it').setIcon('check').onClick(() => move(date)));
+      sub.addSeparator();
+      for (const p of DAY_PARTS) sub.addItem((j) => j.setTitle(PART_LABEL[p]).setIcon(partIcon(p)).setChecked(task.part === p).onClick(() => move(date, p)));
+    });
   }
 }
 
