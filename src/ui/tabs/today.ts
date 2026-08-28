@@ -1,6 +1,6 @@
 /** The cockpit: one day, split into parts, and the two rituals around it. */
 import type { Habit, HabitPart, IsoDate, Task } from '../../core/types';
-import { addDays, humanDate, minutesToHuman, startOfWeek } from '../../core/dates';
+import { addDays, humanDate, minutesToHuman } from '../../core/dates';
 import { candidates, dayPlan, DAY_PARTS, type Candidate, type DayItem, type DayPart } from '../../data/planner';
 import { habitDue, habitStats } from '../../data/habits';
 import { PART_LABEL } from '../../core/dailyNote';
@@ -67,13 +67,10 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
 
   const store = state.collapsed;
 
-  // Needs attention. Something past its due date is broken until it is dealt with, so it shows on any
-  // day you open. Carried-over work — late, but with no date it promised — is only offered while you
-  // are still planning that stretch: the rest of this week and all of next.
-  const planningHorizon = addDays(startOfWeek(today, settings.weekStartsOn), 13);
-  const stillPlanning = date <= planningHorizon;
+  // Needs attention: work that is late, overdue or simply carried over. It follows you onto every day
+  // you open until you deal with it — planning it onto a day from today onwards, or finishing it.
   if (!isPast) {
-    const cands = candidates(snap, date, settings, today).filter((c) => c.reason === 'overdue' || (c.reason === 'scheduled-past' && stillPlanning));
+    const cands = candidates(snap, date, settings, today).filter((c) => c.reason === 'overdue' || c.reason === 'scheduled-past');
     if (cands.length > 0) {
       root.appendChild(section('Needs attention', { count: cands.length, store, key: 'attention', cls: 'is-attention', actions: [button('Plan day', { icon: 'list-plus', onClick: () => openPlanDay(ctx, date) })] },
         ...cands.slice(0, 12).map((c) => taskRow(ctx, c.task, { reason: reasonLabel(c), draggable: true, quickAction: { icon: 'arrow-down-to-line', title: `Pull onto ${humanDate(date, today)}`, onClick: (t) => void ctx.run('Schedule', () => ctx.mutations.schedule(t.key, date)) } })),

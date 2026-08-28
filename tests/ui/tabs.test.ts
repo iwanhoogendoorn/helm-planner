@@ -75,19 +75,23 @@ describe('Today tab', () => {
     expect(root.querySelector('.helm-capacity-label')!.textContent).toContain('3 open · 1 done');
   });
 
-  it('keeps overdue work on every day but stops offering carried-over work after next week', async () => {
-    const { ctx } = await ctxFor(); // TODAY is Wed 26 Aug, weeks start on Monday
+  it('keeps late work in Needs attention on every day until it is planned forward or finished', async () => {
+    const { ctx, m, index } = await ctxFor();
     const reasons = (date: string): string[] => {
       const root = render((r) => renderToday(ctx, r, { date, collapsed: new Map() }));
       const sec = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === 'Needs attention');
       return sec ? texts(sec, '.helm-chip.reason') : [];
     };
-    expect(reasons(TODAY)).toEqual(expect.arrayContaining(['overdue', 'carried over']));
-    expect(reasons('2026-09-06')).toEqual(expect.arrayContaining(['carried over'])); // the end of next week: still planning territory
-    const far = reasons('2026-09-28');
-    expect(far).toContain('overdue');        // a broken promise stays broken, however far out you look
-    expect(far).not.toContain('carried over'); // soft slippage does not follow you into next month
-    expect(reasons('2026-08-25')).toEqual([]); // a past day was never offered any
+    for (const d of [TODAY, '2026-09-06', '2026-09-07', '2026-09-28']) {
+      expect(reasons(d), `on ${d}`).toEqual(expect.arrayContaining(['overdue', 'carried over'])); // however far out you look
+    }
+    expect(reasons('2026-08-25')).toEqual([]); // a past day is a record, not a to-do list
+    // Planning one of them onto a day from today onwards is what takes it off the list.
+    const late = [...index.snapshot.tasks.values()].find((t) => t.text === 'Renew passport')!;
+    await m.schedule(late.key, '2026-09-28');
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const sec = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === 'Needs attention')!;
+    expect(texts(sec, '.helm-task-text')).not.toContain('Renew passport');
   });
 
   it('renders today with attention items and an empty plan call-to-action', async () => {

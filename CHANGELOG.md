@@ -2,12 +2,10 @@
 
 ## Unreleased
 
-- *Needs attention* separates a broken promise from soft slippage. Something
-  **overdue** shows on every day you open, however far out, until you move it
-  to a day on or after today — planning it forward is what clears it.
-  **Carried-over** work (late, but with no date it promised) is only offered
-  while you are still planning that stretch: the rest of this week and all of
-  next. Opening a day a month out used to list everything late today.
+- *Needs attention* keeps late work in front of you on every day you open —
+  overdue and carried over alike — until you deal with it, by planning it onto
+  a day from today onwards or finishing it. A subtask is never listed there in
+  its own right, which is what made a far-off day look cluttered.
 - *Add link…* copes with what people actually type: the URL and Label boxes
   filled the wrong way round are swapped for you, and an address without its
   `https://` gets one. When neither box holds an address the dialog says so
