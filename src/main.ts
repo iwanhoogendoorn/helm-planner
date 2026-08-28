@@ -9,6 +9,7 @@ import { HelmView, VIEW_TYPE } from './ui/view';
 import type { TabId, UiContext } from './ui/context';
 import { HelmSettingTab } from './ui/settingsTab';
 import { openCapture } from './ui/modals/capture';
+import { openSearch } from './ui/modals/search';
 import { openPlanDay } from './ui/modals/planDay';
 import { openWrapUp } from './ui/modals/wrapUp';
 import { openProjectForm } from './ui/modals/projectForm';
@@ -374,6 +375,7 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'open-review', name: 'Open Review', callback: () => void this.openView().then((v) => v.navigate('review')) });
     this.addCommand({ id: 'open-dashboard', name: 'Open Dashboard', callback: () => void this.openView().then((v) => v.navigate('dashboard')) });
     this.addCommand({ id: 'open-horizons', name: 'Open Horizons (goals by year, quarter, month)', callback: () => void this.openView().then((v) => v.navigate('horizons')) });
+    this.addCommand({ id: 'search', name: 'Search everything', callback: () => openSearch(ctx()) });
     this.addCommand({ id: 'capture', name: 'Capture a task', callback: () => openCapture(ctx()) });
     this.addCommand({ id: 'capture-today', name: 'Capture a task for today', callback: () => openCapture(ctx(), { date: this.today() }) });
     this.addCommand({ id: 'plan-day', name: 'Plan my day', callback: () => openPlanDay(ctx(), this.today()) });

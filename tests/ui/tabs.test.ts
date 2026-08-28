@@ -12,6 +12,7 @@ import { openCapture } from '../../src/ui/modals/capture';
 import { openPlanDay } from '../../src/ui/modals/planDay';
 import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
+import { openSearch } from '../../src/ui/modals/search';
 import { taskRow } from '../../src/ui/taskRow';
 import { openProjectForm, parsePhases } from '../../src/ui/modals/projectForm';
 import { openHabitForm } from '../../src/ui/modals/habitForm';
@@ -179,6 +180,38 @@ describe('Review tab', () => {
 });
 
 describe('Modals', () => {
+  it('search: groups hits by kind, arrows move the selection, Enter opens, and a task row can be edited', async () => {
+    const { ctx, nav, opened } = await ctxFor();
+    openSearch(ctx);
+    const m = Modal.last!;
+    const input = m.contentEl.querySelector<HTMLInputElement>('.helm-search-input')!;
+    expect(m.contentEl.querySelector('.helm-empty')!.textContent).toContain('Type to search');
+    input.value = 'chapter'; input.dispatchEvent(new Event('input'));
+    expect(texts(m.contentEl, '.helm-search-group')).toEqual(['Tasks3']);
+    expect(texts(m.contentEl, '.helm-search-row .helm-search-title')).toEqual(['Chapter 1', 'Chapter 2', 'Draft chapter list']);
+    expect(m.contentEl.querySelectorAll('.helm-search-row')[0]!.classList.contains('is-selected')).toBe(true);
+    // Arrow down twice, Enter opens the third hit's note at its line.
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    expect(m.contentEl.querySelectorAll('.helm-search-row')[2]!.classList.contains('is-selected')).toBe(true);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(opened.at(-1)).toBe('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md');
+    // A project hit navigates to the Projects tab instead of opening a file.
+    openSearch(ctx, 'kitchen');
+    const m2 = Modal.last!;
+    expect(texts(m2.contentEl, '.helm-search-group')).toContain('Projects1');
+    click([...m2.contentEl.querySelectorAll('.helm-search-row')].find((r) => r.querySelector('.helm-search-title')?.textContent === 'Kitchen Remodel'));
+    expect(nav.at(-1)).toEqual({ tab: 'projects', opts: { projectId: 'prj-kitchen' } });
+    // The pencil on a task hit opens the editor.
+    openSearch(ctx, 'chapter');
+    const m3 = Modal.last!;
+    click(m3.contentEl.querySelector('.helm-search-row button[aria-label="Edit task"]'));
+    expect(Modal.last!.titleEl.textContent).toBe('Edit task');
+    // Nothing matching says so.
+    openSearch(ctx, 'zzzznothing');
+    expect(Modal.last!.contentEl.querySelector('.helm-empty')!.textContent).toContain('Nothing matches');
+  });
+
   it('task editor: a link added in the Links section shows at once, lands in the Text field and is written on Save', async () => {
     const { ctx, index, vault } = await ctxFor();
     await ctx.mutations.addTask({ text: 'Chase UC3', date: TODAY, part: 'morning' });

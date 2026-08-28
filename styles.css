@@ -722,3 +722,19 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-chip.link { display: inline-flex; align-items: center; gap: 3px; background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); text-decoration: none; }
 .helm-chip.link::before { content: '↗'; font-size: 10px; opacity: 0.8; }
 .helm-chip.link:hover { background: rgba(var(--color-blue-rgb), 0.22); text-decoration: none; }
+
+/* Search */
+.helm-search-modal { min-width: min(680px, 88vw); }
+.helm-search-input { font-size: var(--font-ui-medium); }
+.helm-search-summary { margin: 6px 2px 8px; }
+.helm-search-results { max-height: min(56vh, 520px); overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.helm-search-group { display: flex; align-items: center; gap: 6px; padding: 10px 6px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+.helm-search-group svg { width: 12px; height: 12px; }
+.helm-badge-count { padding: 0 6px; border-radius: 8px; background: var(--background-modifier-border); font-size: 10px; font-weight: 600; letter-spacing: 0; }
+.helm-search-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-s); cursor: pointer; }
+.helm-search-row.is-selected { background: var(--background-modifier-hover); box-shadow: inset 2px 0 0 var(--interactive-accent); }
+.helm-search-icon { flex: none; color: var(--text-muted); }
+.helm-search-icon svg { width: 15px; height: 15px; }
+.helm-search-main { min-width: 0; flex: 1; }
+.helm-search-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helm-search-sub { font-size: var(--font-ui-smaller); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

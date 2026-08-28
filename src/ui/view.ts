@@ -11,6 +11,7 @@ import { renderReview, type ReviewState } from './tabs/review';
 import { renderHorizons, type HorizonsState } from './tabs/horizons';
 import { renderDashboard, type DashboardState, defaultDashboardState } from './tabs/dashboard';
 import { openCapture } from './modals/capture';
+import { openSearch } from './modals/search';
 
 export const VIEW_TYPE = 'helm-view';
 
@@ -116,6 +117,7 @@ export class HelmView extends ItemView {
     }
     this.tabBar.appendChild(h('span', { cls: 'helm-spacer' }));
     if (!ctx.index.ready) this.tabBar.appendChild(h('span', { cls: 'helm-hint helm-indexing', text: 'indexing…' }));
+    this.tabBar.appendChild(iconButton('search', 'Search everything (tasks, projects, notes, drawings)', () => openSearch(ctx), 'helm-tab-search'));
     this.tabBar.appendChild(iconButton('plus', 'Capture (quick add)', () => openCapture(ctx, this.tab === 'today' ? { date: this.todayState.date } : {}), 'helm-tab-capture'));
     this.tabBar.appendChild(iconButton('refresh-cw', 'Rebuild index', () => void ctx.run('Rebuild index', () => ctx.index.rebuild())));
 
