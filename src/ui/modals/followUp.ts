@@ -9,6 +9,7 @@ import { conflictWarning, effortField, linkTimes, wikilinkSuggest } from '../fie
 import { conflictsFor, describeConflicts } from '../../data/conflicts';
 import { minutesToHuman } from '../../core/dates';
 import type { UiContext } from '../context';
+import { plainLabel } from '../../core/label';
 
 export function openFollowUp(ctx: UiContext, task: Task): void {
   const today = ctx.today();
@@ -18,6 +19,8 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   const root = m.contentEl;
   root.addClass('helm-modal', 'helm-followup');
   const text = h('input', { cls: 'helm-input-wide', attr: { type: 'text', value: task.text.replace(new RegExp(`\\s*#${tag}(\\s|$)`), ' ').trim(), placeholder: 'What comes next?' } });
+  let addTag = false;
+  const tagBtn = h('button', { cls: 'helm-tag-toggle', text: `#${tag}`, title: `Add #${tag} to the follow-up`, onClick: () => { addTag = !addTag; tagBtn.classList.toggle('is-active', addTag); } });
   wikilinkSuggest(ctx, text);
   let date = addDays(today, 1);
   const dateInput = h('input', { attr: { type: 'date', value: date } });
@@ -49,8 +52,9 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   effort.onChange(checkConflicts);
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
   root.append(
-    h('div', { cls: 'helm-hint' }, h('span', { text: 'Continues: ' }), h('strong', { text: task.text })),
+    h('div', { cls: 'helm-hint' }, h('span', { text: 'Continues: ' }), h('strong', { text: plainLabel(task.text) })),
     field('Next step', text),
+    field('Tag', h('div', { cls: 'helm-capture-tags' }, tagBtn), h('div', { cls: 'helm-hint', text: 'Optional — the follow-up is linked to the original either way.' })),
     field('When', h('div', { cls: 'helm-row' }, dateInput), presets),
     field('Part of the day', parts),
     h('div', { cls: 'helm-grid2' },
@@ -58,7 +62,7 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
       field('Effort', effort.el),
     ),
     conflict,
-    h('div', { cls: 'helm-hint', text: `The follow-up gets #${tag} and waits on the original (⛔), so it shows as “follows …” and unblocks when the original is ticked. The original itself is left exactly as it is.` }),
+    h('div', { cls: 'helm-hint', text: 'The follow-up waits on the original (⛔), so it shows as “follows …” and unblocks when the original is ticked. The original itself is left exactly as it is.' }),
     h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button('Create follow-up', { primary: true, icon: 'corner-down-right', onClick: () => void create() })),
   );
   async function create(): Promise<void> {
@@ -68,7 +72,7 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
     await ctx.run('Follow up', async () => {
       const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;
       const eff = effort.get();
-      const r = await ctx.mutations.followUp(task.key, { text: text.value, date, ...(part ? { part } : {}), fields: { ...(time ? { time } : {}), ...(eff ? { effortMinutes: eff, effortRaw: minutesToHuman(eff) } : {}) } });
+      const r = await ctx.mutations.followUp(task.key, { text: text.value, date, ...(addTag ? { addTag } : {}), ...(part ? { part } : {}), fields: { ...(time ? { time } : {}), ...(eff ? { effortMinutes: eff, effortRaw: minutesToHuman(eff) } : {}) } });
       ctx.notify(`Follow-up planned for ${humanDate(r.date, today)}.`);
     });
   }

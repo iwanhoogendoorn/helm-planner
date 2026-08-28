@@ -110,7 +110,9 @@
 .helm-prio.prio-highest, .helm-prio.prio-high { color: var(--color-red); }
 .helm-prio.prio-medium { color: var(--color-orange); }
 .helm-prio.prio-low, .helm-prio.prio-lowest { color: var(--text-faint); }
-.helm-task-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.helm-task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 3px; }
+.helm-task-meta > * { flex: none; max-width: 100%; }
+.helm-chip-label { display: inline-block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 /* Always laid out, only revealed on hover — appearing buttons must never reflow the row or nudge the rows below. */
 .helm-task-actions { display: inline-flex; visibility: hidden; flex: none; align-items: center; gap: 2px; height: 22px; margin-top: 1px; }
 .helm-task:hover .helm-task-actions, .helm-task:focus-within .helm-task-actions { visibility: visible; }
@@ -717,6 +719,6 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-attach-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--radius-s); background: var(--background-secondary); }
 .helm-attach-row .helm-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.helm-chip.link { display: inline-flex; align-items: center; gap: 3px; background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); text-decoration: none; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helm-chip.link { display: inline-flex; align-items: center; gap: 3px; background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); text-decoration: none; }
 .helm-chip.link::before { content: '↗'; font-size: 10px; opacity: 0.8; }
 .helm-chip.link:hover { background: rgba(var(--color-blue-rgb), 0.22); text-decoration: none; }

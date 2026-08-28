@@ -26,7 +26,7 @@ describe('follow-ups of tasks with attachments and duplicated keys', () => {
     const r = await m.followUp(dup.key, { text: 'Plan for certs', date: '2026-08-28' });
     expect(r.id).toBe('tsk-dup');
     const friday = await vault.read(dailyPath('2026-08-28'));
-    expect(friday).toMatch(/- \[ \] Plan for certs #followup 🆔 tsk-\w+ ⛔ tsk-dup(\s|$)/);
+    expect(friday).toMatch(/- \[ \] Plan for certs 🆔 tsk-\w+ ⛔ tsk-dup(\s|$)/);
     expect(friday).not.toContain('tsk-dup~');
   });
 

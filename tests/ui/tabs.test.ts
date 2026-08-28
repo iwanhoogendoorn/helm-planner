@@ -1091,6 +1091,10 @@ describe('Follow up from the UI', () => {
     expect(m.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-08-27');
     expect(m.contentEl.querySelector('input[type="checkbox"]')).toBeNull(); // nothing in the dialog can change the original
     text.value = 'Next step';
+    const tagBtn = m.contentEl.querySelector<HTMLButtonElement>('.helm-tag-toggle')!;
+    expect(tagBtn.textContent).toBe('#followup');
+    expect(tagBtn.classList.contains('is-active')).toBe(false); // off unless you ask for it
+    click(tagBtn);
     const [ts, te] = [...m.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')];
     expect(ts!.value).toBe(t.time?.start ?? '');
     ts!.value = '14:00'; ts!.dispatchEvent(new Event('input'));
@@ -1102,6 +1106,10 @@ describe('Follow up from the UI', () => {
     const line = (await vault.read(dailyPath('2026-08-27'))).split('\n').find((l) => l.includes('Next step'))!;
     expect(line).toMatch(/^- \[ \] 14:00 - 14:45: Next step #followup 🆔 tsk-\w+ ⛔ tsk-\w+ ⏱️ 45m/);
     const fu = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Next step') && x.origin === 'daily')!;
+    // The chip names the original in plain words: no tag, no wikilink brackets, no URL, ellipsis by CSS.
+    const rowRoot = render((r) => renderToday(ctx, r, { date: '2026-08-27', collapsed: new Map() }));
+    const chipEl = rowRoot.querySelector('.helm-chip.followup .helm-chip-label');
+    if (chipEl) { expect(chipEl.textContent).not.toContain('#'); expect(chipEl.textContent).not.toContain('[['); }
     expect(fu.part).toBe('afternoon'); // from the time
     const row = taskRow(ctx, [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Next step') && x.origin === 'daily')!);
     expect(row.querySelector('.helm-chip.followup')!.textContent).toContain('follows:');

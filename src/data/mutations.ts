@@ -859,13 +859,14 @@ export class Mutations {
    * `⛔ <original id>` (blocked until the original is done), in the original's project and
    * phase when it has one, else in the day's note. Optionally ticks the original now.
    */
-  async followUp(key: string, opts: { text?: string; date: IsoDate; part?: DayPart; markOriginalDone?: boolean; fields?: Partial<TaskLine> }): Promise<{ id: string; date: IsoDate; followUpId: string }> {
+  async followUp(key: string, opts: { text?: string; date: IsoDate; part?: DayPart; markOriginalDone?: boolean; addTag?: boolean; fields?: Partial<TaskLine> }): Promise<{ id: string; date: IsoDate; followUpId: string }> {
     const id = await this.ensureId(key);
     const orig = this.fresh(this.index.task(id)?.key ?? key);
     const src = orig.mirrorOf ? this.fresh(orig.mirrorOf) : orig;
     const tag = (this.settings.followupTag.trim() || 'followup').replace(/^#/, '');
     let text = (opts.text?.trim() || src.text).trim();
-    if (!new RegExp(`(^|\\s)#${tag}(\\s|$)`).test(text)) text = `${text} #${tag}`;
+    // The tag is only ever added when asked for; the ⛔ link is what makes it a follow-up.
+    if (opts.addTag && !new RegExp(`(^|\\s)#${tag}(\\s|$)`).test(text)) text = `${text} #${tag}`;
     const followUpId = this.newTaskId();
     const fields: Partial<TaskLine> = { ...(opts.fields ?? {}), id: followUpId, blockedBy: [...new Set([...(opts.fields?.blockedBy ?? []), id])], priority: opts.fields?.priority ?? src.priority };
     if (src.projectId && src.origin === 'project') await this.addTask({ text, projectId: src.projectId, ...(src.phaseId ? { phaseId: src.phaseId } : {}), date: opts.date, ...(opts.part ? { part: opts.part } : {}), fields });

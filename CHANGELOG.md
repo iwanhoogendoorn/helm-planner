@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Follow-ups no longer add `#followup` on their own: the ⛔ link to the
+  original is what makes one, and the tag is a toggle in the *Follow up…*
+  dialog (off unless you switch it on). A task that waits on another shows
+  the *follows …* chip whether or not it carries the tag.
+- Chips that name a task (follows …, follow-ups, links) show plain words —
+  tags, wikilink brackets and URLs stripped — and are cut with an ellipsis
+  instead of being clipped mid-word by a neighbour.
 - Links on tasks: a bare URL in a task now renders as a clickable link with a
   readable label (host and path); the task menu's *Links* submenu opens,
   adds (*Add link…*: URL + optional label, written as a markdown link that

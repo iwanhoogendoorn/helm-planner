@@ -502,7 +502,7 @@ describe('follow up', () => {
     const { followsOf, followUpsOf, isBlocked } = await import('../../src/data/planner');
     const { m, vault, index, settings } = await setup();
     const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'daily' && t.noteDate === '2026-08-25' && t.status === 'todo' && t.section !== 'outside')!;
-    const r = await m.followUp(orig.key, { text: 'Continue with OIB: networking module', date: '2026-08-28', part: 'morning', markOriginalDone: true });
+    const r = await m.followUp(orig.key, { text: 'Continue with OIB: networking module', date: '2026-08-28', part: 'morning', markOriginalDone: true, addTag: true });
     expect(r.id).toMatch(/^tsk-/);
     const friday = await vault.read(dailyPath('2026-08-28'));
     expect(friday).toMatch(new RegExp(`- \\[ \\] Continue with OIB: networking module #followup 🆔 tsk-\\w+ ⛔ ${r.id}`));
@@ -512,8 +512,8 @@ describe('follow up', () => {
     const src = [...index.snapshot.tasks.values()].find((t) => t.id === r.id)!;
     expect(fu.tags).toContain('followup');
     expect(fu.part).toBe('morning');
-    expect(followsOf(index.snapshot, fu, 'followup')?.id).toBe(r.id);
-    expect(followUpsOf(index.snapshot, src, 'followup').map((t) => t.text)).toEqual([fu.text]);
+    expect(followsOf(index.snapshot, fu)?.id).toBe(r.id);
+    expect(followUpsOf(index.snapshot, src).map((t) => t.text)).toEqual([fu.text]);
     expect(isBlocked(fu, index.snapshot)).toBe(false); // the original is done
     // Without ticking the original, the follow-up waits on it.
     const r2 = await m.followUp(fu.key, { date: '2026-08-31' });
@@ -529,7 +529,7 @@ describe('follow up', () => {
     const r = await m.followUp(orig.key, { text: 'Second draft of the outline', date: '2026-08-28' });
     const note = await vault.read(orig.path);
     const line = note.split('\n').find((l) => l.includes('Second draft of the outline'))!;
-    expect(line).toMatch(/^- \[ \] Second draft of the outline #followup 🆔 tsk-\w+/);
+    expect(line).toMatch(/^- \[ \] Second draft of the outline 🆔 tsk-\w+/); // no tag unless asked for
     expect(line).toContain('⏳ 2026-08-28');
     expect(line).toContain(`⛔ ${r.id}`);
     const fu = [...index.snapshot.tasks.values()].find((t) => t.text.startsWith('Second draft') && t.origin === 'project')!;

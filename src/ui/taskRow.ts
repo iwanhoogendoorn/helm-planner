@@ -11,6 +11,7 @@ import { drawingsIndicator } from './drawings';
 import { notesIndicator } from './notes';
 import { linksIndicator } from './links';
 import { linksIn, textWithoutLinks } from '../core/links';
+import { plainLabel, shortLabel } from '../core/label';
 import { taskLabel } from './context';
 
 export interface RowOptions {
@@ -95,14 +96,13 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (t.origin === 'daily' && t.noteDate && t.due && t.due > t.noteDate && open) meta.appendChild(chip(`in ${humanDate(t.noteDate, today)}'s note`, 'note', 'Dated later than the note it sits in — Helm moves it to the right note'));
   if (t.effortMinutes !== undefined) meta.appendChild(chip(minutesToHuman(t.effortMinutes), 'effort'));
   if (t.recurrence) meta.appendChild(chip(formatRecurrence(t.recurrence), 'recurrence', t.recurrence.parsed ? '' : 'Unrecognised rule'));
-  const fuTag = (ctx.settings().followupTag.trim() || 'followup').replace(/^#/, '');
   // Links live in the line but are shown as pills, like notes and drawings.
-  for (const l of linksIn(t.text)) meta.appendChild(h('a', { cls: 'helm-chip link', text: l.label, title: l.url, attr: { href: l.url, target: '_blank', rel: 'noopener' }, onClick: (ev) => ev.stopPropagation() }));
-  const follows = followsOf(snap, t, fuTag);
-  if (follows) meta.appendChild(h('button', { cls: 'helm-chip followup', title: `Continues “${follows.text}” — click to open`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(follows.path, follows.line); } }, icon('corner-down-right'), h('span', { text: `follows: ${follows.text.length > 40 ? follows.text.slice(0, 39) + '…' : follows.text}${isOpen(follows) ? ' (open)' : ''}` })));
+  for (const l of linksIn(t.text)) meta.appendChild(h('a', { cls: 'helm-chip link', title: l.url, attr: { href: l.url, target: '_blank', rel: 'noopener' }, onClick: (ev) => ev.stopPropagation() }, h('span', { cls: 'helm-chip-label', text: l.label })));
+  const follows = followsOf(snap, t);
+  if (follows) meta.appendChild(h('button', { cls: 'helm-chip followup', title: `Continues “${plainLabel(follows.text)}” — click to open`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(follows.path, follows.line); } }, icon('corner-down-right'), h('span', { cls: 'helm-chip-label', text: `follows: ${shortLabel(follows.text)}${isOpen(follows) ? ' (open)' : ''}` })));
   else if (blocked) meta.appendChild(chip('blocked', 'blocked', `Waiting on ${t.blockedBy.join(', ')}`));
-  const ups = followUpsOf(snap, t, fuTag);
-  for (const u of ups.slice(0, 2)) meta.appendChild(h('button', { cls: ['helm-chip', 'followup', !isOpen(u) && 'is-done'], title: `Follow-up: ${u.text}`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(u.path, u.line); } }, icon('corner-down-right'), h('span', { text: `→ ${u.scheduled ?? u.noteDate ? humanDate((u.scheduled ?? u.noteDate)!, today) : 'unplanned'}` })));
+  const ups = followUpsOf(snap, t);
+  for (const u of ups.slice(0, 2)) meta.appendChild(h('button', { cls: ['helm-chip', 'followup', !isOpen(u) && 'is-done'], title: `Follow-up: ${plainLabel(u.text)}`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(u.path, u.line); } }, icon('corner-down-right'), h('span', { text: `→ ${u.scheduled ?? u.noteDate ? humanDate((u.scheduled ?? u.noteDate)!, today) : 'unplanned'}` })));
   if (t.status === 'waiting') meta.appendChild(chip('waiting', 'waiting'));
   if (t.childKeys.length > 0) {
     const kids = t.childKeys.map((k) => snap.tasks.get(k)).filter((x): x is Task => x !== undefined);
