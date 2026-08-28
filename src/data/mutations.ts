@@ -458,7 +458,12 @@ export class Mutations {
       const { start, end } = this.subtreeRange(lines, t);
       carried = lines.slice(start, end).map((l) => parseTaskLine(l)).filter((x): x is TaskLine => x !== undefined);
       if (t.noteDate !== undefined && t.noteDate < today) {
-        lines[start] = serialiseTaskLine(withStatus(this.lineOf(lines, t), 'forwarded', t.noteDate), { force: true });
+        // A past day keeps a record of what moved on: the task and its subtasks are marked forwarded,
+        // never left open, or they would come back as carried-over work of their own.
+        for (let i = start; i < end; i++) {
+          const tl = parseTaskLine(lines[i]!);
+          if (tl) lines[i] = serialiseTaskLine(withStatus(tl, 'forwarded', t.noteDate), { force: true });
+        }
       } else lines.splice(start, end - start);
       return true;
     });

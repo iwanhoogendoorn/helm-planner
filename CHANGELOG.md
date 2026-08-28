@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Moving a task off a past day now forwards its subtasks with it. They were
+  left open in the old note, so they came back the next morning as
+  *carried over* work of their own while the task itself sat on its new day.
+- A subtask is never offered as carried-over work in its own right — it
+  belongs to its task and travels with it.
+
 ## 1.13.0 — 2026-08-28
 
 - A note created, renamed or moved anywhere outside Helm's scanned folders —

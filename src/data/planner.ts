@@ -145,6 +145,7 @@ export function candidates(snap: Snapshot, date: IsoDate, settings: HelmSettings
   const hasOpenChildren = (t: Task): boolean => t.childKeys.some((k) => { const c = snap.tasks.get(k); return c !== undefined && isOpen(c); });
   const isCandidateTask = (t: Task): boolean => {
     if (!isOpen(t) || t.origin === 'daily-mirror') return false;
+    if (t.depth > 0) return false; // a subtask is never work of its own — it travels with its task
     // Lines outside the Helm region of a daily note (the user's own planner slots) are a log, not a backlog.
     if (t.origin === 'daily' && t.section === 'outside') return false;
     // Already on a day that has not passed: today's work is still today's, tomorrow's is tomorrow's.

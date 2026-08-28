@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { setup, dailyPath } from './fixture';
+import { setup, TODAY, dailyPath } from './fixture';
 
 describe('subtasks', () => {
   it('adds one under its parent, indented, in the same note', async () => {
@@ -38,6 +38,27 @@ describe('subtasks', () => {
     const stillThere = [...index.snapshot.tasks.values()].find((t) => t.id === r.id)!;
     expect(stillThere.depth).toBe(1);
     expect((await vault.read(dailyPath('2026-08-25'))).match(/Read the docs/g)).toHaveLength(1);
+  });
+
+  it('leaves no open subtasks behind when a past task is moved on', async () => {
+    const { m, vault, index } = await setup();
+    const { candidates } = await import('../../src/data/planner');
+    const { SETTINGS } = await import('./fixture');
+    const orig = [...index.snapshot.tasks.values()].find((t) => t.origin === 'daily' && t.noteDate === '2026-08-25' && t.status === 'todo' && t.section !== 'outside')!;
+    await m.addTask({ text: 'Sub one', parentKey: orig.key });
+    await m.addTask({ text: 'Sub two', parentKey: orig.key });
+    await m.schedule(index.task(orig.key)!.key, '2026-08-28'); // 25 Aug is in the past, so the old note keeps a record
+    const yesterday = await vault.read(dailyPath('2026-08-25'));
+    expect(yesterday).toMatch(/- \[>\] 08:00 - 09:00: Start with OIB/);
+    expect(yesterday).toMatch(/\t- \[>\] Sub one/); // forwarded with it, not left open
+    expect(yesterday).toMatch(/\t- \[>\] Sub two/);
+    const later = await vault.read(dailyPath('2026-08-28'));
+    expect(later).toMatch(/- \[ \] .*Start with OIB[^\n]*\n\t- \[ \] Sub one\n\t- \[ \] Sub two/);
+    // Nothing from that subtree comes back as carried-over work.
+    const texts = candidates(index.snapshot, TODAY, SETTINGS, TODAY).map((c) => c.task.text);
+    expect(texts).not.toContain('Sub one');
+    expect(texts).not.toContain('Sub two');
+    expect(texts.filter((t) => t.includes('Start with OIB'))).toEqual([]);
   });
 
   it('moves a task within the day and to another day with its subtasks', async () => {
