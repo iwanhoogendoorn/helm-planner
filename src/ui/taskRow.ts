@@ -9,6 +9,7 @@ import { openTaskEditor } from './modals/taskEditor';
 import { followsOf, followUpsOf, isBlocked, isOpen } from '../data/planner';
 import { drawingsIndicator } from './drawings';
 import { notesIndicator } from './notes';
+import { linksIndicator } from './links';
 import { taskLabel } from './context';
 
 export interface RowOptions {
@@ -113,6 +114,8 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (nt) actions.appendChild(nt);
   const dr = drawingsIndicator(ctx, t);
   if (dr) actions.appendChild(dr);
+  const lk = linksIndicator(ctx, t);
+  if (lk) actions.appendChild(lk);
   if (opts.quickAction) actions.appendChild(iconButton(opts.quickAction.icon, opts.quickAction.title, (ev) => { ev.stopPropagation(); opts.quickAction!.onClick(t); }));
   else if (open) actions.appendChild(iconButton('calendar', 'Schedule…', (ev) => { ev.stopPropagation(); taskMenu(ctx, t, ev); }));
   for (const a of opts.extraActions ?? []) actions.appendChild(iconButton(a.icon, a.title, (ev) => { ev.stopPropagation(); a.onClick(t); }));

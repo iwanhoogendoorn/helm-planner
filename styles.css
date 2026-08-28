@@ -632,10 +632,10 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-conflict-icon { font-weight: 700; }
 
 /* Attachment indicators on task rows: icon + count as one small pill */
-.helm-task-actions .helm-task-notes, .helm-task-actions .helm-task-drawings { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px 0 5px; border-radius: 11px; background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); border: none; box-shadow: none; }
-.helm-task-actions .helm-task-notes:hover, .helm-task-actions .helm-task-drawings:hover { background: rgba(var(--color-blue-rgb), 0.22); }
-.helm-task-actions .helm-task-notes svg, .helm-task-actions .helm-task-drawings svg { width: 13px; height: 13px; }
-.helm-task-actions .helm-task-notes .helm-badge, .helm-task-actions .helm-task-drawings .helm-badge { position: static; min-width: 0; height: auto; padding: 0; margin: 0; background: transparent; color: inherit; font-size: 11px; font-weight: 600; }
+.helm-task-actions .helm-task-notes, .helm-task-actions .helm-task-drawings, .helm-task-actions .helm-task-links { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px 0 5px; border-radius: 11px; background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); border: none; box-shadow: none; }
+.helm-task-actions .helm-task-notes:hover, .helm-task-actions .helm-task-drawings:hover, .helm-task-actions .helm-task-links:hover { background: rgba(var(--color-blue-rgb), 0.22); }
+.helm-task-actions .helm-task-notes svg, .helm-task-actions .helm-task-drawings svg, .helm-task-actions .helm-task-links svg { width: 13px; height: 13px; }
+.helm-task-actions .helm-task-notes .helm-badge, .helm-task-actions .helm-task-drawings .helm-badge, .helm-task-actions .helm-task-links .helm-badge { position: static; min-width: 0; height: auto; padding: 0; margin: 0; background: transparent; color: inherit; font-size: 11px; font-weight: 600; }
 
 .helm-sgroup-body .setting-item-name .helm-schip { margin-left: 8px; vertical-align: middle; }
 
@@ -709,3 +709,10 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-habit-card[draggable="true"] { cursor: grab; }
 .helm-habit-card.is-dragging { opacity: 0.4; }
 .helm-habit-moved { background: rgba(var(--hc-rgb), 0.18); color: var(--hc); font-size: 11px; }
+
+.helm-task-text a.external-link { word-break: break-all; }
+
+/* Links section in the task editor */
+.helm-attach-section { display: flex; flex-direction: column; gap: 4px; }
+.helm-attach-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--radius-s); background: var(--background-secondary); }
+.helm-attach-row .helm-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

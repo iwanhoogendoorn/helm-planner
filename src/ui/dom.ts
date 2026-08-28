@@ -2,6 +2,7 @@
  * Tiny DOM helpers. Plain `document.createElement` so the views render
  * identically under jsdom in tests and inside Obsidian.
  */
+import { linkLabel } from '../core/links';
 import { setIcon } from 'obsidian';
 
 export type Child = Node | string | number | null | undefined | false | Child[];
@@ -71,7 +72,7 @@ export function iconButton(name: string, title: string, onClick: (ev: MouseEvent
 /** Render text with [[wikilinks]], #tags and `code` lightly styled. */
 export function richText(text: string, openLink?: (target: string) => void): HTMLElement {
   const span = h('span', { cls: 'helm-richtext' });
-  const re = /(\[\[[^\]]+\]\])|(\[[^\]]+\]\([^)]+\))|((?:^|\s)#[\p{L}\p{N}_\-/]+)|(`[^`]+`)|(\*\*[^*]+\*\*)/gu;
+  const re = /(\[\[[^\]]+\]\])|(\[[^\]]+\]\([^)]+\))|((?:^|\s)#[\p{L}\p{N}_\-/]+)|(`[^`]+`)|(\*\*[^*]+\*\*)|(https?:\/\/[^\s<>)\]]+)/gu;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
@@ -90,6 +91,7 @@ export function richText(text: string, openLink?: (target: string) => void): HTM
       span.appendChild(h('span', { cls: 'helm-tag', text: raw.trim() }));
     } else if (m[4]) span.appendChild(h('code', { text: raw.slice(1, -1) }));
     else if (m[5]) span.appendChild(h('strong', { text: raw.slice(2, -2) }));
+    else if (m[6]) { const url = raw.replace(/[.,;:!?]+$/, ''); span.appendChild(h('a', { cls: 'external-link helm-link', text: linkLabel(url), title: url, attr: { href: url, target: '_blank', rel: 'noopener' }, onClick: (ev) => ev.stopPropagation() })); if (url.length < raw.length) span.appendChild(document.createTextNode(raw.slice(url.length))); }
     last = m.index + raw.length;
   }
   if (last < text.length) span.appendChild(document.createTextNode(text.slice(last)));

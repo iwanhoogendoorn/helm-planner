@@ -29,6 +29,7 @@ import { bundledTemplate, bundledDailyTemplate, type TemplateConfig } from '../c
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
 import { noteTitle, renderNewNote, listValues, type NoteRef } from '../core/noteRef';
 import type { DrawingTarget } from '../core/types';
+import { addLinkToText, removeLinkFromText } from '../core/links';
 
 export interface MutationDeps {
   vault: VaultAdapter;
@@ -882,6 +883,21 @@ export class Mutations {
     }
     if (opts.markOriginalDone) await this.setStatus(src.key, 'done');
     return { id, date: opts.date, followUpId };
+  }
+
+  /* ── Links ─────────────────────────────────────────────────────────── */
+
+  /** Add a `[label](url)` to the task text (a bare copy of the URL is upgraded in place). */
+  async addLink(key: string, url: string, label?: string): Promise<void> {
+    const t = this.fresh(key);
+    const src = t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf) ? this.fresh(t.mirrorOf) : t;
+    await this.updateTask(src.key, { text: addLinkToText(src.text, url, label) });
+  }
+
+  async removeLink(key: string, url: string): Promise<void> {
+    const t = this.fresh(key);
+    const src = t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf) ? this.fresh(t.mirrorOf) : t;
+    await this.updateTask(src.key, { text: removeLinkFromText(src.text, url) });
   }
 
   /* ── Drawings ──────────────────────────────────────────────────────── */

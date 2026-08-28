@@ -5,6 +5,7 @@ import { addDays, humanDate, startOfWeek } from '../core/dates';
 import type { UiContext } from './context';
 import { addDrawingItems, targetForTask } from './drawings';
 import { addNoteItems } from './notes';
+import { addLinkItems } from './links';
 import { openFollowUp } from './modals/followUp';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
@@ -82,6 +83,11 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     i.setTitle('Drawings').setIcon('pen-tool');
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
     addDrawingItems(sub, ctx, targetForTask(task));
+  });
+  menu.addItem((i) => {
+    i.setTitle('Links').setIcon('link');
+    const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    addLinkItems(sub, ctx, task);
   });
   menu.addItem((i) => i.setTitle('Move to project…').setIcon('folder-input').onClick(() => pickProject(ctx, (p, phaseId) => void ctx.run('Move', () => ctx.mutations.moveToProject(task.key, p.id, phaseId)), { phases: true })));
   menu.addSeparator();

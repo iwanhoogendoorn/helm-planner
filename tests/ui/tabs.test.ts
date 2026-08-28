@@ -179,6 +179,42 @@ describe('Review tab', () => {
 });
 
 describe('Modals', () => {
+  it('task links: bare URLs render as labelled anchors; the menu opens, adds and removes links; the row shows a pill', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await ctx.mutations.addTask({ text: 'Chase UC3 https://jira.example.com/browse/RSC-1', date: TODAY, part: 'morning' });
+    let t = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Chase UC3'))!;
+    let root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const row = () => [...root.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.textContent?.includes('Chase UC3'))!;
+    const a = row().querySelector<HTMLAnchorElement>('.helm-task-text a.external-link')!;
+    expect(a.textContent).toBe('jira.example.com/browse/RSC-1');
+    expect(a.getAttribute('href')).toBe('https://jira.example.com/browse/RSC-1');
+    expect(row().querySelector('.helm-task-links .helm-badge')!.textContent).toBe('1');
+    click(row().querySelector('button[aria-label="More…"]'));
+    const links = Menu.last!.items.find((i) => i.title === 'Links')!;
+    expect(links.sub!.items.map((i) => i.title)).toEqual(['jira.example.com/browse/RSC-1', 'Add link…', 'Remove link']);
+    links.sub!.items[1]!.click!();
+    const dlg = Modal.last!;
+    expect(dlg.titleEl.textContent).toBe('Add link');
+    const inputs = dlg.contentEl.querySelectorAll<HTMLInputElement>('input');
+    inputs[0]!.value = 'https://docs.example.com/nat'; inputs[0]!.dispatchEvent(new Event('input'));
+    inputs[1]!.value = 'NAT docs'; inputs[1]!.dispatchEvent(new Event('input'));
+    expect(dlg.contentEl.querySelector('.helm-path-preview')!.textContent).toBe('[NAT docs](https://docs.example.com/nat)');
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
+    await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('Chase UC3 https://jira.example.com/browse/RSC-1 [NAT docs](https://docs.example.com/nat)');
+    t = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Chase UC3'))!;
+    root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    expect(row().querySelector('.helm-task-links .helm-badge')!.textContent).toBe('2');
+    click(row().querySelector('button[aria-label="More…"]'));
+    const rm = Menu.last!.items.find((i) => i.title === 'Links')!.sub!.items.find((i) => i.title === 'Remove link')!;
+    expect(rm.sub!.items.map((i) => i.title)).toEqual(['NAT docs', 'jira.example.com/browse/RSC-1']);
+    rm.sub!.items[1]!.click!();
+    await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('Chase UC3 [NAT docs](https://docs.example.com/nat)');
+    expect(await vault.read(dailyPath(TODAY))).not.toContain('jira.example.com');
+    void t;
+  });
+
   it('capture has quick tag toggles that add and remove the tag in the text', async () => {
     const { ctx } = await ctxFor();
     openCapture(ctx);
