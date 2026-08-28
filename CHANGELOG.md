@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.11.0 — 2026-08-28
 
 - Dashboard: a *Counting tasks in* row of pills under the filters for **where
   the counted tasks live** — *Daily notes* (on
