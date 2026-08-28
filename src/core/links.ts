@@ -47,3 +47,25 @@ export function textWithoutLinks(text: string): string {
   for (const l of linksIn(text)) out = out.replace(l.raw, '');
   return out.replace(/\s{2,}/g, ' ').trim();
 }
+
+const SCHEME = /^(https?:\/\/|mailto:|obsidian:\/\/)/i;
+const BARE_HOST = /^[\w-]+(\.[\w-]+)+(\/\S*)?$/;
+
+/** Does this read as a web address, with or without its scheme? */
+export function looksLikeUrl(s: string): boolean {
+  const t = s.trim();
+  return t !== '' && !/\s/.test(t) && (SCHEME.test(t) || BARE_HOST.test(t));
+}
+
+/**
+ * Make sense of what was typed into the URL and Label boxes: the two get swapped often, and a bare
+ * host is still an address. Returns undefined when neither field holds anything link-shaped.
+ */
+export function normaliseLink(urlField: string, labelField: string): { url: string; label?: string } | undefined {
+  let url = urlField.trim();
+  let label = labelField.trim();
+  if (!looksLikeUrl(url) && looksLikeUrl(label)) [url, label] = [label, url]; // typed the wrong way round
+  if (!looksLikeUrl(url)) return undefined;
+  if (!SCHEME.test(url)) url = `https://${url}`;
+  return { url, ...(label ? { label } : {}) };
+}

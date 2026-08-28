@@ -295,8 +295,9 @@ describe('Modals', () => {
     const dlg = Modal.last!;
     expect(dlg.titleEl.textContent).toBe('Add link');
     const inputs = dlg.contentEl.querySelectorAll<HTMLInputElement>('input');
-    inputs[0]!.value = 'https://docs.example.com/nat'; inputs[0]!.dispatchEvent(new Event('input'));
-    inputs[1]!.value = 'NAT docs'; inputs[1]!.dispatchEvent(new Event('input'));
+    // Deliberately the wrong way round: the label in the URL box and the address in the label box.
+    inputs[0]!.value = 'NAT docs'; inputs[0]!.dispatchEvent(new Event('input'));
+    inputs[1]!.value = 'https://docs.example.com/nat'; inputs[1]!.dispatchEvent(new Event('input'));
     expect(dlg.contentEl.querySelector('.helm-path-preview')!.textContent).toBe('[NAT docs](https://docs.example.com/nat)');
     click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
     await flush(); await flush();

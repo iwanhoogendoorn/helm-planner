@@ -28,3 +28,19 @@ describe('text without links', () => {
     expect(textWithoutLinks('[only](https://x.io)')).toBe('');
   });
 });
+
+describe('making sense of the Add link boxes', () => {
+  it('takes the fields either way round, and an address without its scheme', async () => {
+    const { normaliseLink, looksLikeUrl } = await import('../../src/core/links');
+    // Typed the wrong way round — the exact mix-up the dialog invites.
+    expect(normaliseLink('Github Link', 'https://gitlab.example.com/luna-labs/docs/oci-blog/-/tree/main/x'))
+      .toEqual({ url: 'https://gitlab.example.com/luna-labs/docs/oci-blog/-/tree/main/x', label: 'Github Link' });
+    expect(normaliseLink('https://x.io/a', 'Ticket')).toEqual({ url: 'https://x.io/a', label: 'Ticket' });
+    expect(normaliseLink('example.com/page', '')).toEqual({ url: 'https://example.com/page' }); // scheme filled in
+    expect(normaliseLink('mailto:a@b.io', '')).toEqual({ url: 'mailto:a@b.io' });
+    expect(normaliseLink('', '')).toBeUndefined();
+    expect(normaliseLink('just some words', 'more words')).toBeUndefined();
+    expect(looksLikeUrl('not a url')).toBe(false);
+    expect(looksLikeUrl('docs.example.com')).toBe(true);
+  });
+});

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- *Add link…* copes with what people actually type: the URL and Label boxes
+  filled the wrong way round are swapped for you, and an address without its
+  `https://` gets one. When neither box holds an address the dialog says so
+  under the fields instead of failing silently on the button.
 - Moving a task off a past day now forwards its subtasks with it. They were
   left open in the old note, so they came back the next morning as
   *carried over* work of their own while the task itself sat on its new day.

@@ -1,7 +1,7 @@
 /** Links on a task: open, add, remove — from the row pill, the task menu and the editor. */
 import { Menu, Modal } from 'obsidian';
 import type { Task } from '../core/types';
-import { linkLabel, linksIn, type TaskLink } from '../core/links';
+import { linkLabel, linksIn, normaliseLink, type TaskLink } from '../core/links';
 import type { UiContext } from './context';
 import { button, h, iconButton } from './dom';
 
@@ -17,18 +17,27 @@ export function askLink(ctx: UiContext, onDone: (r: { url: string; label?: strin
   const url = h('input', { cls: 'helm-input-wide', attr: { type: 'url', placeholder: 'https://…', value: initial.url ?? '' } });
   const label = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: 'e.g. Jira ticket', value: initial.label ?? '' } });
   const preview = h('div', { cls: 'helm-path-preview' });
-  const update = (): void => { const u = url.value.trim(); preview.textContent = u ? `[${label.value.trim() || linkLabel(u)}](${u})` : '—'; };
+  const problem = h('div', { cls: 'helm-hint helm-link-problem', style: { display: 'none' } });
+  const update = (): void => {
+    const r = normaliseLink(url.value, label.value);
+    preview.textContent = r ? `[${r.label || linkLabel(r.url)}](${r.url})` : '—';
+    const typed = url.value.trim() !== '' || label.value.trim() !== '';
+    problem.style.display = !r && typed ? '' : 'none';
+    problem.textContent = 'Neither box holds a web address — paste one, e.g. https://example.com/page.';
+  };
   url.addEventListener('input', update); label.addEventListener('input', update);
   let accepted = false;
   const accept = (): void => {
-    const u = url.value.trim();
-    if (!/^(https?:\/\/|mailto:|obsidian:\/\/)/i.test(u)) { ctx.notify('Enter a full URL, starting with https://'); return; }
-    accepted = true; m.close(); onDone({ url: u, ...(label.value.trim() ? { label: label.value.trim() } : {}) });
+    // Forgiving: the boxes swapped round, or an address without its https://, are both fine.
+    const r = normaliseLink(url.value, label.value);
+    if (!r) { update(); url.focus(); return; }
+    accepted = true; m.close(); onDone(r);
   };
   for (const el of [url, label]) el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); accept(); } });
   m.contentEl.append(
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'URL' }), url),
-    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Label' }), label, h('div', { cls: 'helm-hint', text: 'Leave empty to show the address.' })),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Label' }), label, h('div', { cls: 'helm-hint', text: 'Leave empty to show the address. Swap the two boxes round and Helm sorts it out.' })),
+    problem,
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Written as' }), preview),
     h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), h('button', { cls: 'helm-btn', text: 'Cancel', onClick: () => m.close() }), h('button', { cls: 'helm-btn mod-cta', text: 'Add', onClick: accept })),
   );

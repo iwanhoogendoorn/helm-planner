@@ -756,3 +756,4 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-dash-sources .helm-hint { margin-right: 2px; }
 .helm-chip.subtask-of { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; background: var(--background-modifier-border); color: var(--text-muted); border: none; height: auto; }
 .helm-chip.subtask-of svg { width: 11px; height: 11px; }
+.helm-link-problem { color: var(--color-red); }
