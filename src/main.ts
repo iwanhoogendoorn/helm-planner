@@ -315,6 +315,7 @@ export default class HelmPlugin extends Plugin {
 
   private registerVaultEvents(): void {
     const touch = (path: string): void => {
+      this.index.noteSeen(path); // linkable straight away, even when its content is none of Helm's business
       if (!this.index.inScope(path) && !this.index.hasFile(path)) return;
       this.pendingPaths.add(path);
       if (this.updateTimer) window.clearTimeout(this.updateTimer);
@@ -323,7 +324,7 @@ export default class HelmPlugin extends Plugin {
     this.registerEvent(this.app.vault.on('modify', (f) => { if (f instanceof TFile) touch(f.path); }));
     this.registerEvent(this.app.vault.on('create', (f) => { if (f instanceof TFile) touch(f.path); }));
     this.registerEvent(this.app.vault.on('delete', (f) => { if (f instanceof TFile) { this.index.update(f.path, undefined); } }));
-    this.registerEvent(this.app.vault.on('rename', (f, old) => { this.index.update(old, undefined); if (f instanceof TFile) touch(f.path); }));
+    this.registerEvent(this.app.vault.on('rename', (f, old) => { this.index.update(old, undefined); this.index.noteGone(old); if (f instanceof TFile) touch(f.path); }));
   }
 
   private async flushUpdates(): Promise<void> {

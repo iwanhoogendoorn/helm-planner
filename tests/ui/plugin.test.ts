@@ -84,6 +84,30 @@ describe('HelmPlugin', () => {
     expect(plugin.index.project('prj-kitchen')?.path).toBe(np);
   });
 
+  it('a note created outside the scanned folders is linkable at once', async () => {
+    const { plugin, app } = await boot();
+    const p = 'Grok Agents Proposal.md'; // vault root: none of Helm's business, but still a note you can link
+    expect(plugin.index.linkableNotes().some((n) => n.path === p)).toBe(false);
+    app.vault.files.files.set(p, '# Grok Agents Proposal\n');
+    app.vault.emit('create', new FakeTFile(p));
+    await tick(300);
+    expect(plugin.index.linkableNotes().find((n) => n.path === p)).toEqual({ path: p, title: 'Grok Agents Proposal' });
+    expect(plugin.index.noteTitles()).toContain('Grok Agents Proposal');
+    expect(plugin.index.hasFile(p)).toBe(false); // its content is still not indexed — only its name is known
+    // Renaming it keeps the picker honest.
+    const np = 'Grok Agents Plan.md';
+    app.vault.files.files.set(np, app.vault.files.files.get(p)!);
+    app.vault.emit('rename', new FakeTFile(np), p);
+    await tick(300);
+    const titles = plugin.index.linkableNotes().map((n) => n.title);
+    expect(titles).toContain('Grok Agents Plan');
+    expect(titles).not.toContain('Grok Agents Proposal');
+    // Deleting it takes it out again.
+    app.vault.emit('delete', new FakeTFile(np));
+    await tick(300);
+    expect(plugin.index.linkableNotes().some((n) => n.title === 'Grok Agents Plan')).toBe(false);
+  });
+
   it('modals are tracked while open and forgotten once closed', async () => {
     const { plugin, app } = await boot();
     const { Modal } = await import('../stubs/obsidian');

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- A note created, renamed or moved anywhere outside Helm's scanned folders —
+  the vault root, say — is now linkable straight away. Its name reached the
+  link picker and `[[` completion only after a full re-index before, so a note
+  you had just written could not be found.
+
 ## 1.12.0 — 2026-08-28
 
 - Subtasks: *Add subtask…* in a task's menu writes an indented line under it in

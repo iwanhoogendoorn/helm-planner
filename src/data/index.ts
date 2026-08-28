@@ -173,9 +173,24 @@ export class HelmIndex {
   /** Every markdown note in the vault by lower-cased basename (for resolving wikilinks), refreshed on rebuild and on file events. */
   private allNoteTitles = new Map<string, string>();
 
+  /**
+   * Remember (or forget) a markdown file's title, whatever else Helm does with it. Every note in the
+   * vault can be linked to a task, so this must not depend on the file being in Helm's scanned scope.
+   */
+  noteSeen(path: string): void {
+    if (!path.endsWith('.md') || isDrawingPath(path)) return;
+    this.allNoteTitles.set(noteTitle(path).toLowerCase(), path);
+  }
+
+  noteGone(path: string): void {
+    if (!path.endsWith('.md') || isDrawingPath(path)) return;
+    const key = noteTitle(path).toLowerCase();
+    if (this.allNoteTitles.get(key) === path) this.allNoteTitles.delete(key);
+  }
+
   private applyOne(path: string, content: string | undefined): boolean {
     const known = this.files.get(path);
-    if (path.endsWith('.md') && !isDrawingPath(path)) { if (content === undefined) { if (this.allNoteTitles.get(noteTitle(path).toLowerCase()) === path) this.allNoteTitles.delete(noteTitle(path).toLowerCase()); } else this.allNoteTitles.set(noteTitle(path).toLowerCase(), path); }
+    if (content === undefined) this.noteGone(path); else this.noteSeen(path);
     if (!this.inScope(path, content) || content === undefined) {
       if (!known) return false;
       this.files.delete(path);
