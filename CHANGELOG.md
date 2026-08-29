@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.19.0 — 2026-08-29
+
+- Wikilinks in a project's next action are links again, not raw `[[brackets]]`
+  — in Projects, Horizons and Calendar alike.
+
 ## 1.18.0 — 2026-08-29
 
 - The three things a task can do with a project — *Move to project…*, *Make a
