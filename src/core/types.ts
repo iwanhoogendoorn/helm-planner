@@ -266,6 +266,10 @@ export interface HelmSettings {
   projectDrawingsInProjectFolder: boolean;
   embedDrawings: boolean;
   /** Tag put on follow-up tasks (without #). */
+  /** Local HTTP API for other tools on this machine. Off unless you switch it on. */
+  apiEnabled: boolean;
+  apiPort: number;
+  apiToken: string;
   followupTag: string;
   /** Tags offered as one-click toggles in Capture, comma separated, without the #. */
   captureTags: string;
@@ -327,6 +331,9 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   drawingTemplate: '',
   projectDrawingsInProjectFolder: true,
   embedDrawings: true,
+  apiEnabled: false,
+  apiPort: 27125,
+  apiToken: '',
   followupTag: 'followup',
   captureTags: 'meeting, followup, task',
   notesFolder: 'Notes',

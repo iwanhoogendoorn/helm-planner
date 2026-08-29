@@ -30,7 +30,8 @@ const ctx = await esbuild.context({
   banner: { js: banner },
   entryPoints: ['src/main.ts'],
   bundle: true,
-  external: ['obsidian', 'electron', '@codemirror/*', '@lezer/*', ...builtins],
+  // Node's own modules stay external in both spellings — Obsidian provides them at run time.
+  external: ['obsidian', 'electron', '@codemirror/*', '@lezer/*', ...builtins, ...builtins.map((b) => `node:${b}`)],
   format: 'cjs',
   target: 'es2022',
   logLevel: 'info',

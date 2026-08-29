@@ -548,6 +548,15 @@ export class Mutations {
     await this.appendToInbox([newTaskLine(spec.text, fields)]);
   }
 
+  /** Add a task and hand back what was written — the id lets a caller act on it straight away. */
+  async addTaskReturning(spec: AddTaskSpec): Promise<Task> {
+    const id = spec.fields?.id ?? this.newTaskId();
+    await this.addTask({ ...spec, fields: { ...spec.fields, id } });
+    const made = [...this.index.snapshot.tasks.values()].find((t) => t.id === id && t.origin !== 'daily-mirror');
+    if (!made) throw new Error('The task was written but could not be found again — reindex and try once more');
+    return made;
+  }
+
   /** Where a new task goes in a project note: end of the phase, else under `## Tasks` (created when missing). */
   private projectInsertPoint(lines: string[], doc: Document, p: Project, phaseId?: string): { index: number; prefix: string[] } {
     const phase = phaseId ? p.phases.find((ph) => ph.id === phaseId) : undefined;

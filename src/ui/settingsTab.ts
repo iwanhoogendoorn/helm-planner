@@ -8,7 +8,7 @@
  * Reusing that name for our section nav made Obsidian hoist it into the
  * sidebar on the first open after startup — hence `sectionNavEl`.
  */
-import { PluginSettingTab, Setting, setIcon, TFile, type App, type Plugin, type TextComponent } from 'obsidian';
+import { Notice, PluginSettingTab, Setting, setIcon, TFile, type App, type Plugin, type TextComponent } from 'obsidian';
 import { PathSuggest } from './fields';
 import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
 import type { PeriodKind } from '../core/periods';
@@ -28,6 +28,10 @@ export interface SettingsHost extends Plugin {
   dailyConfig(): { folder: string; format: string; template: string };
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string };
   onSettingsChanged(): void;
+  today(): string;
+  apiStatus(): { running: boolean; port?: number; error?: string };
+  restartApi(): Promise<void>;
+  newApiToken(): string;
   templateInfo(kind: PeriodKind): Promise<{ source: 'custom' | 'periodic-notes' | 'built-in'; path?: string; exists: boolean }>;
   templateTargetPath(kind: PeriodKind): string;
   writeTemplate(kind: PeriodKind, replace: boolean): Promise<'created' | 'replaced' | 'skipped'>;
@@ -58,6 +62,7 @@ export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
   { id: 'planning', label: 'Planning', icon: 'sliders-horizontal' },
   { id: 'drawings', label: 'Notes & drawings', icon: 'pen-tool' },
   { id: 'view', label: 'View', icon: 'layout-dashboard' },
+  { id: 'api', label: 'Local API', icon: 'plug' },
   { id: 'about', label: 'About', icon: 'info' },
 ];
 
@@ -219,6 +224,7 @@ export class HelmSettingTab extends PluginSettingTab {
       case 'planning': this.renderPlanning(body); break;
       case 'drawings': this.renderDrawings(body); break;
       case 'view': this.renderView(body); break;
+      case 'api': this.renderApi(body); break;
       case 'about': this.renderAbout(body); break;
       default: this.renderFolders(body);
     }
@@ -463,6 +469,54 @@ export class HelmSettingTab extends PluginSettingTab {
   }
 
   // ── about ─────────────────────────────────────────────────────────────
+
+  // ── local API ─────────────────────────────────────────────────────────
+
+  private renderApi(body: HTMLElement): void {
+    const s = this.host.settings;
+    const state = this.host.apiStatus();
+    const g = this.group(body, {
+      icon: 'plug', title: 'Local API', subtitle: 'Let other tools on this machine read and change your tasks through Helm.',
+      chip: state.error ? { text: state.error, tone: 'warn' as const } : state.running ? { text: `on · port ${state.port ?? s.apiPort}`, tone: 'ok' as const } : { text: 'off', tone: 'pending' as const },
+    });
+    g.content.createEl('p', { cls: 'helm-hint', text: 'Helm serves JSON on 127.0.0.1 only — never a network interface — and every request must carry the token below. Calls go through the same code the buttons use, so ids, daily-note mirrors and subtasks stay consistent.' });
+    new Setting(g.content).setName('Serve the API').setDesc('Starts when you switch it on, and whenever Obsidian starts.')
+      .addToggle((t) => t.setValue(s.apiEnabled).onChange((v) => void (async () => {
+        if (v && s.apiToken === '') s.apiToken = this.host.newApiToken();
+        s.apiEnabled = v;
+        await this.host.saveSettings();
+        await this.host.restartApi();
+        this.renderBody();
+      })()));
+    new Setting(g.content).setName('Port').setDesc('Change it if something else already uses this one.')
+      .addText((t) => t.setPlaceholder('27125').setValue(String(s.apiPort)).onChange((v) => void (async () => {
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < 1024 || n > 65535) return;
+        s.apiPort = n;
+        await this.host.saveSettings();
+        await this.host.restartApi();
+      })()));
+    new Setting(g.content).setName('Token').setDesc('Send it as “Authorization: Bearer <token>”. Treat it like a password.')
+      .addText((t) => { t.setValue(s.apiToken).setDisabled(true); t.inputEl.addClass('helm-api-token'); })
+      .addButton((b) => b.setButtonText('Copy').onClick(() => { void navigator.clipboard.writeText(s.apiToken); new Notice('Token copied.'); }))
+      .addButton((b) => b.setButtonText('New token').setWarning().onClick(() => void (async () => {
+        s.apiToken = this.host.newApiToken();
+        await this.host.saveSettings();
+        await this.host.restartApi();
+        this.renderBody();
+        new Notice('New token — anything using the old one has to be updated.');
+      })()));
+    const base = `http://127.0.0.1:${state.port ?? s.apiPort}/helm/v1`;
+    const token = s.apiToken || '<token>';
+    g.content.createEl('p', { cls: 'helm-hint', text: 'Try it from a terminal:' });
+    g.content.createEl('pre', { cls: 'helm-api-example', text: [
+      `curl -s ${base}/health -H "Authorization: Bearer ${token}"`,
+      `curl -s "${base}/tasks?status=open&limit=5" -H "Authorization: Bearer ${token}"`,
+      `curl -s -X POST ${base}/tasks -H "Authorization: Bearer ${token}" -H 'content-type: application/json' \\`,
+      `  -d '{"text":"Ring the plumber","scheduled":"${this.host.today()}","part":"afternoon"}'`,
+    ].join('\n') });
+    g.content.createEl('p', { cls: 'helm-hint', text: 'Every route is listed in docs/api.md in the Helm repository.' });
+  }
 
   private renderAbout(body: HTMLElement): void {
     const m = this.host.manifest;

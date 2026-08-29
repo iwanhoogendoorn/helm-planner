@@ -5,6 +5,11 @@ import type { VaultAdapter } from './data/vault';
 export class ObsidianVault implements VaultAdapter {
   constructor(private app: App) {}
 
+  /** Paths written since the last call — the API reports them so a caller can see what it changed. */
+  private writes: string[] = [];
+  takeWrites(): string[] { const w = [...new Set(this.writes)]; this.writes = []; return w; }
+  private noteWrite(path: string): void { this.writes.push(path); if (this.writes.length > 200) this.writes = this.writes.slice(-200); }
+
   async list(): Promise<string[]> {
     return this.app.vault.getMarkdownFiles().map((f) => f.path);
   }
@@ -23,6 +28,7 @@ export class ObsidianVault implements VaultAdapter {
 
   async write(path: string, content: string): Promise<void> {
     const p = normalizePath(path);
+    this.noteWrite(p);
     const f = this.app.vault.getAbstractFileByPath(p);
     if (f instanceof TFile) { await this.app.vault.modify(f, content); return; }
     const folder = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
@@ -54,6 +60,7 @@ export class ObsidianVault implements VaultAdapter {
 
   async writeBinary(path: string, data: ArrayBuffer): Promise<void> {
     const p = normalizePath(path);
+    this.noteWrite(p);
     const f = this.app.vault.getAbstractFileByPath(p);
     if (f instanceof TFile) { await this.app.vault.modifyBinary(f, data); return; }
     const folder = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';

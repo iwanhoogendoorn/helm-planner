@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **A local API.** Settings → *Local API* switches on a small HTTP server on
+  `127.0.0.1` so other tools on this machine — a script, a shortcut, an AI
+  agent — can list, create, schedule, edit and delete tasks and projects.
+  Every call runs the same code the buttons run, so ids, daily-note mirrors,
+  the Helm region and subtasks-travel-with-their-task all still hold; a caller
+  cannot get the vault into a state Helm would not. Off unless you turn it on,
+  loopback only, and every request needs the token from Settings. Routes are
+  documented in `docs/api.md`.
+
 ## 1.14.0 — 2026-08-29
 
 - *Needs attention* keeps late work in front of you on every day you open —

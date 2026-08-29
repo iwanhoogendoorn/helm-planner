@@ -9,6 +9,7 @@ import { HelmView, VIEW_TYPE } from './ui/view';
 import type { TabId, UiContext } from './ui/context';
 import { HelmSettingTab } from './ui/settingsTab';
 import { openCapture } from './ui/modals/capture';
+import { randomToken, startApiServer } from './api/server';
 import { openSearch } from './ui/modals/search';
 import { openPlanDay } from './ui/modals/planDay';
 import { openWrapUp } from './ui/modals/wrapUp';
@@ -86,10 +87,51 @@ export default class HelmPlugin extends Plugin {
         }
       });
       if (this.settings.openOnStartup) void this.openView();
+      void this.restartApi();
     });
   }
 
+  /* ── Local API ──────────────────────────────────────────────────────── */
+
+  private api?: { close: () => void; port: number };
+  private apiError?: string;
+
+  apiStatus(): { running: boolean; port?: number; error?: string } {
+    return { running: this.api !== undefined, ...(this.api ? { port: this.api.port } : {}), ...(this.apiError ? { error: this.apiError } : {}) };
+  }
+
+  newApiToken(): string { return randomToken(); }
+
+  /** Bring the server in line with the settings: start, stop or move it. */
+  async restartApi(): Promise<void> {
+    this.api?.close();
+    this.api = undefined;
+    this.apiError = undefined;
+    if (!this.settings.apiEnabled) return;
+    if (this.settings.apiToken === '') { this.apiError = 'no token'; return; }
+    try {
+      this.api = await startApiServer({
+        port: this.settings.apiPort,
+        token: this.settings.apiToken,
+        log: (m) => console.log(`[helm/api] ${m}`),
+        deps: {
+          index: this.index,
+          mutations: this.mutations,
+          settings: () => this.settings,
+          today: () => this.today(),
+          version: this.manifest.version,
+          written: () => this.vault.takeWrites(),
+        },
+      });
+    } catch (e) {
+      this.apiError = e instanceof Error && /EADDRINUSE/.test(e.message) ? `port ${this.settings.apiPort} is taken` : 'could not start';
+      console.error('[helm/api]', e);
+      new Notice(`Helm API: ${this.apiError}.`);
+    }
+  }
+
   override onunload(): void {
+    this.api?.close();
     for (const m of this.openModals) { try { m.close(); } catch { /* already gone */ } }
     this.openModals.clear();
     if (this.reconcileTimer) window.clearTimeout(this.reconcileTimer);
