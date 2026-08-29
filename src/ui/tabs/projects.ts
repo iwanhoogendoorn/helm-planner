@@ -18,6 +18,7 @@ import { crumbBar } from '../crumbs';
 import { drawingsButton, drawingsSection, targetForProject } from '../drawings';
 import { notesButton, notesSection } from '../notes';
 import { linksSection } from '../links';
+import { pickTask } from '../menus';
 
 export interface ProjectsState { projectId?: string; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
 
@@ -202,6 +203,17 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   root.appendChild(h('div', { cls: 'helm-detail-log' }, log));
   const drawTarget = targetForProject(p.id, p.title);
   root.appendChild(section('Notes', { count: ctx.index.notesFor(drawTarget).length, store: state.collapsed, key: 'notes', collapsed: ctx.index.notesFor(drawTarget).length === 0 }, notesSection(ctx, drawTarget)));
+  // Tasks the project points at without owning them: live rows, and they stay out of its counts.
+  const related = p.relatedTaskIds.map((id) => ({ id, task: ctx.index.taskById(id) }));
+  root.appendChild(section('Related tasks', {
+    count: related.length, store: state.collapsed, key: 'related', collapsed: related.length === 0,
+    actions: [button('Link a task…', { icon: 'link', cls: 'helm-btn-quiet', onClick: () => pickTask(ctx, (t) => void ctx.run('Link task', () => ctx.mutations.linkTaskToProject(p.id, t.key)), { exclude: (t) => (t.id !== undefined && p.relatedTaskIds.includes(t.id)) || (t.origin === 'project' && t.projectId === p.id) }) })],
+  },
+    ...related.map(({ id, task }) => task
+      ? taskRow(ctx, task, { showDate: 'due', showProject: true, extraActions: [{ icon: 'unlink', title: 'Stop pointing at this task', onClick: () => void ctx.run('Unlink', () => ctx.mutations.unlinkTaskFromProject(p.id, id)) }] })
+      : h('div', { cls: 'helm-attach-row' }, h('span', { cls: 'helm-hint', text: `${id} — no longer in the vault` }), h('span', { cls: 'helm-spacer' }), iconButton('unlink', 'Take it off the list', () => void ctx.run('Unlink', () => ctx.mutations.unlinkTaskFromProject(p.id, id))))),
+    related.length === 0 ? h('div', { cls: 'helm-hint', text: 'Tasks listed here live somewhere else — a daily note, another project — and are not counted as this project’s work.' }) : null,
+  ));
   root.appendChild(section('Links', { count: p.links.length, store: state.collapsed, key: 'links', collapsed: p.links.length === 0 }, linksSection(ctx, {
     list: () => p.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addProjectLink(p.id, url, label)),

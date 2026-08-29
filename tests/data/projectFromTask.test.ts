@@ -94,3 +94,44 @@ describe('links on a project', () => {
     expect(index.project('prj-book')!.links).toEqual([]);
   });
 });
+
+describe('a project pointing at tasks that live elsewhere', () => {
+  it('lists them by id, keeps them where they are, and leaves the project’s own counts alone', async () => {
+    const { m, vault, index } = await setup();
+    const before = index.project('prj-kitchen')!;
+    const ownWork = [...index.snapshot.tasks.values()].filter((t) => t.projectId === 'prj-kitchen' && t.origin === 'project').length;
+    const day = [...index.snapshot.tasks.values()].find((t) => t.origin === 'daily' && t.status === 'todo' && t.section !== 'outside')!;
+    expect(before.relatedTaskIds).toEqual([]);
+
+    const id = await m.linkTaskToProject('prj-kitchen', day.key);
+    expect(id).toMatch(/^tsk-/);
+    const p = index.project('prj-kitchen')!;
+    expect(p.relatedTaskIds).toEqual([id]);
+    const note = await vault.read(p.path);
+    expect(note).toMatch(new RegExp(`## Related tasks\\n\\n- ${id} · Start with OIB · \\[\\[25, Tuesday, Aug, 2026\\]\\]`));
+
+    // The task did not move, and it is not counted as the project's work.
+    const still = index.taskById(id)!;
+    expect(still.origin).toBe('daily');
+    expect(still.projectId).toBeUndefined();
+    expect([...index.snapshot.tasks.values()].filter((t) => t.projectId === 'prj-kitchen' && t.origin === 'project')).toHaveLength(ownWork);
+
+    // The reference survives the task being reworded, because it is by id.
+    await m.updateTask(index.taskById(id)!.key, { text: 'Start with OIB, properly' });
+    expect(index.project('prj-kitchen')!.relatedTaskIds).toEqual([id]);
+    expect(index.taskById(id)!.text).toBe('Start with OIB, properly');
+
+    // Linking twice changes nothing; unlinking takes it off.
+    await m.linkTaskToProject('prj-kitchen', index.taskById(id)!.key);
+    expect((await vault.read(p.path)).match(new RegExp(id, 'g'))).toHaveLength(1);
+    await m.unlinkTaskFromProject('prj-kitchen', id);
+    expect(index.project('prj-kitchen')!.relatedTaskIds).toEqual([]);
+    expect(index.taskById(id)).toBeTruthy(); // unlinking is not deleting
+  });
+
+  it('refuses to point a project at its own task', async () => {
+    const { m, index } = await setup();
+    const own = [...index.snapshot.tasks.values()].find((t) => t.origin === 'project' && t.projectId === 'prj-book')!;
+    await expect(m.linkTaskToProject('prj-book', own.key)).rejects.toThrow(/already belongs/i);
+  });
+});

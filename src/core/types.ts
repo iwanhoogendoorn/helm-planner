@@ -134,6 +134,8 @@ export interface Project {
   tags: string[];
   /** Addresses listed under `## Links` in the project note. */
   links: { url: string; label: string }[];
+  /** Ids of tasks listed under `## Related tasks`: referenced, not owned — they do not count as the project's work. */
+  relatedTaskIds: string[];
   phases: Phase[];
   looseTaskKeys: string[];
   /** Line index of the `## Tasks` heading if present. */

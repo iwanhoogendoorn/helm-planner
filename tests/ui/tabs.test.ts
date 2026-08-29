@@ -164,7 +164,7 @@ describe('Projects tab', () => {
     const state = { projectId: 'prj-book', filter: '', showClosed: false, collapsed: new Map(), showDone: false };
     const root = render((r) => renderProjects(ctx, r, state));
     expect(root.querySelector('h2')!.textContent).toBe('Oracle Book Writing');
-    expect(texts(root, '.helm-section-title')).toEqual(['Outline', 'Writing', 'Other tasks', 'Notes', 'Links', 'Diagrams']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Outline', 'Writing', 'Other tasks', 'Notes', 'Related tasks', 'Links', 'Diagrams']);
     expect(texts(root, '.helm-section:nth-of-type(1) .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams', 'Review with editor']);
     const input = root.querySelector<HTMLInputElement>('.helm-section:nth-of-type(2) .helm-quickadd-input')!;
     input.value = 'Chapter 3 tomorrow !high';
@@ -1269,6 +1269,28 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('points a project at a task without moving it, and unlinks it again', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    await m.addTask({ text: 'Chase the survey', date: TODAY, part: 'morning' });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Chase the survey')!;
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    Menu.last!.items.find((i) => i.title === 'Link to a project…')!.click!();
+    const picker = Modal.last! as unknown as { getItems: () => { id: string; title: string }[]; onChooseItem: (p: { id: string }) => void };
+    picker.onChooseItem(picker.getItems().find((p: any) => p.project?.id === 'prj-kitchen') as any ?? { id: 'prj-kitchen' } as any);
+    await flush(); await flush();
+    const p = index.project('prj-kitchen')!;
+    expect(p.relatedTaskIds).toHaveLength(1);
+    expect(index.taskById(p.relatedTaskIds[0]!)!.origin).toBe('daily'); // it stayed on the day
+
+    const root = render((r) => renderProjects(ctx, r, { collapsed: new Map(), projectId: 'prj-kitchen' } as any));
+    const sec = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === 'Related tasks')!;
+    expect(texts(sec, '.helm-task-text')).toEqual(['Chase the survey']);
+    click(sec.querySelector('button[aria-label="Stop pointing at this task"]'));
+    await flush(); await flush();
+    expect(index.project('prj-kitchen')!.relatedTaskIds).toEqual([]);
+    expect(await vault.read(dailyPath(TODAY))).toContain('Chase the survey'); // still there
+  });
+
   it('offers Make a project from this…, prefilled with the task name', async () => {
     const { ctx, m, index, vault } = await ctxFor();
     await m.addTask({ text: 'Build the cert lab #work', date: TODAY, part: 'morning' });

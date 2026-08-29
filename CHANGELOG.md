@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A project can point at tasks that live somewhere else — a daily note,
+  another project — without moving them: *Link a task…* in the project's
+  **Related tasks** section, or *Link to a project…* in a task's menu. They
+  show as live rows with their real status, and they stay out of the project's
+  own progress, velocity and ETA, because the project does not own them. The
+  reference is stored by `🆔` under `## Related tasks`, so rewording the task
+  does not break it; unlinking removes the reference, never the task.
 - A project keeps its own **Links** now, beside its Notes and Diagrams: add,
   open and remove addresses from the project view, stored as a plain `## Links`
   list in the project note. An address without its `https://` gets one.

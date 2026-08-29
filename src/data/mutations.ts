@@ -639,6 +639,44 @@ export class Mutations {
     return { notes: notes.length, drawings: drawings.length, links: links.length };
   }
 
+  /**
+   * Point a project at a task that lives somewhere else. The task does not move and stays out of the
+   * project's own counts — the project note simply lists it under `## Related tasks`, by id so the
+   * reference survives the task being reworded.
+   */
+  async linkTaskToProject(projectId: string, taskKey: string): Promise<string> {
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    let t = this.fresh(taskKey);
+    if (t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf)) t = this.fresh(t.mirrorOf);
+    if (t.origin === 'project' && t.projectId === projectId) throw new Error('That task already belongs to this project');
+    const id = await this.ensureId(t.key);
+    const fresh = this.index.task(id) ?? t;
+    const where = baseName(fresh.path);
+    const line = `- ${id} · ${plainLabel(fresh.text) || fresh.text} · [[${where}]]`;
+    await this.editFile(p.path, (lines, doc) => {
+      if (lines.some((l) => l.includes(id))) return false;
+      const h = doc.headings.find((x) => /^related( tasks?)?$/i.test(x.text.trim()));
+      if (h) { lines.splice(sectionInsertPoint(doc, h), 0, line); return true; }
+      let e = lines.length;
+      while (e > 0 && lines[e - 1]!.trim() === '') e--;
+      lines.splice(e, lines.length - e, '', '## Related tasks', '', line, '');
+      return true;
+    });
+    return id;
+  }
+
+  async unlinkTaskFromProject(projectId: string, taskId: string): Promise<void> {
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    await this.editFile(p.path, (lines) => {
+      const at = lines.findIndex((l) => /^\s*-\s/.test(l) && l.includes(taskId));
+      if (at === -1) return false;
+      lines.splice(at, 1);
+      return true;
+    });
+  }
+
   /** Put an address in a project's `## Links` list. */
   async addProjectLink(projectId: string, url: string, label?: string): Promise<void> {
     const p = this.index.project(projectId);

@@ -57,13 +57,16 @@ export function isProjectNote(doc: Document): boolean {
   return t !== undefined && /^project(\s*note)?$/i.test(t);
 }
 
-/** The body under a `## Links` heading, where a project keeps its addresses. */
-function linkSection(doc: Document): string {
-  const h = doc.headings.find((x) => /^links?$/i.test(x.text.trim()));
+/** The body under a heading, by name. */
+function section(doc: Document, name: RegExp): string {
+  const h = doc.headings.find((x) => name.test(x.text.trim()));
   if (!h) return '';
   const next = doc.headings.find((x) => x.line > h.line && x.level <= h.level);
   return doc.lines.slice(h.line + 1, next ? next.line : doc.lines.length).join('\n');
 }
+
+/** The body under a `## Links` heading, where a project keeps its addresses. */
+function linkSection(doc: Document): string { return section(doc, /^links?$/i); }
 
 export function parseProject(path: string, content: string, opts: { fallbackId?: string; mtime?: number } = {}): ParsedProject {
   const doc = parseDocument(content);
@@ -91,6 +94,7 @@ export function parseProject(path: string, content: string, opts: { fallbackId?:
     childIds: [],
     tags: list(fm['tags']).map((t) => t.replace(/^#/, '')).filter((t) => t !== 'project'),
     links: linksIn(linkSection(doc)).map((l) => ({ url: l.url, label: l.label })),
+    relatedTaskIds: [...new Set([...section(doc, /^related( tasks?)?$/i).matchAll(/\btsk-[\w-]+/g)].map((m) => m[0]))],
     phases: [],
     looseTaskKeys: [],
     frontmatterEndLine: doc.frontmatter.endLine,

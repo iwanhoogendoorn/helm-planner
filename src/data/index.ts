@@ -574,6 +574,11 @@ export class HelmIndex {
   /* ── Queries ─────────────────────────────────────────────────────────── */
 
   task(key: string): Task | undefined { return this.snapshot.tasks.get(key); }
+  /** The task carrying this 🆔, ignoring the copy mirrored onto a day. */
+  taskById(id: string): Task | undefined {
+    for (const t of this.snapshot.tasks.values()) if (t.id === id && t.origin !== 'daily-mirror') return t;
+    return undefined;
+  }
   project(id: string): Project | undefined { return this.snapshot.projects.get(id); }
   projectByTitle(title: string): Project | undefined {
     const t = title.trim().toLowerCase().replace(/^\[\[|\]\]$/g, '').split('|')[0]!;

@@ -10,6 +10,8 @@ import { openFollowUp } from './modals/followUp';
 import { openSubtask } from './modals/subtask';
 import { openProjectForm } from './modals/projectForm';
 import { plainLabel } from '../core/label';
+import { isOpen } from '../data/planner';
+import { baseName } from '../data/vault';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
@@ -112,6 +114,7 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     await ctx.mutations.carryAttachmentsToProject(task.key, p.id); // notes, drawings and links travel with it
     await ctx.mutations.moveToProject(task.key, p.id, phaseId);
   }), { phases: true })));
+  menu.addItem((i) => i.setTitle('Link to a project…').setIcon('link').onClick(() => pickProject(ctx, (p) => void ctx.run('Link', () => ctx.mutations.linkTaskToProject(p.id, task.key)))));
   if (task.origin !== 'project' && task.origin !== 'daily-mirror') {
     menu.addItem((i) => i.setTitle('Make a project from this…').setIcon('folder-plus').onClick(() => openProjectForm(ctx, { title: plainLabel(task.text), fromTask: task, onCreated: (p) => ctx.navigate('projects', { projectId: p.id }) })));
   }
@@ -135,6 +138,22 @@ class ProjectPicker extends FuzzySuggestModal<{ project: Project; phaseId?: stri
   getItems(): { project: Project; phaseId?: string; label: string }[] { return this.items; }
   getItemText(item: { label: string }): string { return item.label; }
   onChooseItem(item: { project: Project; phaseId?: string }): void { this.onPick(item.project, item.phaseId); }
+}
+
+/** Pick any task in the vault. `exclude` keeps the ones already spoken for out of the list. */
+class TaskPicker extends FuzzySuggestModal<Task> {
+  constructor(ctx: UiContext, private items: Task[], private onPick: (t: Task) => void) { super(ctx.app); this.setPlaceholder('Task to link…'); }
+  getItems(): Task[] { return this.items; }
+  getItemText(t: Task): string { return `${plainLabel(t.text)}  ·  ${t.projectTitle ?? baseName(t.path)}${isOpen(t) ? '' : '  ·  done'}`; }
+  onChooseItem(t: Task): void { this.onPick(t); }
+}
+
+export function pickTask(ctx: UiContext, onPick: (t: Task) => void, opts: { exclude?: (t: Task) => boolean } = {}): void {
+  const items = [...ctx.index.snapshot.tasks.values()]
+    .filter((t) => t.origin !== 'daily-mirror' && t.text.trim() !== '' && !(opts.exclude?.(t) ?? false))
+    .sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || plainLabel(a.text).localeCompare(plainLabel(b.text)));
+  if (items.length === 0) { ctx.notify('No tasks left to link.'); return; }
+  new TaskPicker(ctx, items, onPick).open();
 }
 
 export function pickProject(ctx: UiContext, onPick: (p: Project, phaseId?: string) => void, opts: { phases?: boolean; includeInactive?: boolean } = {}): void {
