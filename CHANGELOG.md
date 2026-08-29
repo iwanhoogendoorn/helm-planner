@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.19.1 — 2026-08-29
 
 - *Add phase* and *Rename phase* work again. They asked with `window.prompt`,
   which Electron refuses outright, so the button appeared to do nothing at
