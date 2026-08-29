@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.14.0 — 2026-08-29
 
 - *Needs attention* keeps late work in front of you on every day you open —
   overdue and carried over alike — until you deal with it, by planning it onto
