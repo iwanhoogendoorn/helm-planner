@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.17.0 — 2026-08-29
 
 - A project can point at tasks that live somewhere else — a daily note,
   another project — without moving them: *Link a task…* in the project's
