@@ -68,6 +68,25 @@ describe('promoting a task to a project of its own', () => {
     expect(again.match(/docs\.example\.com/g)).toHaveLength(1);
   });
 
+  it('carries the belongings however the task gets into a project — the move itself does it', async () => {
+    const { m, vault, index } = await taskWithEverything();
+    // Straight moveToProject, the way the command, the inbox row and the task editor all call it.
+    await m.moveToProject(index.task('tsk-grow')!.key, 'prj-kitchen');
+    const note = await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md');
+    expect(note).toContain('Build the cert lab');
+    expect(note).toContain('[[Cert research]]');
+    expect(note).toContain('![[Cert map.excalidraw]]');
+    expect(note).toMatch(/## Links\n\n- \[OCI docs\]\(https:\/\/docs\.example\.com\/oci\)/);
+    const kitchen = { kind: 'project' as const, id: 'prj-kitchen', title: 'Kitchen Remodel' };
+    expect(index.notesFor(kitchen).map((n) => n.title)).toContain('Cert research');
+    expect(index.drawingsFor(kitchen).map((d) => d.title)).toContain('Cert map');
+    // Moving it on to a second project takes them along again, and adds nothing twice.
+    await m.moveToProject(index.taskById('tsk-grow')!.key, 'prj-book');
+    const book = await vault.read('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md');
+    expect(book.match(/Cert research/g)).toHaveLength(1);
+    expect(index.notesFor({ kind: 'project', id: 'prj-book', title: 'Oracle Book Writing' }).map((n) => n.title)).toContain('Cert research');
+  });
+
   it('refuses to promote a task that already lives in a project', async () => {
     const { m, index } = await setup();
     const inProject = [...index.snapshot.tasks.values()].find((t) => t.origin === 'project')!;

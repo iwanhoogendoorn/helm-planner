@@ -91,9 +91,12 @@ Send only what changes:
 
 ```json
 { "scheduled": "2026-09-01", "part": "morning", "status": "done",
-  "text": "New wording", "due": null, "effortMinutes": 45, "priority": "normal" }
+  "text": "New wording", "due": null, "effortMinutes": 45, "priority": "normal",
+  "projectId": "prj-kitchen", "phaseId": "ph-2" }
 ```
 
+- `"projectId"` (with an optional `phaseId`) moves the task into that project,
+  taking its notes, drawings and links with it.
 - `"scheduled": null` unschedules.
 - `"due": null` and `"effortMinutes": null` clear those.
 - `part` on its own moves it within its day.

@@ -726,8 +726,8 @@ export class Mutations {
     const id = await this.ensureId(src.key);
     const project = await this.createProject({ ...spec, title });
     const fresh = this.index.task(id) ?? this.fresh(src.key);
-    const carried = await this.carryAttachmentsToProject(fresh.key, project.id);
-    await this.moveToProject(this.index.task(id)?.key ?? fresh.key, project.id);
+    const carried = { notes: this.index.notesFor({ kind: 'task', key: fresh.key, id, title: fresh.text }).length, drawings: this.index.drawingsFor({ kind: 'task', key: fresh.key, id, title: fresh.text }).filter((d) => d.kind === 'excalidraw').length, links: linksIn(fresh.text).length };
+    await this.moveToProject(fresh.key, project.id); // the move carries them
     return { project, carried };
   }
 
@@ -736,6 +736,11 @@ export class Mutations {
     if (t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf)) t = this.fresh(t.mirrorOf);
     const p = this.index.project(projectId);
     if (!p) throw new Error('Project not found');
+    // Notes, drawings and addresses come along, whichever way the task got here.
+    if (!(t.origin === 'project' && t.projectId === projectId)) {
+      await this.carryAttachmentsToProject(t.key, projectId);
+      t = this.fresh(this.index.task(t.id ?? '')?.key ?? t.key);
+    }
     const planned = t.scheduled ?? (t.origin === 'daily' ? t.noteDate : undefined);
     if (t.origin === 'project' && t.projectId === projectId) {
       // Same project, different phase: cut the block, then paste it at the phase's end.

@@ -121,3 +121,21 @@ describe('the local API', () => {
     expect(await call('DELETE', 'tasks')).toMatchObject({ status: 405 });
   });
 });
+
+describe('moving a task into a project over the API', () => {
+  it('takes its notes, drawings and links with it', async () => {
+    const s = await setup({
+      '81 AI/Cert research.md': '---\nhelm-task: tsk-grow\n---\n# Cert research\n',
+    });
+    await s.m.addTask({ text: 'Build the cert lab [OCI docs](https://docs.example.com/oci)', date: TODAY, fields: { id: 'tsk-grow' } });
+    const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: 't', written: () => [] };
+    const r = await handle({ method: 'PATCH', path: 'tasks/tsk-grow', query: {}, body: { projectId: 'prj-kitchen' } }, deps) as { status: number; body: any };
+    expect(r.status).toBe(200);
+    expect(r.body.task.project.id).toBe('prj-kitchen');
+    const note = await s.vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md');
+    expect(note).toContain('[[Cert research]]');
+    expect(note).toContain('docs.example.com/oci');
+    const bad = await handle({ method: 'PATCH', path: 'tasks/tsk-grow', query: {}, body: { projectId: 'prj-nope' } }, deps);
+    expect(bad.status).toBe(404);
+  });
+});

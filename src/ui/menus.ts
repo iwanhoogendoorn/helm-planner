@@ -110,10 +110,7 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
     addLinkItems(sub, ctx, task);
   });
-  menu.addItem((i) => i.setTitle('Move to project…').setIcon('folder-input').onClick(() => pickProject(ctx, (p, phaseId) => void ctx.run('Move', async () => {
-    await ctx.mutations.carryAttachmentsToProject(task.key, p.id); // notes, drawings and links travel with it
-    await ctx.mutations.moveToProject(task.key, p.id, phaseId);
-  }), { phases: true })));
+  menu.addItem((i) => i.setTitle('Move to project…').setIcon('folder-input').onClick(() => pickProject(ctx, (p, phaseId) => void ctx.run('Move', () => ctx.mutations.moveToProject(task.key, p.id, phaseId)), { phases: true })));
   menu.addItem((i) => i.setTitle('Link to a project…').setIcon('link').onClick(() => pickProject(ctx, (p) => void ctx.run('Link', () => ctx.mutations.linkTaskToProject(p.id, task.key)))));
   if (task.origin !== 'project' && task.origin !== 'daily-mirror') {
     menu.addItem((i) => i.setTitle('Make a project from this…').setIcon('folder-plus').onClick(() => openProjectForm(ctx, { title: plainLabel(task.text), fromTask: task, onCreated: (p) => ctx.navigate('projects', { projectId: p.id }) })));

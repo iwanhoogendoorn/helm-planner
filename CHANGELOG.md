@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- A task's notes, drawings and links now follow it into a project whichever
+  way it gets there — the task menu, the inbox row, the task editor, the
+  command, *Make a project from this…* or the API. The carrying happens inside
+  the move itself, so no route can forget it.
+- The API can move a task into a project: `PATCH /tasks/:id {"projectId":"…"}`
+  (with an optional `phaseId`).
+
 ## 1.17.1 — 2026-08-29
 
 - A project's links are reachable from its header too — a link button beside

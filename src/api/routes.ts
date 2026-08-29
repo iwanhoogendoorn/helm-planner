@@ -296,6 +296,12 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: ApiDeps)
     touched = true;
   }
 
+  if (str(body['projectId'])) {
+    const projectId = str(body['projectId'])!;
+    if (!d.index.project(projectId)) return missing(`No project ${projectId}`);
+    await d.mutations.moveToProject(findTask(ref, d)!.key, projectId, str(body['phaseId']));
+    touched = true;
+  }
   const patch: Record<string, unknown> = {};
   if (str(body['text'])) patch['text'] = str(body['text']);
   if (has(body, 'due')) patch['due'] = body['due'] === null ? undefined : day(body['due']);
