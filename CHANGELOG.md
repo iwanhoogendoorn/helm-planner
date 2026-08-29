@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A project's links are reachable from its header too — a link button beside
+  the notes and drawings ones, with the count on it, that opens, adds and
+  removes them. The Links section further down does the same.
+
 ## 1.17.0 — 2026-08-29
 
 - A project can point at tasks that live somewhere else — a daily note,

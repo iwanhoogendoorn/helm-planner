@@ -17,7 +17,7 @@ import { periodChoices, projectPeriodLabel } from './horizons';
 import { crumbBar } from '../crumbs';
 import { drawingsButton, drawingsSection, targetForProject } from '../drawings';
 import { notesButton, notesSection } from '../notes';
-import { linksSection } from '../links';
+import { linksSection, linksButton, type LinkHolder } from '../links';
 import { pickTask } from '../menus';
 
 export interface ProjectsState { projectId?: string; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
@@ -147,6 +147,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       button('Open note', { icon: 'file-text', onClick: () => void ctx.openFile(p.path) }),
       notesButton(ctx, targetForProject(p.id, p.title)),
       drawingsButton(ctx, targetForProject(p.id, p.title)),
+      linksButton(ctx, projectLinks(ctx, p)),
       button('', { icon: 'more-horizontal', title: 'More', onClick: (ev) => projectMenu(ctx, p, ev) }),
     ),
     h('div', { cls: 'helm-detail-meta' },
@@ -214,12 +215,17 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       : h('div', { cls: 'helm-attach-row' }, h('span', { cls: 'helm-hint', text: `${id} — no longer in the vault` }), h('span', { cls: 'helm-spacer' }), iconButton('unlink', 'Take it off the list', () => void ctx.run('Unlink', () => ctx.mutations.unlinkTaskFromProject(p.id, id))))),
     related.length === 0 ? h('div', { cls: 'helm-hint', text: 'Tasks listed here live somewhere else — a daily note, another project — and are not counted as this project’s work.' }) : null,
   ));
-  root.appendChild(section('Links', { count: p.links.length, store: state.collapsed, key: 'links', collapsed: p.links.length === 0 }, linksSection(ctx, {
+  root.appendChild(section('Links', { count: p.links.length, store: state.collapsed, key: 'links', collapsed: p.links.length === 0 }, linksSection(ctx, projectLinks(ctx, p))));
+  root.appendChild(section('Diagrams', { count: ctx.index.drawingsFor(drawTarget).length, store: state.collapsed, key: 'drawings', collapsed: ctx.index.drawingsFor(drawTarget).length === 0 }, drawingsSection(ctx, drawTarget)));
+}
+
+/** A project's links: the list in its note, and the ways to change it. */
+function projectLinks(ctx: UiContext, p: Project): LinkHolder {
+  return {
     list: () => p.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addProjectLink(p.id, url, label)),
     remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removeProjectLink(p.id, url)),
-  })));
-  root.appendChild(section('Diagrams', { count: ctx.index.drawingsFor(drawTarget).length, store: state.collapsed, key: 'drawings', collapsed: ctx.index.drawingsFor(drawTarget).length === 0 }, drawingsSection(ctx, drawTarget)));
+  };
 }
 
 function quickAdd(ctx: UiContext, placeholder: string, onSubmit: (text: string) => void, iconName = 'plus'): HTMLElement {

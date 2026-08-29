@@ -53,16 +53,46 @@ export function addLink(ctx: UiContext, task: Task): void {
   askLink(ctx, (r) => { if (r) void ctx.run('Add link', () => ctx.mutations.addLink(task.key, r.url, r.label)); });
 }
 
-export function addLinkItems(menu: Menu, ctx: UiContext, task: Task): void {
-  const links = linksIn(task.text);
+/** Whatever holds a set of links — a task's text, a project's note — behind one small interface. */
+export interface LinkHolder {
+  list: () => TaskLink[];
+  add: (url: string, label?: string) => void;
+  remove: (url: string) => void;
+}
+
+/** The links of anything, plus the ways to add and remove one. */
+export function addLinkItemsFor(menu: Menu, ctx: UiContext, holder: LinkHolder): void {
+  const links = holder.list();
   for (const l of links) menu.addItem((i) => i.setTitle(l.label).setIcon('external-link').onClick(() => openExternal(l.url)));
   if (links.length > 0) menu.addSeparator();
-  menu.addItem((i) => i.setTitle('Add link…').setIcon('link').onClick(() => addLink(ctx, task)));
+  menu.addItem((i) => i.setTitle('Add link…').setIcon('link').onClick(() => askLink(ctx, (r) => { if (r) holder.add(r.url, r.label); })));
   if (links.length > 0) menu.addItem((i) => {
     i.setTitle('Remove link').setIcon('unlink');
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
-    for (const l of links) sub.addItem((j) => j.setTitle(l.label).setIcon('x').onClick(() => void ctx.run('Remove link', () => ctx.mutations.removeLink(task.key, l.url))));
+    for (const l of links) sub.addItem((j) => j.setTitle(l.label).setIcon('x').onClick(() => holder.remove(l.url)));
   });
+}
+
+/** A button with the link count that opens that menu. */
+export function linksButton(ctx: UiContext, holder: LinkHolder, title = 'Links'): HTMLElement {
+  const n = holder.list().length;
+  const b = button('', { icon: 'link', title: n === 0 ? `${title}: none yet — add one` : `${n} link${n === 1 ? '' : 's'}`, onClick: (ev) => { const menu = new Menu(); addLinkItemsFor(menu, ctx, holder); menu.showAtMouseEvent(ev); } });
+  b.addClass('helm-links-btn');
+  if (n > 0) b.appendChild(h('span', { cls: 'helm-badge', text: String(n) }));
+  return b;
+}
+
+/** A task's own links: the same menu, over its text. */
+export function taskLinks(ctx: UiContext, task: Task): LinkHolder {
+  return {
+    list: () => linksIn(task.text),
+    add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addLink(task.key, url, label)),
+    remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removeLink(task.key, url)),
+  };
+}
+
+export function addLinkItems(menu: Menu, ctx: UiContext, task: Task): void {
+  addLinkItemsFor(menu, ctx, taskLinks(ctx, task));
 }
 
 export function linksMenu(ctx: UiContext, task: Task, ev: MouseEvent): void {

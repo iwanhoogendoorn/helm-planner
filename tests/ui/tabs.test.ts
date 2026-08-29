@@ -1269,6 +1269,26 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('has a links button in the project header that opens, adds and removes links', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.addProjectLink('prj-kitchen', 'https://example.com/quote', 'The quote');
+    const root = render((r) => renderProjects(ctx, r, { collapsed: new Map(), projectId: 'prj-kitchen' } as any));
+    const btn = root.querySelector<HTMLElement>('.helm-detail-title .helm-links-btn')!;
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toBe('1'); // the count sits on the button
+    click(btn);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['The quote', 'Add link…', 'Remove link']);
+    Menu.last!.items.find((i) => i.title === 'Remove link')!.sub!.items[0]!.click!();
+    await flush(); await flush();
+    expect(index.project('prj-kitchen')!.links).toEqual([]);
+    // With none left the button is still there, ready to add one.
+    const root2 = render((r) => renderProjects(ctx, r, { collapsed: new Map(), projectId: 'prj-kitchen' } as any));
+    const btn2 = root2.querySelector<HTMLElement>('.helm-detail-title .helm-links-btn')!;
+    expect(btn2.textContent).toBe('');
+    click(btn2);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
+  });
+
   it('points a project at a task without moving it, and unlinks it again', async () => {
     const { ctx, m, index, vault } = await ctxFor();
     await m.addTask({ text: 'Chase the survey', date: TODAY, part: 'morning' });

@@ -759,3 +759,4 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-link-problem { color: var(--color-red); }
 .helm-api-token input, input.helm-api-token { font-family: var(--font-monospace); }
 .helm-api-example { user-select: text; overflow-x: auto; padding: 8px 10px; border-radius: var(--radius-s); background: var(--background-secondary); font-size: var(--font-ui-smaller); }
+.helm-links-btn .helm-badge { position: static; min-width: 0; height: auto; padding: 0 0 0 4px; margin: 0; background: transparent; color: inherit; font-size: 11px; font-weight: 600; }
