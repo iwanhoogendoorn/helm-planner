@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.16.0 — 2026-08-29
 
 - **Make a project from this…** in a task's menu: the project form opens with
   the task's name filled in, and creating it moves the task and its subtasks
