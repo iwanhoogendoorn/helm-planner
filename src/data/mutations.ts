@@ -882,7 +882,7 @@ export class Mutations {
     await this.editFile(p.path, (lines, doc) => {
       const has = (k: string): boolean => Object.prototype.hasOwnProperty.call(doc.frontmatter.values, k);
       const pick = (cands: string[]): string => cands.find(has) ?? cands[0]!;
-      const updates: Record<string, string | null> = {};
+      const updates: Record<string, string | string[] | null | undefined> = {};
       if (fields.status) updates['status'] = fields.status;
       if (fields.priority) updates['priority'] = fields.priority;
       if (fields.area !== undefined) updates['area'] = fields.area;
@@ -891,8 +891,9 @@ export class Mutations {
       if (fields.start !== undefined) updates[pick(['start_date', 'start'])] = fields.start ?? '';
       if (fields.period !== undefined) updates[pick(['period', 'horizon', 'quarter', 'month', 'year'])] = fields.period ?? '';
       if (fields.goal !== undefined) updates[pick(['goal', 'goals'])] = fields.goal ?? '';
-      if (fields.pinned !== undefined) updates['pinned'] = fields.pinned ? 'true' : '';
-      if (fields.order !== undefined) updates['order'] = fields.order === null ? '' : String(fields.order);
+      // Unpinning and un-ordering take the key out again rather than leaving an empty one behind.
+      if (fields.pinned !== undefined) updates['pinned'] = fields.pinned ? 'true' : undefined;
+      if (fields.order !== undefined) updates['order'] = fields.order === null ? undefined : String(fields.order);
       return setFrontmatter(lines, updates);
     });
   }

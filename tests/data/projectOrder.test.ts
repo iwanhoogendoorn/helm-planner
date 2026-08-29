@@ -23,6 +23,7 @@ describe('pinning and ordering projects', () => {
 
     await m.setProjectPinned('prj-kitchen', false);
     expect(index.project('prj-kitchen')!.pinned).toBeUndefined();
+    expect(await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')).not.toMatch(/^pinned:/m); // the key goes, no empty leftover
     expect(listed(index)).toEqual(before);
   });
 

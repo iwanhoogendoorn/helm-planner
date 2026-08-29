@@ -8,7 +8,8 @@
   project note (`pinned: true`, `order: 3`), so they survive a reindex and read
   fine outside Helm. Ordering applies within a status group, which is how the
   list is built; projects you never ordered keep their usual place, after the
-  ones you did.
+  ones you did. Unpinning or clearing an order takes the key back out of the
+  note rather than leaving an empty one behind.
 
 ## 1.19.1 — 2026-08-29
 
