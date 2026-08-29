@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.15.0 — 2026-08-29
 
 - **A local API.** Settings → *Local API* switches on a small HTTP server on
   `127.0.0.1` so other tools on this machine — a script, a shortcut, an AI
