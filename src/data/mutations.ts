@@ -29,7 +29,8 @@ import { bundledTemplate, bundledDailyTemplate, type TemplateConfig } from '../c
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
 import { noteTitle, renderNewNote, listValues, type NoteRef } from '../core/noteRef';
 import type { DrawingTarget } from '../core/types';
-import { addLinkToText, removeLinkFromText } from '../core/links';
+import { addLinkToText, linksIn, removeLinkFromText } from '../core/links';
+import { plainLabel } from '../core/label';
 
 export interface MutationDeps {
   vault: VaultAdapter;
@@ -618,6 +619,60 @@ export class Mutations {
   }
 
   /** Move a task (with subtree) into a project phase. Keeps its plan date, adding a mirror. */
+  /**
+   * Everything a task had comes with it when it joins a project: its notes and drawings are attached to
+   * the project as well, and the addresses in its text are listed in the project note. The task itself
+   * keeps its own attachments — a note can belong to both.
+   */
+  async carryAttachmentsToProject(taskKey: string, projectId: string): Promise<{ notes: number; drawings: number; links: number }> {
+    const t = this.fresh(taskKey);
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    const from: DrawingTarget = { kind: 'task', key: t.key, ...(t.id ? { id: t.id } : {}), title: t.text };
+    const to: DrawingTarget = { kind: 'project', id: p.id, title: p.title };
+    const notes = this.index.notesFor(from);
+    const drawings = this.index.drawingsFor(from).filter((d) => d.kind === 'excalidraw');
+    for (const n of notes) await this.linkNote(to, n.path);
+    for (const d of drawings) await this.linkDrawing(to, d.path);
+    const links = linksIn(t.text);
+    if (links.length > 0) await this.addLinksToNote(p.path, links);
+    return { notes: notes.length, drawings: drawings.length, links: links.length };
+  }
+
+  /** List addresses under a `## Links` heading in a note, skipping any that are already there. */
+  private async addLinksToNote(path: string, links: { url: string; label: string }[]): Promise<void> {
+    await this.editFile(path, (lines, doc) => {
+      const fresh = links.filter((l) => !lines.some((x) => x.includes(l.url)));
+      if (fresh.length === 0) return false;
+      const rendered = fresh.map((l) => `- [${l.label}](${l.url})`);
+      const h = doc.headings.find((x) => /^links?$/i.test(x.text.trim()));
+      if (h) { lines.splice(sectionInsertPoint(doc, h), 0, ...rendered); return true; }
+      let e = lines.length;
+      while (e > 0 && lines[e - 1]!.trim() === '') e--;
+      lines.splice(e, lines.length - e, '', '## Links', '', ...rendered, '');
+      return true;
+    });
+  }
+
+  /**
+   * Promote a task to a project of its own: the project is created, the task (with its subtasks) moves
+   * in, and its notes, drawings and links come along. A task that was planned for a day stays on that
+   * day as a mirror, so nothing disappears from your plan.
+   */
+  async projectFromTask(key: string, spec: Omit<Parameters<Mutations['createProject']>[0], 'title'> & { title?: string }): Promise<{ project: Project; carried: { notes: number; drawings: number; links: number } }> {
+    const t = this.fresh(key);
+    const src = t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf) ? this.fresh(t.mirrorOf) : t;
+    if (src.origin === 'project') throw new Error('That task already lives in a project — move it instead.');
+    const title = (spec.title ?? plainLabel(src.text)).trim();
+    if (title === '') throw new Error('A project needs a name');
+    const id = await this.ensureId(src.key);
+    const project = await this.createProject({ ...spec, title });
+    const fresh = this.index.task(id) ?? this.fresh(src.key);
+    const carried = await this.carryAttachmentsToProject(fresh.key, project.id);
+    await this.moveToProject(this.index.task(id)?.key ?? fresh.key, project.id);
+    return { project, carried };
+  }
+
   async moveToProject(key: string, projectId: string, phaseId?: string): Promise<void> {
     let t = this.fresh(key);
     if (t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf)) t = this.fresh(t.mirrorOf);

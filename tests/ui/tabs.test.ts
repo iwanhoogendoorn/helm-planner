@@ -1269,6 +1269,29 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('offers Make a project from this…, prefilled with the task name', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    await m.addTask({ text: 'Build the cert lab #work', date: TODAY, part: 'morning' });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Build the cert lab'))!;
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    const item = Menu.last!.items.find((i) => i.title === 'Make a project from this…')!;
+    expect(item).toBeTruthy();
+    item.click!();
+    const form = Modal.last!;
+    expect(form.titleEl.textContent).toBe('New project');
+    const name = form.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;
+    expect(name.value).toBe('Build the cert lab'); // the tag is not part of the project name
+    click([...form.contentEl.querySelectorAll('button')].find((b) => b.textContent?.includes('Create project')));
+    await flush(); await flush(); await flush();
+    const project = index.allProjects().find((p) => p.title === 'Build the cert lab')!;
+    expect(project).toBeTruthy();
+    expect(await vault.read(project.path)).toContain('Build the cert lab');
+    // A task that already lives in a project is not offered it.
+    const inProject = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project')!;
+    taskMenu(ctx, inProject, new MouseEvent('contextmenu'));
+    expect(Menu.last!.items.some((i) => i.title === 'Make a project from this…')).toBe(false);
+  });
+
   it('offers Follow up… on a subtask but not on the task that has it', async () => {
     const { ctx, m, index } = await ctxFor();
     await m.addTask({ text: 'Ship the draft', date: TODAY, part: 'morning' });

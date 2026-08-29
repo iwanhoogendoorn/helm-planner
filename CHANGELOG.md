@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Make a project from this…** in a task's menu: the project form opens with
+  the task's name filled in, and creating it moves the task and its subtasks
+  into the new project while keeping it on the day it was planned for (as a
+  mirror), so nothing disappears from your plan.
+- Whichever way a task joins a project — the new command or *Move to
+  project…* — its notes and drawings are attached to the project as well, and
+  the addresses in its text are listed under *Links* in the project note. The
+  task keeps its own attachments; a note can belong to both. Running it twice
+  adds nothing twice.
+
 ## 1.15.0 — 2026-08-29
 
 - **A local API.** Settings → *Local API* switches on a small HTTP server on

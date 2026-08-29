@@ -8,6 +8,8 @@ import { addNoteItems } from './notes';
 import { addLinkItems } from './links';
 import { openFollowUp } from './modals/followUp';
 import { openSubtask } from './modals/subtask';
+import { openProjectForm } from './modals/projectForm';
+import { plainLabel } from '../core/label';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
@@ -106,7 +108,13 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
     addLinkItems(sub, ctx, task);
   });
-  menu.addItem((i) => i.setTitle('Move to project…').setIcon('folder-input').onClick(() => pickProject(ctx, (p, phaseId) => void ctx.run('Move', () => ctx.mutations.moveToProject(task.key, p.id, phaseId)), { phases: true })));
+  menu.addItem((i) => i.setTitle('Move to project…').setIcon('folder-input').onClick(() => pickProject(ctx, (p, phaseId) => void ctx.run('Move', async () => {
+    await ctx.mutations.carryAttachmentsToProject(task.key, p.id); // notes, drawings and links travel with it
+    await ctx.mutations.moveToProject(task.key, p.id, phaseId);
+  }), { phases: true })));
+  if (task.origin !== 'project' && task.origin !== 'daily-mirror') {
+    menu.addItem((i) => i.setTitle('Make a project from this…').setIcon('folder-plus').onClick(() => openProjectForm(ctx, { title: plainLabel(task.text), fromTask: task, onCreated: (p) => ctx.navigate('projects', { projectId: p.id }) })));
+  }
   menu.addSeparator();
   menu.addItem((i) => i.setTitle('Open in note').setIcon('file-text').onClick(() => void ctx.openFile(task.path, task.line)));
   if (task.origin === 'daily-mirror' && task.mirrorOf) {

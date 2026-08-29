@@ -1,6 +1,6 @@
 /** New project: name, umbrella, status, priority, area, dates, horizon, goal — and a click-driven phase/task builder. */
 import { Modal } from 'obsidian';
-import type { Project, ProjectPriority, ProjectStatus } from '../../core/types';
+import type { Project, ProjectPriority, ProjectStatus, Task } from '../../core/types';
 import { humanDate, isIsoDate, minutesToHuman } from '../../core/dates';
 import { PROJECT_PRIORITIES, PROJECT_STATUSES } from '../../core/project';
 import { parseCapture } from '../../core/nlp';
@@ -26,13 +26,13 @@ export function draftToLine(text: string, today: string, weekStartsOn: 1 | 7 = 1
   return serialiseTaskLine(line);
 }
 
-export function openProjectForm(ctx: UiContext, opts: { parentId?: string; period?: string; goalKey?: string; onCreated?: (p: Project) => void } = {}): void {
+export function openProjectForm(ctx: UiContext, opts: { parentId?: string; period?: string; goalKey?: string; title?: string; fromTask?: Task; onCreated?: (p: Project) => void } = {}): void {
   const today = ctx.today();
   const m = new Modal(ctx.app);
   m.titleEl.setText('New project');
   const root = m.contentEl;
   root.addClass('helm-modal', 'helm-project-form');
-  const title = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: 'Project name' } });
+  const title = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: 'Project name', value: opts.title ?? '' } });
   const parent = h('select');
   parent.appendChild(h('option', { text: '— none (top level) —', attr: { value: '' } }));
   const projects = ctx.index.allProjects().filter((p) => !['done', 'cancelled', 'archived'].includes(p.status)).sort((a, b) => a.title.localeCompare(b.title));
@@ -130,16 +130,24 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; perio
     if (phases.some((p) => p.title.trim() === '')) { ctx.notify('Every phase needs a name.'); return; }
     const wk = ctx.settings().weekStartsOn;
     m.close();
-    await ctx.run('Create project', async () => {
-      const p = await ctx.mutations.createProject({
-        title: name, status: status.value as ProjectStatus, priority: priority.value as ProjectPriority,
+    const spec = () => ({
+      status: status.value as ProjectStatus, priority: priority.value as ProjectPriority,
         ...(area.value.trim() ? { area: area.value.trim() } : {}), ...(parent.value ? { parentId: parent.value } : {}),
         ...(isIsoDate(start.value) ? { start: start.value } : {}), ...(isIsoDate(due.value) ? { due: due.value } : {}),
         ...(objective.value.trim() ? { objective: objective.value.trim() } : {}),
         ...(period.value ? { period: period.value } : {}), ...(goal.value ? { goal: ctx.index.goal(goal.value)?.id ?? goal.value } : {}),
         phases: phases.map((ph) => ({ title: ph.title.trim(), ...(isIsoDate(ph.due) ? { due: ph.due } : {}), tasks: ph.tasks.map((t) => draftToLine(t.text, today, wk)) })),
         tasks: loose.map((t) => draftToLine(t.text, today, wk)),
-      });
+    });
+    await ctx.run(opts.fromTask ? 'Make a project from this task' : 'Create project', async () => {
+      if (opts.fromTask) {
+        const r = await ctx.mutations.projectFromTask(opts.fromTask.key, { ...spec(), title: name });
+        const bits = [r.carried.notes && `${r.carried.notes} note(s)`, r.carried.drawings && `${r.carried.drawings} drawing(s)`, r.carried.links && `${r.carried.links} link(s)`].filter(Boolean);
+        ctx.notify(`“${r.project.title}” created — the task moved in${bits.length ? `, with ${bits.join(', ')}` : ''}.`);
+        opts.onCreated?.(r.project);
+        return;
+      }
+      const p = await ctx.mutations.createProject({ title: name, ...spec() });
       ctx.notify(`Created “${p.title}”.`);
       opts.onCreated?.(p);
     });
