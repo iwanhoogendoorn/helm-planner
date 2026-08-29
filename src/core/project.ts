@@ -5,6 +5,7 @@
  * Phase status is derived from its tasks. A phase heading may carry a target
  * date: `## Phase: Outline 📅 2026-09-15`.
  */
+import { linksIn } from './links';
 import type { Diagnostic, Phase, Project, ProjectPriority, ProjectStatus } from './types';
 import { parseDocument, type DocHeading, type Document } from './document';
 import { list, scalar } from './frontmatter';
@@ -56,6 +57,14 @@ export function isProjectNote(doc: Document): boolean {
   return t !== undefined && /^project(\s*note)?$/i.test(t);
 }
 
+/** The body under a `## Links` heading, where a project keeps its addresses. */
+function linkSection(doc: Document): string {
+  const h = doc.headings.find((x) => /^links?$/i.test(x.text.trim()));
+  if (!h) return '';
+  const next = doc.headings.find((x) => x.line > h.line && x.level <= h.level);
+  return doc.lines.slice(h.line + 1, next ? next.line : doc.lines.length).join('\n');
+}
+
 export function parseProject(path: string, content: string, opts: { fallbackId?: string; mtime?: number } = {}): ParsedProject {
   const doc = parseDocument(content);
   const diagnostics: Diagnostic[] = [];
@@ -81,6 +90,7 @@ export function parseProject(path: string, content: string, opts: { fallbackId?:
     priority,
     childIds: [],
     tags: list(fm['tags']).map((t) => t.replace(/^#/, '')).filter((t) => t !== 'project'),
+    links: linksIn(linkSection(doc)).map((l) => ({ url: l.url, label: l.label })),
     phases: [],
     looseTaskKeys: [],
     frontmatterEndLine: doc.frontmatter.endLine,

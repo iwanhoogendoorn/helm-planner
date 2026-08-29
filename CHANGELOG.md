@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A project keeps its own **Links** now, beside its Notes and Diagrams: add,
+  open and remove addresses from the project view, stored as a plain `## Links`
+  list in the project note. An address without its `https://` gets one.
+
 ## 1.16.0 — 2026-08-29
 
 - **Make a project from this…** in a task's menu: the project form opens with

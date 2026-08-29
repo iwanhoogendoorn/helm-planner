@@ -17,6 +17,7 @@ import { periodChoices, projectPeriodLabel } from './horizons';
 import { crumbBar } from '../crumbs';
 import { drawingsButton, drawingsSection, targetForProject } from '../drawings';
 import { notesButton, notesSection } from '../notes';
+import { linksSection } from '../links';
 
 export interface ProjectsState { projectId?: string; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
 
@@ -201,6 +202,11 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   root.appendChild(h('div', { cls: 'helm-detail-log' }, log));
   const drawTarget = targetForProject(p.id, p.title);
   root.appendChild(section('Notes', { count: ctx.index.notesFor(drawTarget).length, store: state.collapsed, key: 'notes', collapsed: ctx.index.notesFor(drawTarget).length === 0 }, notesSection(ctx, drawTarget)));
+  root.appendChild(section('Links', { count: p.links.length, store: state.collapsed, key: 'links', collapsed: p.links.length === 0 }, linksSection(ctx, {
+    list: () => p.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),
+    add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addProjectLink(p.id, url, label)),
+    remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removeProjectLink(p.id, url)),
+  })));
   root.appendChild(section('Diagrams', { count: ctx.index.drawingsFor(drawTarget).length, store: state.collapsed, key: 'drawings', collapsed: ctx.index.drawingsFor(drawTarget).length === 0 }, drawingsSection(ctx, drawTarget)));
 }
 

@@ -74,3 +74,23 @@ describe('promoting a task to a project of its own', () => {
     await expect(m.projectFromTask(inProject.key, { status: 'active', priority: 'normal' })).rejects.toThrow(/already lives in a project/i);
   });
 });
+
+describe('links on a project', () => {
+  it('adds, reads back and removes addresses in the project note', async () => {
+    const { m, vault, index } = await setup();
+    expect(index.project('prj-kitchen')!.links).toEqual([]);
+    await m.addProjectLink('prj-kitchen', 'https://example.com/quote', 'The quote');
+    await m.addProjectLink('prj-kitchen', 'plumbers.example.com/rates');
+    const p = index.project('prj-kitchen')!;
+    expect(p.links).toEqual([
+      { url: 'https://example.com/quote', label: 'The quote' },
+      { url: 'https://plumbers.example.com/rates', label: 'plumbers.example.com/rates' }, // the scheme is filled in
+    ]);
+    expect(await vault.read(p.path)).toMatch(/## Links\n\n- \[The quote\]\(https:\/\/example\.com\/quote\)/);
+    await expect(m.addProjectLink('prj-kitchen', 'just some words')).rejects.toThrow(/not a web address/i);
+    await m.removeProjectLink('prj-kitchen', 'https://example.com/quote');
+    expect(index.project('prj-kitchen')!.links.map((l) => l.url)).toEqual(['https://plumbers.example.com/rates']);
+    // Only the Links list counts — an address written in the body is left alone.
+    expect(index.project('prj-book')!.links).toEqual([]);
+  });
+});

@@ -29,7 +29,7 @@ import { bundledTemplate, bundledDailyTemplate, type TemplateConfig } from '../c
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
 import { noteTitle, renderNewNote, listValues, type NoteRef } from '../core/noteRef';
 import type { DrawingTarget } from '../core/types';
-import { addLinkToText, linksIn, removeLinkFromText } from '../core/links';
+import { addLinkToText, linkLabel, linksIn, normaliseLink, removeLinkFromText } from '../core/links';
 import { plainLabel } from '../core/label';
 
 export interface MutationDeps {
@@ -639,6 +639,26 @@ export class Mutations {
     return { notes: notes.length, drawings: drawings.length, links: links.length };
   }
 
+  /** Put an address in a project's `## Links` list. */
+  async addProjectLink(projectId: string, url: string, label?: string): Promise<void> {
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    const r = normaliseLink(url, label ?? ''); // an address without its https:// is still an address
+    if (!r) throw new Error(`Not a web address: ${url}`);
+    await this.addLinksToNote(p.path, [{ url: r.url, label: r.label ?? linkLabel(r.url) }]);
+  }
+
+  async removeProjectLink(projectId: string, url: string): Promise<void> {
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    await this.editFile(p.path, (lines) => {
+      const at = lines.findIndex((l) => /^\s*-\s/.test(l) && l.includes(url));
+      if (at === -1) return false;
+      lines.splice(at, 1);
+      return true;
+    });
+  }
+
   /** List addresses under a `## Links` heading in a note, skipping any that are already there. */
   private async addLinksToNote(path: string, links: { url: string; label: string }[]): Promise<void> {
     await this.editFile(path, (lines, doc) => {
@@ -971,6 +991,9 @@ export class Mutations {
 
   /** Add a `[label](url)` to the task text (a bare copy of the URL is upgraded in place). */
   async addLink(key: string, url: string, label?: string): Promise<void> {
+    const r = normaliseLink(url, label ?? '');
+    if (!r) throw new Error(`Not a web address: ${url}`);
+    url = r.url; label = r.label;
     const t = this.fresh(key);
     const src = t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf) ? this.fresh(t.mirrorOf) : t;
     await this.updateTask(src.key, { text: addLinkToText(src.text, url, label) });

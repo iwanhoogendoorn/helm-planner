@@ -132,6 +132,8 @@ export interface Project {
   /** True when the note is `<Folder>/<Folder>.md` — only those can be umbrellas. */
   folderNote: boolean;
   tags: string[];
+  /** Addresses listed under `## Links` in the project note. */
+  links: { url: string; label: string }[];
   phases: Phase[];
   looseTaskKeys: string[];
   /** Line index of the `## Tasks` heading if present. */

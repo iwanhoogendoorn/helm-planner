@@ -164,7 +164,7 @@ describe('Projects tab', () => {
     const state = { projectId: 'prj-book', filter: '', showClosed: false, collapsed: new Map(), showDone: false };
     const root = render((r) => renderProjects(ctx, r, state));
     expect(root.querySelector('h2')!.textContent).toBe('Oracle Book Writing');
-    expect(texts(root, '.helm-section-title')).toEqual(['Outline', 'Writing', 'Other tasks', 'Notes', 'Diagrams']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Outline', 'Writing', 'Other tasks', 'Notes', 'Links', 'Diagrams']);
     expect(texts(root, '.helm-section:nth-of-type(1) .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams', 'Review with editor']);
     const input = root.querySelector<HTMLInputElement>('.helm-section:nth-of-type(2) .helm-quickadd-input')!;
     input.value = 'Chapter 3 tomorrow !high';
