@@ -7,7 +7,7 @@ import { compareProjects, isOpen, projectHealth, type ProjectHealth } from '../.
 import { parseCapture } from '../../core/nlp';
 import { button, chip, empty, h, icon, iconButton, progressBar, richText, section } from '../dom';
 import type { UiContext } from '../context';
-import { wikilinkSuggest } from '../fields';
+import { askText, wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
 import { openProjectForm } from '../modals/projectForm';
 import { openCapture } from '../modals/capture';
@@ -249,16 +249,20 @@ function addQuick(ctx: UiContext, text: string, projectId: string, phaseId?: str
   }));
 }
 
+const PHASE_HINT = 'Add 📅 2026-09-30 at the end to give the phase a target date.';
+
 function addPhasePrompt(ctx: UiContext, p: Project): void {
-  const title = window.prompt('Phase name (optionally followed by 📅 YYYY-MM-DD):');
-  if (!title) return;
-  const m = /^(.*?)(?:\s*📅\s*(\d{4}-\d{2}-\d{2}))?\s*$/.exec(title.trim())!;
-  void ctx.run('Add phase', () => ctx.mutations.addPhase(p.id, m[1]!.trim(), m[2]));
+  askText(ctx, { title: `New phase in ${p.title}`, label: 'Phase name', placeholder: 'e.g. Research', hint: PHASE_HINT, cta: 'Add phase', onDone: (v) => {
+    if (!v) return;
+    const m = /^(.*?)(?:\s*📅\s*(\d{4}-\d{2}-\d{2}))?\s*$/.exec(v.trim())!;
+    void ctx.run('Add phase', () => ctx.mutations.addPhase(p.id, m[1]!.trim(), m[2]));
+  } });
 }
 
 function renamePhasePrompt(ctx: UiContext, p: Project, phaseId: string, title: string, due?: IsoDate): void {
-  const v = window.prompt('Phase name (optionally followed by 📅 YYYY-MM-DD; leave the date out to clear it):', `${title}${due ? ` 📅 ${due}` : ''}`);
-  if (!v) return;
-  const m = /^(.*?)(?:\s*📅\s*(\d{4}-\d{2}-\d{2}))?\s*$/.exec(v.trim())!;
-  void ctx.run('Rename phase', () => ctx.mutations.renamePhase(p.id, phaseId, m[1]!.trim(), m[2] ?? null));
+  askText(ctx, { title: 'Rename phase', label: 'Phase name', value: `${title}${due ? ` 📅 ${due}` : ''}`, hint: `${PHASE_HINT} Leave the date out to clear it.`, onDone: (v) => {
+    if (!v) return;
+    const m = /^(.*?)(?:\s*📅\s*(\d{4}-\d{2}-\d{2}))?\s*$/.exec(v.trim())!;
+    void ctx.run('Rename phase', () => ctx.mutations.renamePhase(p.id, phaseId, m[1]!.trim(), m[2] ?? null));
+  } });
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- *Add phase* and *Rename phase* work again. They asked with `window.prompt`,
+  which Electron refuses outright, so the button appeared to do nothing at
+  all. Both now open a proper little dialog — with a hint that `📅 2026-09-30`
+  at the end sets the phase's target date.
+
 ## 1.19.0 — 2026-08-29
 
 - Wikilinks in a project's next action are links again, not raw `[[brackets]]`

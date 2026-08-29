@@ -1289,6 +1289,27 @@ describe('dragging a task between parts of the day', () => {
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
   });
 
+  it('adds and renames a phase through a dialog (Electron refuses window.prompt)', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    const view = () => render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    click([...view().querySelectorAll('button')].find((b) => b.textContent === 'Add phase'));
+    const dlg = Modal.last!;
+    expect(dlg.titleEl.textContent).toBe('New phase in Kitchen Remodel');
+    const input = dlg.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;
+    input.value = 'Demolition 📅 2026-09-30';
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add phase'));
+    await flush(); await flush();
+    const phase = index.project('prj-kitchen')!.phases.find((x) => x.title === 'Demolition')!;
+    expect(phase).toBeTruthy();
+    expect(phase.due).toBe('2026-09-30');
+    expect(await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')).toContain('Demolition');
+    // Cancelling changes nothing.
+    click([...view().querySelectorAll('button')].find((b) => b.textContent === 'Add phase'));
+    click([...Modal.last!.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Cancel'));
+    await flush();
+    expect(index.project('prj-kitchen')!.phases).toHaveLength(1);
+  });
+
   it('renders wikilinks in a project’s next action as links, not raw brackets', async () => {
     const { ctx, m, index, nav } = await ctxFor();
     const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId === 'prj-kitchen' && x.status === 'todo')!;

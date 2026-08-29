@@ -1,6 +1,6 @@
 /** Shared form fields: an effort dropdown and start/end/effort linking. */
 import { minutesToHuman, parseEffort } from '../core/dates';
-import { h } from './dom';
+import { button, h } from './dom';
 import { AbstractInputSuggest, Modal, TFolder, type App } from 'obsidian';
 
 export const EFFORT_PRESETS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480];
@@ -192,4 +192,27 @@ export function conflictWarning(el: HTMLElement, text: string | undefined, sugge
   if (!text) return;
   el.append(h('span', { cls: 'helm-conflict-icon', text: '⚠' }), h('span', { text: ` Overlaps ${text}` }));
   if (suggest) el.append(h('button', { cls: 'helm-btn helm-conflict-fix', text: `Move to ${suggest.time}`, title: 'The first free slot that fits', onClick: (ev) => { ev.preventDefault(); suggest.onPick(); } }));
+}
+
+/**
+ * Ask for one line of text. Obsidian runs in Electron, where `window.prompt` is disabled and silently
+ * returns null — so anything that needs a word from the user asks with this instead.
+ */
+export function askText(ctx: { app: App; trackModal: (m: { close: () => void; onClose?: () => void }) => void }, o: { title: string; label: string; value?: string; placeholder?: string; hint?: string; cta?: string; onDone: (value: string | undefined) => void }): void {
+  const m = new Modal(ctx.app);
+  m.titleEl.setText(o.title);
+  m.contentEl.addClass('helm-modal', 'helm-ask-modal');
+  const input = h('input', { cls: 'helm-input-wide', attr: { type: 'text', value: o.value ?? '', placeholder: o.placeholder ?? '' } });
+  let accepted = false;
+  const accept = (): void => { const v = input.value.trim(); if (v === '') { input.focus(); return; } accepted = true; m.close(); o.onDone(v); };
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); accept(); } });
+  m.contentEl.append(
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: o.label }), input, o.hint ? h('div', { cls: 'helm-hint', text: o.hint }) : null),
+    h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button(o.cta ?? 'Save', { primary: true, onClick: accept })),
+  );
+  const origClose = m.onClose.bind(m);
+  m.onClose = () => { origClose(); if (!accepted) o.onDone(undefined); };
+  m.open();
+  ctx.trackModal(m);
+  setTimeout(() => { input.focus(); input.select(); }, 0);
 }
