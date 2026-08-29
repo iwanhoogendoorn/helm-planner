@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.18.0 — 2026-08-29
 
 - The three things a task can do with a project — *Move to project…*, *Make a
   project from this…*, *Link to a project…* — are offered in the same words,
@@ -12,7 +12,7 @@
   now **Move a task in…**, which takes an existing task from anywhere — with
   its notes, drawings and links — and makes it this project's work.
 
-## Unreleased
+## 1.18.0 — 2026-08-29
 
 - A task's notes, drawings and links now follow it into a project whichever
   way it gets there — the task menu, the inbox row, the task editor, the
