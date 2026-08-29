@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Projects can be **pinned** and **put in your own order**. Pin one from its
+  menu and it sits at the top of the list, marked; drag a card onto another to
+  move it, or use *Move up* / *Move down* in the menu. Both are kept in the
+  project note (`pinned: true`, `order: 3`), so they survive a reindex and read
+  fine outside Helm. Ordering applies within a status group, which is how the
+  list is built; projects you never ordered keep their usual place, after the
+  ones you did.
+
 ## 1.19.1 — 2026-08-29
 
 - *Add phase* and *Rename phase* work again. They asked with `window.prompt`,

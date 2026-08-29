@@ -94,6 +94,8 @@ export function parseProject(path: string, content: string, opts: { fallbackId?:
     childIds: [],
     tags: list(fm['tags']).map((t) => t.replace(/^#/, '')).filter((t) => t !== 'project'),
     links: linksIn(linkSection(doc)).map((l) => ({ url: l.url, label: l.label })),
+    ...(/^(true|yes|1)$/i.test(scalar(fm['pinned']) ?? '') ? { pinned: true } : {}),
+    ...(Number.isFinite(Number(scalar(fm['order']))) && scalar(fm['order']) !== undefined ? { order: Number(scalar(fm['order'])) } : {}),
     relatedTaskIds: [...new Set([...section(doc, /^related( tasks?)?$/i).matchAll(/\btsk-[\w-]+/g)].map((m) => m[0]))],
     phases: [],
     looseTaskKeys: [],

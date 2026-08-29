@@ -136,6 +136,10 @@ export interface Project {
   links: { url: string; label: string }[];
   /** Ids of tasks listed under `## Related tasks`: referenced, not owned — they do not count as the project's work. */
   relatedTaskIds: string[];
+  /** Kept at the top of the list. */
+  pinned?: boolean;
+  /** Where you dragged it: lower comes first. Projects without one keep the usual order, after those with one. */
+  order?: number;
   phases: Phase[];
   looseTaskKeys: string[];
   /** Line index of the `## Tasks` heading if present. */

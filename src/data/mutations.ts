@@ -876,7 +876,7 @@ export class Mutations {
     await this.index.rebuild();
   }
 
-  async setProjectFields(id: string, fields: { status?: ProjectStatus; priority?: ProjectPriority; area?: string; due?: IsoDate | null; start?: IsoDate | null; title?: string; period?: string | null; goal?: string | null }): Promise<void> {
+  async setProjectFields(id: string, fields: { status?: ProjectStatus; priority?: ProjectPriority; area?: string; due?: IsoDate | null; start?: IsoDate | null; title?: string; pinned?: boolean | null; order?: number | null; period?: string | null; goal?: string | null }): Promise<void> {
     const p = this.index.project(id);
     if (!p) throw new Error('Project not found');
     await this.editFile(p.path, (lines, doc) => {
@@ -891,8 +891,41 @@ export class Mutations {
       if (fields.start !== undefined) updates[pick(['start_date', 'start'])] = fields.start ?? '';
       if (fields.period !== undefined) updates[pick(['period', 'horizon', 'quarter', 'month', 'year'])] = fields.period ?? '';
       if (fields.goal !== undefined) updates[pick(['goal', 'goals'])] = fields.goal ?? '';
+      if (fields.pinned !== undefined) updates['pinned'] = fields.pinned ? 'true' : '';
+      if (fields.order !== undefined) updates['order'] = fields.order === null ? '' : String(fields.order);
       return setFrontmatter(lines, updates);
     });
+  }
+
+  /** Pin a project to the top of the list, or let it settle back into place. */
+  async setProjectPinned(id: string, pinned: boolean): Promise<void> {
+    await this.setProjectFields(id, { pinned: pinned ? true : null });
+  }
+
+  /**
+   * Put a project where you dragged it: everything in `orderedIds` is numbered from 1, so the list
+   * keeps that order until you move something again.
+   */
+  async setProjectOrder(orderedIds: string[]): Promise<void> {
+    let n = 0;
+    for (const id of orderedIds) {
+      n += 1;
+      const p = this.index.project(id);
+      if (!p) continue;
+      if (p.order === n) continue;
+      await this.setProjectFields(id, { order: n });
+    }
+  }
+
+  /** Move one project up or down among the ones it is listed with. */
+  async moveProjectBy(id: string, delta: number, siblingIds: string[]): Promise<void> {
+    const at = siblingIds.indexOf(id);
+    if (at === -1) return;
+    const to = Math.min(siblingIds.length - 1, Math.max(0, at + delta));
+    if (to === at) return;
+    const next = [...siblingIds];
+    next.splice(to, 0, ...next.splice(at, 1));
+    await this.setProjectOrder(next);
   }
 
   async addPhase(projectId: string, title: string, due?: IsoDate): Promise<void> {

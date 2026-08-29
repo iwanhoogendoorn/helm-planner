@@ -59,8 +59,10 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     const roots = visible.filter((hh) => hh.project.status === st && (!hh.project.parentId || !byId.has(hh.project.parentId) || byId.get(hh.project.parentId)!.project.status !== st));
     if (roots.length === 0) continue;
     const rows: HTMLElement[] = [];
+    // Reordering happens among the top-level projects of a group; a sub-project sits with its parent.
+    const siblings = roots.map((r) => r.project.id);
     const walk = (hh: ProjectHealth, depth: number): void => {
-      rows.push(projectCard(ctx, hh, depth, today));
+      rows.push(projectCard(ctx, hh, depth, today, depth === 0 ? siblings : []));
       for (const cid of hh.project.childIds) { const c = byId.get(cid); if (c && c.project.status === st) walk(c, depth + 1); }
     };
     for (const r of roots) walk(r, 0);
@@ -68,12 +70,32 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
   }
 }
 
-function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: IsoDate): HTMLElement {
+/** Drag a project onto another to put it there; the whole group is renumbered so the order sticks. */
+function makeProjectDraggable(ctx: UiContext, card: HTMLElement, id: string, siblings: string[]): void {
+  card.setAttribute('draggable', 'true');
+  card.addEventListener('dragstart', (ev) => { ev.dataTransfer?.setData('text/helm-project', id); if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'; card.addClass('is-dragging'); ev.stopPropagation(); });
+  card.addEventListener('dragend', () => card.removeClass('is-dragging'));
+  card.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-project')) { ev.preventDefault(); card.addClass('is-dropping'); } });
+  card.addEventListener('dragleave', () => card.removeClass('is-dropping'));
+  card.addEventListener('drop', (ev) => {
+    ev.preventDefault(); ev.stopPropagation();
+    card.removeClass('is-dropping');
+    const moved = ev.dataTransfer?.getData('text/helm-project');
+    if (!moved || moved === id) return;
+    const next = siblings.filter((x) => x !== moved);
+    next.splice(Math.max(0, next.indexOf(id)), 0, moved);
+    void ctx.run('Reorder', () => ctx.mutations.setProjectOrder(next));
+  });
+}
+
+function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: IsoDate, siblings: string[] = []): HTMLElement {
   const p = hh.project;
-  const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, hh.flags.length > 0 && 'has-flags'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } });
+  const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, p.pinned && 'is-pinned', hh.flags.length > 0 && 'has-flags'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev, { siblings }); } });
+  if (siblings.length > 1) makeProjectDraggable(ctx, card, p.id, siblings);
   card.append(
     h('div', { cls: 'helm-project-head' },
       icon(p.childIds.length > 0 ? 'folder-tree' : 'folder'),
+      p.pinned ? icon('pin', 'helm-project-pin') : null,
       h('span', { cls: 'helm-project-title', text: p.title }),
       p.priority !== 'normal' ? chip(p.priority, `prio prio-${p.priority}`) : null,
       p.area ? chip(p.area, 'area') : null,
@@ -93,12 +115,18 @@ function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: Is
   return card;
 }
 
-function projectMenu(ctx: UiContext, p: Project, ev: MouseEvent): void {
+function projectMenu(ctx: UiContext, p: Project, ev: MouseEvent, opts: { siblings?: string[] } = {}): void {
   const menu = new Menu();
   menu.addItem((i) => { i.setTitle('Status').setIcon('activity'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); for (const s of PROJECT_STATUSES) sub.addItem((j) => j.setTitle(STATUS_LABEL[s]).setChecked(p.status === s).onClick(() => void ctx.run('Status', () => ctx.mutations.setProjectFields(p.id, { status: s })))); });
   menu.addItem((i) => { i.setTitle('Priority').setIcon('flag'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); for (const s of PROJECT_PRIORITIES) sub.addItem((j) => j.setTitle(s).setChecked(p.priority === s).onClick(() => void ctx.run('Priority', () => ctx.mutations.setProjectFields(p.id, { priority: s })))); });
   menu.addItem((i) => i.setTitle('Set due date…').setIcon('calendar').onClick(() => openDatePicker(ctx, { title: `Due date for ${p.title}`, initial: p.due, allowClear: true }, (d) => void ctx.run('Due', () => ctx.mutations.setProjectFields(p.id, { due: d ?? null })))));
   menu.addSeparator();
+  menu.addItem((i) => i.setTitle(p.pinned ? 'Unpin' : 'Pin to the top').setIcon('pin').onClick(() => void ctx.run('Pin', () => ctx.mutations.setProjectPinned(p.id, !p.pinned))));
+  if (opts.siblings && opts.siblings.length > 1) {
+    const at = opts.siblings.indexOf(p.id);
+    if (at > 0) menu.addItem((i) => i.setTitle('Move up').setIcon('arrow-up').onClick(() => void ctx.run('Reorder', () => ctx.mutations.moveProjectBy(p.id, -1, opts.siblings!))));
+    if (at < opts.siblings.length - 1) menu.addItem((i) => i.setTitle('Move down').setIcon('arrow-down').onClick(() => void ctx.run('Reorder', () => ctx.mutations.moveProjectBy(p.id, 1, opts.siblings!))));
+  }
   menu.addItem((i) => i.setTitle('New sub-project…').setIcon('folder-plus').onClick(() => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) })));
   menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => void ctx.openFile(p.path)));
   menu.addSeparator();

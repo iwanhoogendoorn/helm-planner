@@ -270,8 +270,14 @@ export function projectHealth(snap: Snapshot, p: Project, today: IsoDate, settin
 export const PROJECT_STATUS_ORDER: ProjectStatus[] = ['active', 'planned', 'on-hold', 'idea', 'done', 'cancelled', 'archived'];
 
 export function compareProjects(a: ProjectHealth, b: ProjectHealth): number {
+  // Pinned projects come first, then the order you dragged them into, then Helm's own reckoning.
+  const pin = Number(b.project.pinned ?? false) - Number(a.project.pinned ?? false);
+  if (pin !== 0) return pin;
   const s = PROJECT_STATUS_ORDER.indexOf(a.project.status) - PROJECT_STATUS_ORDER.indexOf(b.project.status);
   if (s !== 0) return s;
+  const ao = a.project.order ?? Number.MAX_SAFE_INTEGER;
+  const bo = b.project.order ?? Number.MAX_SAFE_INTEGER;
+  if (ao !== bo) return ao - bo;
   const p = PROJECT_PRIORITY_RANK[a.project.priority] - PROJECT_PRIORITY_RANK[b.project.priority];
   if (p !== 0) return p;
   const ad = a.project.due ?? '9999';
