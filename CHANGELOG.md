@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- The three things a task can do with a project — *Move to project…*, *Make a
+  project from this…*, *Link to a project…* — are offered in the same words,
+  in the same order, everywhere: the task menu, the task editor's *Project…*
+  button, the inbox row, and three matching commands for the task under the
+  cursor. One piece of code serves them all, so notes, drawings and links
+  travel with the task whichever one you reach for.
+- The project side mirrors it: beside *Add task* and *Link a task…* there is
+  now **Move a task in…**, which takes an existing task from anywhere — with
+  its notes, drawings and links — and makes it this project's work.
+
+## Unreleased
+
 - A task's notes, drawings and links now follow it into a project whichever
   way it gets there — the task menu, the inbox row, the task editor, the
   command, *Make a project from this…* or the API. The carrying happens inside

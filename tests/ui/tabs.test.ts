@@ -1272,7 +1272,7 @@ describe('dragging a task between parts of the day', () => {
   it('has a links button in the project header that opens, adds and removes links', async () => {
     const { ctx, m, index } = await ctxFor();
     await m.addProjectLink('prj-kitchen', 'https://example.com/quote', 'The quote');
-    const root = render((r) => renderProjects(ctx, r, { collapsed: new Map(), projectId: 'prj-kitchen' } as any));
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
     const btn = root.querySelector<HTMLElement>('.helm-detail-title .helm-links-btn')!;
     expect(btn).toBeTruthy();
     expect(btn.textContent).toBe('1'); // the count sits on the button
@@ -1282,11 +1282,46 @@ describe('dragging a task between parts of the day', () => {
     await flush(); await flush();
     expect(index.project('prj-kitchen')!.links).toEqual([]);
     // With none left the button is still there, ready to add one.
-    const root2 = render((r) => renderProjects(ctx, r, { collapsed: new Map(), projectId: 'prj-kitchen' } as any));
+    const root2 = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
     const btn2 = root2.querySelector<HTMLElement>('.helm-detail-title .helm-links-btn')!;
     expect(btn2.textContent).toBe('');
     click(btn2);
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
+  });
+
+  it('offers the same three project operations wherever a task is', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.addTask({ text: 'Chase the survey', date: TODAY, part: 'morning' });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Chase the survey')!;
+    const three = ['Move to project…', 'Make a project from this…', 'Link to a project…'];
+
+    // The task menu.
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    expect(Menu.last!.items.map((i) => i.title).filter((x) => three.includes(x))).toEqual(three);
+
+    // The task editor's Project… button.
+    openTaskEditor(ctx, t);
+    const ed = Modal.last!;
+    click([...ed.contentEl.querySelectorAll('button')].find((b) => b.textContent?.includes('Project…')));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(three);
+
+    // The inbox row's Project… action.
+    const inboxTask = [...index.snapshot.tasks.values()].find((x) => x.origin === 'inbox')!;
+    const root = render((r) => renderInbox(ctx, r, { collapsed: new Map() }));
+    const row = [...root.querySelectorAll<HTMLElement>('.helm-task')].find((x) => x.textContent?.includes(inboxTask.text.slice(0, 12)))!;
+    click(row.querySelector('button[aria-label="Project…"]'));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(three);
+
+    // And the project side mirrors it: make one, bring one in, or point at one.
+    const proj = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    expect(texts(proj, 'button').filter((x) => ['Add task', 'Move a task in…', 'Link a task…'].includes(x))).toEqual(['Add task', 'Move a task in…', 'Link a task…']);
+    click([...proj.querySelectorAll('button')].find((b) => b.textContent === 'Move a task in…'));
+    const picker = Modal.last! as unknown as { getItems: () => { key: string; text: string; projectId?: string }[]; onChooseItem: (t: { key: string }) => void };
+    expect(picker.getItems().some((x) => x.projectId === 'prj-kitchen')).toBe(false); // the project's own work is not on offer
+    picker.onChooseItem(picker.getItems().find((x) => x.text === 'Chase the survey')!);
+    await flush(); await flush();
+    const moved = [...index.snapshot.tasks.values()].find((x) => x.text === 'Chase the survey' && x.origin === 'project')!;
+    expect(moved.projectId).toBe('prj-kitchen'); // moved in, not merely referenced
   });
 
   it('points a project at a task without moving it, and unlinks it again', async () => {
@@ -1302,7 +1337,7 @@ describe('dragging a task between parts of the day', () => {
     expect(p.relatedTaskIds).toHaveLength(1);
     expect(index.taskById(p.relatedTaskIds[0]!)!.origin).toBe('daily'); // it stayed on the day
 
-    const root = render((r) => renderProjects(ctx, r, { collapsed: new Map(), projectId: 'prj-kitchen' } as any));
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
     const sec = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === 'Related tasks')!;
     expect(texts(sec, '.helm-task-text')).toEqual(['Chase the survey']);
     click(sec.querySelector('button[aria-label="Stop pointing at this task"]'));

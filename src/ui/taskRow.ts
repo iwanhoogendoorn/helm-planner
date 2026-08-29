@@ -24,7 +24,7 @@ export interface RowOptions {
   compact?: boolean;
   /** Replaces the default schedule quick action. */
   quickAction?: { icon: string; title: string; onClick: (t: Task) => void };
-  extraActions?: { icon: string; title: string; onClick: (t: Task) => void }[];
+  extraActions?: { icon: string; title: string; onClick: (t: Task, ev: MouseEvent) => void }[];
   /** Highlight state. */
   reason?: string;
 }
@@ -122,7 +122,7 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (lk) actions.appendChild(lk);
   if (opts.quickAction) actions.appendChild(iconButton(opts.quickAction.icon, opts.quickAction.title, (ev) => { ev.stopPropagation(); opts.quickAction!.onClick(t); }));
   else if (open) actions.appendChild(iconButton('calendar', 'Schedule…', (ev) => { ev.stopPropagation(); taskMenu(ctx, t, ev); }));
-  for (const a of opts.extraActions ?? []) actions.appendChild(iconButton(a.icon, a.title, (ev) => { ev.stopPropagation(); a.onClick(t); }));
+  for (const a of opts.extraActions ?? []) actions.appendChild(iconButton(a.icon, a.title, (ev) => { ev.stopPropagation(); a.onClick(t, ev); }));
   actions.appendChild(iconButton('more-horizontal', 'More…', (ev) => { ev.stopPropagation(); taskMenu(ctx, t, ev); }));
   row.appendChild(actions);
 

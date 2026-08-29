@@ -14,6 +14,7 @@ import { openSearch } from './ui/modals/search';
 import { openPlanDay } from './ui/modals/planDay';
 import { openWrapUp } from './ui/modals/wrapUp';
 import { openProjectForm } from './ui/modals/projectForm';
+import { plainLabel } from './core/label';
 import { openHabitForm } from './ui/modals/habitForm';
 import { pickProject } from './ui/menus';
 import { runSelfTest } from './selftest';
@@ -446,6 +447,22 @@ export default class HelmPlugin extends Plugin {
         const t = this.taskAtCursor(view.file?.path, editor.getCursor().line);
         if (!t) return false;
         if (!checking) { const d = new Date(); d.setDate(d.getDate() + 1); void this.run('Schedule', () => this.mutations.schedule(t.key, todayLocal(d))); }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: 'task-under-cursor-new-project', name: 'Make a project from the task under the cursor…', editorCheckCallback: (checking, editor, view) => {
+        const t = this.taskAtCursor(view.file?.path, editor.getCursor().line);
+        if (!t || t.origin === 'project' || t.origin === 'daily-mirror') return false;
+        if (!checking) openProjectForm(ctx(), { title: plainLabel(t.text), fromTask: t, onCreated: (p) => ctx().navigate('projects', { projectId: p.id }) });
+        return true;
+      },
+    });
+    this.addCommand({
+      id: 'task-under-cursor-link-project', name: 'Point a project at the task under the cursor…', editorCheckCallback: (checking, editor, view) => {
+        const t = this.taskAtCursor(view.file?.path, editor.getCursor().line);
+        if (!t) return false;
+        if (!checking) pickProject(ctx(), (p) => void this.run('Link', () => this.mutations.linkTaskToProject(p.id, t.key)));
         return true;
       },
     });

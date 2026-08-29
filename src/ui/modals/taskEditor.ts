@@ -13,7 +13,7 @@ import { linkLabel, linksIn, textWithoutLinks } from '../../core/links';
 import { openFollowUp } from './followUp';
 import { conflictWarning } from '../fields';
 import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot } from '../../data/conflicts';
-import { STATUS_LABELS, pickProject } from '../menus';
+import { STATUS_LABELS, projectMenuForTask } from '../menus';
 import { DAY_PARTS, PART_LABEL, type DayPart } from '../../core/dailyNote';
 import { effortField, linkTimes , wikilinkSuggest } from '../fields';
 
@@ -87,7 +87,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Links' }), linksSection(ctx, { list: () => links, add: (url, label) => { links = [...links.filter((l) => l.url !== url), { url, label: label?.trim() || linkLabel(url), raw: `[${label?.trim() || linkLabel(url)}](${url})` }]; }, remove: (url) => { links = links.filter((l) => l.url !== url); } })),
     h('div', { cls: 'helm-modal-buttons' },
       button('Follow up…', { icon: 'corner-down-right', cls: 'helm-btn-quiet', title: 'Continue this task another day', onClick: () => { m.close(); openFollowUp(ctx, task); } }),
-      button('Move to project…', { icon: 'folder-input', onClick: () => pickProject(ctx, (p, phaseId) => { m.close(); void ctx.run('Move', () => ctx.mutations.moveToProject(src.key, p.id, phaseId)); }, { phases: true }) }),
+      button('Project…', { icon: 'folder-input', title: 'Move it in, make one from it, or point one at it', onClick: (ev) => projectMenuForTask(ctx, src, ev, { before: () => m.close() }) }),
       button('Open note', { icon: 'file-text', onClick: () => { m.close(); void ctx.openFile(src.path, src.line); } }),
       h('span', { cls: 'helm-spacer' }),
       button('Cancel', { onClick: () => m.close() }),

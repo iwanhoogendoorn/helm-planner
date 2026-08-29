@@ -172,6 +172,8 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
     h('span', { cls: 'helm-spacer' }),
     button('Add phase', { icon: 'milestone', onClick: () => addPhasePrompt(ctx, p) }),
     button('Add task', { icon: 'plus', onClick: () => openCapture(ctx, { projectId: p.id }) }),
+    // The mirror of the task side: bring an existing task in, with its notes, drawings and links.
+    button('Move a task in…', { icon: 'folder-input', cls: 'helm-btn-quiet', title: 'Take a task from somewhere else and make it this project’s work', onClick: () => pickTask(ctx, (t) => void ctx.run('Move', () => ctx.mutations.moveToProject(t.key, p.id)), { exclude: (t) => t.projectId === p.id }) }),
   );
   root.appendChild(toolbar);
 

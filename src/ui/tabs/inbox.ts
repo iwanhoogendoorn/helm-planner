@@ -8,7 +8,7 @@ import type { UiContext } from '../context';
 import { wikilinkSuggest } from '../fields';
 import { crumbBar } from '../crumbs';
 import { taskRow } from '../taskRow';
-import { pickProject } from '../menus';
+import { projectMenuForTask } from '../menus';
 import { minutesToHuman } from '../../core/dates';
 
 export interface InboxState { collapsed: Map<string, boolean> }
@@ -39,7 +39,7 @@ export function renderInbox(ctx: UiContext, root: HTMLElement, state: InboxState
     quickAction: { icon: 'sun', title: 'Plan for today', onClick: (x) => void ctx.run('Schedule', () => ctx.mutations.schedule(x.key, today)) },
     extraActions: [
       { icon: 'sunrise', title: 'Plan for tomorrow', onClick: (x) => void ctx.run('Schedule', () => ctx.mutations.schedule(x.key, addDays(today, 1))) },
-      { icon: 'folder-input', title: 'Move to project…', onClick: (x) => pickProject(ctx, (p, ph) => void ctx.run('Move', () => ctx.mutations.moveToProject(x.key, p.id, ph)), { phases: true }) },
+      { icon: 'folder-input', title: 'Project…', onClick: (x, ev) => projectMenuForTask(ctx, x, ev) },
     ],
     ...(t.origin === 'note' ? {} : {}),
   });
