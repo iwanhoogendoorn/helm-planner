@@ -232,7 +232,7 @@ function projectsSection(ctx: UiContext, hp: HorizonPeriod, today: IsoDate, stat
     ...hp.projectsWithin.map((hh) => h('div', { cls: 'helm-project', onClick: () => ctx.navigate('projects', { projectId: hh.project.id }) },
       h('div', { cls: 'helm-project-head' }, icon('folder'), h('span', { cls: 'helm-project-title', text: hh.project.title }), chip(hh.project.status, 'area'), hh.project.period && hh.project.period !== p.key ? chip(hh.project.period, 'scheduled') : null, h('span', { cls: 'helm-spacer' }), hh.project.due ? chip(`due ${humanDate(hh.project.due, today)}`, 'due') : null, h('span', { cls: 'helm-project-count', text: `${hh.done}/${hh.total}` })),
       progressBar(hh.progress, 'is-thin'),
-      h('div', { cls: 'helm-project-foot' }, hh.nextAction ? h('span', { cls: 'helm-project-next' }, icon('arrow-right'), h('span', { text: hh.nextAction.text })) : null, h('span', { cls: 'helm-spacer' }), ...hh.flags.map((f) => chip(f.replace(/-/g, ' '), `flag flag-${f}`))),
+      h('div', { cls: 'helm-project-foot' }, hh.nextAction ? h('span', { cls: 'helm-project-next' }, icon('arrow-right'), h('span', { cls: 'helm-task-text' }, richText(hh.nextAction.text, (t) => ctx.openLink(t, hh.nextAction!.path)))) : null, h('span', { cls: 'helm-spacer' }), ...hh.flags.map((f) => chip(f.replace(/-/g, ' '), `flag flag-${f}`))),
     )),
   );
 }

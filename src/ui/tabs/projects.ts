@@ -5,7 +5,7 @@ import { humanDate, relativeDays } from '../../core/dates';
 import { PROJECT_PRIORITIES, PROJECT_STATUSES } from '../../core/project';
 import { compareProjects, isOpen, projectHealth, type ProjectHealth } from '../../data/planner';
 import { parseCapture } from '../../core/nlp';
-import { button, chip, empty, h, icon, iconButton, progressBar, section } from '../dom';
+import { button, chip, empty, h, icon, iconButton, progressBar, richText, section } from '../dom';
 import type { UiContext } from '../context';
 import { wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
@@ -84,7 +84,7 @@ function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: Is
     ),
     progressBar(hh.progress, 'is-thin'),
     h('div', { cls: 'helm-project-foot' },
-      hh.nextAction ? h('span', { cls: 'helm-project-next' }, icon('arrow-right'), h('span', { text: hh.nextAction.text })) : h('span', { cls: 'helm-hint', text: hh.open === 0 && hh.total > 0 ? 'All tasks done' : hh.flags.includes('no-next-action') ? 'No next action' : p.childIds.length > 0 ? `${p.childIds.length} sub-project${p.childIds.length === 1 ? '' : 's'}` : '' }),
+      hh.nextAction ? h('span', { cls: 'helm-project-next' }, icon('arrow-right'), h('span', { cls: 'helm-task-text' }, richText(hh.nextAction.text, (t) => ctx.openLink(t, hh.nextAction!.path)))) : h('span', { cls: 'helm-hint', text: hh.open === 0 && hh.total > 0 ? 'All tasks done' : hh.flags.includes('no-next-action') ? 'No next action' : p.childIds.length > 0 ? `${p.childIds.length} sub-project${p.childIds.length === 1 ? '' : 's'}` : '' }),
       h('span', { cls: 'helm-spacer' }),
       ...hh.flags.map((f) => chip(FLAG_LABEL[f], `flag flag-${f}`)),
       hh.lastTouched ? h('span', { cls: 'helm-hint', text: relativeDays(hh.lastTouched, today), title: `Last activity ${hh.lastTouched}` }) : null,

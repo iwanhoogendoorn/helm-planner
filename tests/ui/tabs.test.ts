@@ -1289,6 +1289,19 @@ describe('dragging a task between parts of the day', () => {
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
   });
 
+  it('renders wikilinks in a project’s next action as links, not raw brackets', async () => {
+    const { ctx, m, index, nav } = await ctxFor();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'project' && x.projectId === 'prj-kitchen' && x.status === 'todo')!;
+    await m.updateTask(t.key, { text: 'Order the parts || [[Buy & Wish List]]' });
+    const root = render((r) => renderProjects(ctx, r, { filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    const next = [...root.querySelectorAll<HTMLElement>('.helm-project-next')].find((x) => x.textContent?.includes('Order the parts'))!;
+    expect(next.textContent).not.toContain('[[');
+    const a = next.querySelector<HTMLAnchorElement>('a.internal-link')!;
+    expect(a.textContent).toBe('Buy & Wish List');
+    a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    void nav;
+  });
+
   it('offers the same three project operations wherever a task is', async () => {
     const { ctx, m, index } = await ctxFor();
     await m.addTask({ text: 'Chase the survey', date: TODAY, part: 'morning' });
