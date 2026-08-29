@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.20.0 — 2026-08-29
 
 - Projects can be **pinned** and **put in your own order**. Pin one from its
   menu and it sits at the top of the list, marked; drag a card onto another to
