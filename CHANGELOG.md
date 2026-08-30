@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Work that runs past a boundary now shows as a **ghost in the part it eats into**:
+  dinner from 17:00 to 19:30 stays in the afternoon where it starts, and the evening
+  carries a dashed copy saying “from the afternoon, runs on until 19:30”, with a
+  “1 running in” chip on the heading. Same for a morning meeting that runs into the
+  afternoon. The part's own count still only counts what is planned for it, and the
+  “drop a task here” hint gives way — an evening with two and a half hours spoken
+  for is not an empty evening.
+
 ## 1.21.2 — 2026-08-30
 
 - The “3 sub-projects” chip is now a **handle**: click it and the family opens in

@@ -66,6 +66,9 @@
 .helm-chip.scheduled { background: rgba(var(--color-green-rgb), 0.14); color: var(--color-green); }
 .helm-chip.effort { font-variant-numeric: tabular-nums; }
 .helm-chip.effort.is-over { background: rgba(var(--color-red-rgb), 0.16); color: var(--color-red); }
+.helm-chip.spill { background: rgba(var(--color-purple-rgb), 0.12); color: var(--color-purple); }
+.helm-chip.spill .helm-icon { width: 12px; height: 12px; }
+.helm-task.helm-spill { opacity: 0.75; border-style: dashed; }
 .helm-chip.blocked { background: rgba(var(--color-red-rgb), 0.12); color: var(--color-red); }
 .helm-chip.waiting { background: rgba(var(--color-orange-rgb), 0.14); color: var(--color-orange); }
 .helm-chip.reason { background: rgba(var(--color-orange-rgb), 0.16); color: var(--color-orange); text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }

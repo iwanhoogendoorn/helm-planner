@@ -75,6 +75,31 @@ describe('Today tab', () => {
     expect(root.querySelector('.helm-capacity-label')!.textContent).toContain('3 open · 1 done');
   });
 
+  it('shows work that runs past the boundary as a ghost in the part it eats into', async () => {
+    const { ctx, m } = await ctxFor();
+    await m.addTask({ text: 'Eten met JV', date: TODAY, part: 'afternoon', fields: { time: { start: '17:00', end: '19:30' } } });
+    await m.addTask({ text: 'Long standup', date: TODAY, part: 'morning', fields: { time: { start: '11:00', end: '13:00' } } });
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const sec = (title: string): HTMLElement => [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === title)!;
+
+    // Dinner at 17:00–19:30 belongs to the afternoon but the evening is not free.
+    const evening = sec('Evening');
+    const spill = evening.querySelector<HTMLElement>('.helm-spill')!;
+    expect(spill.querySelector('.helm-task-text')!.textContent).toBe('Eten met JV');
+    expect(spill.textContent).toContain('from the afternoon, runs on until 19:30');
+    expect(evening.querySelector('.helm-chip.spill')!.textContent).toContain('1 running in');
+    expect(evening.querySelector('.helm-dropzone-hint')).toBeNull(); // it is not an empty evening any more
+    expect(evening.querySelector('.helm-count')!.textContent).toBe('0'); // but nothing is *planned* for it
+
+    // The same for a morning meeting that runs into the afternoon.
+    const afternoon = sec('Afternoon');
+    expect([...afternoon.querySelectorAll<HTMLElement>('.helm-spill')].map((x) => x.querySelector('.helm-task-text')!.textContent)).toEqual(['Long standup']);
+    expect(afternoon.querySelector('.helm-spill')!.textContent).toContain('from the morning');
+    // And the ghost is only ever a ghost: the task itself stays in the part it starts in.
+    expect(texts(sec('Afternoon'), '.helm-task:not(.helm-spill) .helm-task-text')).toContain('Eten met JV');
+    expect(texts(sec('Evening'), '.helm-task:not(.helm-spill) .helm-task-text')).toEqual([]);
+  });
+
   it('keeps late work in Needs attention on every day until it is planned forward or finished', async () => {
     const { ctx, m, index } = await ctxFor();
     const reasons = (date: string): string[] => {
