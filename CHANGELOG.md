@@ -9,6 +9,12 @@
   afternoon. The part's own count still only counts what is planned for it, and the
   “drop a task here” hint gives way — an evening with two and a half hours spoken
   for is not an empty evening.
+- **A Repeat row in Capture**, under Tags: Daily · Weekdays · Weekly · Monthly ·
+  Yearly, plus a **when done** toggle that counts the next one from the day you tick
+  it. The buttons write the same phrase you would have typed, so the line stays the
+  one truth — switching presets replaces the repeat instead of stacking a second
+  one, and a repeat you typed by hand (“every 2 weeks on monday”) keeps a button of
+  its own. The task editor's Repeat field carries the same row.
 - Capture: “weekly when done” and friends now hand the whole phrase to the repeat
   instead of leaving “when done” sitting in the task's text, and “annually” is
   understood alongside “yearly”.

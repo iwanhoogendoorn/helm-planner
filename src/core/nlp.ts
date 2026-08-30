@@ -16,6 +16,13 @@ import type { IsoDate, Priority, Recurrence } from './types';
 import { addDays, addMonths, endOfMonth, isIsoDate, isoWeekday, MONTH_SHORT, startOfWeek } from './dates';
 import { parseRecurrence } from './recurrence';
 
+/**
+ * The repeat phrase inside a capture line — “every 2 weeks on monday”, “weekly when done”. Exported so
+ * the Capture dialog's Repeat buttons write and remove exactly what this parser reads. Match it against
+ * a space-padded line; group 1 is the phrase.
+ */
+export const REPEAT_PATTERN = /\s(every\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years|weekday|weekend)(?:\s+on\s+(?:the\s+)?[\w, ]+?)?(?:\s+when\s+done)?|(?:daily|weekly|monthly|yearly|annually)(?:\s+when\s+done)?)(?=\s)/i;
+
 export interface Capture {
   text: string;
   part?: 'morning' | 'afternoon' | 'evening';
@@ -39,7 +46,7 @@ export function parseCapture(input: string, today: IsoDate, weekStartsOn: 1 | 7 
   const out: Capture = { text: '', tags: [], priority: 'normal' };
 
   // Recurrence first (it may contain weekday names).
-  s = s.replace(/\s(every\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years|weekday|weekend)(?:\s+on\s+(?:the\s+)?[\w, ]+?)?(?:\s+when\s+done)?|(?:daily|weekly|monthly|yearly|annually)(?:\s+when\s+done)?)(?=\s)/i, (_, r: string) => {
+  s = s.replace(REPEAT_PATTERN, (_, r: string) => {
     const rec = parseRecurrence(r);
     if (rec.parsed) { out.recurrence = rec; return ' '; }
     return ` ${r}`;

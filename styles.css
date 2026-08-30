@@ -716,6 +716,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-capture-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .helm-tag-toggle { height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); color: var(--text-accent); font-size: var(--font-ui-smaller); box-shadow: none; cursor: pointer; }
 .helm-tag-toggle:hover { border-color: var(--text-accent); }
+.helm-capture-repeat { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .helm-tag-toggle.is-active { background: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
 
 .helm-habit-card[draggable="true"] { cursor: grab; }

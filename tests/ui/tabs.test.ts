@@ -361,16 +361,70 @@ describe('Modals', () => {
     void t;
   });
 
+  it('capture has repeat buttons that write the phrase the parser reads', async () => {
+    const { ctx, m: mut, index } = await ctxFor();
+    openCapture(ctx);
+    const modal = Modal.last!;
+    const input = modal.contentEl.querySelector<HTMLInputElement>('input')!;
+    const repeats = (): HTMLElement[] => [...modal.contentEl.querySelectorAll<HTMLElement>('.helm-repeat-toggle')];
+    const hit = (label: string): void => click(repeats().find((b) => b.textContent === label));
+    input.value = 'Water the plants tomorrow'; input.dispatchEvent(new Event('input'));
+    expect(repeats().map((b) => b.textContent)).toEqual(['Daily', 'Weekdays', 'Weekly', 'Monthly', 'Yearly']);
+
+    hit('Weekly');
+    expect(input.value).toBe('Water the plants tomorrow every week');
+    expect(repeats().find((b) => b.classList.contains('is-active'))!.textContent).toBe('Weekly');
+    expect(texts(modal.contentEl, '.helm-capture-preview .helm-chip.recurrence')).toEqual(['every week']);
+
+    // Switching presets replaces the phrase rather than stacking a second one.
+    hit('Monthly');
+    expect(input.value).toBe('Water the plants tomorrow every month');
+    // “when done” only appears once something repeats, and rides along when you switch.
+    hit('when done');
+    expect(input.value).toBe('Water the plants tomorrow every month when done');
+    hit('Weekly');
+    expect(input.value).toBe('Water the plants tomorrow every week when done');
+    // Clicking the active preset stops the repeat, and the button goes with it.
+    hit('Weekly');
+    expect(input.value).toBe('Water the plants tomorrow');
+    expect(repeats().map((b) => b.textContent)).not.toContain('when done');
+
+    // A repeat typed by hand keeps its own button, and it is the phrase that reaches the task.
+    input.value = 'Bins out every 2 weeks on monday'; input.dispatchEvent(new Event('input'));
+    expect(repeats().map((b) => b.textContent)).toContain('every 2 weeks on monday');
+    click([...modal.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
+    const made = await waitFor(() => [...index.snapshot.tasks.values()].find((t) => t.text === 'Bins out'), 'the task');
+    expect(made.recurrence).toMatchObject({ frequency: 'weekly', interval: 2, weekdays: [1] });
+    void mut;
+  });
+
+  it('the task editor offers the same repeat buttons, writing into its field', async () => {
+    const { ctx, index } = await ctxFor();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
+    openTaskEditor(ctx, t);
+    const modal = Modal.last!;
+    const field = [...modal.contentEl.querySelectorAll<HTMLInputElement>('input[type="text"]')].find((i) => i.placeholder === 'every week on monday')!;
+    const repeats = (): HTMLElement[] => [...modal.contentEl.querySelectorAll<HTMLElement>('.helm-repeat-toggle')];
+    expect(repeats().map((b) => b.textContent)).toEqual(['Daily', 'Weekdays', 'Weekly', 'Monthly', 'Yearly']);
+    click(repeats().find((b) => b.textContent === 'Weekdays'));
+    expect(field.value).toBe('every weekday');
+    click(repeats().find((b) => b.textContent === 'when done'));
+    expect(field.value).toBe('every weekday when done');
+    click([...modal.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    const after = await waitFor(() => { const x = index.taskById(t.id ?? '') ?? [...index.snapshot.tasks.values()].find((y) => y.text === 'Start with OIB'); return x?.recurrence ? x : undefined; }, 'the saved repeat');
+    expect(after.recurrence).toMatchObject({ frequency: 'weekly', weekdays: [1, 2, 3, 4, 5], whenDone: true });
+  });
+
   it('capture has quick tag toggles that add and remove the tag in the text', async () => {
     const { ctx } = await ctxFor();
     openCapture(ctx);
     const m = Modal.last!;
     const input = m.contentEl.querySelector<HTMLInputElement>('input')!;
     input.value = 'Sync with Bob'; input.dispatchEvent(new Event('input'));
-    expect(texts(m.contentEl, '.helm-tag-toggle')).toEqual(['#meeting', '#followup', '#task']);
+    expect(texts(m.contentEl, '.helm-tag-toggle:not(.helm-repeat-toggle)')).toEqual(['#meeting', '#followup', '#task']);
     click([...m.contentEl.querySelectorAll('.helm-tag-toggle')].find((b) => b.textContent === '#meeting'));
     expect(input.value).toBe('#meeting Sync with Bob');
-    expect(m.contentEl.querySelector('.helm-tag-toggle.is-active')!.textContent).toBe('#meeting');
+    expect(m.contentEl.querySelector('.helm-tag-toggle.is-active:not(.helm-repeat-toggle)')!.textContent).toBe('#meeting');
     expect(texts(m.contentEl, '.helm-capture-preview .helm-chip.tag, .helm-chip.tag')).toContain('#meeting');
     click([...m.contentEl.querySelectorAll('.helm-tag-toggle')].find((b) => b.textContent === '#task'));
     expect(input.value).toBe('#task #meeting Sync with Bob');

@@ -11,7 +11,7 @@ import { notesSection } from '../notes';
 import { linksSection } from '../links';
 import { linkLabel, linksIn, textWithoutLinks } from '../../core/links';
 import { openFollowUp } from './followUp';
-import { conflictWarning } from '../fields';
+import { conflictWarning, repeatButtons } from '../fields';
 import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot } from '../../data/conflicts';
 import { STATUS_LABELS, projectMenuForTask } from '../menus';
 import { DAY_PARTS, PART_LABEL, type DayPart } from '../../core/dailyNote';
@@ -38,6 +38,11 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   const start = h('input', { attr: { type: 'date', value: src.start ?? '' } });
   const effort = effortField(src.effortMinutes);
   const recurrence = h('input', { attr: { type: 'text', placeholder: 'every week on monday', value: src.recurrence ? src.recurrence.raw : '' } });
+  // The same buttons Capture offers, writing into the field rather than into a sentence.
+  const repeatRow = h('div', { cls: 'helm-capture-tags helm-capture-repeat' });
+  const drawRepeat = (): void => repeatButtons(repeatRow, parseRecurrence(recurrence.value.trim()), (phrase) => { recurrence.value = phrase ?? ''; drawRepeat(); }, '');
+  recurrence.addEventListener('input', drawRepeat);
+  drawRepeat();
   const timeStart = h('input', { attr: { type: 'time', value: src.time?.start ?? '' } });
   const timeEnd = h('input', { attr: { type: 'time', value: src.time?.end ?? '' } });
   linkTimes(timeStart, timeEnd, effort);
@@ -79,7 +84,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     h('div', { cls: 'helm-grid2' }, field('Status', status), field('Priority', priority)),
     h('div', { cls: 'helm-grid3' }, field('Planned for', h('div', { cls: 'helm-row' }, scheduled, partSel)), field('Due', due), field('Start (not before)', start)),
     conflict,
-    h('div', { cls: 'helm-grid3' }, field('Effort', effort.el), field('Time block', h('div', { cls: 'helm-row' }, timeStart, timeEnd)), field('Repeat', recurrence)),
+    h('div', { cls: 'helm-grid3' }, field('Effort', effort.el), field('Time block', h('div', { cls: 'helm-row' }, timeStart, timeEnd)), field('Repeat', h('div', {}, recurrence, repeatRow))),
     field('Blocked by (ids)', blockedBy),
     where,
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Notes' }), notesSection(ctx, targetForTask(task))),

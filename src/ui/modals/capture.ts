@@ -3,15 +3,15 @@
  * understood and where it will land.
  */
 import { Modal } from 'obsidian';
-import type { IsoDate, Project, TaskLine } from '../../core/types';
+import type { IsoDate, Project, Recurrence, TaskLine } from '../../core/types';
 import { addDays, humanDate, minutesToHuman, startOfWeek } from '../../core/dates';
-import { parseCapture } from '../../core/nlp';
+import { parseCapture, REPEAT_PATTERN } from '../../core/nlp';
 import { formatRecurrence } from '../../core/recurrence';
 import { append, button, chip, h } from '../dom';
 import type { UiContext } from '../context';
 import { pickProject } from '../menus';
 import { partOfTime } from '../../core/dailyNote';
-import { conflictWarning, effortField, linkTimes, wikilinkSuggest } from '../fields';
+import { conflictWarning, effortField, linkTimes, repeatButtons, wikilinkSuggest } from '../fields';
 import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot } from '../../data/conflicts';
 
 export interface CaptureDefaults {
@@ -99,6 +99,17 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     tagRow.style.display = tags.length ? '' : 'none';
     tagRow.replaceChildren(h('span', { cls: 'helm-hint', text: 'Tags' }), ...tags.map((t) => h('button', { cls: ['helm-tag-toggle', hasTag(t) && 'is-active'], text: `#${t}`, title: hasTag(t) ? `Remove #${t}` : `Add #${t}`, onClick: () => toggleTag(t) })));
   };
+  // Quick repeats: the buttons write the same phrase you would type, so the line stays the one truth.
+  const repeatRow = h('div', { cls: 'helm-capture-tags helm-capture-repeat' });
+  /** Put this repeat on the line (or take the current one off), keeping everything else the user typed. */
+  const setRepeat = (phrase: string | undefined): void => {
+    const bare = ` ${input.value.trim()} `.replace(REPEAT_PATTERN, ' ').replace(/\s{2,}/g, ' ').trim();
+    input.value = phrase ? `${bare} ${phrase}`.trim() : bare;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  };
+  const drawRepeat = (rec: Recurrence | undefined): void => repeatButtons(repeatRow, rec, setRepeat);
   const dest = h('div', { cls: 'helm-capture-dest' });
   const help = h('div', { cls: 'helm-hint', text: 'Dates: today, tomorrow, fri, next week, in 3 days, 1/9, due friday · Part: morning, afternoon, evening, tonight · Priority: !, !!, !!! · Project: @Name · Effort: ~45m · Time: 14:00-15:00 · Repeat: every week' });
 
@@ -123,6 +134,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     for (const t of c.tags) preview.appendChild(chip(`#${t}`, 'tag'));
     drawDay();
     drawTags();
+    drawRepeat(c.recurrence);
     conflictText = date && time ? (describeConflicts(conflictsFor(ctx.index.snapshot, date, time, ctx.settings(), { effortMinutes: effort.get() })) || undefined) : undefined;
     const free = conflictText && date ? freeSlotOn(ctx.index.snapshot, date, ctx.settings(), { ...(part ? { part } : {}), effortMinutes: effort.get() ?? ctx.settings().defaultEffortMinutes, notBefore: time?.start ?? (date === today ? ctx.now() : undefined) }) : undefined;
     conflictWarning(conflict, conflictText, free ? { time: free, onPick: () => setStart(free) } : undefined);
@@ -165,7 +177,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (keepOpen) { input.value = ''; render(); input.focus(); }
   }
 
-  root.append(input, preview, dayRow, tagRow, conflict, dest, help, h('div', { cls: 'helm-modal-buttons' },
+  root.append(input, preview, dayRow, tagRow, repeatRow, conflict, dest, help, h('div', { cls: 'helm-modal-buttons' },
     h('span', { cls: 'helm-hint', text: 'Enter to add · Shift+Enter to add and keep capturing' }),
     h('span', { cls: 'helm-spacer' }),
     button('Cancel', { onClick: () => m.close() }),

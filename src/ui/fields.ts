@@ -2,6 +2,8 @@
 import { minutesToHuman, parseEffort } from '../core/dates';
 import { button, h } from './dom';
 import { AbstractInputSuggest, Modal, TFolder, type App } from 'obsidian';
+import type { Recurrence } from '../core/types';
+import { formatRecurrence, parseRecurrence } from '../core/recurrence';
 
 export const EFFORT_PRESETS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480];
 
@@ -215,4 +217,32 @@ export function askText(ctx: { app: App; trackModal: (m: { close: () => void; on
   m.open();
   ctx.trackModal(m);
   setTimeout(() => { input.focus(); input.select(); }, 0);
+}
+
+/** The Repeat presets, shared by Capture and the task editor so one control means one thing. */
+export const REPEAT_PRESETS: [string, string][] = [['Daily', 'every day'], ['Weekdays', 'every weekday'], ['Weekly', 'every week'], ['Monthly', 'every month'], ['Yearly', 'every year']];
+
+/**
+ * Fill `row` with the repeat buttons for `rec`. Clicking one hands `apply` the phrase to write —
+ * the same words you would type — or undefined to stop repeating. A repeat typed by hand keeps a
+ * button of its own, and “when done” appears once something repeats.
+ */
+export function repeatButtons(row: HTMLElement, rec: Recurrence | undefined, apply: (phrase: string | undefined) => void, label = 'Repeat'): void {
+  const same = (phrase: string): boolean => {
+    if (!rec?.parsed) return false;
+    const b = parseRecurrence(phrase);
+    return rec.frequency === b.frequency && rec.interval === b.interval
+      && (rec.weekdays ?? []).join() === (b.weekdays ?? []).join() && (rec.monthDays ?? []).join() === (b.monthDays ?? []).join();
+  };
+  const known = REPEAT_PRESETS.some(([, phrase]) => same(phrase));
+  const kids: (HTMLElement | null)[] = [
+    label ? h('span', { cls: 'helm-hint', text: label }) : null,
+    ...REPEAT_PRESETS.map(([text, phrase]) => {
+      const on = same(phrase);
+      return h('button', { cls: ['helm-tag-toggle', 'helm-repeat-toggle', on && 'is-active'], text, title: on ? `Not repeating (${phrase})` : `Repeat ${phrase}`, onClick: () => apply(on ? undefined : rec?.whenDone ? `${phrase} when done` : phrase) });
+    }),
+  ];
+  if (rec?.parsed && !known) kids.push(h('button', { cls: 'helm-tag-toggle helm-repeat-toggle is-active', text: formatRecurrence({ ...rec, whenDone: false }), title: 'Stop repeating', onClick: () => apply(undefined) }));
+  if (rec?.parsed) kids.push(h('button', { cls: ['helm-tag-toggle', 'helm-repeat-toggle', rec.whenDone && 'is-active'], text: 'when done', title: rec.whenDone ? 'Count the next one from the due date instead' : 'Count the next one from the day you tick it', onClick: () => apply(formatRecurrence({ ...rec, whenDone: !rec.whenDone })) }));
+  row.replaceChildren(...kids.filter((k): k is HTMLElement => k !== null));
 }
