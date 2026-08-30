@@ -13,6 +13,7 @@ import { onDayContext } from '../dayMenu';
 import { periodOf } from '../../core/periods';
 import { goalProgress } from '../../data/planner';
 import { progressBar, richText } from '../dom';
+import { dragKeys, selection } from '../selection';
 
 export interface WeekState { anchor: IsoDate; collapsed: Map<string, boolean> }
 
@@ -64,8 +65,8 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
     col.addEventListener('drop', (ev) => {
       ev.preventDefault();
       col.classList.remove('is-dropping');
-      const key = ev.dataTransfer?.getData('text/helm-task');
-      if (key) void ctx.run('Schedule', () => ctx.mutations.schedule(key, d.date));
+      const keys = dragKeys(ev);
+      if (keys.length > 0) void ctx.run('Schedule', async () => { for (const key of keys) await ctx.mutations.schedule(key, d.date); selection.clear(); });
     });
     col.append(
       h('div', { cls: 'helm-week-day-head', onClick: () => ctx.navigate('today', { date: d.date }) },
@@ -111,11 +112,16 @@ function weekDayBody(ctx: UiContext, date: string, open: Task[], doneCount: numb
     block.addEventListener('drop', (ev) => {
       ev.preventDefault(); ev.stopPropagation();
       block.classList.remove('is-dropping');
-      const key = ev.dataTransfer?.getData('text/helm-task');
-      if (!key) return;
-      const t = ctx.index.task(key);
-      const onThisDay = t && (t.noteDate === date || t.scheduled === date);
-      void ctx.run('Move', () => (onThisDay ? ctx.mutations.setPart(key, part) : ctx.mutations.schedule(key, date, part)));
+      const keys = dragKeys(ev);
+      if (keys.length === 0) return;
+      void ctx.run('Move', async () => {
+        for (const key of keys) {
+          const t = ctx.index.task(key);
+          const onThisDay = t && (t.noteDate === date || t.scheduled === date);
+          await (onThisDay ? ctx.mutations.setPart(key, part) : ctx.mutations.schedule(key, date, part));
+        }
+        selection.clear();
+      });
     });
     body.appendChild(block);
   }

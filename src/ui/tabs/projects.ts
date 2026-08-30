@@ -21,6 +21,7 @@ import { linksSection, linksButton, type LinkHolder } from '../links';
 import { pickTask, taskMenu, STATUS_LABELS } from '../menus';
 import { openTaskEditor } from '../modals/taskEditor';
 import { plainLabel } from '../../core/label';
+import { dragKeys, selection } from '../selection';
 
 export type ProjectView = 'list' | 'board' | 'table' | 'timeline';
 
@@ -565,8 +566,8 @@ function renderBoard(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectH
     column.addEventListener('drop', (ev) => {
       ev.preventDefault();
       column.removeClass('is-dropping');
-      const key = ev.dataTransfer?.getData('text/helm-task');
-      if (key) void ctx.run('Move', () => ctx.mutations.moveToProject(key, p.id, col.id));
+      const keys = dragKeys(ev);
+      if (keys.length > 0) void ctx.run('Move', async () => { for (const key of keys) await ctx.mutations.moveToProject(key, p.id, col.id); selection.clear(); });
     });
     board.appendChild(column);
   }

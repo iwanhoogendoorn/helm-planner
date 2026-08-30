@@ -13,6 +13,7 @@ import { linksIndicator } from './links';
 import { linksIn, textWithoutLinks } from '../core/links';
 import { plainLabel, shortLabel } from '../core/label';
 import { taskLabel } from './context';
+import { selection, selectionClick, selectionMenu, setDragKeys } from './selection';
 
 export interface RowOptions {
   showProject?: boolean;
@@ -38,14 +39,14 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   const blocked = open && isBlocked(t, snap);
   const overdue = open && t.due !== undefined && t.due < today;
   const row = h('div', {
-    cls: ['helm-task', `is-${t.status}`, !open && 'is-closed', blocked && 'is-blocked', overdue && 'is-overdue', opts.depth ? `depth-${Math.min(opts.depth, 4)}` : ''],
+    cls: ['helm-task', `is-${t.status}`, !open && 'is-closed', blocked && 'is-blocked', overdue && 'is-overdue', selection.has(t.key) && 'is-selected', opts.depth ? `depth-${Math.min(opts.depth, 4)}` : ''],
     attr: { 'data-key': t.key, 'data-path': t.path, 'data-line': t.line },
     draggable: opts.draggable ?? false,
-    onContextMenu: (ev) => { ev.preventDefault(); taskMenu(ctx, t, ev); },
+    onContextMenu: (ev) => { ev.preventDefault(); if (selection.size() > 1 && selection.has(t.key)) selectionMenu(ctx, ev); else taskMenu(ctx, t, ev); },
   });
   if (opts.draggable) {
     row.addEventListener('dragstart', (ev) => {
-      ev.dataTransfer?.setData('text/helm-task', t.key);
+      setDragKeys(ev, t.key);                                  // a picked row brings the rest of the selection
       ev.dataTransfer?.setData('text/plain', t.text);
       if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
       row.classList.add('is-dragging');
@@ -68,7 +69,11 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     row.appendChild(cb);
   }
 
-  const main = h('div', { cls: 'helm-task-main', onClick: (ev) => { if ((ev.target as HTMLElement).closest('a')) return; openTaskEditor(ctx, t); } });
+  const main = h('div', { cls: 'helm-task-main', onClick: (ev) => {
+    if ((ev.target as HTMLElement).closest('a')) return;
+    if (selectionClick(ctx, ev, row, t.key)) return;           // cmd-click picks, shift-click takes a run
+    openTaskEditor(ctx, t);
+  } });
   const line1 = h('div', { cls: 'helm-task-line' });
   if (t.time) line1.appendChild(h('span', { cls: 'helm-time', text: t.time.end ? `${t.time.start}–${t.time.end}` : t.time.start }));
   if (t.priority !== 'normal') line1.appendChild(h('span', { cls: ['helm-prio', `prio-${t.priority}`], text: PRIORITY_LABEL[t.priority] ?? '', title: `Priority: ${t.priority}` }));

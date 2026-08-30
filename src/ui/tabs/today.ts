@@ -20,6 +20,7 @@ import { habitMenu } from '../habits';
 import { habitCard, colourise } from '../habitCard';
 import { drawingsButton, targetForDate } from '../drawings';
 import { notesButton } from '../notes';
+import { dragKeys, selection } from '../selection';
 
 export interface TodayState { date: IsoDate; collapsed: Map<string, boolean> }
 
@@ -161,15 +162,19 @@ function makeDropZone(ctx: UiContext, el: HTMLElement, date: IsoDate, part: DayP
     el.classList.remove('is-dropping');
     const habitId = ev.dataTransfer?.getData('text/helm-habit');
     if (habitId && part !== 'anytime') { void ctx.run('Move habit', () => ctx.mutations.moveHabitForDay(habitId, date, part)); return; }
-    const key = ev.dataTransfer?.getData('text/helm-task');
-    if (!key) return;
-    const t = ctx.index.task(key);
-    const onThisDay = t && (t.noteDate === date || t.scheduled === date);
+    const keys = dragKeys(ev);                                  // one row, or the whole selection
+    if (keys.length === 0) return;
     void ctx.run('Move', async () => {
-      await (onThisDay ? ctx.mutations.setPart(key, part) : ctx.mutations.schedule(key, date, part));
-      // A timed task keeps its length but takes the first free slot in the part it landed in.
-      const slot = t?.time && part !== 'anytime' ? retimeFor(ctx, t, date, part) : undefined;
-      if (slot) await ctx.mutations.updateTask(key, { time: slot });
+      for (const key of keys) {
+        const t = ctx.index.task(key);
+        if (!t) continue;
+        const onThisDay = t.noteDate === date || t.scheduled === date;
+        await (onThisDay ? ctx.mutations.setPart(key, part) : ctx.mutations.schedule(key, date, part));
+        // A timed task keeps its length but takes the first free slot in the part it landed in.
+        const slot = t.time && part !== 'anytime' ? retimeFor(ctx, t, date, part) : undefined;
+        if (slot) await ctx.mutations.updateTask(key, { time: slot });
+      }
+      selection.clear();
     });
   });
 }

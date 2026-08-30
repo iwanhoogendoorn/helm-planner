@@ -9,6 +9,15 @@
   afternoon. The part's own count still only counts what is planned for it, and the
   “drop a task here” hint gives way — an evening with two and a half hours spoken
   for is not an empty evening.
+- **Pick several tasks and move them in one go.** Cmd-click (Ctrl-click) a task to
+  pick it out, Shift-click to take everything down to there. A bar appears at the
+  top of the view: *Plan for…* (a day and a part), *Part of the day*, *Move to
+  project…*, *Mark done*, *Clear* — and right-clicking any picked row offers the
+  same. **Dragging one of them drags all of them**, into a part of the day, a day in
+  the week or calendar, or a project's board column. It works in every view that
+  lists tasks, subtasks travel with their parents as always, and each task goes
+  through the ordinary single-task move — a selection is a shortcut, never a second
+  code path.
 - A raw `*.excalidraw` file now says **why** it cannot be attached — it has no
   frontmatter to hold the link — and names the fix (“Excalidraw: Convert
   *.excalidraw to *.md files”). The picker marks them rather than letting you pick

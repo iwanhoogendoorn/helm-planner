@@ -13,6 +13,7 @@ import { openPlanDay } from '../../src/ui/modals/planDay';
 import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { linkExisting } from '../../src/ui/drawings';
+import { selection, selectionBar, dragKeys, setDragKeys } from '../../src/ui/selection';
 import { openSearch } from '../../src/ui/modals/search';
 import { taskMenu } from '../../src/ui/menus';
 import { taskRow } from '../../src/ui/taskRow';
@@ -57,7 +58,7 @@ const waitFor = async <T>(get: () => T | null | undefined, what = 'condition', t
   throw new Error(`waitFor: ${what} never happened`);
 };
 
-beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; });
+beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; selection.clear(); });
 
 describe('Today tab', () => {
   it('renders yesterday: time blocks, tasks, mirrors, habits, done', async () => {
@@ -89,6 +90,64 @@ describe('Today tab', () => {
     expect([...root.querySelectorAll('.helm-empty')].map((e) => e.textContent).join(' ')).toContain('Nothing planned yet');
     // Yesterday is a record: an empty evening is simply not part of it.
     expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);
+  });
+
+  it('picks several tasks and moves them all in one go', async () => {
+    const { ctx, index } = await ctxFor();
+    const day = '2026-08-25';
+    const view = (): HTMLElement => {
+      const root = render((r) => { const bar = selectionBar(ctx); if (bar) r.appendChild(bar); renderToday(ctx, r, { date: day, collapsed: new Map() }); });
+      root.classList.add('helm-body');
+      return root;
+    };
+    const rowFor = (root: HTMLElement, text: string): HTMLElement =>
+      [...root.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === text)!;
+    const pick = (root: HTMLElement, text: string, mod: 'meta' | 'shift'): void => {
+      const row = rowFor(root, text);
+      row.querySelector<HTMLElement>('.helm-task-main')!.dispatchEvent(new MouseEvent('click', { bubbles: true, ...(mod === 'meta' ? { metaKey: true } : { shiftKey: true }) }));
+    };
+
+    let root = view();
+    expect(root.querySelector('.helm-selection-bar')).toBeNull(); // nothing picked, nothing in the way
+
+    pick(root, 'Start with OIB', 'meta');
+    pick(view(), 'Fix router config', 'meta');
+    expect(selection.size()).toBe(2);
+    root = view();
+    expect(root.querySelector('.helm-selection-count')!.textContent).toBe('2 selected');
+    expect(rowFor(root, 'Start with OIB').classList.contains('is-selected')).toBe(true);
+    expect(Modal.last).toBeUndefined(); // picking does not open the task
+
+    // Both go to Thursday morning in one move.
+    click([...root.querySelectorAll('.helm-selection-bar button')].find((b) => b.textContent?.includes('Plan for')));
+    const picker = Modal.last!;
+    picker.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value = '2026-08-27';
+    click([...picker.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Morning'));
+    click([...picker.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Pick'));
+    await waitFor(() => selection.size() === 0 || undefined, 'the selection to be spent');
+    for (const text of ['Start with OIB', 'Fix router config']) {
+      // The line on the old day stays as a “forwarded” record, the way a single move leaves one.
+      const t = [...index.snapshot.tasks.values()].find((x) => x.text === text && x.status === 'todo')!;
+      expect({ text, day: t.scheduled ?? t.noteDate, part: t.part }).toEqual({ text, day: '2026-08-27', part: 'morning' });
+    }
+    expect(view().querySelector('.helm-selection-bar')).toBeNull(); // the bar goes when the work is done
+  });
+
+  it('drags a whole selection at once, and a plain drag still carries one', async () => {
+    const { index } = await ctxFor();
+    const a = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB')!;
+    const b = [...index.snapshot.tasks.values()].find((t) => t.text === 'Fix router config')!;
+    selection.toggle(a.key); selection.toggle(b.key);
+    const carried: Record<string, string> = {};
+    const ev = { dataTransfer: { setData: (k: string, v: string) => { carried[k] = v; }, getData: (k: string) => carried[k] ?? '' } } as unknown as DragEvent;
+    setDragKeys(ev, a.key);
+    expect(dragKeys(ev)).toEqual([a.key, b.key]);            // one grip, both tasks
+
+    selection.clear();
+    const solo: Record<string, string> = {};
+    const ev2 = { dataTransfer: { setData: (k: string, v: string) => { solo[k] = v; }, getData: (k: string) => solo[k] ?? '' } } as unknown as DragEvent;
+    setDragKeys(ev2, a.key);
+    expect(dragKeys(ev2)).toEqual([a.key]);
   });
 
   it('shows work that runs past the boundary as a ghost in the part it eats into', async () => {

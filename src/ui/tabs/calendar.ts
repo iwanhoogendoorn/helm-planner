@@ -19,6 +19,7 @@ import { drawingsButton, targetForPeriod } from '../drawings';
 import { notesButton } from '../notes';
 import { dayMenu, firstUsefulDay, onDayContext, periodMenu } from '../dayMenu';
 import { openCapture } from '../modals/capture';
+import { dragKeys, selection } from '../selection';
 
 export type CalendarScope = 'week' | 'month' | 'quarter' | 'year';
 export interface CalendarState { scope: CalendarScope; anchor: IsoDate; collapsed: Map<string, boolean> }
@@ -123,7 +124,7 @@ function renderMonth(ctx: UiContext, root: HTMLElement, period: Period, days: Ma
 function dropZone(ctx: UiContext, el: HTMLElement, date: IsoDate): void {
   el.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task')) { ev.preventDefault(); el.classList.add('is-dropping'); } });
   el.addEventListener('dragleave', () => el.classList.remove('is-dropping'));
-  el.addEventListener('drop', (ev) => { ev.preventDefault(); el.classList.remove('is-dropping'); const key = ev.dataTransfer?.getData('text/helm-task'); if (key) void ctx.run('Schedule', () => ctx.mutations.schedule(key, date)); });
+  el.addEventListener('drop', (ev) => { ev.preventDefault(); el.classList.remove('is-dropping'); const keys = dragKeys(ev); if (keys.length > 0) void ctx.run('Schedule', async () => { for (const key of keys) await ctx.mutations.schedule(key, date); selection.clear(); }); });
 }
 
 /* ── Quarter ────────────────────────────────────────────────────────────── */

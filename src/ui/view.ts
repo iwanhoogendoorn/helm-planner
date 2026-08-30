@@ -3,6 +3,7 @@ import { ItemView, WorkspaceLeaf } from 'obsidian';
 import type { IsoDate } from '../core/types';
 import { clear, h, icon, iconButton } from './dom';
 import type { TabId, UiContext } from './context';
+import { selection, selectionBar } from './selection';
 import { renderToday, type TodayState } from './tabs/today';
 import { renderCalendar, type CalendarState } from './tabs/calendar';
 import { renderProjects, type ProjectsState } from './tabs/projects';
@@ -124,6 +125,10 @@ export class HelmView extends ItemView {
     this.scrollTop.set(this.scrollKey(), this.body.scrollTop);
     clear(this.body);
     this.body.setAttribute('data-tab', this.tab);
+    // Whatever the tab, a selection is shown and acted on in the same place.
+    selection.prune((k) => ctx.index.task(k) !== undefined);
+    const bar = selectionBar(ctx);
+    if (bar) this.body.appendChild(bar);
     try {
       switch (this.tab) {
         case 'today': renderToday(ctx, this.body, this.todayState); break;
