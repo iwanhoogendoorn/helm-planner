@@ -398,12 +398,15 @@ function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectS
     const cards = h('div', { cls: 'helm-board-cards' });
     for (const group of familyGroups(inCol, byId)) {
       if (group.under) {
+        // The master card, in outline: the same shape as the one an opened umbrella shows above its
+        // children, so a family reads the same whether it is at home or split across columns.
         const master = group.under.project;
-        cards.appendChild(h('div', { cls: 'helm-board-family', title: `Master project, ${STATUS_LABEL[master.status].toLowerCase()}`, onClick: () => ctx.navigate('projects', { projectId: master.id }) },
-          icon('folder-tree'),
-          h('span', { cls: 'helm-board-family-title', text: master.title }),
-          h('span', { cls: 'helm-spacer' }),
-          h('span', { cls: 'helm-hint', text: STATUS_LABEL[master.status] }),
+        cards.appendChild(h('div', { cls: 'helm-board-card is-ghost', title: `${master.title} lives in ${STATUS_LABEL[master.status]}`, onClick: () => ctx.navigate('projects', { projectId: master.id }) },
+          h('div', { cls: 'helm-board-card-text' }, icon('folder-tree'), h('span', { cls: 'helm-board-family-title', text: master.title })),
+          h('div', { cls: 'helm-task-meta' },
+            chip(STATUS_LABEL[master.status], 'ghost-status'),
+            chip(`${group.items.length} here`, 'subs'),
+          ),
         ));
       }
       for (const { u, depth } of unfolded(group.items, open)) {

@@ -8,10 +8,11 @@
   Click again to fold them back in. Works the same in the board, the table and the
   timeline.
 - A sub-project you drag into another column no longer floats there context-free:
-  the column grows a **family header** with its master's name and where the master
-  lives, and the strays sit under it the way they would at home. The table and the
-  timeline say it with an “under ⮕ 3D Printing” chip instead, having no columns to
-  group in.
+  the column grows the **master's card in outline** — same shape as the card an
+  opened umbrella shows above its children, dashed to say it lives elsewhere, with
+  the status it lives in and how many of its family are here — and the strays sit
+  under it the way they would at home. The table and the timeline say it with an
+  “under ⮕ 3D Printing” chip instead, having no columns to group in.
 
 ## 1.21.1 — 2026-08-30
 

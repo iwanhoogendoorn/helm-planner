@@ -1401,8 +1401,11 @@ describe('dragging a task between parts of the day', () => {
     // It does not float there context-free: the column carries its master's header above it.
     const held = [...root.querySelectorAll<HTMLElement>('.helm-board-col')].find((x) => x.textContent?.startsWith('On hold'))!;
     expect(texts(held, '.helm-board-family-title')).toEqual(['Oracle']);
-    expect(held.querySelector('.helm-board-family')!.textContent).toContain('Active'); // where the master lives
-    const card = [...held.querySelectorAll<HTMLElement>('.helm-board-card')].find((c) => c.textContent?.startsWith('OCI Certification'))!;
+    const ghost = held.querySelector<HTMLElement>('.helm-board-card.is-ghost')!;
+    expect(ghost.textContent).toContain('Active'); // where the master lives
+    expect(ghost.textContent).toContain('1 here');
+    expect(ghost.getAttribute('draggable')).toBeNull(); // an outline, not a card you can move
+    const card = [...held.querySelectorAll<HTMLElement>('.helm-board-card:not(.is-ghost)')].find((c) => c.textContent?.startsWith('OCI Certification'))!;
     expect(card.classList.contains('is-sub')).toBe(true);
 
     // The flat views say the same thing in their own way.
