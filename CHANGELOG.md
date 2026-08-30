@@ -14,7 +14,9 @@
   - **Timeline** — weeks across the top; inside a project the phases run from
     their earliest to their latest date, in the list the projects run from
     start to due. Says so plainly when nothing is dated.
-  Each choice sticks while Obsidian is open.
+  Each choice sticks while Obsidian is open. On a board every column header
+  stays put and each column scrolls its own cards; in a table and a timeline
+  the header row stays as you scroll.
 - Phases can be **deleted**: a bin next to the pencil on each phase header. It
   asks first, tells you how many tasks are involved, then removes the heading
   and moves everything it held into the project's own task list — the work is
