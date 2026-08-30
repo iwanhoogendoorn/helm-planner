@@ -1343,6 +1343,24 @@ describe('dragging a task between parts of the day', () => {
     expect(oracleRow.querySelectorAll('.helm-timeline-cell.is-run').length).toBeGreaterThan(0);
   });
 
+  it('a sub-project in another column keeps its own card, and its work is counted there', async () => {
+    const { ctx, m } = await ctxFor();
+    const state = { filter: '', showClosed: false, showDone: false, collapsed: new Map(), listView: 'board' } as Parameters<typeof renderProjects>[2];
+    const view = () => render((r) => renderProjects(ctx, r, state));
+    // Putting the sub-project on hold does not put its master on hold, so it belongs in On hold by itself.
+    await m.setProjectFields('prj-cert', { status: 'on-hold' });
+    const root = view();
+    const col = (name: string): string[] => {
+      const c = [...root.querySelectorAll<HTMLElement>('.helm-board-col')].find((x) => x.textContent?.startsWith(name))!;
+      return texts(c, '.helm-board-card-text');
+    };
+    expect(col('On hold')).toContain('OCI Certification');
+    expect(col('Active')).toContain('Oracle');
+    const oracle = [...root.querySelectorAll<HTMLElement>('.helm-board-card')].find((c) => c.querySelector('.helm-board-card-text')?.textContent === 'Oracle')!;
+    expect(oracle.textContent).not.toContain('sub-project'); // it stands for nobody now
+    expect(texts(oracle, '.helm-chip.count')[0]).toBe('0/0'); // and Book exam is not counted twice
+  });
+
   it('offers list, board, table and timeline views of a project', async () => {
     const { ctx, m, index, vault } = await ctxFor();
     void vault;

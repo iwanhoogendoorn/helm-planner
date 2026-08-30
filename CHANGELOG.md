@@ -7,6 +7,9 @@
   counted there, its dates stretching the parent's timeline bar — with a
   “3 sub-projects” chip saying how many it stands for. Open the umbrella to see
   them. Filter by a sub-project's name and it stands on its own again.
+- Folding only happens within a column: a sub-project you put **on hold** stays in
+  On hold on its own — putting it on hold does not put the master on hold — and its
+  work is counted on its own card rather than twice.
 
 ## 1.21.0 — 2026-08-30
 

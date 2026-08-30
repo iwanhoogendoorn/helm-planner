@@ -297,13 +297,15 @@ function projectLinks(ctx: UiContext, p: Project): LinkHolder {
 /**
  * The flat views show umbrellas only: a sub-project is folded into its parent — its tasks counted
  * there, its dates part of the parent's run — so one piece of work is one card, not a family of them.
- * A project only stands on its own when its parent is not in view (filtered out, or there is none).
+ * A project stands on its own when its parent is not in view, or when it does not share its parent's
+ * status: putting a sub-project on hold does not put the master on hold, so it belongs in On hold by
+ * itself, and its work is counted there rather than twice. This is the rule the list view nests by.
  */
 type Umbrella = { hh: ProjectHealth; subs: number; done: number; total: number; open: number; start?: IsoDate; due?: IsoDate; touched?: IsoDate };
 
 function umbrellas(visible: ProjectHealth[]): Umbrella[] {
   const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
-  const roll = (hh: ProjectHealth, seen: Set<string>): Umbrella => {
+  const roll = (hh: ProjectHealth, status: ProjectStatus, seen: Set<string>): Umbrella => {
     seen.add(hh.project.id);
     const u: Umbrella = { hh, subs: 0, done: hh.done, total: hh.total, open: hh.open };
     if (hh.project.start) u.start = hh.project.start;
@@ -311,8 +313,8 @@ function umbrellas(visible: ProjectHealth[]): Umbrella[] {
     if (hh.lastTouched) u.touched = hh.lastTouched;
     for (const cid of hh.project.childIds) {
       const c = byId.get(cid);
-      if (!c || seen.has(cid)) continue;
-      const sub = roll(c, seen);
+      if (!c || seen.has(cid) || c.project.status !== status) continue; // it stands in its own column
+      const sub = roll(c, status, seen);
       u.subs += 1 + sub.subs;
       u.done += sub.done; u.total += sub.total; u.open += sub.open;
       if (sub.start && (!u.start || sub.start < u.start)) u.start = sub.start;
@@ -322,7 +324,11 @@ function umbrellas(visible: ProjectHealth[]): Umbrella[] {
     return u;
   };
   const seen = new Set<string>();
-  return visible.filter((hh) => !hh.project.parentId || !byId.has(hh.project.parentId)).map((hh) => roll(hh, seen));
+  const stands = (hh: ProjectHealth): boolean => {
+    const parent = hh.project.parentId ? byId.get(hh.project.parentId) : undefined;
+    return !parent || parent.project.status !== hh.project.status;
+  };
+  return visible.filter(stands).map((hh) => roll(hh, hh.project.status, seen));
 }
 
 /** “3 sub-projects”, for a card that is standing in for its family. */
