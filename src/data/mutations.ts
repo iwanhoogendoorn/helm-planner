@@ -963,6 +963,35 @@ export class Mutations {
     });
   }
 
+/**
+   * Drop a phase without losing what was under it: the heading goes, and everything it held moves to
+   * the project's own task list. Returns how many lines were carried over.
+   */
+  async deletePhase(projectId: string, phaseId: string): Promise<number> {
+    const p = this.index.project(projectId);
+    const ph = p?.phases.find((x) => x.id === phaseId);
+    if (!p || !ph) throw new Error('Phase not found');
+    let carried = 0;
+    await this.editFile(p.path, (lines, doc) => {
+      const body = lines.slice(ph.startLine, ph.endLine);
+      const keep = body.filter((l) => l.trim() !== '');
+      carried = keep.length;
+      lines.splice(ph.headingLine, ph.endLine - ph.headingLine);
+      if (keep.length === 0) return true;
+      // Put what it held under `## Tasks`, making that heading if the project has none.
+      const doc2 = parseDocument(lines.join(doc.eol));
+      const th = doc2.headings.find((h) => /^tasks$/i.test(h.text.trim()));
+      if (th) lines.splice(sectionInsertPoint(doc2, th), 0, ...keep);
+      else {
+        let e = lines.length;
+        while (e > 0 && lines[e - 1]!.trim() === '') e--;
+        lines.splice(e, lines.length - e, '', '## Tasks', '', ...keep, '');
+      }
+      return true;
+    });
+    return carried;
+  }
+
   async appendLog(projectId: string, text: string): Promise<void> {
     const p = this.index.project(projectId);
     if (!p) throw new Error('Project not found');

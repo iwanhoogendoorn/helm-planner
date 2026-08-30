@@ -1289,6 +1289,28 @@ describe('dragging a task between parts of the day', () => {
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
   });
 
+  it('deletes a phase from its header, after asking, keeping the tasks', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    const view = () => render((r) => renderProjects(ctx, r, { projectId: 'prj-book', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    const phase = index.project('prj-book')!.phases[0]!;
+    const held = phase.taskKeys.map((k) => index.task(k)!.text);
+    const sec = [...view().querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === phase.title)!;
+    const del = sec.querySelector('button[aria-label="Delete this phase"]')!;
+    const orig = window.confirm;
+    // Saying no changes nothing.
+    window.confirm = () => false;
+    try { click(del); await flush(); } finally { window.confirm = orig; }
+    expect(index.project('prj-book')!.phases.map((x) => x.title)).toContain(phase.title);
+    let asked = '';
+    window.confirm = (msg?: string) => { asked = msg ?? ''; return true; };
+    try { click(sec.querySelector('button[aria-label="Delete this phase"]')); await flush(); await flush(); } finally { window.confirm = orig; }
+    expect(asked).toContain(phase.title);
+    expect(asked).toMatch(/move to the project/i);
+    expect(index.project('prj-book')!.phases.map((x) => x.title)).not.toContain(phase.title);
+    const note = await vault.read('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md');
+    for (const t of held) expect(note).toContain(t);
+  });
+
   it('adds and renames a phase through a dialog (Electron refuses window.prompt)', async () => {
     const { ctx, index, vault } = await ctxFor();
     const view = () => render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));

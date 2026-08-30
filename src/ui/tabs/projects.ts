@@ -217,7 +217,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
     const input = quickAdd(ctx, `Add to ${ph.title}…`, (text) => addQuick(ctx, text, p.id, ph.id));
     root.appendChild(section(ph.title, {
       count: `${pp.done}/${pp.total}`, store: state.collapsed, key: `phase:${ph.id}`, collapsed: pp.state === 'done', cls: `phase-${pp.state}`,
-      actions: [ph.due ? chip(`target ${humanDate(ph.due, today)}`, ph.due < today && pp.state !== 'done' ? 'due is-overdue' : 'due') : null, iconButton('pencil', 'Rename phase / target date', () => renamePhasePrompt(ctx, p, ph.id, ph.title, ph.due))],
+      actions: [ph.due ? chip(`target ${humanDate(ph.due, today)}`, ph.due < today && pp.state !== 'done' ? 'due is-overdue' : 'due') : null, iconButton('pencil', 'Rename phase / target date', () => renamePhasePrompt(ctx, p, ph.id, ph.title, ph.due)), iconButton('trash-2', 'Delete this phase', () => deletePhasePrompt(ctx, p, ph.id, ph.title, pp.total))],
     }, ...renderTasks(ph.taskKeys), input));
   }
   const looseInput = quickAdd(ctx, p.phases.length ? 'Add a loose task…' : 'Add a task…', (text) => addQuick(ctx, text, p.id));
@@ -285,6 +285,12 @@ function addPhasePrompt(ctx: UiContext, p: Project): void {
     const m = /^(.*?)(?:\s*📅\s*(\d{4}-\d{2}-\d{2}))?\s*$/.exec(v.trim())!;
     void ctx.run('Add phase', () => ctx.mutations.addPhase(p.id, m[1]!.trim(), m[2]));
   } });
+}
+
+function deletePhasePrompt(ctx: UiContext, p: Project, phaseId: string, title: string, tasks: number): void {
+  const what = tasks === 0 ? 'It holds nothing.' : `Its ${tasks} task${tasks === 1 ? '' : 's'} move to the project’s own list — nothing is deleted.`;
+  if (!window.confirm(`Remove the phase “${title}” from ${p.title}?\n\n${what}`)) return;
+  void ctx.run('Delete phase', () => ctx.mutations.deletePhase(p.id, phaseId));
 }
 
 function renamePhasePrompt(ctx: UiContext, p: Project, phaseId: string, title: string, due?: IsoDate): void {

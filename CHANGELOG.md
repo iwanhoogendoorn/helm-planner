@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Phases can be **deleted**: a bin next to the pencil on each phase header. It
+  asks first, tells you how many tasks are involved, then removes the heading
+  and moves everything it held into the project's own task list — the work is
+  never deleted with the grouping.
+
 ## 1.20.0 — 2026-08-29
 
 - Projects can be **pinned** and **put in your own order**. Pin one from its
