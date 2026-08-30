@@ -119,7 +119,9 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     // Subtasks that got done still sit under their parent; they also show here, so the day's record is complete.
     const doneSubtasks = plan.byPart[part].flatMap((it) => it.display.childKeys.map((k) => snap.tasks.get(k)).filter((c): c is Task => c !== undefined && (c.status === 'done' || c.status === 'cancelled')).map((c) => ({ child: c, parent: it.display })));
     const partHabits = part !== 'anytime' ? habitChipsFor(part) : null;
-    if (items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && spills.length === 0 && !partHabits && (isPast || (openItems.length === 0 && part !== 'anytime'))) continue;
+    // A past day is a record: parts with nothing in them are left out. A day still ahead is a plan, so
+    // every part stands there ready to be dropped into, even when the whole day is empty.
+    if (items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && spills.length === 0 && !partHabits && isPast) continue;
     const minutes = items.reduce((s, it) => s + (it.display.effortMinutes ?? settings.defaultEffortMinutes), 0);
     const sec = section(PART_LABEL[part], {
       count: items.length, store, key: `part:${part}`, cls: `part-${part}`,

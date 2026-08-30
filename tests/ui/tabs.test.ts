@@ -75,6 +75,21 @@ describe('Today tab', () => {
     expect(root.querySelector('.helm-capacity-label')!.textContent).toContain('3 open · 1 done');
   });
 
+  it('an empty day still ahead offers every part to drop into; a past one only shows what happened', async () => {
+    const { ctx } = await ctxFor();
+    const titles = (date: string): string[] => texts(render((r) => renderToday(ctx, r, { date, collapsed: new Map() })), '.helm-section-title');
+    // A quiet Sunday well ahead: nothing planned, but Morning, Afternoon and Evening are there to fill.
+    expect(titles('2026-09-06')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
+    const root = render((r) => renderToday(ctx, r, { date: '2026-09-06', collapsed: new Map() }));
+    expect(texts(root, '.helm-dropzone-hint')).toEqual([
+      'drop a task here for the morning', 'drop a task here for the afternoon',
+      'drop a task here for the evening', 'drop a task here for the anytime',
+    ]);
+    expect([...root.querySelectorAll('.helm-empty')].map((e) => e.textContent).join(' ')).toContain('Nothing planned yet');
+    // Yesterday is a record: an empty evening is simply not part of it.
+    expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);
+  });
+
   it('shows work that runs past the boundary as a ghost in the part it eats into', async () => {
     const { ctx, m } = await ctxFor();
     await m.addTask({ text: 'Eten met JV', date: TODAY, part: 'afternoon', fields: { time: { start: '17:00', end: '19:30' } } });

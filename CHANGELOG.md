@@ -9,6 +9,10 @@
   afternoon. The part's own count still only counts what is planned for it, and the
   “drop a task here” hint gives way — an evening with two and a half hours spoken
   for is not an empty evening.
+- An empty day still ahead now shows **Morning, Afternoon and Evening** alongside
+  Anytime, each ready to be dropped into, instead of collapsing to “Nothing planned
+  yet” with only Anytime standing. A day in the past is still a record: parts with
+  nothing in them stay out of it.
 - **A Repeat row in Capture**, under Tags: Daily · Weekdays · Weekly · Monthly ·
   Yearly, plus a **when done** toggle that counts the next one from the day you tick
   it. The buttons write the same phrase you would have typed, so the line stays the
