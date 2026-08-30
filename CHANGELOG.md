@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.21.2 — 2026-08-30
 
 - The “3 sub-projects” chip is now a **handle**: click it and the family opens in
   place — a card, row or timeline bar each — so you can drag one sub-project into
