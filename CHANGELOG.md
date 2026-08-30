@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- A project can be looked at four ways, switched at the top: **List** (as
+  before), **Board** — a column per phase, drag a card to move a task into it —
+  **Table** — every task with its phase, status, due date and effort, sortable
+  by any column — and **Timeline** — phases across the weeks they run through,
+  with a count of the tasks falling in each. The choice sticks while Obsidian
+  is open.
 - Phases can be **deleted**: a bin next to the pencil on each phase header. It
   asks first, tells you how many tasks are involved, then removes the heading
   and moves everything it held into the project's own task list — the work is

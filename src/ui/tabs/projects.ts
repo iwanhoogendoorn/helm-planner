@@ -1,7 +1,7 @@
 /** Portfolio list → project detail with phases, tasks and inline add. */
 import { Menu } from 'obsidian';
 import type { IsoDate, Project, ProjectPriority, ProjectStatus, Task } from '../../core/types';
-import { humanDate, relativeDays } from '../../core/dates';
+import { addDays, humanDate, relativeDays, startOfWeek } from '../../core/dates';
 import { PROJECT_PRIORITIES, PROJECT_STATUSES } from '../../core/project';
 import { compareProjects, isOpen, projectHealth, type ProjectHealth } from '../../data/planner';
 import { parseCapture } from '../../core/nlp';
@@ -18,9 +18,13 @@ import { crumbBar } from '../crumbs';
 import { drawingsButton, drawingsSection, targetForProject } from '../drawings';
 import { notesButton, notesSection } from '../notes';
 import { linksSection, linksButton, type LinkHolder } from '../links';
-import { pickTask } from '../menus';
+import { pickTask, taskMenu, STATUS_LABELS } from '../menus';
+import { openTaskEditor } from '../modals/taskEditor';
+import { plainLabel } from '../../core/label';
 
-export interface ProjectsState { projectId?: string; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
+export type ProjectView = 'list' | 'board' | 'table' | 'timeline';
+
+export interface ProjectsState { projectId?: string; view?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
 
 const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', planned: 'Planned', 'on-hold': 'On hold', idea: 'Ideas', done: 'Done', cancelled: 'Cancelled', archived: 'Archived' };
 const FLAG_LABEL: Record<ProjectHealth['flags'][number], string> = { 'no-next-action': 'no next action', stale: 'stale', overdue: 'overdue tasks', 'due-soon': 'due soon', 'past-due': 'past due', blocked: 'blocked' };
@@ -212,6 +216,22 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
     return shown.map((t) => taskRow(ctx, t, { showProject: false, showChildren: true, showDate: 'both', draggable: true }));
   };
 
+  const view: ProjectView = state.view ?? 'list';
+  const VIEWS: [ProjectView, string, string][] = [['list', 'List', 'list'], ['board', 'Board', 'columns-3'], ['table', 'Table', 'table'], ['timeline', 'Timeline', 'gantt-chart']];
+  root.appendChild(h('div', { cls: 'helm-toolbar helm-project-views' },
+    h('span', { cls: 'helm-segmented' }, ...VIEWS.map(([id, label, ic]) => h('button', {
+      cls: ['helm-seg', view === id && 'is-active'], title: `${label} view`,
+      onClick: () => { state.view = id; ctx.refresh(); },
+    }, icon(ic), h('span', { text: label })))),
+  ));
+
+  if (view !== 'list') {
+    if (view === 'board') renderBoard(ctx, root, p, hh, state, today);
+    if (view === 'table') renderTable(ctx, root, p, hh, today);
+    if (view === 'timeline') renderTimeline(ctx, root, p, hh, today);
+    return;
+  }
+
   for (const pp of hh.phaseProgress) {
     const ph = pp.phase;
     const input = quickAdd(ctx, `Add to ${ph.title}…`, (text) => addQuick(ctx, text, p.id, ph.id));
@@ -256,6 +276,128 @@ function projectLinks(ctx: UiContext, p: Project): LinkHolder {
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addProjectLink(p.id, url, label)),
     remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removeProjectLink(p.id, url)),
   };
+}
+
+/* ── Other ways to look at a project ─────────────────────────────────── */
+
+/** The task lists a project view works from: one per phase, then whatever is loose. */
+function projectColumns(ctx: UiContext, p: Project, hh: ProjectHealth): { id: string | undefined; title: string; keys: string[]; due?: IsoDate }[] {
+  void ctx;
+  return [
+    ...hh.phaseProgress.map((pp) => ({ id: pp.phase.id, title: pp.phase.title, keys: pp.phase.taskKeys, ...(pp.phase.due ? { due: pp.phase.due } : {}) })),
+    { id: undefined, title: p.phases.length ? 'Other tasks' : 'Tasks', keys: p.looseTaskKeys },
+  ];
+}
+
+/** Kanban: a column per phase, drag a card to move the task into that phase. */
+function renderBoard(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectHealth, state: ProjectsState, today: IsoDate): void {
+  const snap = ctx.index.snapshot;
+  const board = h('div', { cls: 'helm-board' });
+  for (const col of projectColumns(ctx, p, hh)) {
+    const tasks = col.keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined && (state.showDone || isOpen(t)));
+    const cards = h('div', { cls: 'helm-board-cards' });
+    for (const t of tasks) {
+      const card = h('div', { cls: ['helm-board-card', !isOpen(t) && 'is-done'], attr: { draggable: 'true' }, onClick: () => openTaskEditor(ctx, t), onContextMenu: (ev) => { ev.preventDefault(); taskMenu(ctx, t, ev); } },
+        h('div', { cls: 'helm-board-card-text' }, richText(plainLabel(t.text) || t.text, (target) => ctx.openLink(target, t.path))),
+        h('div', { cls: 'helm-task-meta' },
+          t.due ? chip(`due ${humanDate(t.due, today)}`, t.due < today && isOpen(t) ? 'due is-overdue' : 'due') : null,
+          t.effortMinutes !== undefined ? chip(minutesToHuman(t.effortMinutes), 'effort') : null,
+          !isOpen(t) ? chip(t.status, 'done-count') : null,
+        ),
+      );
+      card.addEventListener('dragstart', (ev) => { ev.dataTransfer?.setData('text/helm-task', t.key); card.addClass('is-dragging'); });
+      card.addEventListener('dragend', () => card.removeClass('is-dragging'));
+      cards.appendChild(card);
+    }
+    const column = h('div', { cls: 'helm-board-col' },
+      h('div', { cls: 'helm-board-head' },
+        h('span', { cls: 'helm-board-title', text: col.title }),
+        h('span', { cls: 'helm-badge-count', text: String(tasks.length) }),
+        col.due ? chip(`target ${humanDate(col.due, today)}`, col.due < today ? 'due is-overdue' : 'due') : null,
+      ),
+      cards,
+      quickAdd(ctx, 'Add…', (text) => addQuick(ctx, text, p.id, col.id)),
+    );
+    column.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task')) { ev.preventDefault(); column.addClass('is-dropping'); } });
+    column.addEventListener('dragleave', () => column.removeClass('is-dropping'));
+    column.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      column.removeClass('is-dropping');
+      const key = ev.dataTransfer?.getData('text/helm-task');
+      if (key) void ctx.run('Move', () => ctx.mutations.moveToProject(key, p.id, col.id));
+    });
+    board.appendChild(column);
+  }
+  root.appendChild(board);
+}
+
+/** Every task in one table, sortable by any column. */
+function renderTable(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectHealth, today: IsoDate): void {
+  const snap = ctx.index.snapshot;
+  const rows = projectColumns(ctx, p, hh).flatMap((col) => col.keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined).map((t) => ({ t, phase: col.id ? col.title : '—' })));
+  const table = h('table', { cls: 'helm-table helm-project-table' });
+  const head = h('tr', {}, ...['Task', 'Phase', 'Status', 'Due', 'Effort'].map((label) => h('th', { text: label })));
+  const body = h('tbody', {});
+  const draw = (): void => {
+    body.replaceChildren(...rows.map(({ t, phase }) => h('tr', { cls: ['is-clickable', !isOpen(t) && 'is-closed'], onClick: () => openTaskEditor(ctx, t), onContextMenu: (ev) => { ev.preventDefault(); taskMenu(ctx, t, ev); } },
+      h('td', {}, richText(plainLabel(t.text) || t.text, (target) => ctx.openLink(target, t.path))),
+      h('td', { text: phase }),
+      h('td', { text: STATUS_LABELS[t.status]?.label ?? t.status }),
+      h('td', { cls: t.due && t.due < today && isOpen(t) ? 'is-bad' : '', text: t.due ? humanDate(t.due, today) : '—' }),
+      h('td', { text: t.effortMinutes !== undefined ? minutesToHuman(t.effortMinutes) : '—' }),
+    )));
+  };
+  const keys: ((x: { t: Task; phase: string }) => string)[] = [
+    (x) => plainLabel(x.t.text).toLowerCase(), (x) => x.phase.toLowerCase(), (x) => x.t.status,
+    (x) => x.t.due ?? '9999', (x) => String(x.t.effortMinutes ?? 99999).padStart(6, '0'),
+  ];
+  let sorted = -1;
+  head.querySelectorAll('th').forEach((th, i) => {
+    th.addClass('is-clickable');
+    th.addEventListener('click', () => {
+      const key = keys[i]!;
+      const dir = sorted === i ? -1 : 1;
+      sorted = sorted === i ? -1 : i;
+      rows.sort((a, b) => key(a).localeCompare(key(b)) * dir);
+      draw();
+    });
+  });
+  draw();
+  table.append(h('thead', {}, head), body);
+  root.appendChild(rows.length === 0 ? empty('No tasks in this project yet.') : h('div', { cls: 'helm-table-wrap' }, table));
+}
+
+/** Phases across the weeks they run through, by the dates their tasks carry. */
+function renderTimeline(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectHealth, today: IsoDate): void {
+  const snap = ctx.index.snapshot;
+  const weekStart = ctx.settings().weekStartsOn;
+  const cols = projectColumns(ctx, p, hh).map((col) => {
+    const dates = col.keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined)
+      .flatMap((t) => [t.due, t.scheduled, t.start].filter((d): d is IsoDate => d !== undefined));
+    if (col.due) dates.push(col.due);
+    return { ...col, from: dates.length ? dates.slice().sort()[0]! : undefined, to: dates.length ? dates.slice().sort().at(-1)! : undefined };
+  });
+  const dated = cols.filter((c) => c.from !== undefined);
+  if (dated.length === 0) { root.appendChild(empty('Nothing here carries a date yet, so there is no timeline to draw. Give a task or a phase a due date and it will appear.')); return; }
+  const first = startOfWeek(dated.map((c) => c.from!).sort()[0]!, weekStart);
+  const last = startOfWeek(dated.map((c) => c.to!).sort().at(-1)!, weekStart);
+  const weeks: IsoDate[] = [];
+  for (let d = first; d <= last && weeks.length < 60; d = addDays(d, 7)) weeks.push(d);
+  const thisWeek = startOfWeek(today, weekStart);
+  const table = h('table', { cls: 'helm-table helm-timeline' },
+    h('thead', {}, h('tr', {}, h('th', { cls: 'helm-timeline-name', text: 'Phase' }), ...weeks.map((w) => h('th', { cls: ['helm-timeline-week', w === thisWeek && 'is-now'], text: humanDate(w).replace(/^\w+ /, ''), title: `Week of ${humanDate(w, today, { year: true })}` })))),
+    h('tbody', {}, ...cols.map((c) => h('tr', {},
+      h('td', { cls: 'helm-timeline-name', text: c.title }),
+      ...weeks.map((w) => {
+        const end = addDays(w, 6);
+        const inRun = c.from !== undefined && c.to !== undefined && c.from <= end && c.to >= w;
+        const n = c.keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined && [t.due, t.scheduled].some((d) => d !== undefined && d >= w && d <= end)).length;
+        return h('td', { cls: ['helm-timeline-cell', inRun && 'is-run', w === thisWeek && 'is-now'], title: inRun ? `${c.title}: week of ${humanDate(w, today, { year: true })}${n ? ` — ${n} task(s)` : ''}` : '' }, n > 0 ? h('span', { cls: 'helm-timeline-count', text: String(n) }) : null);
+      }),
+    ))),
+  );
+  root.appendChild(h('div', { cls: 'helm-table-wrap' }, table));
+  root.appendChild(h('div', { cls: 'helm-hint', text: 'A bar runs from the earliest to the latest date in that phase; a number is how many of its tasks fall in that week.' }));
 }
 
 function quickAdd(ctx: UiContext, placeholder: string, onSubmit: (text: string) => void, iconName = 'plus'): HTMLElement {

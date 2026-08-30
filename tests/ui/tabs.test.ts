@@ -1289,6 +1289,50 @@ describe('dragging a task between parts of the day', () => {
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
   });
 
+  it('offers list, board, table and timeline views of a project', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    void vault;
+    const state = { projectId: 'prj-book', filter: '', showClosed: false, showDone: false, collapsed: new Map() } as Parameters<typeof renderProjects>[2];
+    const view = () => render((r) => renderProjects(ctx, r, state));
+    expect(texts(view(), '.helm-project-views .helm-seg')).toEqual(['List', 'Board', 'Table', 'Timeline']);
+
+    // Board: a column per phase plus the loose one, and dragging a card moves the task into that phase.
+    click([...view().querySelectorAll('.helm-project-views .helm-seg')].find((b) => b.textContent === 'Board'));
+    expect(state.view).toBe('board');
+    let root = view();
+    const cols = [...root.querySelectorAll<HTMLElement>('.helm-board-col')];
+    expect(cols.length).toBe(index.project('prj-book')!.phases.length + 1);
+    const titles = texts(root, '.helm-board-title');
+    expect(titles.at(-1)).toBe('Other tasks');
+    const card = root.querySelector<HTMLElement>('.helm-board-card')!;
+    expect(card.textContent).toContain('Draft chapter list');
+    const target = cols.at(-1)!; // the loose column
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? index.task('tsk-0001')!.key : '') } });
+    target.dispatchEvent(ev);
+    await flush(); await flush();
+    expect(index.project('prj-book')!.looseTaskKeys.map((k) => index.task(k)!.text)).toContain('Draft chapter list');
+
+    // Table: one row per task, sortable.
+    state.view = 'table';
+    root = view();
+    expect(texts(root, '.helm-project-table thead th')).toEqual(['Task', 'Phase', 'Status', 'Due', 'Effort']);
+    const rowsBefore = texts(root, '.helm-project-table tbody tr td:first-child');
+    expect(rowsBefore.length).toBeGreaterThan(1);
+    click(root.querySelectorAll('.helm-project-table thead th')[0]);
+    expect(texts(root, '.helm-project-table tbody tr td:first-child')).toEqual([...rowsBefore].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+
+    // Timeline: weeks across, phases down — and it says so plainly when nothing is dated.
+    state.view = 'timeline';
+    root = view();
+    expect(root.querySelector('.helm-timeline') ?? root.querySelector('.helm-empty')).toBeTruthy();
+    await m.updateTask(index.task('tsk-0002')!.key, { due: '2026-09-10' });
+    root = view();
+    expect(root.querySelector('.helm-timeline')).toBeTruthy();
+    expect(texts(root, '.helm-timeline-name').length).toBeGreaterThan(1);
+    expect(root.querySelectorAll('.helm-timeline-cell.is-run').length).toBeGreaterThan(0);
+  });
+
   it('deletes a phase from its header, after asking, keeping the tasks', async () => {
     const { ctx, index, vault } = await ctxFor();
     const view = () => render((r) => renderProjects(ctx, r, { projectId: 'prj-book', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
