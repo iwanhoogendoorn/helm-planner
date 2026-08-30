@@ -401,17 +401,19 @@ describe('Calendar view', () => {
     expect([days('day'), days('3days'), days('workweek'), days('week')]).toEqual([1, 3, 5, 7]);
   });
 
-  it('draws a month of cells and a year as a heat map', async () => {
+  it('keeps a month, a quarter and a year as lists — a grid says nothing extra there', async () => {
     const { ctx } = await ctxFor();
-    const month = render((r) => renderCalendar(ctx, r, state({ scope: 'month' })));
-    expect(month.querySelectorAll('.helm-cal-month-cell').length).toBeGreaterThanOrEqual(28);
-    expect(month.querySelector('.helm-cal-month-cell.is-today')).toBeTruthy();
-    expect(texts(month, '.helm-cal-month-dow')).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
-
+    for (const scope of ['month', 'quarter', 'year']) {
+      const root = render((r) => renderCalendar(ctx, r, state({ scope })));
+      expect(root.querySelector('.helm-cal-views'), scope).toBeNull();   // no switch to offer
+      expect(root.querySelector('.helm-cal-grid'), scope).toBeNull();
+    }
+    // The year lists its months, and every square carries its date.
     const year = render((r) => renderCalendar(ctx, r, state({ scope: 'year' })));
-    expect(year.querySelectorAll('.helm-cal-heat-day:not(.is-key)').length).toBeGreaterThan(300);
-    expect(year.querySelector('.helm-cal-heat-day.is-today')).toBeTruthy();
-    expect(year.textContent).toContain('More open tasks');
+    const days = [...year.querySelectorAll<HTMLElement>('.helm-mini.is-compact .helm-mini-day')];
+    expect(days.length).toBeGreaterThan(300);
+    expect(days.filter((d) => d.textContent?.trim() === '').length).toBe(0);
+    expect(days.some((d) => d.textContent === '26' && d.classList.contains('is-today'))).toBe(true);
   });
 
   it('drops a task onto a day of the grid, at the hour it landed on', async () => {

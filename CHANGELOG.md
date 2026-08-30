@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- The year's little months now show **the date in every square**, so a green day is
+  a day you can name instead of a dot to count along to.
+- The **Calendar** view is offered only where a grid says something a list cannot:
+  1 day, 3 days, Week and Workweek. A month, a quarter and a year are read better as
+  the list already draws them — months with their counts, goals and projects — so
+  those scopes no longer carry the switch, and the month grid and year heat map are
+  gone rather than left lying about.
+
 ## 1.22.0 — 2026-08-31
 
 - Work that runs past a boundary now shows as a **ghost in the part it eats into**:

@@ -1,16 +1,17 @@
 /**
  * The calendar proper: a day drawn as time, not as a list.
  *
- * Three shapes, one toolbar: a time grid (a day, three days, a week, a working week), a month of day
- * cells, and a year as a heat map. Everything you can see, you can act on — click a box to open the
+ * A run of days — one, three, a week, a working week — with the hours down the side and every timed
+ * task as a box where its time is. Everything you can see, you can act on: click a box to open the
  * task, click an empty slot to capture one at that time, drag a box (or a whole selection) onto
- * another day or hour to move it.
+ * another day or hour to move it. A month, a quarter and a year are left to the list, which says
+ * more about them than a grid of cells can.
  */
 import type { HelmSettings, IsoDate, Task } from '../core/types';
-import { addDays, humanDate, MONTH_SHORT, startOfWeek, WEEKDAY_SHORT, isoWeekday } from '../core/dates';
-import { isOpen, plannedDate, type DayBucket } from '../data/planner';
+import { MONTH_SHORT, WEEKDAY_SHORT, isoWeekday } from '../core/dates';
+import { isOpen, type DayBucket } from '../data/planner';
 import { gridHours, layOutDay, toHhmm, toMinutes, toneOf, type DayLayout } from '../data/timegrid';
-import { chip, h, icon } from './dom';
+import { h } from './dom';
 import type { UiContext } from './context';
 import { openTaskEditor } from './modals/taskEditor';
 import { openCapture } from './modals/capture';
@@ -138,85 +139,4 @@ export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate
 
   const grid = h('div', { cls: 'helm-cal-grid', attr: { 'data-days': String(dates.length) }, style: { '--cal-days': String(dates.length) } as never }, head, allDay, body);
   root.appendChild(grid);
-}
-
-/** A month: a cell per day, the day's work listed inside, the rest counted. */
-export function renderMonthGrid(ctx: UiContext, root: HTMLElement, from: IsoDate, to: IsoDate, buckets: Map<IsoDate, DayBucket>, settings: HelmSettings, opts: { inMonth?: (d: IsoDate) => boolean } = {}): void {
-  const today = ctx.today();
-  const start = startOfWeek(from, settings.weekStartsOn);
-  const grid = h('div', { cls: 'helm-cal-month' });
-  const order = settings.weekStartsOn === 7 ? [6, 0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6];
-  for (const i of order) grid.appendChild(h('div', { cls: 'helm-cal-month-dow', text: WEEKDAY_SHORT[i] ?? '' }));
-  for (let d = start; d <= to; d = addDays(d, 1)) {
-    const bucket = buckets.get(d);
-    const all = tasksOn(bucket);
-    const open = all.filter((t) => isOpen(t));
-    const done = all.length - open.length;
-    const timed = open.filter((t) => t.time).sort((a, b) => a.time!.start.localeCompare(b.time!.start));
-    const rest = open.filter((t) => !t.time);
-    const shown = [...timed, ...rest].slice(0, 3);
-    const cell = onDayContext(h('div', {
-      cls: ['helm-cal-month-cell', d === today && 'is-today', opts.inMonth && !opts.inMonth(d) && 'is-outside'],
-      onClick: () => ctx.navigate('today', { date: d }),
-    },
-      h('div', { cls: 'helm-cal-month-head' },
-        h('span', { cls: 'helm-cal-month-num', text: String(Number(d.slice(8, 10))) }),
-        h('span', { cls: 'helm-spacer' }),
-        open.length > 0 ? h('span', { cls: 'helm-cal-month-count', text: String(open.length) }) : null,
-      ),
-      ...shown.map((t) => eventBox(ctx, t, { compact: true })),
-      open.length > shown.length ? h('div', { cls: 'helm-hint helm-cal-more', text: `+${open.length - shown.length} more` }) : null,
-      open.length === 0 && done > 0 ? h('div', { cls: 'helm-hint helm-cal-done', text: `✓ ${done} done` }) : null,
-    ), ctx, d);
-    dropOnDay(ctx, cell, d);
-    grid.appendChild(cell);
-  }
-  root.appendChild(grid);
-}
-
-/** A year: one square per day, darker the more is open — where the busy weeks are, at a glance. */
-export function renderYearHeatmap(ctx: UiContext, root: HTMLElement, from: IsoDate, to: IsoDate, buckets: Map<IsoDate, DayBucket>, settings: HelmSettings): void {
-  const today = ctx.today();
-  const start = startOfWeek(from, settings.weekStartsOn);
-  const weeks: IsoDate[][] = [];
-  for (let d = start; d <= to; d = addDays(d, 7)) weeks.push(Array.from({ length: 7 }, (_, i) => addDays(d, i)));
-  const counts = weeks.flat().map((d) => buckets.get(d)?.open.length ?? 0);
-  const busiest = Math.max(1, ...counts);
-  const level = (n: number): number => (n === 0 ? 0 : Math.min(4, Math.ceil((n / busiest) * 4)));
-
-  const table = h('table', { cls: 'helm-cal-heat' });
-  const monthRow = h('tr', {}, h('th', {}));
-  let last = '';
-  for (const w of weeks) {
-    const m = MONTH_SHORT[Number(w[0]!.slice(5, 7)) - 1] ?? '';
-    monthRow.appendChild(h('th', { cls: 'helm-cal-heat-month', text: m === last ? '' : m }));
-    last = m;
-  }
-  const body = h('tbody', {});
-  for (let row = 0; row < 7; row++) {
-    const tr = h('tr', {}, h('th', { cls: 'helm-cal-heat-dow', text: WEEKDAY_SHORT[(settings.weekStartsOn === 7 ? row + 6 : row) % 7] ?? '' }));
-    for (const w of weeks) {
-      const d = w[row]!;
-      const n = buckets.get(d)?.open.length ?? 0;
-      const outside = d < from || d > to;
-      tr.appendChild(h('td', {},
-        h('button', {
-          cls: ['helm-cal-heat-day', `level-${level(n)}`, d === today && 'is-today', outside && 'is-outside'],
-          title: `${humanDate(d, today, { year: true })}: ${n} open`,
-          text: String(Number(d.slice(8, 10))),
-          onClick: () => ctx.navigate('today', { date: d }),
-        }),
-      ));
-    }
-    body.appendChild(tr);
-  }
-  table.append(h('thead', {}, monthRow), body);
-  root.appendChild(h('div', { cls: 'helm-cal-heat-wrap' }, table,
-    h('div', { cls: 'helm-cal-heat-key' }, h('span', { cls: 'helm-hint', text: 'Less' }),
-      ...[0, 1, 2, 3, 4].map((l) => h('span', { cls: ['helm-cal-heat-day', `level-${l}`, 'is-key'] })),
-      h('span', { cls: 'helm-hint', text: 'More open tasks' })),
-  ));
-  void plannedDate;
-  void chip;
-  void icon;
 }

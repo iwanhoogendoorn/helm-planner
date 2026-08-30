@@ -21,7 +21,7 @@ import { notesButton } from '../notes';
 import { dayMenu, firstUsefulDay, onDayContext, periodMenu } from '../dayMenu';
 import { openCapture } from '../modals/capture';
 import { dragKeys, selection } from '../selection';
-import { renderMonthGrid, renderTimeGrid, renderYearHeatmap } from '../calendarGrid';
+import { renderTimeGrid } from '../calendarGrid';
 
 export type CalendarScope = 'day' | '3days' | 'week' | 'workweek' | 'month' | 'quarter' | 'year';
 export type CalendarView = 'list' | 'calendar';
@@ -51,14 +51,17 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
   const go = (scope: CalendarScope, date: IsoDate): void => ctx.navigate('week', { date, scope });
 
   root.appendChild(crumbBar(ctx, 'week', [...dateCrumbs(ctx, state.anchor, periodKind, { day: false }), ...(state.anchor !== today ? [{ label: 'today', onClick: () => go(state.scope, today), title: 'Back to today' }] : [])], { homeClick: () => go(state.scope, today), homeTitle: 'Back to today' }));
-  const view: CalendarView = state.view ?? 'list';
+  // A time grid is worth having for a run of days. A month, a quarter or a year is better read as the
+  // list already draws it — months with their goals and projects — so those scopes have no switch.
+  const griddable = state.scope === 'day' || state.scope === '3days' || state.scope === 'week' || state.scope === 'workweek';
+  const view: CalendarView = griddable ? state.view ?? 'list' : 'list';
   const span = scopeDays(state.scope, state.anchor, settings);
   root.appendChild(h('div', { cls: 'helm-cal-bar' },
     h('div', { cls: 'helm-segmented' }, ...SCOPES.map((s) => h('button', { cls: ['helm-seg', state.scope === s.id && 'is-active'], text: s.label, onClick: () => go(s.id, state.anchor) }))),
-    h('span', { cls: 'helm-segmented helm-cal-views' }, ...([['list', 'List', 'list'], ['calendar', 'Calendar', 'calendar-days']] as const).map(([id, label, ic]) =>
-      h('button', { cls: ['helm-seg', view === id && 'is-active'], title: `${label} view`, onClick: () => { state.view = id; ctx.refresh(); } }, icon(ic), h('span', { text: label })))),
+    griddable ? h('span', { cls: 'helm-segmented helm-cal-views' }, ...([['list', 'List', 'list'], ['calendar', 'Calendar', 'calendar-days']] as const).map(([id, label, ic]) =>
+      h('button', { cls: ['helm-seg', view === id && 'is-active'], title: `${label} view`, onClick: () => { state.view = id; ctx.refresh(); } }, icon(ic), h('span', { text: label })))) : null,
     h('span', { cls: 'helm-spacer' }),
-    h('span', { cls: 'helm-hint', text: state.scope === 'quarter' || state.scope === 'year' ? `${period.start} → ${period.end}` : `${span[0]} → ${span[span.length - 1]}` }),
+    h('span', { cls: 'helm-hint', text: griddable ? `${span[0]} → ${span[span.length - 1]}` : `${period.start} → ${period.end}` }),
   ));
 
   if (view === 'calendar') { renderCalendarView(ctx, root, state, span, today, settings); return; }
@@ -221,7 +224,7 @@ function miniMonth(ctx: UiContext, m: Period, days: Map<IsoDate, DayBucket>, tod
       title: b && !out ? `${humanDate(d, today)}: ${b.done.length} done · ${b.open.length} planned${b.dueUnplanned.length ? ` · ${b.dueUnplanned.length} due` : ''}` : '',
       onClick: (ev) => { ev.stopPropagation(); if (!out) ctx.navigate('today', { date: d }); },
       onContextMenu: (ev: MouseEvent) => { if (!out) dayMenu(ctx, d, ev); else ev.preventDefault(); },
-    }, opts.compact ? null : h('span', { text: String(Number(d.slice(8, 10))) })));
+    }, h('span', { text: String(Number(d.slice(8, 10))) })));   // the date, always — a square with no number is a puzzle
   }
   return grid;
 }
@@ -296,10 +299,5 @@ function renderCalendarView(ctx: UiContext, root: HTMLElement, state: CalendarSt
     button('New task', { icon: 'plus', onClick: () => openCapture(ctx, { date: firstUsefulDay(period, today) }) }),
   ));
 
-  if (state.scope === 'year') { renderYearHeatmap(ctx, root, period.start, period.end, days, settings); return; }
-  if (state.scope === 'month' || state.scope === 'quarter') {
-    renderMonthGrid(ctx, root, period.start, period.end, days, settings, { inMonth: (d) => d >= period.start && d <= period.end });
-    return;
-  }
   renderTimeGrid(ctx, root, span, days, settings);
 }
