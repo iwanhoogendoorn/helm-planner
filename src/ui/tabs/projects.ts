@@ -24,10 +24,21 @@ import { plainLabel } from '../../core/label';
 
 export type ProjectView = 'list' | 'board' | 'table' | 'timeline';
 
-export interface ProjectsState { projectId?: string; view?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
+export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
 
 const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', planned: 'Planned', 'on-hold': 'On hold', idea: 'Ideas', done: 'Done', cancelled: 'Cancelled', archived: 'Archived' };
 const FLAG_LABEL: Record<ProjectHealth['flags'][number], string> = { 'no-next-action': 'no next action', stale: 'stale', overdue: 'overdue tasks', 'due-soon': 'due soon', 'past-due': 'past due', blocked: 'blocked' };
+
+const VIEWS: [ProjectView, string, string][] = [['list', 'List', 'list'], ['board', 'Board', 'columns-3'], ['table', 'Table', 'table'], ['timeline', 'Timeline', 'gantt-chart']];
+
+/** The List / Board / Table / Timeline switcher, shared by the project list and a single project. */
+function viewSwitcher(ctx: UiContext, state: ProjectsState, key: 'view' | 'listView'): HTMLElement {
+  const current = state[key] ?? 'list';
+  return h('span', { cls: 'helm-segmented helm-project-views' }, ...VIEWS.map(([id, label, ic]) => h('button', {
+    cls: ['helm-seg', current === id && 'is-active'], title: `${label} view`,
+    onClick: () => { state[key] = id; ctx.refresh(); },
+  }, icon(ic), h('span', { text: label }))));
+}
 
 export function renderProjects(ctx: UiContext, root: HTMLElement, state: ProjectsState): void {
   if (state.projectId) {
@@ -51,6 +62,7 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     filter,
     h('label', { cls: 'helm-toggle' }, h('input', { attr: { type: 'checkbox', checked: state.showClosed }, onChange: (ev) => { state.showClosed = (ev.target as HTMLInputElement).checked; ctx.refresh(); } }), h('span', { text: 'Show closed' })),
     h('span', { cls: 'helm-spacer' }),
+    viewSwitcher(ctx, state, 'listView'),
     button('New project', { icon: 'folder-plus', primary: true, onClick: () => openProjectForm(ctx, { onCreated: (p) => ctx.navigate('projects', { projectId: p.id }) }) }),
   ));
   if (all.length === 0) {
@@ -59,6 +71,13 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
   }
   const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
   const groups: ProjectStatus[] = ['active', 'planned', 'on-hold', 'idea', ...(state.showClosed ? (['done', 'cancelled', 'archived'] as ProjectStatus[]) : [])];
+  const listView: ProjectView = state.listView ?? 'list';
+  if (listView !== 'list') {
+    if (listView === 'board') renderProjectsBoard(ctx, root, groups, visible, today);
+    if (listView === 'table') renderProjectsTable(ctx, root, visible, today);
+    if (listView === 'timeline') renderProjectsTimeline(ctx, root, visible, today);
+    return;
+  }
   for (const st of groups) {
     const roots = visible.filter((hh) => hh.project.status === st && (!hh.project.parentId || !byId.has(hh.project.parentId) || byId.get(hh.project.parentId)!.project.status !== st));
     if (roots.length === 0) continue;
@@ -217,13 +236,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   };
 
   const view: ProjectView = state.view ?? 'list';
-  const VIEWS: [ProjectView, string, string][] = [['list', 'List', 'list'], ['board', 'Board', 'columns-3'], ['table', 'Table', 'table'], ['timeline', 'Timeline', 'gantt-chart']];
-  root.appendChild(h('div', { cls: 'helm-toolbar helm-project-views' },
-    h('span', { cls: 'helm-segmented' }, ...VIEWS.map(([id, label, ic]) => h('button', {
-      cls: ['helm-seg', view === id && 'is-active'], title: `${label} view`,
-      onClick: () => { state.view = id; ctx.refresh(); },
-    }, icon(ic), h('span', { text: label })))),
-  ));
+  root.appendChild(h('div', { cls: 'helm-toolbar' }, viewSwitcher(ctx, state, 'view')));
 
   if (view !== 'list') {
     if (view === 'board') renderBoard(ctx, root, p, hh, state, today);
@@ -276,6 +289,117 @@ function projectLinks(ctx: UiContext, p: Project): LinkHolder {
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addProjectLink(p.id, url, label)),
     remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removeProjectLink(p.id, url)),
   };
+}
+
+/* ── The same four ways of looking, for the whole list of projects ────── */
+
+/** Kanban of projects: a column per status, drag a card to change its status. */
+function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectStatus[], visible: ProjectHealth[], today: IsoDate): void {
+  const board = h('div', { cls: 'helm-board' });
+  for (const st of groups) {
+    const inCol = visible.filter((hh) => hh.project.status === st);
+    const cards = h('div', { cls: 'helm-board-cards' });
+    for (const hh of inCol) {
+      const p = hh.project;
+      const card = h('div', { cls: ['helm-board-card', p.pinned && 'is-pinned'], attr: { draggable: 'true' }, onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
+        h('div', { cls: 'helm-board-card-text' }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { text: p.title })),
+        h('div', { cls: 'helm-task-meta' },
+          chip(`${hh.done}/${hh.total}`, 'count'),
+          p.area ? chip(p.area, 'area') : null,
+          p.due ? chip(`due ${humanDate(p.due, today)}`, p.due < today ? 'due is-overdue' : 'due') : null,
+        ),
+      );
+      card.addEventListener('dragstart', (ev) => { ev.dataTransfer?.setData('text/helm-project-card', p.id); card.addClass('is-dragging'); });
+      card.addEventListener('dragend', () => card.removeClass('is-dragging'));
+      cards.appendChild(card);
+    }
+    const column = h('div', { cls: 'helm-board-col' },
+      h('div', { cls: 'helm-board-head' }, h('span', { cls: 'helm-board-title', text: STATUS_LABEL[st] }), h('span', { cls: 'helm-badge-count', text: String(inCol.length) })),
+      cards,
+    );
+    column.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-project-card')) { ev.preventDefault(); column.addClass('is-dropping'); } });
+    column.addEventListener('dragleave', () => column.removeClass('is-dropping'));
+    column.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      column.removeClass('is-dropping');
+      const id = ev.dataTransfer?.getData('text/helm-project-card');
+      if (id) void ctx.run('Status', () => ctx.mutations.setProjectFields(id, { status: st }));
+    });
+    board.appendChild(column);
+  }
+  root.appendChild(board);
+}
+
+/** Every project in one sortable table. */
+function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate): void {
+  const rows = [...visible];
+  const table = h('table', { cls: 'helm-table helm-project-table' });
+  const head = h('tr', {}, ...['Project', 'Status', 'Priority', 'Area', 'Open', 'Done', 'Due', 'Last activity'].map((l) => h('th', { text: l })));
+  const body = h('tbody', {});
+  const draw = (): void => {
+    body.replaceChildren(...rows.map((hh) => {
+      const p = hh.project;
+      return h('tr', { cls: 'is-clickable', onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
+        h('td', {}, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { text: p.title })),
+        h('td', { text: STATUS_LABEL[p.status] }),
+        h('td', { text: p.priority }),
+        h('td', { text: p.area ?? '—' }),
+        h('td', { text: String(hh.open) }),
+        h('td', { text: String(hh.done) }),
+        h('td', { cls: p.due && p.due < today ? 'is-bad' : '', text: p.due ? humanDate(p.due, today) : '—' }),
+        h('td', { text: hh.lastTouched ? relativeDays(hh.lastTouched, today) : '—' }),
+      );
+    }));
+  };
+  const keys: ((hh: ProjectHealth) => string)[] = [
+    (hh) => hh.project.title.toLowerCase(), (hh) => hh.project.status, (hh) => hh.project.priority, (hh) => (hh.project.area ?? '~').toLowerCase(),
+    (hh) => String(hh.open).padStart(6, '0'), (hh) => String(hh.done).padStart(6, '0'),
+    (hh) => hh.project.due ?? '9999', (hh) => hh.lastTouched ?? '',
+  ];
+  let sorted = -1;
+  head.querySelectorAll('th').forEach((th, i) => {
+    th.addClass('is-clickable');
+    th.addEventListener('click', () => {
+      const key = keys[i]!;
+      const dir = sorted === i ? -1 : 1;
+      sorted = sorted === i ? -1 : i;
+      rows.sort((a, b) => key(a).localeCompare(key(b)) * dir);
+      draw();
+    });
+  });
+  draw();
+  table.append(h('thead', {}, head), body);
+  root.appendChild(h('div', { cls: 'helm-table-wrap' }, table));
+}
+
+/** Projects across the weeks they run through, from their start to their due date. */
+function renderProjectsTimeline(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate): void {
+  const weekStart = ctx.settings().weekStartsOn;
+  const dated = visible.filter((hh) => hh.project.start || hh.project.due);
+  if (dated.length === 0) { root.appendChild(empty('No project carries a start or due date yet, so there is no timeline to draw.')); return; }
+  const from = dated.map((hh) => hh.project.start ?? hh.project.due!).sort()[0]!;
+  const to = dated.map((hh) => hh.project.due ?? hh.project.start!).sort().at(-1)!;
+  const weeks: IsoDate[] = [];
+  for (let d = startOfWeek(from, weekStart); d <= startOfWeek(to, weekStart) && weeks.length < 60; d = addDays(d, 7)) weeks.push(d);
+  const thisWeek = startOfWeek(today, weekStart);
+  const table = h('table', { cls: 'helm-table helm-timeline' },
+    h('thead', {}, h('tr', {}, h('th', { cls: 'helm-timeline-name', text: 'Project' }), ...weeks.map((w) => h('th', { cls: ['helm-timeline-week', w === thisWeek && 'is-now'], text: humanDate(w).replace(/^\w+ /, ''), title: `Week of ${humanDate(w, today, { year: true })}` })))),
+    h('tbody', {}, ...dated.map((hh) => {
+      const p = hh.project;
+      const s = p.start ?? p.due!;
+      const e = p.due ?? p.start!;
+      return h('tr', { cls: 'is-clickable', onClick: () => ctx.navigate('projects', { projectId: p.id }) },
+        h('td', { cls: 'helm-timeline-name', text: p.title }),
+        ...weeks.map((w) => {
+          const end = addDays(w, 6);
+          const inRun = s <= end && e >= w;
+          return h('td', { cls: ['helm-timeline-cell', inRun && 'is-run', w === thisWeek && 'is-now'], title: inRun ? `${p.title}: ${humanDate(s, today)} → ${humanDate(e, today, { year: true })}` : '' });
+        }),
+      );
+    })),
+  );
+  root.appendChild(h('div', { cls: 'helm-table-wrap' }, table));
+  root.appendChild(h('div', { cls: 'helm-hint', text: 'A bar runs from a project’s start to its due date; projects without either are left out.' }));
 }
 
 /* ── Other ways to look at a project ─────────────────────────────────── */

@@ -1289,6 +1289,44 @@ describe('dragging a task between parts of the day', () => {
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
   });
 
+  it('offers the same four views for the whole project list', async () => {
+    const { ctx, m, index } = await ctxFor();
+    const state = { filter: '', showClosed: false, showDone: false, collapsed: new Map() } as Parameters<typeof renderProjects>[2];
+    const view = () => render((r) => renderProjects(ctx, r, state));
+    expect(texts(view(), '.helm-project-views .helm-seg')).toEqual(['List', 'Board', 'Table', 'Timeline']);
+
+    // Board of projects: a column per status, dragging a card changes the status.
+    click([...view().querySelectorAll('.helm-project-views .helm-seg')].find((b) => b.textContent === 'Board'));
+    expect(state.listView).toBe('board');
+    let root = view();
+    expect(texts(root, '.helm-board-title')).toEqual(['Active', 'Planned', 'On hold', 'Ideas']);
+    expect(texts(root, '.helm-board-card-text')).toContain('Kitchen Remodel');
+    const onHold = [...root.querySelectorAll<HTMLElement>('.helm-board-col')].find((c) => c.textContent?.startsWith('On hold'))!;
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-project-card'], getData: (k: string) => (k === 'text/helm-project-card' ? 'prj-kitchen' : '') } });
+    onHold.dispatchEvent(ev);
+    await flush(); await flush();
+    expect(index.project('prj-kitchen')!.status).toBe('on-hold');
+
+    // Table of projects, sortable.
+    state.listView = 'table';
+    root = view();
+    expect(texts(root, '.helm-project-table thead th')).toEqual(['Project', 'Status', 'Priority', 'Area', 'Open', 'Done', 'Due', 'Last activity']);
+    const before = texts(root, '.helm-project-table tbody tr td:first-child');
+    expect(before.length).toBeGreaterThan(1);
+    click(root.querySelectorAll('.helm-project-table thead th')[0]);
+    expect(texts(root, '.helm-project-table tbody tr td:first-child')).toEqual([...before].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+
+    // Timeline of projects, once one carries dates.
+    state.listView = 'timeline';
+    expect(view().querySelector('.helm-timeline') ?? view().querySelector('.helm-empty')).toBeTruthy();
+    await m.setProjectFields('prj-book', { start: '2026-09-01', due: '2026-09-20' });
+    root = view();
+    expect(root.querySelector('.helm-timeline')).toBeTruthy();
+    expect(texts(root, '.helm-timeline-name')).toContain('Oracle Book Writing');
+    expect(root.querySelectorAll('.helm-timeline-cell.is-run').length).toBeGreaterThan(0);
+  });
+
   it('offers list, board, table and timeline views of a project', async () => {
     const { ctx, m, index, vault } = await ctxFor();
     void vault;

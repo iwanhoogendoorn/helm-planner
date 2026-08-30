@@ -2,12 +2,19 @@
 
 ## Unreleased
 
-- A project can be looked at four ways, switched at the top: **List** (as
-  before), **Board** — a column per phase, drag a card to move a task into it —
-  **Table** — every task with its phase, status, due date and effort, sortable
-  by any column — and **Timeline** — phases across the weeks they run through,
-  with a count of the tasks falling in each. The choice sticks while Obsidian
-  is open.
+- Four ways to look at your work, switched from the toolbar, in **both** the
+  project list and inside a project:
+  - **List** — as before.
+  - **Board** — inside a project, a column per phase (drag a card to move the
+    task into it); in the list, a column per status (drag a project to change
+    it).
+  - **Table** — inside a project: task, phase, status, due, effort; in the
+    list: project, status, priority, area, open, done, due, last activity.
+    Any column sorts, click again to reverse.
+  - **Timeline** — weeks across the top; inside a project the phases run from
+    their earliest to their latest date, in the list the projects run from
+    start to due. Says so plainly when nothing is dated.
+  Each choice sticks while Obsidian is open.
 - Phases can be **deleted**: a bin next to the pencil on each phase header. It
   asks first, tells you how many tasks are involved, then removes the heading
   and moves everything it held into the project's own task list — the work is
