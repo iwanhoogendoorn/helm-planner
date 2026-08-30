@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.22.0 — 2026-08-31
 
 - Work that runs past a boundary now shows as a **ghost in the part it eats into**:
   dinner from 17:00 to 19:30 stays in the afternoon where it starts, and the evening
