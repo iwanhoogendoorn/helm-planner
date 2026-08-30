@@ -101,5 +101,15 @@ describe('quick capture', () => {
     expect(c.text).toBe('Water plants');
     expect(parseCapture('x !!!', today).priority).toBe('high');
     expect(parseCapture('x !low', today).priority).toBe('low');
+
+    // The short forms carry “when done” too, instead of leaving it in the task's text.
+    const w = parseCapture('Review the budget weekly when done', today);
+    expect(w.text).toBe('Review the budget');
+    expect(w.recurrence).toMatchObject({ frequency: 'weekly', whenDone: true });
+    const y = parseCapture('File the accounts annually', today);
+    expect(y.text).toBe('File the accounts');
+    expect(y.recurrence).toMatchObject({ frequency: 'yearly' });
+    // And a repeat at the very end of the line is still picked up.
+    expect(parseCapture('Water the plants every week', today).recurrence?.parsed).toBe(true);
   });
 });

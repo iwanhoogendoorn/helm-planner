@@ -9,6 +9,9 @@
   afternoon. The part's own count still only counts what is planned for it, and the
   “drop a task here” hint gives way — an evening with two and a half hours spoken
   for is not an empty evening.
+- Capture: “weekly when done” and friends now hand the whole phrase to the repeat
+  instead of leaving “when done” sitting in the task's text, and “annually” is
+  understood alongside “yearly”.
 
 ## 1.21.2 — 2026-08-30
 

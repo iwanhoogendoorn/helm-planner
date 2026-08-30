@@ -39,7 +39,7 @@ export function parseCapture(input: string, today: IsoDate, weekStartsOn: 1 | 7 
   const out: Capture = { text: '', tags: [], priority: 'normal' };
 
   // Recurrence first (it may contain weekday names).
-  s = s.replace(/\s(every\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years|weekday|weekend)(?:\s+on\s+(?:the\s+)?[\w, ]+?)?(?:\s+when\s+done)?|daily|weekly|monthly|yearly)(?=\s)/i, (_, r: string) => {
+  s = s.replace(/\s(every\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years|weekday|weekend)(?:\s+on\s+(?:the\s+)?[\w, ]+?)?(?:\s+when\s+done)?|(?:daily|weekly|monthly|yearly|annually)(?:\s+when\s+done)?)(?=\s)/i, (_, r: string) => {
     const rec = parseRecurrence(r);
     if (rec.parsed) { out.recurrence = rec; return ' '; }
     return ` ${r}`;
