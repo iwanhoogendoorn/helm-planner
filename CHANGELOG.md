@@ -9,6 +9,10 @@
   afternoon. The part's own count still only counts what is planned for it, and the
   “drop a task here” hint gives way — an evening with two and a half hours spoken
   for is not an empty evening.
+- A raw `*.excalidraw` file now says **why** it cannot be attached — it has no
+  frontmatter to hold the link — and names the fix (“Excalidraw: Convert
+  *.excalidraw to *.md files”). The picker marks them rather than letting you pick
+  one and hit a puzzling error about canvases.
 - An empty day still ahead now shows **Morning, Afternoon and Evening** alongside
   Anytime, each ready to be dropped into, instead of collapsing to “Nothing planned
   yet” with only Anytime standing. A day in the past is still a record: parts with

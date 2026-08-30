@@ -35,6 +35,11 @@ export interface Drawing {
   mentionedTaskIds: string[];
   /** Whether the drawing was made by Helm's AI diagram generator. */
   generated: boolean;
+  /**
+   * A raw `*.excalidraw` JSON file rather than an Obsidian-Excalidraw note. It has no frontmatter to
+   * carry an attachment, so Helm can show it but cannot link it until it is converted.
+   */
+  legacy: boolean;
 }
 
 export const DRAWING_RE = /\.(excalidraw\.md|excalidraw|canvas)$/i;
@@ -53,7 +58,7 @@ const unlink = (s: string): string => s.replace(/^\[\[|\]\]$/g, '').split('|')[0
 /** Parse a drawing. Only the frontmatter and the `## Text Elements` section are read; the scene JSON is skipped. */
 export function parseDrawing(path: string, content: string | undefined, mtime?: number): Drawing {
   const kind: Drawing['kind'] = /\.canvas$/i.test(path) ? 'canvas' : 'excalidraw';
-  const d: Drawing = { path, title: drawingTitle(path), kind, taskIds: [], projectRefs: [], dates: [], periodKeys: [], habitIds: [], links: [], mentionedTaskIds: [], generated: false, ...(mtime !== undefined ? { mtime } : {}) };
+  const d: Drawing = { path, title: drawingTitle(path), kind, taskIds: [], projectRefs: [], dates: [], periodKeys: [], habitIds: [], links: [], mentionedTaskIds: [], generated: false, legacy: kind === 'excalidraw' && !/\.md$/i.test(path), ...(mtime !== undefined ? { mtime } : {}) };
   if (!content || kind === 'canvas') return d;
   const doc = parseDocument(content);
   const fm = doc.frontmatter.values;

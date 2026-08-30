@@ -38,7 +38,7 @@ class DrawingPicker extends FuzzySuggestModal<Drawing> {
     this.setPlaceholder('Drawing to link…');
   }
   getItems(): Drawing[] { return this.items; }
-  getItemText(d: Drawing): string { return `${d.title}  ·  ${d.path}`; }
+  getItemText(d: Drawing): string { return `${d.title}${d.legacy ? '  ·  raw .excalidraw — convert it first' : ''}  ·  ${d.path}`; }
   onChooseItem(d: Drawing): void { this.onPick(d); }
 }
 
@@ -53,7 +53,11 @@ export function pickDrawing(ctx: UiContext, exclude: Set<string>, onPick: (d: Dr
 
 export function linkExisting(ctx: UiContext, target: DrawingTarget): void {
   const attached = new Set(ctx.index.drawingsFor(target).map((d) => d.path));
-  pickDrawing(ctx, attached, (d) => void ctx.run('Link drawing', async () => { await ctx.mutations.linkDrawing(target, d.path); ctx.notify(`Linked “${d.title}” to ${target.title}.`); }));
+  pickDrawing(ctx, attached, (d) => {
+    // A raw .excalidraw has nowhere to keep the attachment; say so plainly instead of failing at the write.
+    if (d.legacy) { ctx.notify(`“${d.title}” is a raw .excalidraw file, so it has no frontmatter to hold the link. Run “Excalidraw: Convert *.excalidraw to *.md files”, then attach it here.`); return; }
+    void ctx.run('Link drawing', async () => { await ctx.mutations.linkDrawing(target, d.path); ctx.notify(`Linked “${d.title}” to ${target.title}.`); });
+  });
 }
 
 /** Fill a menu with the drawings of a target and the ways to add one. */

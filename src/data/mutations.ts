@@ -1267,7 +1267,8 @@ export class Mutations {
 
   /** Attach an existing drawing to a target: a helm-* frontmatter key on the drawing, plus the embed in the target's note. */
   async linkDrawing(target: DrawingTarget, drawingPath: string): Promise<void> {
-    if (!drawingPath.endsWith('.md')) throw new Error('Only Excalidraw drawings (.excalidraw.md) can be linked; a canvas is attached by its folder or name');
+    if (drawingPath.endsWith('.canvas')) throw new Error('A canvas is attached by its folder or its name, not linked');
+    if (!drawingPath.endsWith('.md')) throw new Error(`“${drawingTitle(drawingPath)}” is a raw .excalidraw file. Helm attaches a drawing through its frontmatter, which only the Obsidian format has — run the command “Excalidraw: Convert *.excalidraw to *.md files”, then link it`);
     let id: string | undefined;
     if (target.kind === 'task') id = await this.ensureId(target.key);
     const [key, value] = Object.entries(this.drawingFrontmatter(target, id))[0]! as [string, string];

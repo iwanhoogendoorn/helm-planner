@@ -12,6 +12,7 @@ import { openCapture } from '../../src/ui/modals/capture';
 import { openPlanDay } from '../../src/ui/modals/planDay';
 import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
+import { linkExisting } from '../../src/ui/drawings';
 import { openSearch } from '../../src/ui/modals/search';
 import { taskMenu } from '../../src/ui/menus';
 import { taskRow } from '../../src/ui/taskRow';
@@ -22,8 +23,8 @@ import { renderHorizons } from '../../src/ui/tabs/horizons';
 import { renderDashboard, defaultDashboardState } from '../../src/ui/tabs/dashboard';
 import { renderCalendar, type CalendarState } from '../../src/ui/tabs/calendar';
 
-async function ctxFor() {
-  const s = await setup();
+async function ctxFor(extra?: Record<string, string>) {
+  const s = await setup(extra);
   const nav: { tab: TabId; opts?: unknown }[] = [];
   const opened: string[] = [];
   const ctx: UiContext = {
@@ -374,6 +375,26 @@ describe('Modals', () => {
     expect(await vault.read(dailyPath(TODAY))).toContain('Chase UC3 [NAT docs](https://docs.example.com/nat)');
     expect(await vault.read(dailyPath(TODAY))).not.toContain('jira.example.com');
     void t;
+  });
+
+  it('says why a raw .excalidraw file cannot be linked, instead of failing at the write', async () => {
+    const { ctx, m, index } = await ctxFor({
+      'Excalidraw/old wireframes.excalidraw': '{"type":"excalidraw","elements":[]}',
+    });
+    const raw = index.allDrawings().find((d) => d.path.endsWith('old wireframes.excalidraw'))!;
+    expect(raw.legacy).toBe(true);
+    expect(index.allDrawings().filter((d) => d.legacy)).toHaveLength(1); // the .excalidraw.md ones are fine
+
+    const target = { kind: 'project' as const, id: 'prj-kitchen', title: 'Kitchen Remodel' };
+    await expect(m.linkDrawing(target, raw.path)).rejects.toThrow(/raw \.excalidraw file.*Convert \*\.excalidraw/s);
+
+    // The picker lists it, marked, and picking it explains rather than throwing.
+    linkExisting(ctx, target);
+    const picker = Modal.last as unknown as { getItems: () => { title: string; legacy: boolean }[]; getItemText: (d: unknown) => string; onChooseItem: (d: unknown) => void };
+    const listed = picker.getItems().find((d) => d.title === 'old wireframes')!;
+    expect(picker.getItemText(listed)).toContain('raw .excalidraw — convert it first');
+    picker.onChooseItem(listed);
+    expect(Notice.messages.at(-1)).toMatch(/Convert \*\.excalidraw to \*\.md files/);
   });
 
   it('capture has repeat buttons that write the phrase the parser reads', async () => {
