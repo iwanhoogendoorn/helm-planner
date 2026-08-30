@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.21.0 — 2026-08-30
 
 - Four ways to look at your work, switched from the toolbar, in **both** the
   project list and inside a project:
