@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The “3 sub-projects” chip is now a **handle**: click it and the family opens in
+  place — a card, row or timeline bar each — so you can drag one sub-project into
+  another column, open it or right-click it **without picking up its master**.
+  Click again to fold them back in. Works the same in the board, the table and the
+  timeline.
+
 ## 1.21.1 — 2026-08-30
 
 - The board, table and timeline show **umbrellas only**: a sub-project no longer

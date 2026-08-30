@@ -1343,6 +1343,44 @@ describe('dragging a task between parts of the day', () => {
     expect(oracleRow.querySelectorAll('.helm-timeline-cell.is-run').length).toBeGreaterThan(0);
   });
 
+  it('opens an umbrella on the board so a single sub-project can be dragged out on its own', async () => {
+    const { ctx, index } = await ctxFor();
+    const state = { filter: '', showClosed: false, showDone: false, collapsed: new Map(), listView: 'board' } as Parameters<typeof renderProjects>[2];
+    const view = () => render((r) => renderProjects(ctx, r, state));
+    let root = view();
+    expect(texts(root, '.helm-board-card-text')).not.toContain('OCI Certification');
+
+    // The chip is the handle: click it and the family shows, each on a card of its own.
+    const oracle = [...root.querySelectorAll<HTMLElement>('.helm-board-card')].find((c) => c.querySelector('.helm-board-card-text')?.textContent === 'Oracle')!;
+    click(oracle.querySelector('.helm-chip.subs'));
+    expect(state.openSubs?.has('prj-oracle')).toBe(true);
+    root = view();
+    expect(texts(root, '.helm-board-card-text')).toContain('OCI Certification');
+    const sub = [...root.querySelectorAll<HTMLElement>('.helm-board-card')].find((c) => c.querySelector('.helm-board-card-text')?.textContent === 'OCI Certification')!;
+    expect(sub.classList.contains('is-sub')).toBe(true);
+
+    // Picking that card up carries the sub-project's own id — not its master's.
+    const carried: Record<string, string> = {};
+    const start = new Event('dragstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(start, 'dataTransfer', { value: { setData: (k: string, v: string) => { carried[k] = v; }, types: [] } });
+    sub.dispatchEvent(start);
+    expect(carried['text/helm-project-card']).toBe('prj-cert');
+
+    // Dropping it moves the sub-project alone; its master stays where it is.
+    const onHold = [...root.querySelectorAll<HTMLElement>('.helm-board-col')].find((c) => c.textContent?.startsWith('On hold'))!;
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-project-card'], getData: () => carried['text/helm-project-card']! } });
+    onHold.dispatchEvent(ev);
+    await flush(); await flush();
+    expect(index.project('prj-cert')!.status).toBe('on-hold');
+    expect(index.project('prj-oracle')!.status).toBe('active');
+
+    // Clicking the chip again folds them back in.
+    root = view();
+    const again = [...root.querySelectorAll<HTMLElement>('.helm-board-card')].find((c) => c.querySelector('.helm-board-card-text')?.textContent === 'Oracle')!;
+    expect(again.querySelector('.helm-chip.subs')).toBeNull(); // nothing left to stand for
+  });
+
   it('a sub-project in another column keeps its own card, and its work is counted there', async () => {
     const { ctx, m } = await ctxFor();
     const state = { filter: '', showClosed: false, showDone: false, collapsed: new Map(), listView: 'board' } as Parameters<typeof renderProjects>[2];

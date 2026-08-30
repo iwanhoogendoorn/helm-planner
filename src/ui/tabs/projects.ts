@@ -24,7 +24,7 @@ import { plainLabel } from '../../core/label';
 
 export type ProjectView = 'list' | 'board' | 'table' | 'timeline';
 
-export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean }
+export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean; openSubs?: Set<string> }
 
 const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', planned: 'Planned', 'on-hold': 'On hold', idea: 'Ideas', done: 'Done', cancelled: 'Cancelled', archived: 'Archived' };
 const FLAG_LABEL: Record<ProjectHealth['flags'][number], string> = { 'no-next-action': 'no next action', stale: 'stale', overdue: 'overdue tasks', 'due-soon': 'due soon', 'past-due': 'past due', blocked: 'blocked' };
@@ -73,9 +73,10 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
   const groups: ProjectStatus[] = ['active', 'planned', 'on-hold', 'idea', ...(state.showClosed ? (['done', 'cancelled', 'archived'] as ProjectStatus[]) : [])];
   const listView: ProjectView = state.listView ?? 'list';
   if (listView !== 'list') {
-    if (listView === 'board') renderProjectsBoard(ctx, root, groups, visible, today);
-    if (listView === 'table') renderProjectsTable(ctx, root, visible, today);
-    if (listView === 'timeline') renderProjectsTimeline(ctx, root, visible, today);
+    if (!state.openSubs) state.openSubs = new Set();
+    if (listView === 'board') renderProjectsBoard(ctx, root, groups, visible, today, state);
+    if (listView === 'table') renderProjectsTable(ctx, root, visible, today, state);
+    if (listView === 'timeline') renderProjectsTimeline(ctx, root, visible, today, state);
     return;
   }
   for (const st of groups) {
@@ -301,13 +302,13 @@ function projectLinks(ctx: UiContext, p: Project): LinkHolder {
  * status: putting a sub-project on hold does not put the master on hold, so it belongs in On hold by
  * itself, and its work is counted there rather than twice. This is the rule the list view nests by.
  */
-type Umbrella = { hh: ProjectHealth; subs: number; done: number; total: number; open: number; start?: IsoDate; due?: IsoDate; touched?: IsoDate };
+type Umbrella = { hh: ProjectHealth; kids: Umbrella[]; subs: number; done: number; total: number; open: number; start?: IsoDate; due?: IsoDate; touched?: IsoDate };
 
 function umbrellas(visible: ProjectHealth[]): Umbrella[] {
   const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
   const roll = (hh: ProjectHealth, status: ProjectStatus, seen: Set<string>): Umbrella => {
     seen.add(hh.project.id);
-    const u: Umbrella = { hh, subs: 0, done: hh.done, total: hh.total, open: hh.open };
+    const u: Umbrella = { hh, kids: [], subs: 0, done: hh.done, total: hh.total, open: hh.open };
     if (hh.project.start) u.start = hh.project.start;
     if (hh.project.due) u.due = hh.project.due;
     if (hh.lastTouched) u.touched = hh.lastTouched;
@@ -315,6 +316,7 @@ function umbrellas(visible: ProjectHealth[]): Umbrella[] {
       const c = byId.get(cid);
       if (!c || seen.has(cid) || c.project.status !== status) continue; // it stands in its own column
       const sub = roll(c, status, seen);
+      u.kids.push(sub);
       u.subs += 1 + sub.subs;
       u.done += sub.done; u.total += sub.total; u.open += sub.open;
       if (sub.start && (!u.start || sub.start < u.start)) u.start = sub.start;
@@ -331,28 +333,55 @@ function umbrellas(visible: ProjectHealth[]): Umbrella[] {
   return visible.filter(stands).map((hh) => roll(hh, hh.project.status, seen));
 }
 
-/** “3 sub-projects”, for a card that is standing in for its family. */
-const subsChip = (u: Umbrella): HTMLElement | null => (u.subs > 0 ? chip(`${u.subs} sub-project${u.subs === 1 ? '' : 's'}`, 'subs') : null);
+/**
+ * “3 sub-projects” — and the handle that opens them. Folded is the resting state, but the family has to
+ * be reachable: opened, each sub-project gets a row of its own that can be dragged, opened or ordered
+ * without touching its master.
+ */
+function subsChip(u: Umbrella, open?: Set<string>, onToggle?: () => void): HTMLElement | null {
+  if (u.subs === 0) return null;
+  const isOpen = open?.has(u.hh.project.id) ?? false;
+  const el = chip(`${u.subs} sub-project${u.subs === 1 ? '' : 's'}`, ['subs', onToggle && 'is-handle', isOpen && 'is-open'].filter(Boolean).join(' '));
+  if (onToggle) {
+    el.prepend(icon(isOpen ? 'chevron-down' : 'chevron-right'));
+    el.setAttribute('title', isOpen ? 'Fold the sub-projects back in' : 'Show the sub-projects on their own');
+    el.addEventListener('click', (ev) => { ev.stopPropagation(); onToggle(); });
+  }
+  return el;
+}
 
-function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectStatus[], visible: ProjectHealth[], today: IsoDate): void {
+/** The umbrellas, plus the children of the ones that are open, in reading order. */
+function unfolded(list: Umbrella[], open: Set<string>): { u: Umbrella; depth: number }[] {
+  const out: { u: Umbrella; depth: number }[] = [];
+  const walk = (u: Umbrella, depth: number): void => {
+    out.push({ u, depth });
+    if (open.has(u.hh.project.id)) for (const k of u.kids) walk(k, depth + 1);
+  };
+  for (const u of list) walk(u, 0);
+  return out;
+}
+
+function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectStatus[], visible: ProjectHealth[], today: IsoDate, state: ProjectsState): void {
   const board = h('div', { cls: 'helm-board' });
   const all = umbrellas(visible);
+  const open = state.openSubs ?? new Set<string>();
   for (const st of groups) {
     const inCol = all.filter((u) => u.hh.project.status === st);
     const cards = h('div', { cls: 'helm-board-cards' });
-    for (const u of inCol) {
+    for (const { u, depth } of unfolded(inCol, open)) {
       const hh = u.hh;
       const p = hh.project;
-      const card = h('div', { cls: ['helm-board-card', p.pinned && 'is-pinned'], attr: { draggable: 'true' }, onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
+      const card = h('div', { cls: ['helm-board-card', depth > 0 && 'is-sub', p.pinned && 'is-pinned'], attr: { draggable: 'true' }, onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
         h('div', { cls: 'helm-board-card-text' }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { text: p.title })),
         h('div', { cls: 'helm-task-meta' },
           chip(`${u.done}/${u.total}`, 'count'),
-          subsChip(u),
+          subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; ctx.refresh(); }),
           p.area ? chip(p.area, 'area') : null,
           p.due ? chip(`due ${humanDate(p.due, today)}`, p.due < today ? 'due is-overdue' : 'due') : null,
         ),
       );
-      card.addEventListener('dragstart', (ev) => { ev.dataTransfer?.setData('text/helm-project-card', p.id); card.addClass('is-dragging'); });
+      // Each card carries its own id, so an opened sub-project can be dragged out on its own.
+      card.addEventListener('dragstart', (ev) => { ev.stopPropagation(); ev.dataTransfer?.setData('text/helm-project-card', p.id); card.addClass('is-dragging'); });
       card.addEventListener('dragend', () => card.removeClass('is-dragging'));
       cards.appendChild(card);
     }
@@ -374,16 +403,17 @@ function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectS
 }
 
 /** Every project in one sortable table. */
-function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate): void {
+function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate, state: ProjectsState): void {
   const rows = umbrellas(visible);
+  const open = state.openSubs ?? new Set<string>();
   const table = h('table', { cls: 'helm-table helm-project-table' });
   const head = h('tr', {}, ...['Project', 'Status', 'Priority', 'Area', 'Open', 'Done', 'Due', 'Last activity'].map((l) => h('th', { text: l })));
   const body = h('tbody', {});
   const draw = (): void => {
-    body.replaceChildren(...rows.map((u) => {
+    body.replaceChildren(...unfolded(rows, open).map(({ u, depth }) => {
       const p = u.hh.project;
-      return h('tr', { cls: 'is-clickable', onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
-        h('td', {}, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { cls: 'helm-project-name', text: p.title }), subsChip(u)),
+      return h('tr', { cls: ['is-clickable', depth > 0 && 'is-sub'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
+        h('td', { cls: `depth-${Math.min(depth, 3)}` }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { cls: 'helm-project-name', text: p.title }), subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; draw(); })),
         h('td', { text: STATUS_LABEL[p.status] }),
         h('td', { text: p.priority }),
         h('td', { text: p.area ?? '—' }),
@@ -416,23 +446,24 @@ function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: Project
 }
 
 /** Projects across the weeks they run through, from their start to their due date. */
-function renderProjectsTimeline(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate): void {
+function renderProjectsTimeline(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate, state: ProjectsState): void {
   const weekStart = ctx.settings().weekStartsOn;
-  const dated = umbrellas(visible).filter((u) => u.start || u.due);
+  const open = state.openSubs ?? new Set<string>();
+  const dated = unfolded(umbrellas(visible), open).map(({ u, depth }) => ({ u, depth })).filter(({ u }) => u.start || u.due);
   if (dated.length === 0) { root.appendChild(empty('No project carries a start or due date yet, so there is no timeline to draw.')); return; }
-  const from = dated.map((u) => u.start ?? u.due!).sort()[0]!;
-  const to = dated.map((u) => u.due ?? u.start!).sort().at(-1)!;
+  const from = dated.map(({ u }) => u.start ?? u.due!).sort()[0]!;
+  const to = dated.map(({ u }) => u.due ?? u.start!).sort().at(-1)!;
   const weeks: IsoDate[] = [];
   for (let d = startOfWeek(from, weekStart); d <= startOfWeek(to, weekStart) && weeks.length < 60; d = addDays(d, 7)) weeks.push(d);
   const thisWeek = startOfWeek(today, weekStart);
   const table = h('table', { cls: 'helm-table helm-timeline' },
     h('thead', {}, h('tr', {}, h('th', { cls: 'helm-timeline-name', text: 'Project' }), ...weeks.map((w) => h('th', { cls: ['helm-timeline-week', w === thisWeek && 'is-now'], text: humanDate(w).replace(/^\w+ /, ''), title: `Week of ${humanDate(w, today, { year: true })}` })))),
-    h('tbody', {}, ...dated.map((u) => {
+    h('tbody', {}, ...dated.map(({ u, depth }) => {
       const p = u.hh.project;
       const s = u.start ?? u.due!;
       const e = u.due ?? u.start!;
-      return h('tr', { cls: 'is-clickable', onClick: () => ctx.navigate('projects', { projectId: p.id }) },
-        h('td', { cls: 'helm-timeline-name' }, h('span', { text: p.title }), subsChip(u)),
+      return h('tr', { cls: ['is-clickable', depth > 0 && 'is-sub'], onClick: () => ctx.navigate('projects', { projectId: p.id }) },
+        h('td', { cls: `helm-timeline-name depth-${Math.min(depth, 3)}` }, h('span', { text: p.title }), subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; ctx.refresh(); })),
         ...weeks.map((w) => {
           const end = addDays(w, 6);
           const inRun = s <= end && e >= w;
