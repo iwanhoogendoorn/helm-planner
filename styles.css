@@ -54,6 +54,7 @@
 .helm-chip.phase { background: transparent; border: 1px dashed var(--background-modifier-border-hover); }
 .helm-chip.subs { background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); margin-left: 6px; gap: 2px; }
 .helm-chip.subs.is-handle { cursor: pointer; }
+.helm-chip.master { background: transparent; border: 1px solid var(--background-modifier-border); font-style: italic; margin-left: 6px; }
 .helm-chip.subs.is-handle:hover { background: rgba(var(--color-blue-rgb), 0.22); }
 .helm-chip.subs .helm-icon { width: 12px; height: 12px; }
 .helm-project-table td.depth-1 { padding-left: 22px; } .helm-project-table td.depth-2 { padding-left: 44px; } .helm-project-table td.depth-3 { padding-left: 66px; }
@@ -791,6 +792,10 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-board-card:hover { border-color: var(--background-modifier-border-hover); }
 .helm-board-card.is-dragging { opacity: 0.4; }
 .helm-board-card.is-sub { margin-left: 14px; border-left: 2px solid var(--background-modifier-border-hover); background: var(--background-secondary-alt); }
+.helm-board-family { display: flex; align-items: center; gap: 6px; padding: 4px 8px; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-radius: var(--radius-s); }
+.helm-board-family:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.helm-board-family .helm-icon { width: 14px; height: 14px; }
+.helm-board-family .helm-hint { font-weight: 400; font-size: 11px; }
 .helm-board-card.is-done .helm-board-card-text { color: var(--text-muted); text-decoration: line-through; }
 .helm-board-card .helm-task-meta { margin-top: 4px; }
 .helm-board-col .helm-quickadd { background: transparent; }

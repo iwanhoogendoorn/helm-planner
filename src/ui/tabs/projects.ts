@@ -350,6 +350,33 @@ function subsChip(u: Umbrella, open?: Set<string>, onToggle?: () => void): HTMLE
   return el;
 }
 
+/**
+ * A sub-project that stands in another column has no master above it, so the column says whose it is:
+ * the family header carries the master's name and where it lives, and the strays sit under it the way
+ * they would at home. Groups keep the order of their first member.
+ */
+function familyGroups(inCol: Umbrella[], byId: Map<string, ProjectHealth>): { under?: ProjectHealth; items: Umbrella[] }[] {
+  const out: { under?: ProjectHealth; items: Umbrella[] }[] = [];
+  const at = new Map<string, { under?: ProjectHealth; items: Umbrella[] }>();
+  for (const u of inCol) {
+    const pid = u.hh.project.parentId;
+    const parent = pid ? byId.get(pid) : undefined; // it only counts as displaced while the master is in view
+    if (!parent) { out.push({ items: [u] }); continue; }
+    let g = at.get(parent.project.id);
+    if (!g) { g = { under: parent, items: [] }; at.set(parent.project.id, g); out.push(g); }
+    g.items.push(u);
+  }
+  return out;
+}
+
+/** In the flat views there is no column to group under, so a displaced sub-project says whose it is. */
+function masterChip(u: Umbrella, depth: number, byId: Map<string, ProjectHealth>): HTMLElement | null {
+  if (depth > 0) return null;
+  const pid = u.hh.project.parentId;
+  const parent = pid ? byId.get(pid) : undefined;
+  return parent ? chip(`under ${parent.project.title}`, 'master') : null;
+}
+
 /** The umbrellas, plus the children of the ones that are open, in reading order. */
 function unfolded(list: Umbrella[], open: Set<string>): { u: Umbrella; depth: number }[] {
   const out: { u: Umbrella; depth: number }[] = [];
@@ -365,25 +392,37 @@ function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectS
   const board = h('div', { cls: 'helm-board' });
   const all = umbrellas(visible);
   const open = state.openSubs ?? new Set<string>();
+  const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
   for (const st of groups) {
     const inCol = all.filter((u) => u.hh.project.status === st);
     const cards = h('div', { cls: 'helm-board-cards' });
-    for (const { u, depth } of unfolded(inCol, open)) {
-      const hh = u.hh;
-      const p = hh.project;
-      const card = h('div', { cls: ['helm-board-card', depth > 0 && 'is-sub', p.pinned && 'is-pinned'], attr: { draggable: 'true' }, onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
-        h('div', { cls: 'helm-board-card-text' }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { text: p.title })),
-        h('div', { cls: 'helm-task-meta' },
-          chip(`${u.done}/${u.total}`, 'count'),
-          subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; ctx.refresh(); }),
-          p.area ? chip(p.area, 'area') : null,
-          p.due ? chip(`due ${humanDate(p.due, today)}`, p.due < today ? 'due is-overdue' : 'due') : null,
-        ),
-      );
-      // Each card carries its own id, so an opened sub-project can be dragged out on its own.
-      card.addEventListener('dragstart', (ev) => { ev.stopPropagation(); ev.dataTransfer?.setData('text/helm-project-card', p.id); card.addClass('is-dragging'); });
-      card.addEventListener('dragend', () => card.removeClass('is-dragging'));
-      cards.appendChild(card);
+    for (const group of familyGroups(inCol, byId)) {
+      if (group.under) {
+        const master = group.under.project;
+        cards.appendChild(h('div', { cls: 'helm-board-family', title: `Master project, ${STATUS_LABEL[master.status].toLowerCase()}`, onClick: () => ctx.navigate('projects', { projectId: master.id }) },
+          icon('folder-tree'),
+          h('span', { cls: 'helm-board-family-title', text: master.title }),
+          h('span', { cls: 'helm-spacer' }),
+          h('span', { cls: 'helm-hint', text: STATUS_LABEL[master.status] }),
+        ));
+      }
+      for (const { u, depth } of unfolded(group.items, open)) {
+        const hh = u.hh;
+        const p = hh.project;
+        const card = h('div', { cls: ['helm-board-card', (depth > 0 || group.under) && 'is-sub', p.pinned && 'is-pinned'], attr: { draggable: 'true' }, onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
+          h('div', { cls: 'helm-board-card-text' }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { text: p.title })),
+          h('div', { cls: 'helm-task-meta' },
+            chip(`${u.done}/${u.total}`, 'count'),
+            subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; ctx.refresh(); }),
+            p.area ? chip(p.area, 'area') : null,
+            p.due ? chip(`due ${humanDate(p.due, today)}`, p.due < today ? 'due is-overdue' : 'due') : null,
+          ),
+        );
+        // Each card carries its own id, so an opened sub-project can be dragged out on its own.
+        card.addEventListener('dragstart', (ev) => { ev.stopPropagation(); ev.dataTransfer?.setData('text/helm-project-card', p.id); card.addClass('is-dragging'); });
+        card.addEventListener('dragend', () => card.removeClass('is-dragging'));
+        cards.appendChild(card);
+      }
     }
     const column = h('div', { cls: 'helm-board-col' },
       h('div', { cls: 'helm-board-head' }, h('span', { cls: 'helm-board-title', text: STATUS_LABEL[st] }), h('span', { cls: 'helm-badge-count', text: String(inCol.length) })),
@@ -406,6 +445,7 @@ function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectS
 function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate, state: ProjectsState): void {
   const rows = umbrellas(visible);
   const open = state.openSubs ?? new Set<string>();
+  const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
   const table = h('table', { cls: 'helm-table helm-project-table' });
   const head = h('tr', {}, ...['Project', 'Status', 'Priority', 'Area', 'Open', 'Done', 'Due', 'Last activity'].map((l) => h('th', { text: l })));
   const body = h('tbody', {});
@@ -413,7 +453,7 @@ function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: Project
     body.replaceChildren(...unfolded(rows, open).map(({ u, depth }) => {
       const p = u.hh.project;
       return h('tr', { cls: ['is-clickable', depth > 0 && 'is-sub'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
-        h('td', { cls: `depth-${Math.min(depth, 3)}` }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { cls: 'helm-project-name', text: p.title }), subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; draw(); })),
+        h('td', { cls: `depth-${Math.min(depth, 3)}` }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { cls: 'helm-project-name', text: p.title }), masterChip(u, depth, byId), subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; draw(); })),
         h('td', { text: STATUS_LABEL[p.status] }),
         h('td', { text: p.priority }),
         h('td', { text: p.area ?? '—' }),
@@ -449,6 +489,7 @@ function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: Project
 function renderProjectsTimeline(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate, state: ProjectsState): void {
   const weekStart = ctx.settings().weekStartsOn;
   const open = state.openSubs ?? new Set<string>();
+  const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
   const dated = unfolded(umbrellas(visible), open).map(({ u, depth }) => ({ u, depth })).filter(({ u }) => u.start || u.due);
   if (dated.length === 0) { root.appendChild(empty('No project carries a start or due date yet, so there is no timeline to draw.')); return; }
   const from = dated.map(({ u }) => u.start ?? u.due!).sort()[0]!;
@@ -463,7 +504,7 @@ function renderProjectsTimeline(ctx: UiContext, root: HTMLElement, visible: Proj
       const s = u.start ?? u.due!;
       const e = u.due ?? u.start!;
       return h('tr', { cls: ['is-clickable', depth > 0 && 'is-sub'], onClick: () => ctx.navigate('projects', { projectId: p.id }) },
-        h('td', { cls: `helm-timeline-name depth-${Math.min(depth, 3)}` }, h('span', { text: p.title }), subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; ctx.refresh(); })),
+        h('td', { cls: `helm-timeline-name depth-${Math.min(depth, 3)}` }, h('span', { text: p.title }), masterChip(u, depth, byId), subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; ctx.refresh(); })),
         ...weeks.map((w) => {
           const end = addDays(w, 6);
           const inRun = s <= end && e >= w;

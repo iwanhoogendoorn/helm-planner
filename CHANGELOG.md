@@ -7,6 +7,11 @@
   another column, open it or right-click it **without picking up its master**.
   Click again to fold them back in. Works the same in the board, the table and the
   timeline.
+- A sub-project you drag into another column no longer floats there context-free:
+  the column grows a **family header** with its master's name and where the master
+  lives, and the strays sit under it the way they would at home. The table and the
+  timeline say it with an “under ⮕ 3D Printing” chip instead, having no columns to
+  group in.
 
 ## 1.21.1 — 2026-08-30
 

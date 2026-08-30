@@ -1397,6 +1397,19 @@ describe('dragging a task between parts of the day', () => {
     const oracle = [...root.querySelectorAll<HTMLElement>('.helm-board-card')].find((c) => c.querySelector('.helm-board-card-text')?.textContent === 'Oracle')!;
     expect(oracle.textContent).not.toContain('sub-project'); // it stands for nobody now
     expect(texts(oracle, '.helm-chip.count')[0]).toBe('0/0'); // and Book exam is not counted twice
+
+    // It does not float there context-free: the column carries its master's header above it.
+    const held = [...root.querySelectorAll<HTMLElement>('.helm-board-col')].find((x) => x.textContent?.startsWith('On hold'))!;
+    expect(texts(held, '.helm-board-family-title')).toEqual(['Oracle']);
+    expect(held.querySelector('.helm-board-family')!.textContent).toContain('Active'); // where the master lives
+    const card = [...held.querySelectorAll<HTMLElement>('.helm-board-card')].find((c) => c.textContent?.startsWith('OCI Certification'))!;
+    expect(card.classList.contains('is-sub')).toBe(true);
+
+    // The flat views say the same thing in their own way.
+    state.listView = 'table';
+    const table = view();
+    const row = [...table.querySelectorAll<HTMLElement>('.helm-project-table tbody tr')].find((r) => r.textContent?.startsWith('OCI Certification'))!;
+    expect(row.textContent).toContain('under Oracle');
   });
 
   it('offers list, board, table and timeline views of a project', async () => {
