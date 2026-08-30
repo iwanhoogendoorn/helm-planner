@@ -357,6 +357,15 @@ describe('Calendar view', () => {
   const state = (over: Record<string, unknown> = {}): Parameters<typeof renderCalendar>[2] =>
     ({ scope: 'week', anchor: TODAY, collapsed: new Map(), view: 'calendar', ...over }) as Parameters<typeof renderCalendar>[2];
 
+  it('stays on the Calendar tab when a single day is listed', async () => {
+    const { ctx, nav } = await ctxFor();
+    const before = nav.length;
+    const root = render((r) => renderCalendar(ctx, r, state({ scope: 'day', view: 'list' })));
+    expect(nav.length).toBe(before);                                  // it does not bounce you to another tab
+    expect(texts(root, '.helm-section-title')).toContain('Morning');   // the day itself, drawn here
+    expect(root.querySelector('.helm-cal-bar')).toBeTruthy();          // toolbar still on screen to switch with
+  });
+
   it('offers every scope and both views', async () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderCalendar(ctx, r, state({ view: 'list' })));

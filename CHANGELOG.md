@@ -21,7 +21,9 @@
   Click a box to open the task, click an empty slot to capture one there, drag a box
   — or a whole selection — onto another day or hour to move it. Boxes are coloured
   by where the work comes from: meetings, project work, habits, plain tasks, and
-  finished work greyed and struck through.
+  finished work greyed and struck through. In **List** view the 1-day scope draws the
+  day itself inside the Calendar tab, rather than sending you off to Today — which
+  had made the tab look unclickable.
 - **Pick several tasks and move them in one go.** Cmd-click (Ctrl-click) a task to
   pick it out, Shift-click to take everything down to there. A bar appears at the
   top of the view: *Plan for…* (a day and a part), *Part of the day*, *Move to

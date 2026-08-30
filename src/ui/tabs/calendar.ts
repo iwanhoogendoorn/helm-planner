@@ -10,6 +10,7 @@ import { button, chip, h, icon, iconButton, progressBar, richText, section } fro
 import type { UiContext } from '../context';
 import { wikilinkSuggest } from '../fields';
 import { renderWeek } from './week';
+import { renderToday } from './today';
 import { openPlanDay } from '../modals/planDay';
 import { openProjectForm } from '../modals/projectForm';
 import { pickProject } from '../menus';
@@ -61,7 +62,8 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
   ));
 
   if (view === 'calendar') { renderCalendarView(ctx, root, state, span, today, settings); return; }
-  if (state.scope === 'day') { ctx.navigate('today', { date: state.anchor }); return; }
+  // A single day as a list is the day itself, drawn here rather than by sending you to another tab.
+  if (state.scope === 'day') { renderToday(ctx, root, { date: state.anchor, collapsed: state.collapsed }); return; }
   if (state.scope === 'week' || state.scope === '3days' || state.scope === 'workweek') { renderWeek(ctx, root, { anchor: state.anchor, collapsed: state.collapsed, days: span }); return; }
 
   root.appendChild(h('div', { cls: 'helm-day-head' },
