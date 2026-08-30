@@ -18,6 +18,14 @@
   lists tasks, subtasks travel with their parents as always, and each task goes
   through the ordinary single-task move — a selection is a shortcut, never a second
   code path.
+- **Fixed, same day:** a bulk move could tear a subtask off its parent and leave it
+  under whichever task moved last. A task's key is its 🆔 when it has one and
+  otherwise a hash of its file, its wording and which occurrence of that wording it
+  is — so moving the first task changed what a later key pointed at, and two
+  subtasks worded the same in one list (“Delete all transferred data locally”) was
+  all it took. Every picked task is now stamped with a real id **before** anything
+  is written, found again by that id when its turn comes, and skipped when its
+  parent has already carried it along.
 - A raw `*.excalidraw` file now says **why** it cannot be attached — it has no
   frontmatter to hold the link — and names the fix (“Excalidraw: Convert
   *.excalidraw to *.md files”). The picker marks them rather than letting you pick

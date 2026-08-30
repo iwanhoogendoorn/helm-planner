@@ -133,6 +133,37 @@ describe('Today tab', () => {
     expect(view().querySelector('.helm-selection-bar')).toBeNull(); // the bar goes when the work is done
   });
 
+  it('moves every picked task even when two of them read the same, and leaves the neighbours alone', async () => {
+    // The shape that broke it in the wild: one list, a parent with two identically worded subtasks,
+    // and several siblings picked at once. Moving the first shifts what the later keys point at.
+    const day = dailyPath(TODAY);
+    const anytime = ['- [ ] Sort the drive', '\t- [ ] Copy it over', '\t- [ ] Delete the local copy', '\t- [ ] Copy the rest over', '\t- [ ] Delete the local copy', '- [ ] Learn live looping', '- [ ] Read the course', '- [ ] Leave me here'];
+    const { ctx, index, vault } = await ctxFor({ [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n### B. Afternoon\n\n### C. Evening\n\n### Anytime\n${anytime.join('\n')}\n` });
+    // A Shift-click run down the list picks every row it passes — parents and their subtasks alike.
+    selection.clear();
+    for (const t of [...index.snapshot.tasks.values()].filter((x) => x.path === day && x.text !== 'Leave me here')) selection.toggle(t.key);
+    const bar = render((r) => { const b = selectionBar(ctx); if (b) r.appendChild(b); });
+    click([...bar.querySelectorAll('button')].find((b) => b.textContent?.includes('Plan for')));
+    const picker = Modal.last!;
+    picker.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value = '2026-08-28';
+    click([...picker.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Pick'));
+    await waitFor(() => selection.size() === 0 || undefined, `the selection to be spent (${Notice.messages.join(' | ')})`);
+
+    const to = await vault.read('70 OBSIDIAN/70-06 Daily Notes/2026/08 - August/35/28, Friday, Aug, 2026.md');
+    const from = await vault.read(day);
+    // All three arrived, and the parent kept both of its same-worded children — no orphan anywhere.
+    for (const text of ['Sort the drive', 'Learn live looping', 'Read the course']) expect(to, text).toContain(text);
+    expect(to.match(/Delete the local copy/g)).toHaveLength(2);
+    expect(to.match(/^\t- \[ \] Delete the local copy\b/gm)).toHaveLength(2); // still subtasks, not stray top-level lines
+    // Both are still inside the block they belong to, above the next top-level task.
+    const block = to.slice(to.indexOf('Sort the drive'), to.indexOf('Learn live looping'));
+    expect(block.match(/Delete the local copy/g)).toHaveLength(2);
+    // The one that was not picked stayed exactly where it was.
+    expect(from).toContain('- [ ] Leave me here');
+    expect(to).not.toContain('Leave me here');
+    expect(from).not.toContain('Sort the drive');
+  });
+
   it('drags a whole selection at once, and a plain drag still carries one', async () => {
     const { index } = await ctxFor();
     const a = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB')!;

@@ -75,17 +75,63 @@ export function selectionClick(ctx: UiContext, ev: MouseEvent, row: HTMLElement,
   return false;
 }
 
-/** One action over every picked task, in order, then the selection is done with. */
-function bulk(ctx: UiContext, label: string, each: (key: string, t: Task | undefined) => Promise<unknown>): void {
-  const keys = selection.keys();
+/**
+ * One action over every picked task, one after another.
+ *
+ * A key is only good until the file changes under it: it is the task's 🆔 when it has one, otherwise a
+ * hash of the path, the text and which occurrence of that text this is — so moving the first task can
+ * make a later key point at nothing, or at a namesake. Two subtasks worded the same in one list is all
+ * it takes. So: every picked task is given a real id *before* anything is written, and each one is
+ * looked up again by that id at the moment it is its turn. A task that has already travelled — because
+ * it is a subtask of another picked task, and subtasks go with their parent — is left alone.
+ */
+function bulk(ctx: UiContext, label: string, each: (key: string, t: Task) => Promise<unknown>): void {
+  // Where the picked tasks sit, by file and line. Writing an id does not move a line, so these stay
+  // true through the pinning below — unlike the keys, which do not.
+  const at = selection.keys()
+    .map((k) => ctx.index.task(k))
+    .filter((t): t is Task => t !== undefined)
+    .map((t) => ({ path: t.path, line: t.line }));
   void ctx.run(label, async () => {
-    for (const key of keys) {
-      const t = ctx.index.task(key);
-      if (!t) continue;                       // it moved out from under us; the rest still go
-      await each(key, t);
+    const ids: string[] = [];
+    for (const { path, line } of at) {
+      const t = taskAt(ctx, path, line);
+      if (t) ids.push(await ctx.mutations.ensureId(t.key));
+    }
+    const done = new Set<string>();
+    for (const id of ids) {
+      if (done.has(id)) continue;
+      const t = ctx.index.taskById(id);
+      if (!t) { done.add(id); continue; }
+      // Its parent may have taken it along already; the parent's own move covers it.
+      const parent = t.parentKey ? ctx.index.task(t.parentKey) : undefined;
+      if (parent?.id && ids.includes(parent.id)) { done.add(id); continue; }
+      await each(t.key, t);
+      done.add(id);
+      for (const k of descendants(ctx, t)) { const c = ctx.index.task(k); if (c?.id) done.add(c.id); }
     }
     selection.clear();
   });
+}
+
+/** The task on this line of this file, as the index has it now. */
+function taskAt(ctx: UiContext, path: string, line: number): Task | undefined {
+  for (const t of ctx.index.snapshot.tasks.values()) if (t.path === path && t.line === line && t.origin !== 'daily-mirror') return t;
+  return undefined;
+}
+
+/** Every key beneath a task, however deep. */
+function descendants(ctx: UiContext, t: Task): string[] {
+  const out: string[] = [];
+  const walk = (task: Task): void => {
+    for (const k of task.childKeys) {
+      out.push(k);
+      const c = ctx.index.task(k);
+      if (c) walk(c);
+    }
+  };
+  walk(t);
+  return out;
 }
 
 /** The things a selection can have done to it, in one place: the bar and the right-click menu agree. */
