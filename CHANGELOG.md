@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.22.1 — 2026-08-31
 
 - The year's little months now show **the date in every square**, so a green day is
   a day you can name instead of a dot to count along to.
