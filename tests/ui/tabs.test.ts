@@ -1301,6 +1301,12 @@ describe('dragging a task between parts of the day', () => {
     let root = view();
     expect(texts(root, '.helm-board-title')).toEqual(['Active', 'Planned', 'On hold', 'Ideas']);
     expect(texts(root, '.helm-board-card-text')).toContain('Kitchen Remodel');
+    // An umbrella stands for its family: OCI Certification lives under Oracle, so only Oracle gets a card,
+    // carrying the sub-project's work in its count.
+    expect(texts(root, '.helm-board-card-text')).not.toContain('OCI Certification');
+    const oracle = [...root.querySelectorAll<HTMLElement>('.helm-board-card')].find((c) => c.querySelector('.helm-board-card-text')?.textContent === 'Oracle')!;
+    expect(oracle.textContent).toContain('1 sub-project');
+    expect(texts(oracle, '.helm-chip.count')[0]).toBe('0/1'); // Book exam, which belongs to the sub-project
     const onHold = [...root.querySelectorAll<HTMLElement>('.helm-board-col')].find((c) => c.textContent?.startsWith('On hold'))!;
     const ev = new Event('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-project-card'], getData: (k: string) => (k === 'text/helm-project-card' ? 'prj-kitchen' : '') } });
@@ -1312,10 +1318,12 @@ describe('dragging a task between parts of the day', () => {
     state.listView = 'table';
     root = view();
     expect(texts(root, '.helm-project-table thead th')).toEqual(['Project', 'Status', 'Priority', 'Area', 'Open', 'Done', 'Due', 'Last activity']);
-    const before = texts(root, '.helm-project-table tbody tr td:first-child');
+    const before = texts(root, '.helm-project-table tbody .helm-project-name');
     expect(before.length).toBeGreaterThan(1);
+    expect(before).not.toContain('OCI Certification'); // folded into Oracle here too
+    expect(texts(root, '.helm-project-table tbody tr td:first-child')).toContain('Oracle1 sub-project');
     click(root.querySelectorAll('.helm-project-table thead th')[0]);
-    expect(texts(root, '.helm-project-table tbody tr td:first-child')).toEqual([...before].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+    expect(texts(root, '.helm-project-table tbody .helm-project-name')).toEqual([...before].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
 
     // Timeline of projects, once one carries dates.
     state.listView = 'timeline';
@@ -1325,6 +1333,14 @@ describe('dragging a task between parts of the day', () => {
     expect(root.querySelector('.helm-timeline')).toBeTruthy();
     expect(texts(root, '.helm-timeline-name')).toContain('Oracle Book Writing');
     expect(root.querySelectorAll('.helm-timeline-cell.is-run').length).toBeGreaterThan(0);
+
+    // A sub-project's dates stretch the umbrella's bar rather than drawing a row of their own.
+    await m.setProjectFields('prj-cert', { start: '2026-10-05', due: '2026-10-20' });
+    root = view();
+    expect(texts(root, '.helm-timeline-name')).not.toContain('OCI Certification');
+    const oracleRow = [...root.querySelectorAll<HTMLElement>('tbody tr')].find((r) => r.querySelector('.helm-timeline-name span')?.textContent === 'Oracle')!;
+    expect(oracleRow.textContent).toContain('1 sub-project');
+    expect(oracleRow.querySelectorAll('.helm-timeline-cell.is-run').length).toBeGreaterThan(0);
   });
 
   it('offers list, board, table and timeline views of a project', async () => {

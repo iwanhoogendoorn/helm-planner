@@ -52,6 +52,7 @@
 .helm-chip { display: inline-flex; align-items: center; font-size: 11px; line-height: 1.5; padding: 0 7px; border-radius: 10px; background: var(--background-modifier-border); color: var(--text-muted); white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 .helm-chip.project { background: rgba(var(--color-blue-rgb), 0.15); color: var(--color-blue); cursor: pointer; }
 .helm-chip.phase { background: transparent; border: 1px dashed var(--background-modifier-border-hover); }
+.helm-chip.subs { background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); margin-left: 6px; }
 .helm-chip.note { background: rgba(var(--color-purple-rgb), 0.12); color: var(--color-purple); cursor: pointer; }
 .helm-chip.inbox { background: rgba(var(--color-cyan-rgb), 0.14); color: var(--color-cyan); }
 .helm-chip.due { background: rgba(var(--color-yellow-rgb), 0.16); color: var(--text-normal); }

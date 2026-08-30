@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The board, table and timeline show **umbrellas only**: a sub-project no longer
+  gets a card of its own, it is folded into its parent — its open and done tasks
+  counted there, its dates stretching the parent's timeline bar — with a
+  “3 sub-projects” chip saying how many it stands for. Open the umbrella to see
+  them. Filter by a sub-project's name and it stands on its own again.
+
 ## 1.21.0 — 2026-08-30
 
 - Four ways to look at your work, switched from the toolbar, in **both** the

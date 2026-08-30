@@ -294,17 +294,54 @@ function projectLinks(ctx: UiContext, p: Project): LinkHolder {
 /* ── The same four ways of looking, for the whole list of projects ────── */
 
 /** Kanban of projects: a column per status, drag a card to change its status. */
+/**
+ * The flat views show umbrellas only: a sub-project is folded into its parent — its tasks counted
+ * there, its dates part of the parent's run — so one piece of work is one card, not a family of them.
+ * A project only stands on its own when its parent is not in view (filtered out, or there is none).
+ */
+type Umbrella = { hh: ProjectHealth; subs: number; done: number; total: number; open: number; start?: IsoDate; due?: IsoDate; touched?: IsoDate };
+
+function umbrellas(visible: ProjectHealth[]): Umbrella[] {
+  const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
+  const roll = (hh: ProjectHealth, seen: Set<string>): Umbrella => {
+    seen.add(hh.project.id);
+    const u: Umbrella = { hh, subs: 0, done: hh.done, total: hh.total, open: hh.open };
+    if (hh.project.start) u.start = hh.project.start;
+    if (hh.project.due) u.due = hh.project.due;
+    if (hh.lastTouched) u.touched = hh.lastTouched;
+    for (const cid of hh.project.childIds) {
+      const c = byId.get(cid);
+      if (!c || seen.has(cid)) continue;
+      const sub = roll(c, seen);
+      u.subs += 1 + sub.subs;
+      u.done += sub.done; u.total += sub.total; u.open += sub.open;
+      if (sub.start && (!u.start || sub.start < u.start)) u.start = sub.start;
+      if (sub.due && (!u.due || sub.due > u.due)) u.due = sub.due;
+      if (sub.touched && (!u.touched || sub.touched > u.touched)) u.touched = sub.touched;
+    }
+    return u;
+  };
+  const seen = new Set<string>();
+  return visible.filter((hh) => !hh.project.parentId || !byId.has(hh.project.parentId)).map((hh) => roll(hh, seen));
+}
+
+/** “3 sub-projects”, for a card that is standing in for its family. */
+const subsChip = (u: Umbrella): HTMLElement | null => (u.subs > 0 ? chip(`${u.subs} sub-project${u.subs === 1 ? '' : 's'}`, 'subs') : null);
+
 function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectStatus[], visible: ProjectHealth[], today: IsoDate): void {
   const board = h('div', { cls: 'helm-board' });
+  const all = umbrellas(visible);
   for (const st of groups) {
-    const inCol = visible.filter((hh) => hh.project.status === st);
+    const inCol = all.filter((u) => u.hh.project.status === st);
     const cards = h('div', { cls: 'helm-board-cards' });
-    for (const hh of inCol) {
+    for (const u of inCol) {
+      const hh = u.hh;
       const p = hh.project;
       const card = h('div', { cls: ['helm-board-card', p.pinned && 'is-pinned'], attr: { draggable: 'true' }, onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
         h('div', { cls: 'helm-board-card-text' }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { text: p.title })),
         h('div', { cls: 'helm-task-meta' },
-          chip(`${hh.done}/${hh.total}`, 'count'),
+          chip(`${u.done}/${u.total}`, 'count'),
+          subsChip(u),
           p.area ? chip(p.area, 'area') : null,
           p.due ? chip(`due ${humanDate(p.due, today)}`, p.due < today ? 'due is-overdue' : 'due') : null,
         ),
@@ -332,29 +369,29 @@ function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectS
 
 /** Every project in one sortable table. */
 function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate): void {
-  const rows = [...visible];
+  const rows = umbrellas(visible);
   const table = h('table', { cls: 'helm-table helm-project-table' });
   const head = h('tr', {}, ...['Project', 'Status', 'Priority', 'Area', 'Open', 'Done', 'Due', 'Last activity'].map((l) => h('th', { text: l })));
   const body = h('tbody', {});
   const draw = (): void => {
-    body.replaceChildren(...rows.map((hh) => {
-      const p = hh.project;
+    body.replaceChildren(...rows.map((u) => {
+      const p = u.hh.project;
       return h('tr', { cls: 'is-clickable', onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
-        h('td', {}, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { text: p.title })),
+        h('td', {}, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { cls: 'helm-project-name', text: p.title }), subsChip(u)),
         h('td', { text: STATUS_LABEL[p.status] }),
         h('td', { text: p.priority }),
         h('td', { text: p.area ?? '—' }),
-        h('td', { text: String(hh.open) }),
-        h('td', { text: String(hh.done) }),
+        h('td', { text: String(u.open) }),
+        h('td', { text: String(u.done) }),
         h('td', { cls: p.due && p.due < today ? 'is-bad' : '', text: p.due ? humanDate(p.due, today) : '—' }),
-        h('td', { text: hh.lastTouched ? relativeDays(hh.lastTouched, today) : '—' }),
+        h('td', { text: u.touched ? relativeDays(u.touched, today) : '—' }),
       );
     }));
   };
-  const keys: ((hh: ProjectHealth) => string)[] = [
-    (hh) => hh.project.title.toLowerCase(), (hh) => hh.project.status, (hh) => hh.project.priority, (hh) => (hh.project.area ?? '~').toLowerCase(),
-    (hh) => String(hh.open).padStart(6, '0'), (hh) => String(hh.done).padStart(6, '0'),
-    (hh) => hh.project.due ?? '9999', (hh) => hh.lastTouched ?? '',
+  const keys: ((u: Umbrella) => string)[] = [
+    (u) => u.hh.project.title.toLowerCase(), (u) => u.hh.project.status, (u) => u.hh.project.priority, (u) => (u.hh.project.area ?? '~').toLowerCase(),
+    (u) => String(u.open).padStart(6, '0'), (u) => String(u.done).padStart(6, '0'),
+    (u) => u.hh.project.due ?? '9999', (u) => u.touched ?? '',
   ];
   let sorted = -1;
   head.querySelectorAll('th').forEach((th, i) => {
@@ -375,21 +412,21 @@ function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: Project
 /** Projects across the weeks they run through, from their start to their due date. */
 function renderProjectsTimeline(ctx: UiContext, root: HTMLElement, visible: ProjectHealth[], today: IsoDate): void {
   const weekStart = ctx.settings().weekStartsOn;
-  const dated = visible.filter((hh) => hh.project.start || hh.project.due);
+  const dated = umbrellas(visible).filter((u) => u.start || u.due);
   if (dated.length === 0) { root.appendChild(empty('No project carries a start or due date yet, so there is no timeline to draw.')); return; }
-  const from = dated.map((hh) => hh.project.start ?? hh.project.due!).sort()[0]!;
-  const to = dated.map((hh) => hh.project.due ?? hh.project.start!).sort().at(-1)!;
+  const from = dated.map((u) => u.start ?? u.due!).sort()[0]!;
+  const to = dated.map((u) => u.due ?? u.start!).sort().at(-1)!;
   const weeks: IsoDate[] = [];
   for (let d = startOfWeek(from, weekStart); d <= startOfWeek(to, weekStart) && weeks.length < 60; d = addDays(d, 7)) weeks.push(d);
   const thisWeek = startOfWeek(today, weekStart);
   const table = h('table', { cls: 'helm-table helm-timeline' },
     h('thead', {}, h('tr', {}, h('th', { cls: 'helm-timeline-name', text: 'Project' }), ...weeks.map((w) => h('th', { cls: ['helm-timeline-week', w === thisWeek && 'is-now'], text: humanDate(w).replace(/^\w+ /, ''), title: `Week of ${humanDate(w, today, { year: true })}` })))),
-    h('tbody', {}, ...dated.map((hh) => {
-      const p = hh.project;
-      const s = p.start ?? p.due!;
-      const e = p.due ?? p.start!;
+    h('tbody', {}, ...dated.map((u) => {
+      const p = u.hh.project;
+      const s = u.start ?? u.due!;
+      const e = u.due ?? u.start!;
       return h('tr', { cls: 'is-clickable', onClick: () => ctx.navigate('projects', { projectId: p.id }) },
-        h('td', { cls: 'helm-timeline-name', text: p.title }),
+        h('td', { cls: 'helm-timeline-name' }, h('span', { text: p.title }), subsChip(u)),
         ...weeks.map((w) => {
           const end = addDays(w, 6);
           const inRun = s <= end && e >= w;
@@ -399,7 +436,7 @@ function renderProjectsTimeline(ctx: UiContext, root: HTMLElement, visible: Proj
     })),
   );
   root.appendChild(h('div', { cls: 'helm-table-wrap' }, table));
-  root.appendChild(h('div', { cls: 'helm-hint', text: 'A bar runs from a project’s start to its due date; projects without either are left out.' }));
+  root.appendChild(h('div', { cls: 'helm-hint', text: 'A bar runs from a project’s start to its due date, stretched to cover its sub-projects; projects without either are left out.' }));
 }
 
 /* ── Other ways to look at a project ─────────────────────────────────── */
