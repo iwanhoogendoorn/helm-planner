@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.21.1 — 2026-08-30
 
 - The board, table and timeline show **umbrellas only**: a sub-project no longer
   gets a card of its own, it is folded into its parent — its open and done tasks
