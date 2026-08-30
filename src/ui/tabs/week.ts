@@ -15,7 +15,7 @@ import { goalProgress } from '../../data/planner';
 import { progressBar, richText } from '../dom';
 import { dragKeys, selection } from '../selection';
 
-export interface WeekState { anchor: IsoDate; collapsed: Map<string, boolean> }
+export interface WeekState { anchor: IsoDate; collapsed: Map<string, boolean>; /** Show only these days — three days, or a working week. */ days?: IsoDate[] }
 
 export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState): void {
   const today = ctx.today();
@@ -56,7 +56,8 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
   ));
 
   const grid = h('div', { cls: 'helm-week' });
-  for (const d of w.days) {
+  const shown = state.days ? w.days.filter((d) => state.days!.includes(d.date)) : w.days;
+  for (const d of shown) {
     const isToday = d.date === today;
     const isPast = d.date < today;
     const col = onDayContext(h('div', { cls: ['helm-week-day', isToday && 'is-today', isPast && 'is-past'], attr: { 'data-date': d.date } }), ctx, d.date);

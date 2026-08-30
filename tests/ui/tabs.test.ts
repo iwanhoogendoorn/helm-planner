@@ -353,6 +353,71 @@ describe('Review tab', () => {
   });
 });
 
+describe('Calendar view', () => {
+  const state = (over: Record<string, unknown> = {}): Parameters<typeof renderCalendar>[2] =>
+    ({ scope: 'week', anchor: TODAY, collapsed: new Map(), view: 'calendar', ...over }) as Parameters<typeof renderCalendar>[2];
+
+  it('offers every scope and both views', async () => {
+    const { ctx } = await ctxFor();
+    const root = render((r) => renderCalendar(ctx, r, state({ view: 'list' })));
+    expect(texts(root, '.helm-cal-bar .helm-segmented:not(.helm-cal-views) .helm-seg')).toEqual(['1 day', '3 days', 'Week', 'Workweek', 'Month', 'Quarter', 'Year']);
+    expect(texts(root, '.helm-cal-views .helm-seg')).toEqual(['List', 'Calendar']);
+  });
+
+  it('draws a day as a time grid: hours, a column, boxes where the time is', async () => {
+    const { ctx, m } = await ctxFor();
+    await m.addTask({ text: 'Eten met JV', date: TODAY, part: 'afternoon', fields: { time: { start: '17:00', end: '19:30' } } });
+    await m.addTask({ text: 'Standup', date: TODAY, part: 'morning', fields: { time: { start: '09:00', end: '09:30' } } });
+    await m.addTask({ text: 'Sort the drive', date: TODAY });
+    const root = render((r) => renderCalendar(ctx, r, state({ scope: 'day' })));
+    const grid = root.querySelector<HTMLElement>('.helm-cal-grid')!;
+    expect(grid.getAttribute('data-days')).toBe('1');
+    expect(texts(grid, '.helm-cal-day-head')[0]).toContain('26');
+    // The hour gutter runs from the working day, and the boxes are placed, not listed.
+    expect(texts(grid, '.helm-cal-hour')[0]).toBe('07:00');
+    const placed = [...grid.querySelectorAll<HTMLElement>('.helm-cal-event.is-placed')].map((e) => e.textContent);
+    expect(placed.some((t) => t?.includes('Eten met JV'))).toBe(true);
+    expect(placed.some((t) => t?.includes('Standup'))).toBe(true);
+    // Anything without a time is an all-day item above the grid, not a box.
+    expect(texts(grid, '.helm-cal-allday-cell .helm-cal-event')).toContain('Sort the drive');
+    const dinner = [...grid.querySelectorAll<HTMLElement>('.helm-cal-event.is-placed')].find((e) => e.textContent?.includes('Eten met JV'))!;
+    expect(dinner.style.height).toBe(`${2.5 * 56 - 2}px`);        // 17:00–19:30 is two and a half hours tall
+    expect(dinner.style.top).toBe(`${10 * 56}px`);                 // ten hours below the 07:00 line
+  });
+
+  it('gives each scope its own run of days', async () => {
+    const { ctx } = await ctxFor();
+    const days = (scope: string): number => Number(render((r) => renderCalendar(ctx, r, state({ scope })))
+      .querySelector<HTMLElement>('.helm-cal-grid')!.getAttribute('data-days'));
+    expect([days('day'), days('3days'), days('workweek'), days('week')]).toEqual([1, 3, 5, 7]);
+  });
+
+  it('draws a month of cells and a year as a heat map', async () => {
+    const { ctx } = await ctxFor();
+    const month = render((r) => renderCalendar(ctx, r, state({ scope: 'month' })));
+    expect(month.querySelectorAll('.helm-cal-month-cell').length).toBeGreaterThanOrEqual(28);
+    expect(month.querySelector('.helm-cal-month-cell.is-today')).toBeTruthy();
+    expect(texts(month, '.helm-cal-month-dow')).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+
+    const year = render((r) => renderCalendar(ctx, r, state({ scope: 'year' })));
+    expect(year.querySelectorAll('.helm-cal-heat-day:not(.is-key)').length).toBeGreaterThan(300);
+    expect(year.querySelector('.helm-cal-heat-day.is-today')).toBeTruthy();
+    expect(year.textContent).toContain('More open tasks');
+  });
+
+  it('drops a task onto a day of the grid, at the hour it landed on', async () => {
+    const { ctx, index } = await ctxFor();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
+    const root = render((r) => renderCalendar(ctx, r, state({ scope: 'week' })));
+    const col = root.querySelectorAll<HTMLElement>('.helm-cal-col')[3]!; // Thursday
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? t.key : '') } });
+    Object.defineProperty(ev, 'clientY', { value: 0 });
+    col.dispatchEvent(ev);
+    await waitFor(() => { const x = [...index.snapshot.tasks.values()].find((y) => y.text === 'Start with OIB' && y.status === 'todo'); return (x?.noteDate ?? x?.scheduled) === '2026-08-27' ? x : undefined; }, 'the task to land on Thursday');
+  });
+});
+
 describe('Modals', () => {
   it('search: starting points, grouped hits, keyboard, and acting on a result without leaving', async () => {
     const { ctx, nav, opened, vault } = await ctxFor();

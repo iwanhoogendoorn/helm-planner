@@ -9,6 +9,19 @@
   afternoon. The part's own count still only counts what is planned for it, and the
   “drop a task here” hint gives way — an evening with two and a half hours spoken
   for is not an empty evening.
+- **A real calendar.** The Calendar tab now has a **List / Calendar** switch and the
+  scopes to go with it: **1 day · 3 days · Week · Workweek · Month · Quarter · Year**.
+  In Calendar view a day is drawn as time, not as a list:
+  - a **time grid** with the hours down the side, a column per day and every timed
+    task as a box where its time is — overlapping work sits side by side, the
+    working day stretches to cover anything outside it, and a red line marks now;
+  - an **all-day row** above the grid for what is planned but not timed;
+  - a **month** of day cells with the day's work inside, a count, and “+n more”;
+  - a **year** as a heat map, a square per day, darker the more is open.
+  Click a box to open the task, click an empty slot to capture one there, drag a box
+  — or a whole selection — onto another day or hour to move it. Boxes are coloured
+  by where the work comes from: meetings, project work, habits, plain tasks, and
+  finished work greyed and struck through.
 - **Pick several tasks and move them in one go.** Cmd-click (Ctrl-click) a task to
   pick it out, Shift-click to take everything down to there. A bar appears at the
   top of the view: *Plan for…* (a day and a part), *Part of the day*, *Move to

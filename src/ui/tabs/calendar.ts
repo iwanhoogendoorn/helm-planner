@@ -2,7 +2,7 @@
  * Calendar: one tab, four scopes. Year → Quarter → Month → Week → Day, each
  * clickable into the next, each with the goals and projects of its period.
  */
-import type { IsoDate, Task } from '../../core/types';
+import type { HelmSettings, IsoDate, Task } from '../../core/types';
 import { addDays, addMonths, addYears, humanDate, isoWeek, minutesToHuman, MONTH_SHORT, startOfWeek, WEEKDAY_SHORT } from '../../core/dates';
 import { monthPeriod, periodOf, quarterPeriod, weekPeriod, yearPeriod, type Period } from '../../core/periods';
 import { horizonPeriod, tasksByDay, type DayBucket, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../../data/planner';
@@ -20,26 +20,49 @@ import { notesButton } from '../notes';
 import { dayMenu, firstUsefulDay, onDayContext, periodMenu } from '../dayMenu';
 import { openCapture } from '../modals/capture';
 import { dragKeys, selection } from '../selection';
+import { renderMonthGrid, renderTimeGrid, renderYearHeatmap } from '../calendarGrid';
 
-export type CalendarScope = 'week' | 'month' | 'quarter' | 'year';
-export interface CalendarState { scope: CalendarScope; anchor: IsoDate; collapsed: Map<string, boolean> }
+export type CalendarScope = 'day' | '3days' | 'week' | 'workweek' | 'month' | 'quarter' | 'year';
+export type CalendarView = 'list' | 'calendar';
+export interface CalendarState { scope: CalendarScope; anchor: IsoDate; collapsed: Map<string, boolean>; view?: CalendarView }
 
-const SCOPES: { id: CalendarScope; label: string }[] = [{ id: 'week', label: 'Week' }, { id: 'month', label: 'Month' }, { id: 'quarter', label: 'Quarter' }, { id: 'year', label: 'Year' }];
+const SCOPES: { id: CalendarScope; label: string }[] = [
+  { id: 'day', label: '1 day' }, { id: '3days', label: '3 days' }, { id: 'week', label: 'Week' }, { id: 'workweek', label: 'Workweek' },
+  { id: 'month', label: 'Month' }, { id: 'quarter', label: 'Quarter' }, { id: 'year', label: 'Year' },
+];
+
+/** The days a scope covers, as a run of dates — what the time grid draws columns for. */
+export function scopeDays(scope: CalendarScope, anchor: IsoDate, settings: HelmSettings): IsoDate[] {
+  if (scope === 'day') return [anchor];
+  if (scope === '3days') return [0, 1, 2].map((i) => addDays(anchor, i));
+  const ws = startOfWeek(anchor, settings.weekStartsOn);
+  if (scope === 'workweek') return [0, 1, 2, 3, 4].map((i) => addDays(ws, i));
+  return [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(ws, i));
+}
 
 export function renderCalendar(ctx: UiContext, root: HTMLElement, state: CalendarState): void {
   const today = ctx.today();
   const settings = ctx.settings();
-  const period = periodOf(state.anchor, state.scope === 'week' ? 'week' : state.scope);
-  const step = (n: number): IsoDate => state.scope === 'week' ? addDays(state.anchor, 7 * n) : state.scope === 'month' ? addMonths(period.start, n) : state.scope === 'quarter' ? addMonths(period.start, 3 * n) : addYears(period.start, n);
+  // Day, three days and a working week all sit inside one week as far as the periodic notes go.
+  const periodKind = state.scope === 'month' || state.scope === 'quarter' || state.scope === 'year' ? state.scope : 'week';
+  const period = periodOf(state.anchor, periodKind);
+  const step = (n: number): IsoDate => periodKind === 'week' ? addDays(state.anchor, 7 * n) : periodKind === 'month' ? addMonths(period.start, n) : periodKind === 'quarter' ? addMonths(period.start, 3 * n) : addYears(period.start, n);
   const go = (scope: CalendarScope, date: IsoDate): void => ctx.navigate('week', { date, scope });
 
-  root.appendChild(crumbBar(ctx, 'week', [...dateCrumbs(ctx, state.anchor, state.scope, { day: false }), ...(state.anchor !== today ? [{ label: 'today', onClick: () => go(state.scope, today), title: 'Back to today' }] : [])], { homeClick: () => go(state.scope, today), homeTitle: 'Back to today' }));
+  root.appendChild(crumbBar(ctx, 'week', [...dateCrumbs(ctx, state.anchor, periodKind, { day: false }), ...(state.anchor !== today ? [{ label: 'today', onClick: () => go(state.scope, today), title: 'Back to today' }] : [])], { homeClick: () => go(state.scope, today), homeTitle: 'Back to today' }));
+  const view: CalendarView = state.view ?? 'list';
+  const span = scopeDays(state.scope, state.anchor, settings);
   root.appendChild(h('div', { cls: 'helm-cal-bar' },
     h('div', { cls: 'helm-segmented' }, ...SCOPES.map((s) => h('button', { cls: ['helm-seg', state.scope === s.id && 'is-active'], text: s.label, onClick: () => go(s.id, state.anchor) }))),
+    h('span', { cls: 'helm-segmented helm-cal-views' }, ...([['list', 'List', 'list'], ['calendar', 'Calendar', 'calendar-days']] as const).map(([id, label, ic]) =>
+      h('button', { cls: ['helm-seg', view === id && 'is-active'], title: `${label} view`, onClick: () => { state.view = id; ctx.refresh(); } }, icon(ic), h('span', { text: label })))),
     h('span', { cls: 'helm-spacer' }),
+    h('span', { cls: 'helm-hint', text: state.scope === 'quarter' || state.scope === 'year' ? `${period.start} → ${period.end}` : `${span[0]} → ${span[span.length - 1]}` }),
   ));
 
-  if (state.scope === 'week') { renderWeek(ctx, root, { anchor: state.anchor, collapsed: state.collapsed }); return; }
+  if (view === 'calendar') { renderCalendarView(ctx, root, state, span, today, settings); return; }
+  if (state.scope === 'day') { ctx.navigate('today', { date: state.anchor }); return; }
+  if (state.scope === 'week' || state.scope === '3days' || state.scope === 'workweek') { renderWeek(ctx, root, { anchor: state.anchor, collapsed: state.collapsed, days: span }); return; }
 
   root.appendChild(h('div', { cls: 'helm-day-head' },
     h('div', { cls: 'helm-day-nav' },
@@ -241,3 +264,40 @@ function projectsSection(ctx: UiContext, hp: HorizonPeriod, today: IsoDate, stat
 export function scopeOfPeriodKind(kind: Period['kind']): CalendarScope { return kind; }
 export type { Task };
 export { weekPeriod, yearPeriod };
+
+/** The Calendar view: a time grid for a run of days, a month of cells, or a year as a heat map. */
+function renderCalendarView(ctx: UiContext, root: HTMLElement, state: CalendarState, span: IsoDate[], today: IsoDate, settings: HelmSettings): void {
+  const kind = state.scope === 'quarter' ? 'quarter' : state.scope === 'year' ? 'year' : state.scope === 'month' ? 'month' : 'week';
+  const period = periodOf(state.anchor, kind);
+  const grid = state.scope === 'month' || state.scope === 'quarter' || state.scope === 'year';
+  const from = grid ? startOfWeek(period.start, settings.weekStartsOn) : span[0]!;
+  const to = grid ? addDays(startOfWeek(period.end, settings.weekStartsOn), 6) : span[span.length - 1]!;
+  const days = tasksByDay(ctx.index.snapshot, from, to, settings);
+  const step = (n: number): IsoDate => (state.scope === 'day' ? addDays(state.anchor, n)
+    : state.scope === '3days' ? addDays(state.anchor, 3 * n)
+    : state.scope === 'month' ? addMonths(period.start, n)
+    : state.scope === 'quarter' ? addMonths(period.start, 3 * n)
+    : state.scope === 'year' ? addYears(period.start, n)
+    : addDays(state.anchor, 7 * n));
+  const title = state.scope === 'day' ? humanDate(state.anchor, today, { year: true })
+    : state.scope === 'month' || state.scope === 'quarter' || state.scope === 'year' ? period.label
+    : `Week ${isoWeek(span[0]!).week}`;
+
+  root.appendChild(h('div', { cls: 'helm-cal-gridhead' },
+    iconButton('chevron-left', 'Previous', () => ctx.navigate('week', { date: step(-1), scope: state.scope })),
+    h('button', { cls: 'helm-day-title', onClick: () => ctx.navigate('week', { date: today, scope: state.scope }) },
+      h('span', { cls: 'helm-day-title-main', text: title }),
+      h('span', { cls: 'helm-day-title-sub', text: `${humanDate(from, today)} – ${humanDate(to, today, { year: true })}` }),
+    ),
+    iconButton('chevron-right', 'Next', () => ctx.navigate('week', { date: step(1), scope: state.scope })),
+    h('span', { cls: 'helm-spacer' }),
+    button('New task', { icon: 'plus', onClick: () => openCapture(ctx, { date: firstUsefulDay(period, today) }) }),
+  ));
+
+  if (state.scope === 'year') { renderYearHeatmap(ctx, root, period.start, period.end, days, settings); return; }
+  if (state.scope === 'month' || state.scope === 'quarter') {
+    renderMonthGrid(ctx, root, period.start, period.end, days, settings, { inMonth: (d) => d >= period.start && d <= period.end });
+    return;
+  }
+  renderTimeGrid(ctx, root, span, days, settings);
+}
