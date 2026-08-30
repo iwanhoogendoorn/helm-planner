@@ -1,7 +1,7 @@
 import { Modal } from 'obsidian';
 import type { IsoDate } from '../../core/types';
 import { DAY_PARTS, PART_LABEL, type DayPart } from '../../core/dailyNote';
-import { addDays, humanDate, isIsoDate, startOfWeek } from '../../core/dates';
+import { addDays, humanDate, isIsoDate, startOfWeek, WEEKDAY_SHORT, isoWeekday } from '../../core/dates';
 import { resolveDate } from '../../core/nlp';
 import { button, h } from '../dom';
 import type { UiContext } from '../context';
@@ -34,9 +34,15 @@ export function openDatePicker(ctx: UiContext, opts: { title: string; initial?: 
   free.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { const d = resolveDate(free.value, today, ctx.settings().weekStartsOn) ?? (isIsoDate(input.value) ? input.value : undefined); if (d) commit(d); } });
   input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && isIsoDate(input.value)) commit(input.value); });
   const ws = startOfWeek(today, ctx.settings().weekStartsOn);
+  // Every preset says what it means. “+1 week” keeps the weekday, the way “+2 weeks” and “+1 month” do;
+  // the one that snaps to the start of next week is named after the day it lands on, not after “next
+  // week” — from a Sunday those are a day apart, and a wrong guess moves real work to the wrong day.
+  const startNext = addDays(ws, 7);
   const presets = [
     ['Today', today], ['Tomorrow', addDays(today, 1)], ['+2 days', addDays(today, 2)], ['Sat', addDays(ws, 5)],
-    ['Next week', addDays(ws, 7)], ['+2 weeks', addDays(today, 14)], ['+1 month', addDays(today, 30)],
+    [`+1 week (${WEEKDAY_SHORT[isoWeekday(addDays(today, 7)) - 1]})`, addDays(today, 7)],
+    [`Next ${WEEKDAY_SHORT[isoWeekday(startNext) - 1]}`, startNext],
+    ['+2 weeks', addDays(today, 14)], ['+1 month', addDays(today, 30)],
   ] as const;
   root.append(
     h('div', { cls: 'helm-presets' }, ...presets.map(([label, d]) => button(label, { onClick: () => commit(d), title: humanDate(d, today, { year: true }) }))),

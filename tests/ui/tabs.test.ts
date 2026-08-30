@@ -14,6 +14,7 @@ import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { linkExisting } from '../../src/ui/drawings';
 import { selection, selectionBar, dragKeys, setDragKeys } from '../../src/ui/selection';
+import { openDatePicker } from '../../src/ui/modals/datePicker';
 import { openSearch } from '../../src/ui/modals/search';
 import { taskMenu } from '../../src/ui/menus';
 import { taskRow } from '../../src/ui/taskRow';
@@ -162,6 +163,23 @@ describe('Today tab', () => {
     expect(from).toContain('- [ ] Leave me here');
     expect(to).not.toContain('Leave me here');
     expect(from).not.toContain('Sort the drive');
+  });
+
+  it('names the day each preset lands on, and says where a bulk move went', async () => {
+    const { ctx, index } = await ctxFor();
+    // TODAY is a Wednesday, so “+1 week” is the Wednesday after and the start of next week is a Monday.
+    openDatePicker(ctx, { title: 'x', parts: true }, () => {});
+    const labels = [...Modal.last!.contentEl.querySelectorAll('.helm-presets button')].map((b) => b.textContent);
+    expect(labels).toEqual(['Today', 'Tomorrow', '+2 days', 'Sat', '+1 week (Wed)', 'Next Mon', '+2 weeks', '+1 month']);
+
+    // And the move reports its destination, so a mis-aimed click cannot be silent.
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
+    selection.clear(); selection.toggle(t.key);
+    const bar = render((r) => { const b = selectionBar(ctx); if (b) r.appendChild(b); });
+    click([...bar.querySelectorAll('button')].find((b) => b.textContent?.includes('Plan for')));
+    click([...Modal.last!.contentEl.querySelectorAll('.helm-presets button')].find((b) => b.textContent === '+1 week (Wed)'));
+    await waitFor(() => Notice.messages.find((msg) => msg.includes('→')), 'the report');
+    expect(Notice.messages.at(-1)).toBe('1 task → Wed 2 Sep 2026');
   });
 
   it('drags a whole selection at once, and a plain drag still carries one', async () => {

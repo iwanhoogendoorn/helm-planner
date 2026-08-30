@@ -18,14 +18,24 @@
   lists tasks, subtasks travel with their parents as always, and each task goes
   through the ordinary single-task move — a selection is a shortcut, never a second
   code path.
-- **Fixed, same day:** a bulk move could tear a subtask off its parent and leave it
+- **Fixed, the real cause:** rewriting a day's plan could tear one of two
+  identically worded lines out of its place and re-append it at the end of the
+  section — where it read as a subtask of whatever now sat above it. Every line in
+  the region is matched to its old self by an identity key, and two lines worded the
+  same share one; the map kept only the first, so the second twin looked new. It
+  keeps every line that answers to a key now, in order. This was never about moving
+  several tasks at once: one ordinary move of one task was enough, as long as some
+  list in that day repeated itself (“Delete all transferred data locally”, once per
+  account).
+- A bulk move could also tear a subtask off its parent and leave it
   under whichever task moved last. A task's key is its 🆔 when it has one and
   otherwise a hash of its file, its wording and which occurrence of that wording it
   is — so moving the first task changed what a later key pointed at, and two
   subtasks worded the same in one list (“Delete all transferred data locally”) was
   all it took. Every picked task is now stamped with a real id **before** anything
   is written, found again by that id when its turn comes, and skipped when its
-  parent has already carried it along.
+  parent has already carried it along. A mirrored project task is no longer passed
+  over when it is picked.
 - A raw `*.excalidraw` file now says **why** it cannot be attached — it has no
   frontmatter to hold the link — and names the fix (“Excalidraw: Convert
   *.excalidraw to *.md files”). The picker marks them rather than letting you pick

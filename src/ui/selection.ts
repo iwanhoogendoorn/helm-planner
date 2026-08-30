@@ -10,6 +10,7 @@ import { Menu } from 'obsidian';
 import type { DayPart } from '../core/dailyNote';
 import { DAY_PARTS, PART_LABEL } from '../core/dailyNote';
 import type { IsoDate, Task } from '../core/types';
+import { humanDate } from '../core/dates';
 import { button, h, icon } from './dom';
 import type { UiContext } from './context';
 import { openDatePicker } from './modals/datePicker';
@@ -85,7 +86,7 @@ export function selectionClick(ctx: UiContext, ev: MouseEvent, row: HTMLElement,
  * looked up again by that id at the moment it is its turn. A task that has already travelled — because
  * it is a subtask of another picked task, and subtasks go with their parent — is left alone.
  */
-function bulk(ctx: UiContext, label: string, each: (key: string, t: Task) => Promise<unknown>): void {
+function bulk(ctx: UiContext, label: string, each: (key: string, t: Task) => Promise<unknown>, describe?: (n: number) => string): void {
   // Where the picked tasks sit, by file and line. Writing an id does not move a line, so these stay
   // true through the pinning below — unlike the keys, which do not.
   const at = selection.keys()
@@ -99,19 +100,34 @@ function bulk(ctx: UiContext, label: string, each: (key: string, t: Task) => Pro
       if (t) ids.push(await ctx.mutations.ensureId(t.key));
     }
     const done = new Set<string>();
+    let moved = 0;
     for (const id of ids) {
       if (done.has(id)) continue;
-      const t = ctx.index.taskById(id);
+      const t = byId(ctx, id);
       if (!t) { done.add(id); continue; }
       // Its parent may have taken it along already; the parent's own move covers it.
       const parent = t.parentKey ? ctx.index.task(t.parentKey) : undefined;
       if (parent?.id && ids.includes(parent.id)) { done.add(id); continue; }
       await each(t.key, t);
       done.add(id);
+      moved++;
       for (const k of descendants(ctx, t)) { const c = ctx.index.task(k); if (c?.id) done.add(c.id); }
     }
     selection.clear();
+    // Say where they went: a bulk move is easy to aim wrong, and silence is how work goes missing.
+    if (describe) ctx.notify(describe(moved));
   });
+}
+
+/**
+ * The task with this id. A row in the day may be a project task's mirror, which `taskById` passes over
+ * on purpose — but it is still a row you can pick, and scheduling it is meaningful, so fall back to it.
+ */
+function byId(ctx: UiContext, id: string): Task | undefined {
+  const own = ctx.index.taskById(id);
+  if (own) return own;
+  for (const t of ctx.index.snapshot.tasks.values()) if (t.id === id) return t;
+  return undefined;
 }
 
 /** The task on this line of this file, as the index has it now. */
@@ -137,17 +153,19 @@ function descendants(ctx: UiContext, t: Task): string[] {
 /** The things a selection can have done to it, in one place: the bar and the right-click menu agree. */
 function actions(ctx: UiContext): { label: string; icon: string; run: (ev: MouseEvent) => void }[] {
   const n = selection.size();
+  const tasks = (k: number): string => `${k} task${k === 1 ? '' : 's'}`;
   const move = (date: IsoDate | undefined, part?: DayPart): void =>
-    bulk(ctx, date ? 'Schedule' : 'Unschedule', (key) => ctx.mutations.schedule(key, date, part));
+    bulk(ctx, date ? 'Schedule' : 'Unschedule', (key) => ctx.mutations.schedule(key, date, part),
+      (k) => (date ? `${tasks(k)} → ${humanDate(date, ctx.today(), { year: true })}${part ? ` · ${PART_LABEL[part]}` : ''}` : `${tasks(k)} taken off the calendar`));
   return [
-    { label: 'Plan for…', icon: 'calendar', run: () => openDatePicker(ctx, { title: `Plan ${n} task${n === 1 ? '' : 's'}`, initial: ctx.today(), parts: true, allowClear: true }, (d, part) => move(d, part)) },
+    { label: 'Plan for…', icon: 'calendar', run: () => openDatePicker(ctx, { title: `Plan ${tasks(n)}`, initial: ctx.today(), parts: true, allowClear: true }, (d, part) => move(d, part)) },
     { label: 'Part of the day', icon: 'sun', run: (ev) => {
       const menu = new Menu();
-      for (const p of DAY_PARTS) menu.addItem((i) => i.setTitle(PART_LABEL[p]).setIcon(p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock').onClick(() => bulk(ctx, 'Part', (key) => ctx.mutations.setPart(key, p))));
+      for (const p of DAY_PARTS) menu.addItem((i) => i.setTitle(PART_LABEL[p]).setIcon(p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock').onClick(() => bulk(ctx, 'Part', (key) => ctx.mutations.setPart(key, p), (k) => `${tasks(k)} → ${PART_LABEL[p]}`)));
       menu.showAtMouseEvent(ev);
     } },
-    { label: 'Move to project…', icon: 'folder-input', run: () => pickProject(ctx, (p, phaseId) => bulk(ctx, 'Move', (key) => ctx.mutations.moveToProject(key, p.id, phaseId)), { phases: true }) },
-    { label: 'Mark done', icon: 'check', run: () => bulk(ctx, 'Status', (key) => ctx.mutations.setStatus(key, 'done')) },
+    { label: 'Move to project…', icon: 'folder-input', run: () => pickProject(ctx, (p, phaseId) => bulk(ctx, 'Move', (key) => ctx.mutations.moveToProject(key, p.id, phaseId), (k) => `${tasks(k)} → ${p.title}`), { phases: true }) },
+    { label: 'Mark done', icon: 'check', run: () => bulk(ctx, 'Status', (key) => ctx.mutations.setStatus(key, 'done'), (k) => `${tasks(k)} marked done`) },
   ];
 }
 

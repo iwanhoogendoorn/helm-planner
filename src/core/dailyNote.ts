@@ -292,10 +292,13 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
 
   const region = scan.region;
   const before = readRegion(lines, region);
-  // Identity of every existing line: key → { section, line number }.
-  const existing = new Map<string, { sec: Section; index: number }>();
+  // Identity of every existing line: key → the lines that answer to it, in the order they appear. Two
+  // lines worded the same share a key — “Delete all transferred data locally” twice in one list is
+  // ordinary — so a key has to remember both, or the second twin matches nothing, gets treated as new,
+  // and is torn out of its place and re-appended at the end of the section.
+  const existing = new Map<string, { sec: Section; index: number }[]>();
   const allIndexes = new Set<number>();
-  for (const sec of SECTION_ORDER) region.sections[sec].taskLines.forEach((idx, i) => { allIndexes.add(idx); for (const k of lineKeys(before[sec][i]!)) if (!existing.has(k)) existing.set(k, { sec, index: idx }); });
+  for (const sec of SECTION_ORDER) region.sections[sec].taskLines.forEach((idx, i) => { allIndexes.add(idx); for (const k of lineKeys(before[sec][i]!)) (existing.get(k) ?? existing.set(k, []).get(k)!).push({ sec, index: idx }); });
 
   const replacements = new Map<number, string>();
   const removals = new Set<number>();
@@ -310,7 +313,7 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
   const keptIndexes = new Set<number>();
   for (const sec of SECTION_ORDER) {
     for (const l of next[sec]) {
-      const prev = lineKeys(l).map((k) => existing.get(k)).find((p) => p !== undefined && !keptIndexes.has(p.index));
+      const prev = lineKeys(l).flatMap((k) => existing.get(k) ?? []).find((p) => !keptIndexes.has(p.index));
       if (prev && prev.sec === sec) {
         keptIndexes.add(prev.index);
         const text = render(l);

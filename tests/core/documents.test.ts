@@ -124,6 +124,23 @@ Previous day: [[25, Tuesday, Aug, 2026|Yesterday]]
 const RS = { regionPlacement: 'before-first-heading' as const, regionAnchor: '', planHeading: '## Plan' };
 
 describe('daily note region', () => {
+  it('keeps two lines worded the same exactly where they are', () => {
+    // A list can repeat itself — “Delete the local copy” once per account — and both lines are real
+    // work in their own place. Rewriting the region must not treat the second one as new.
+    const note = `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Standup\n\n### Anytime\n- [ ] Sort the drive\n\t- [ ] Copy it over\n\t- [ ] Delete the local copy\n\t- [ ] Copy the rest over\n\t- [ ] Delete the local copy\n- [ ] Something else\n`;
+    const { lines } = splitLines(note);
+    const region = findRegion(lines, RS).region!;
+    const cur = readRegion(lines, region);
+    expect(cur.anytime.map((l) => l.text)).toEqual(['Sort the drive', 'Copy it over', 'Delete the local copy', 'Copy the rest over', 'Delete the local copy', 'Something else']);
+
+    // Change something else entirely — the morning — and the anytime list must come back untouched.
+    const out = writeRegion(note, { ...cur, morning: [] }, RS)!;
+    const text = out.lines.join(out.eol);
+    expect(text.slice(text.indexOf('### Anytime'))).toBe(`### Anytime\n- [ ] Sort the drive\n\t- [ ] Copy it over\n\t- [ ] Delete the local copy\n\t- [ ] Copy the rest over\n\t- [ ] Delete the local copy\n- [ ] Something else\n`);
+    expect(text).not.toMatch(/Something else\n\t?- \[ \] Delete the local copy/); // never re-appended at the end
+  });
+
+
   it('adopts the note\'s own Day planner sections and edits them in place', () => {
     const { lines: l0 } = splitLines(DAILY);
     const scan0 = findRegion(l0, RS);
