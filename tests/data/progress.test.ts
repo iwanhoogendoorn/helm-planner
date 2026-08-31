@@ -55,3 +55,26 @@ describe('setting how far along a task is', () => {
     void dailyPath;
   });
 });
+
+describe('a part-done task that moves day', () => {
+  it('keeps its percentage and stays in progress', async () => {
+    const { m, index, vault } = await setup();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
+    await m.setProgress(t.key, 75);
+    const doing = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB' && x.status === 'doing')!;
+    await m.schedule(doing.key, '2026-08-27');
+    const moved = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB' && x.status !== 'forwarded')!;
+    expect(moved.noteDate ?? moved.scheduled).toBe('2026-08-27');
+    expect({ status: moved.status, progress: moved.progress }).toEqual({ status: 'doing', progress: 75 });
+    expect(await vault.read(moved.path)).toMatch(/- \[\/\] .*Start with OIB.*📈 75%/);
+  });
+
+  it('a task with nothing against its name still starts the new day fresh', async () => {
+    const { m, index } = await setup();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
+    await m.setStatus(t.key, 'doing');
+    await m.schedule([...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB' && x.status === 'doing')!.key, '2026-08-27');
+    const moved = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB' && x.status !== 'forwarded')!;
+    expect(moved.status).toBe('todo');
+  });
+});

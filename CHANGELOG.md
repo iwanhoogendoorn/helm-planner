@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **A subtask can no longer be pulled out of its task by a stray drop.** Dropping one
+  on a part of the day it already sits in used to promote it to a task of its own —
+  easy to do by half an inch while reordering, and then it is left behind the next
+  time its parent moves on. Helm now says what to do instead: drop it on a sibling to
+  reorder it, or on another day to genuinely take it out. The part-of-the-day menu is
+  gone from subtasks for the same reason — a subtask sits where its task sits.
+- A **part-done task keeps its percentage and its “in progress”** when it moves to
+  another day. Moving a task starts the new day fresh, but a line reading “to do,
+  75%” is a contradiction.
 - The part-of-the-day menu now **names the day it will use**: “Part of Tomorrow”,
   with “Morning of Tomorrow · Afternoon of Tomorrow · …” inside. It only ever moves a
   task within the day it is already on — it never changes the date — but “Afternoon”

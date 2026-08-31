@@ -476,7 +476,14 @@ export class Mutations {
     if (carried.length === 0) return;
     if (t.noteDate !== undefined && t.noteDate >= today && t.section !== 'outside') await this.editRegion(t.noteDate, (rc) => rc); // drop an emptied section heading
     const baseIndent = carried[0]!.raw.indent;
-    const rebased = carried.map((l) => ({ ...l, status: l === carried[0] ? 'todo' as TaskStatus : l.status, marker: l === carried[0] ? ' ' : l.marker, raw: { ...l.raw, indent: l.raw.indent.slice(baseIndent.length), eol: '' } }));
+    // A moved task starts the new day fresh — unless it is part-done, in which case it keeps both its
+    // percentage and its “in progress”: a line reading “to do, 75%” is a contradiction.
+    const rebased = carried.map((l) => ({
+      ...l,
+      status: l === carried[0] ? (l.progress !== undefined ? 'doing' as TaskStatus : 'todo' as TaskStatus) : l.status,
+      marker: l === carried[0] ? (l.progress !== undefined ? '/' : ' ') : l.marker,
+      raw: { ...l.raw, indent: l.raw.indent.slice(baseIndent.length), eol: '' },
+    }));
     delete rebased[0]!.done;
     delete rebased[0]!.cancelled;
     if (date !== undefined) {

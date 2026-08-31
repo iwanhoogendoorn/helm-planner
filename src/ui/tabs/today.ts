@@ -164,6 +164,14 @@ function makeDropZone(ctx: UiContext, el: HTMLElement, date: IsoDate, part: DayP
     if (habitId && part !== 'anytime') { void ctx.run('Move habit', () => ctx.mutations.moveHabitForDay(habitId, date, part)); return; }
     const keys = dragKeys(ev);                                  // one row, or the whole selection
     if (keys.length === 0) return;
+    // A subtask lives with its task. Dropping one on a part of the day it is already on used to pull it
+    // out into a task of its own — easy to do by half an inch while reordering, and it then gets left
+    // behind when its parent moves on. Say what to do instead; a drop on another day still takes it out.
+    const strays = keys.map((k) => ctx.index.task(k)).filter((t) => t?.parentKey && (ctx.index.task(t.parentKey)?.noteDate === date || ctx.index.task(t.parentKey)?.scheduled === date));
+    if (strays.length > 0 && strays.length === keys.length) {
+      ctx.notify(`“${plainLabel(strays[0]!.text)}” belongs to ${plainLabel(ctx.index.task(strays[0]!.parentKey!)?.text ?? 'its task')}. Drop it on one of its siblings to reorder it, or on another day to take it out.`);
+      return;
+    }
     void ctx.run('Move', async () => {
       for (const key of keys) {
         const t = ctx.index.task(key);

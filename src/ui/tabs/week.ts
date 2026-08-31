@@ -14,6 +14,7 @@ import { periodOf } from '../../core/periods';
 import { goalProgress } from '../../data/planner';
 import { progressBar, richText } from '../dom';
 import { dragKeys, selection } from '../selection';
+import { plainLabel } from '../../core/label';
 
 export interface WeekState { anchor: IsoDate; collapsed: Map<string, boolean>; /** Show only these days — three days, or a working week. */ days?: IsoDate[] }
 
@@ -115,6 +116,14 @@ function weekDayBody(ctx: UiContext, date: string, open: Task[], doneCount: numb
       block.classList.remove('is-dropping');
       const keys = dragKeys(ev);
       if (keys.length === 0) return;
+      // A subtask belongs to its task: dropping it on a part of the day it already sits in would pull
+      // it out of the list it belongs to, and it would be left behind next time the parent moves.
+      const stray = keys.length === 1 ? ctx.index.task(keys[0]!) : undefined;
+      const parent = stray?.parentKey ? ctx.index.task(stray.parentKey) : undefined;
+      if (parent && (parent.noteDate === date || parent.scheduled === date)) {
+        ctx.notify(`That is a subtask of “${plainLabel(parent.text)}” — drop it on one of its siblings to reorder it, or on another day to take it out.`);
+        return;
+      }
       void ctx.run('Move', async () => {
         for (const key of keys) {
           const t = ctx.index.task(key);

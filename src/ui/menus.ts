@@ -96,7 +96,7 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   menu.addSeparator();
   addScheduleItems(menu, ctx, task);
   const onADay = task.noteDate !== undefined || task.scheduled !== undefined;
-  if (onADay) {
+  if (onADay && !task.parentKey) {   // a subtask sits where its task sits
     // This moves the task *within the day it is already on* — it never changes the date. Say which day
     // that is, or “Afternoon” reads as “this afternoon” and looks like it will drag the task back to today.
     const its = task.scheduled ?? task.noteDate!;

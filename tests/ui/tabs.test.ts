@@ -135,6 +135,26 @@ describe('Today tab', () => {
     expect(taskRow(ctx, at()).querySelector('.helm-task-progress')).toBeNull();
   });
 
+  it('will not pull a subtask out of its task by a stray drop on the same day', async () => {
+    const day = dailyPath(TODAY);
+    const list = ['- [ ] Process the data', '\t- [ ] Joint ING', '\t- [ ] KNAB private', '\t- [ ] Old entries'];
+    const { ctx, index, vault } = await ctxFor({ [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n### B. Afternoon\n\n### Anytime\n${list.join('\n')}\n` });
+    const kid = [...index.snapshot.tasks.values()].find((t) => t.text === 'KNAB private')!;
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const afternoon = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Afternoon')!;
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? kid.key : '') } });
+    afternoon.dispatchEvent(ev);
+    await flush(); await flush(); await flush();
+
+    // It is still where it was, still indented, and Helm said why.
+    const lines = (await vault.read(day)).split('\n');
+    expect(lines.filter((l) => l.includes('KNAB private'))).toEqual(['\t- [ ] KNAB private']);
+    expect(index.task(kid.key)!.parentKey).toBeTruthy();
+    expect(Notice.messages.at(-1)).toMatch(/subtask|belongs to/i);
+    expect(Notice.messages.at(-1)).toMatch(/siblings to reorder/);
+  });
+
   it('reorders subtasks by dragging one onto another', async () => {
     const day = dailyPath(TODAY);
     const list = ['- [ ] Ship the thing', '\t- [ ] Write it', '\t- [ ] Proof it', '\t- [ ] Post it'];
