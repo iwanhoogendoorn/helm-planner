@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.1 — 2026-08-31
 
 - **Subtasks show up under the task you added them to.** When two notes hold the same
   🆔 — a day you moved work off leaves a “forwarded” record behind wearing the same
