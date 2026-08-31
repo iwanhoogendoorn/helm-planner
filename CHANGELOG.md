@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.3 — 2026-08-31
 
 - **A day's plan can no longer gain a second copy of a task.** Rewriting the plan
   works from a snapshot of the note; if the file had moved on in between — the line
