@@ -93,6 +93,23 @@ describe('Today tab', () => {
     expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);
   });
 
+  it('names the day in the part menu, and moving a part never changes the date', async () => {
+    const { ctx, index, m } = await ctxFor();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
+    await m.schedule(t.key, '2026-08-27');                     // put it on Thursday, the day after today
+    const moved = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB' && x.status === 'todo')!;
+    expect(moved.noteDate ?? moved.scheduled).toBe('2026-08-27');
+
+    taskMenu(ctx, moved, new MouseEvent('contextmenu'));
+    const part = Menu.last!.items.find((i) => i.title.startsWith('Part of'))!;
+    expect(part.title).toBe('Part of Tomorrow');               // not “Part of the day”, which reads as today
+    expect(part.sub!.items.map((i) => i.title)).toEqual(['Morning of Tomorrow', 'Afternoon of Tomorrow', 'Evening of Tomorrow', 'Anytime of Tomorrow']);
+
+    part.sub!.items.find((i) => i.title.startsWith('Afternoon'))!.click!();
+    const after = await waitFor(() => { const x = [...index.snapshot.tasks.values()].find((y) => y.text === 'Start with OIB' && y.status === 'todo'); return x?.part === 'afternoon' ? x : undefined; }, 'the part to change');
+    expect(after.noteDate ?? after.scheduled).toBe('2026-08-27');   // still Thursday, not today
+  });
+
   it('shows how far along a task is, and sets it from the checkbox', async () => {
     const { ctx, index, m } = await ctxFor();
     const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;

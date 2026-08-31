@@ -85,6 +85,7 @@ export function progressMenu(ctx: UiContext, task: Task, ev: MouseEvent): void {
 
 export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onEdit?: () => void } = {}): void {
   const menu = new Menu();
+  const today = ctx.today();
   menu.addItem((i) => i.setTitle('Edit…').setIcon('pencil').onClick(() => opts.onEdit ? opts.onEdit() : openTaskEditor(ctx, task)));
   menu.addItem((i) => i.setTitle('Add subtask…').setIcon('list-plus').onClick(() => openSubtask(ctx, task)));
   menu.addItem((i) => { i.setTitle(task.progress !== undefined ? `Progress — ${task.progress}%` : 'Progress').setIcon('trending-up'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addProgressItems(sub, ctx, task); });
@@ -96,10 +97,14 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   addScheduleItems(menu, ctx, task);
   const onADay = task.noteDate !== undefined || task.scheduled !== undefined;
   if (onADay) {
+    // This moves the task *within the day it is already on* — it never changes the date. Say which day
+    // that is, or “Afternoon” reads as “this afternoon” and looks like it will drag the task back to today.
+    const its = task.scheduled ?? task.noteDate!;
+    const dayName = humanDate(its, today);
     menu.addItem((i) => {
-      i.setTitle('Part of the day').setIcon('sun');
+      i.setTitle(`Part of ${dayName}`).setIcon('sun');
       const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
-      for (const p of DAY_PARTS) sub.addItem((j) => j.setTitle(PART_LABEL[p]).setIcon(p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock').setChecked(task.part === p).onClick(() => void ctx.run('Part', () => ctx.mutations.setPart(task.key, p))));
+      for (const p of DAY_PARTS) sub.addItem((j) => j.setTitle(`${PART_LABEL[p]} of ${dayName}`).setIcon(p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock').setChecked(task.part === p).onClick(() => void ctx.run('Part', () => ctx.mutations.setPart(task.key, p))));
     });
   }
   menu.addSeparator();

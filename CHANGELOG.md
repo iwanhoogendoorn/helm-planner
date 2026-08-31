@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The part-of-the-day menu now **names the day it will use**: “Part of Tomorrow”,
+  with “Morning of Tomorrow · Afternoon of Tomorrow · …” inside. It only ever moves a
+  task within the day it is already on — it never changes the date — but “Afternoon”
+  on its own read as “this afternoon” and looked like it would drag the task back to
+  today.
 - **How far along a task is.** A task in progress can carry a percentage, written on
   the line as `📈 40%`:
   - **right-click the checkbox** for the quick steps — 10 · 25 · 50 · 75 · 90 —
