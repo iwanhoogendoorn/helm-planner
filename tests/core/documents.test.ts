@@ -124,6 +124,20 @@ Previous day: [[25, Tuesday, Aug, 2026|Yesterday]]
 const RS = { regionPlacement: 'before-first-heading' as const, regionAnchor: '', planHeading: '## Plan' };
 
 describe('daily note region', () => {
+  it('never writes a line the section already holds', () => {
+    // A rewrite works from a snapshot. If the file moved on and now holds the very line Helm is about
+    // to add, adding it again makes a second copy of the task — and of every subtask under it.
+    const note = `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] 08:00 - 09:00: Continue with OIB\n\t- [ ] Verify workflow\n\n### Anytime\n`;
+    const { lines } = splitLines(note);
+    const cur = readRegion(lines, findRegion(lines, RS).region!);
+    // The snapshot says this line is new; the file already has it.
+    const stale = { ...cur, morning: [...cur.morning, newTaskLine('08:00 - 09:00: Continue with OIB')] };
+    const out = writeRegion(note, stale, RS)!;
+    const text = out.lines.join(out.eol);
+    expect(text.match(/Continue with OIB/g)).toHaveLength(1);
+    expect(text.match(/Verify workflow/g)).toHaveLength(1);
+  });
+
   it('keeps two lines worded the same exactly where they are', () => {
     // A list can repeat itself — “Delete the local copy” once per account — and both lines are real
     // work in their own place. Rewriting the region must not treat the second one as new.

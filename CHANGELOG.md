@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **A day's plan can no longer gain a second copy of a task.** Rewriting the plan
+  works from a snapshot of the note; if the file had moved on in between — the line
+  was just edited, by hand or by another write — Helm could treat a line it already
+  had as a new one and add it again, duplicating the task and every subtask under it.
+  A rewrite now never writes a line the section already holds.
+
 ## 1.23.2 — 2026-08-31
 
 - **A subtask can no longer be pulled out of its task by a stray drop.** Dropping one

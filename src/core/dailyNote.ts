@@ -340,6 +340,10 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
     if (info && info.line >= 0) {
       for (const group of groups) {
         const cur = findRegion(lines, settings).region!.sections[sec];
+        // Never write a line the section already holds. A rewrite works from a snapshot; if the file
+        // has moved on — the line was just edited by hand or by another write — the “new” line is one
+        // Helm already has, and adding it makes a second copy of the task, subtasks and all.
+        if (cur.taskLines.some((idx) => lines[idx]!.trim() === group[0]!.trim())) continue;
         lines.splice(insertionIndexInSection(lines, cur, group[0]!), 0, ...group);
       }
     } else {
