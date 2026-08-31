@@ -1682,6 +1682,27 @@ describe('dragging a task between parts of the day', () => {
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
   });
 
+  it('gives every phase its own notes, drawings and links', async () => {
+    const { ctx, index, m } = await ctxFor();
+    const view = (): HTMLElement => render((r) => renderProjects(ctx, r, { projectId: 'prj-book', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    const phaseSection = (root: HTMLElement): HTMLElement =>
+      [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Outline')!;
+
+    const actions = [...phaseSection(view()).querySelectorAll<HTMLElement>('.helm-section-actions button')].map((b) => b.getAttribute('title') ?? '');
+    expect(actions.some((t) => /note/i.test(t))).toBe(true);
+    expect(actions.some((t) => /drawing|diagram/i.test(t))).toBe(true);
+    expect(actions.some((t) => /link/i.test(t))).toBe(true);
+
+    // An address added to the phase shows under the phase, and the project stays clean.
+    const ph = index.project('prj-book')!.phases[0]!;
+    await m.addPhaseLink(ph.id, 'https://docs.example.com/blueprint', 'The blueprint');
+    const section = phaseSection(view());
+    expect(section.textContent).toContain('The blueprint');
+    expect(index.project('prj-book')!.links).toEqual([]);
+    const other = [...view().querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Writing')!;
+    expect(other.textContent).not.toContain('The blueprint');
+  });
+
   it('offers the same four views for the whole project list', async () => {
     const { ctx, m, index } = await ctxFor();
     const state = { filter: '', showClosed: false, showDone: false, collapsed: new Map() } as Parameters<typeof renderProjects>[2];

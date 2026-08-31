@@ -749,6 +749,35 @@ export class Mutations {
     await this.addLinksToNote(p.path, [{ url: r.url, label: r.label ?? linkLabel(r.url) }]);
   }
 
+  /** A web address that belongs to one phase, written under its heading rather than the project's list. */
+  async addPhaseLink(phaseId: string, url: string, label?: string): Promise<void> {
+    const project = this.index.project(phaseId.split('#')[0]!);
+    const phase = project?.phases.find((x) => x.id === phaseId);
+    if (!project || !phase) throw new Error('Phase not found');
+    const r = normaliseLink(url, label ?? '');
+    if (!r) throw new Error(`Not a web address: ${url}`);
+    const line = `- [${r.label ?? linkLabel(r.url)}](${r.url})`;
+    await this.editFile(project.path, (lines) => {
+      if (lines.slice(phase.startLine, phase.endLine).some((l) => l.includes(r.url))) return false;
+      const at = this.phaseInsertPoint(lines, phaseId);
+      if (at === undefined) return false;
+      lines.splice(at, 0, line);
+      return true;
+    });
+  }
+
+  async removePhaseLink(phaseId: string, url: string): Promise<void> {
+    const project = this.index.project(phaseId.split('#')[0]!);
+    const phase = project?.phases.find((x) => x.id === phaseId);
+    if (!project || !phase) throw new Error('Phase not found');
+    await this.editFile(project.path, (lines) => {
+      const at = lines.findIndex((l, i) => i >= phase.startLine && i < phase.endLine && /^\s*-\s/.test(l) && l.includes(url));
+      if (at === -1) return false;
+      lines.splice(at, 1);
+      return true;
+    });
+  }
+
   async removeProjectLink(projectId: string, url: string): Promise<void> {
     const p = this.index.project(projectId);
     if (!p) throw new Error('Project not found');
@@ -1186,7 +1215,22 @@ export class Mutations {
       case 'date': return { 'helm-date': target.date };
       case 'period': return { 'helm-period': target.key };
       case 'habit': return { 'helm-habit': target.id };
+      case 'phase': return { 'helm-phase': target.id };
     }
+  }
+
+  /**
+   * The line to write a phase's own attachment on: the end of the phase's block, after its tasks and
+   * whatever else it already holds, so an embed or a link sits with the phase and not with the project.
+   */
+  private phaseInsertPoint(lines: string[], phaseId: string): number | undefined {
+    const projectId = phaseId.split('#')[0]!;
+    const p = this.index.project(projectId);
+    const ph = p?.phases.find((x) => x.id === phaseId);
+    if (!ph) return undefined;
+    let at = Math.min(ph.endLine, lines.length);
+    while (at > ph.startLine && lines[at - 1]!.trim() === '') at--;
+    return at;
   }
 
   /** The note a target is, or lives in, as a wikilink for a `related` property: the daily note, the periodic note, the project note, or the note holding the task. */
@@ -1195,6 +1239,7 @@ export class Mutations {
     if (target.kind === 'period') { const p = parsePeriod(target.key); return p ? `[[${baseName(this.index.periodicPath(p))}]]` : undefined; }
     if (target.kind === 'project') { const p = this.index.project(target.id); return p ? `[[${baseName(p.path)}]]` : undefined; }
     if (target.kind === 'habit') { const hb = this.index.snapshot.habits.get(target.id); return hb ? `[[${baseName(hb.path)}]]` : undefined; }
+    if (target.kind === 'phase') { const p = this.index.project(target.projectId); return p ? `[[${baseName(p.path)}]]` : undefined; }
     const t = this.index.task(target.key) ?? (target.id ? [...this.index.snapshot.tasks.values()].find((x) => x.id === target.id && x.origin !== 'daily-mirror') : undefined);
     return t ? `[[${baseName(t.path)}]]` : undefined;
   }
@@ -1226,6 +1271,7 @@ export class Mutations {
     if (!inProject) return general.replace(/\/+$/, '');
     let project: Project | undefined;
     if (target.kind === 'project') project = this.index.project(target.id);
+    if (target.kind === 'phase') project = this.index.project(target.projectId);   // a phase belongs to its project's folder
     if (target.kind === 'task') { const t = this.index.task(target.key) ?? (target.id ? [...this.index.snapshot.tasks.values()].find((x) => x.id === target.id && x.origin !== 'daily-mirror') : undefined); const src = t?.mirrorOf ? this.index.task(t.mirrorOf) : t; if (src?.projectId) project = this.index.project(src.projectId); }
     return (project ? this.index.projectFolderOf(project) || general : general).replace(/\/+$/, '');
   }
@@ -1277,6 +1323,7 @@ export class Mutations {
     if (!this.settings.embedDrawings || target.kind === 'task') return;
     let notePath: string | undefined;
     if (target.kind === 'project') notePath = this.index.project(target.id)?.path;
+    else if (target.kind === 'phase') notePath = this.index.project(target.projectId)?.path;
     else if (target.kind === 'habit') notePath = this.index.snapshot.habits.get(target.id)?.path;
     else if (target.kind === 'date') notePath = await this.ensureDailyNote(target.date);
     else { const p = parsePeriod(target.key); if (p) notePath = await this.ensurePeriodicNote(p); }
@@ -1284,6 +1331,7 @@ export class Mutations {
     const embed = `![[${drawingTitle(drawingPath)}.excalidraw]]`;
     await this.editFile(notePath, (lines, doc) => {
       if (lines.some((l) => l.includes(embed))) return false;
+      if (target.kind === 'phase') { const at = this.phaseInsertPoint(lines, target.id); if (at === undefined) return false; lines.splice(at, 0, embed); return true; }
       const h = doc.headings.find((x) => /^(diagrams?|drawings?|visuals?)$/i.test(x.text.trim()));
       if (h) { lines.splice(sectionInsertPoint(doc, h), 0, embed); return true; }
       let e = lines.length;
@@ -1440,6 +1488,7 @@ export class Mutations {
     if (!this.settings.linkNotes || target.kind === 'task') return;
     let host: string | undefined;
     if (target.kind === 'project') host = this.index.project(target.id)?.path;
+    else if (target.kind === 'phase') host = this.index.project(target.projectId)?.path;
     else if (target.kind === 'habit') host = this.index.snapshot.habits.get(target.id)?.path;
     else if (target.kind === 'date') host = await this.ensureDailyNote(target.date);
     else { const p = parsePeriod(target.key); if (p) host = await this.ensurePeriodicNote(p); }
@@ -1447,6 +1496,7 @@ export class Mutations {
     const link = `- [[${noteTitle(notePath)}]]`;
     await this.editFile(host, (lines, doc) => {
       if (lines.some((l) => l.includes(`[[${noteTitle(notePath)}]]`) || l.includes(`[[${noteTitle(notePath)}|`))) return false;
+      if (target.kind === 'phase') { const at = this.phaseInsertPoint(lines, target.id); if (at === undefined) return false; lines.splice(at, 0, link); return true; }
       const h = doc.headings.find((x) => /^(notes?|related|links?)$/i.test(x.text.trim()));
       if (h) { lines.splice(sectionInsertPoint(doc, h), 0, link); return true; }
       let e = lines.length;

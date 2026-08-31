@@ -141,6 +141,9 @@ export function parseProject(path: string, content: string, opts: { fallbackId?:
     const phase: Phase = {
       id: `${id}#${slug}`, projectId: id, title: ph.title, slug, order,
       headingLine: ph.h.line, startLine: ph.h.line + 1, endLine: end, taskKeys: [],
+      // Addresses written under the heading belong to the phase, not to the project as a whole.
+      // Everything under the heading except the tasks themselves — `- [Label](url)` is a link, `- [ ] x` is not.
+      links: linksIn(doc.lines.slice(ph.h.line + 1, end).filter((l) => !/^\s*[-*]\s*\[[ xX/\->?]\]/.test(l)).join('\n')).map((l) => ({ url: l.url, label: l.label })),
     };
     if (ph.due) phase.due = ph.due;
     project.phases.push(phase);

@@ -111,6 +111,8 @@ export interface Phase {
   startLine: number; // first body line
   endLine: number; // exclusive
   taskKeys: string[];
+  /** Web links written under the phase heading. */
+  links: { url: string; label: string }[];
 }
 
 export interface Project {
@@ -218,7 +220,8 @@ export type DrawingTarget =
   | { kind: 'project'; id: string; title: string }
   | { kind: 'date'; date: IsoDate; title: string }
   | { kind: 'period'; key: string; title: string }
-  | { kind: 'habit'; id: string; title: string };
+  | { kind: 'habit'; id: string; title: string }
+  | { kind: 'phase'; id: string; projectId: string; title: string };
 
 export interface Snapshot {
   builtAt: number;

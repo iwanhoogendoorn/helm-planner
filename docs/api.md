@@ -121,6 +121,11 @@ DELETE /projects/:id
 `status` is one of `idea`, `planned`, `active`, `on-hold`, `done`, `cancelled`, `archived`;
 `priority` one of `low`, `normal`, `medium`, `high`, `urgent`, `critical`.
 
+## Attachments
+
+Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`
+(`prj-…#slug`), `helm-date`, `helm-period` or `helm-habit`.
+
 ## Errors
 
 | code | meaning |

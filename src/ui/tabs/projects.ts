@@ -1,6 +1,6 @@
 /** Portfolio list → project detail with phases, tasks and inline add. */
 import { Menu } from 'obsidian';
-import type { IsoDate, Project, ProjectPriority, ProjectStatus, Task } from '../../core/types';
+import type { IsoDate, Phase, Project, ProjectPriority, ProjectStatus, Task } from '../../core/types';
 import { addDays, humanDate, relativeDays, startOfWeek } from '../../core/dates';
 import { PROJECT_PRIORITIES, PROJECT_STATUSES } from '../../core/project';
 import { compareProjects, isOpen, projectHealth, type ProjectHealth } from '../../data/planner';
@@ -15,7 +15,7 @@ import { openDatePicker } from '../modals/datePicker';
 import { minutesToHuman } from '../../core/dates';
 import { periodChoices, projectPeriodLabel } from './horizons';
 import { crumbBar } from '../crumbs';
-import { drawingsButton, drawingsSection, targetForProject } from '../drawings';
+import { drawingsButton, drawingsSection, targetForPhase, targetForProject } from '../drawings';
 import { notesButton, notesSection } from '../notes';
 import { linksSection, linksButton, type LinkHolder } from '../links';
 import { pickTask, taskMenu, STATUS_LABELS } from '../menus';
@@ -252,8 +252,23 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
     const input = quickAdd(ctx, `Add to ${ph.title}…`, (text) => addQuick(ctx, text, p.id, ph.id));
     root.appendChild(section(ph.title, {
       count: `${pp.done}/${pp.total}`, store: state.collapsed, key: `phase:${ph.id}`, collapsed: pp.state === 'done', cls: `phase-${pp.state}`,
-      actions: [ph.due ? chip(`target ${humanDate(ph.due, today)}`, ph.due < today && pp.state !== 'done' ? 'due is-overdue' : 'due') : null, iconButton('pencil', 'Rename phase / target date', () => renamePhasePrompt(ctx, p, ph.id, ph.title, ph.due)), iconButton('trash-2', 'Delete this phase', () => deletePhasePrompt(ctx, p, ph.id, ph.title, pp.total))],
-    }, ...renderTasks(ph.taskKeys), input));
+      actions: [
+        ph.due ? chip(`target ${humanDate(ph.due, today)}`, ph.due < today && pp.state !== 'done' ? 'due is-overdue' : 'due') : null,
+        // A phase can hold its own notes, drawings and addresses, like a project or a task.
+        notesButton(ctx, targetForPhase(ph)),
+        drawingsButton(ctx, targetForPhase(ph)),
+        linksButton(ctx, phaseLinks(ctx, ph)),
+        iconButton('pencil', 'Rename phase / target date', () => renamePhasePrompt(ctx, p, ph.id, ph.title, ph.due)),
+        iconButton('trash-2', 'Delete this phase', () => deletePhasePrompt(ctx, p, ph.id, ph.title, pp.total)),
+      ],
+    }, ...renderTasks(ph.taskKeys),
+      ...(ctx.index.notesFor(targetForPhase(ph)).length + ctx.index.drawingsFor(targetForPhase(ph)).length + ph.links.length > 0
+        ? [h('div', { cls: 'helm-phase-attachments' },
+            notesSection(ctx, targetForPhase(ph)),
+            drawingsSection(ctx, targetForPhase(ph)),
+            ph.links.length > 0 ? linksSection(ctx, phaseLinks(ctx, ph)) : null)]
+        : []),
+      input));
   }
   const looseInput = quickAdd(ctx, p.phases.length ? 'Add a loose task…' : 'Add a task…', (text) => addQuick(ctx, text, p.id));
   const loose = renderTasks(p.looseTaskKeys);
@@ -285,6 +300,14 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
 }
 
 /** A project's links: the list in its note, and the ways to change it. */
+function phaseLinks(ctx: UiContext, ph: Phase): LinkHolder {
+  return {
+    list: () => ph.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),
+    add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addPhaseLink(ph.id, url, label)),
+    remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removePhaseLink(ph.id, url)),
+  };
+}
+
 function projectLinks(ctx: UiContext, p: Project): LinkHolder {
   return {
     list: () => p.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),

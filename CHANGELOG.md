@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **A phase can hold its own notes, drawings and web links.** Each phase header now
+  carries the same three buttons a project and a task have; what you attach belongs
+  to that phase, not to the project as a whole, and shows under it. A note or drawing
+  says so in its frontmatter (`helm-phase: prj-…#slug`) and is embedded under the
+  phase's heading; a web address is written as a plain link there. New notes and
+  drawings made for a phase land in the project's own folder.
+
 ## 1.23.3 — 2026-08-31
 
 - **A day's plan can no longer gain a second copy of a task.** Rewriting the plan
