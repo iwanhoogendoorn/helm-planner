@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.0 — 2026-08-31
 
 - **Drag a subtask onto one of its siblings to put it in that place**, or onto the
   space below the list to send it to the end. It takes its own children with it, and
