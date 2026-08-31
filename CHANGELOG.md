@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.2 — 2026-08-31
 
 - **A subtask can no longer be pulled out of its task by a stray drop.** Dropping one
   on a part of the day it already sits in used to promote it to a task of its own —
