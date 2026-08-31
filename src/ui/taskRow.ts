@@ -53,6 +53,31 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     });
     row.addEventListener('dragend', () => row.classList.remove('is-dragging'));
   }
+  // A subtask dropped on one of its siblings takes that place in the list. Dropping it on its parent
+  // sends it to the end. Anything else falls through to the day or project underneath.
+  if (t.parentKey) {
+    const siblingDrag = (ev: DragEvent): string | undefined => {
+      const key = ev.dataTransfer?.getData('text/helm-task') || undefined;
+      if (!key || key === t.key) return undefined;
+      const dragged = ctx.index.task(key);
+      return dragged && dragged.parentKey === t.parentKey && dragged.path === t.path ? key : undefined;
+    };
+    row.addEventListener('dragover', (ev) => {
+      if (!ev.dataTransfer?.types.includes('text/helm-task')) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      row.classList.add('is-reordering');
+    });
+    row.addEventListener('dragleave', (ev) => { if (!row.contains(ev.relatedTarget as Node | null)) row.classList.remove('is-reordering'); });
+    row.addEventListener('drop', (ev) => {
+      row.classList.remove('is-reordering');
+      const key = siblingDrag(ev);
+      if (!key) return;                                        // not a sibling: let the drop zone below have it
+      ev.preventDefault();
+      ev.stopPropagation();
+      void ctx.run('Reorder', () => ctx.mutations.reorderSubtask(key, t.key));
+    });
+  }
 
   // Checkbox: click toggles done; shift-click cycles to in-progress.
   if (!opts.compact) {
@@ -135,8 +160,18 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     const kids = h('div', { cls: 'helm-task-children' });
     for (const k of t.childKeys) {
       const c = snap.tasks.get(k);
-      if (c) kids.appendChild(taskRow(ctx, c, { ...opts, depth: (opts.depth ?? 0) + 1, showProject: false, reason: undefined as unknown as string }));
+      if (c) kids.appendChild(taskRow(ctx, c, { ...opts, draggable: true, depth: (opts.depth ?? 0) + 1, showProject: false, reason: undefined as unknown as string }));
     }
+    // Below the last one: drop here to send a subtask to the end of the list.
+    kids.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task')) { ev.preventDefault(); } });
+    kids.addEventListener('drop', (ev) => {
+      const key = ev.dataTransfer?.getData('text/helm-task');
+      const dragged = key ? ctx.index.task(key) : undefined;
+      if (!dragged || dragged.parentKey !== t.key) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      void ctx.run('Reorder', () => ctx.mutations.reorderSubtask(dragged.key));
+    });
     const wrap = h('div', { cls: 'helm-task-tree' }, row, kids);
     return wrap;
   }

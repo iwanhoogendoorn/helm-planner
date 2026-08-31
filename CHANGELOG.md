@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Drag a subtask onto one of its siblings to put it in that place**, or onto the
+  space below the list to send it to the end. It takes its own children with it, and
+  the lines move verbatim, so ids, times and everything else on them are untouched.
+  Only siblings reorder: drop a subtask anywhere else and the day or project
+  underneath handles it as before.
+
 ## 1.22.1 — 2026-08-31
 
 - The year's little months now show **the date in every square**, so a green day is

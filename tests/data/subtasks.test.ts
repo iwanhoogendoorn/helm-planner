@@ -78,3 +78,39 @@ describe('subtasks', () => {
   });
 
 });
+
+describe('putting subtasks in the order you want them', () => {
+  const NOTE = `---\ntitle: Solo\ntype: project\nid: prj-solo\nstatus: active\n---\n\n## Tasks\n\n- [ ] Ship the thing\n\t- [ ] Write it 🆔 tsk-write\n\t- [ ] Proof it 🆔 tsk-proof\n\t\t- [ ] Read it aloud\n\t- [ ] Post it 🆔 tsk-post\n- [ ] Something else\n`;
+  const kids = async (vault: { read: (p: string) => Promise<string> }): Promise<string[]> =>
+    (await vault.read('02 PROJECTS/Solo/Solo.md')).split('\n').filter((l) => /^\t- \[/.test(l)).map((l) => l.replace(/^\t- \[ \] /, '').replace(/ 🆔.*/, ''));
+
+  it('moves one before another, taking its own children with it', async () => {
+    const { m, vault } = await setup({ '02 PROJECTS/Solo/Solo.md': NOTE });
+    expect(await kids(vault)).toEqual(['Write it', 'Proof it', 'Post it']);
+
+    await m.reorderSubtask('tsk-post', 'tsk-write');            // Post it, to the front
+    expect(await kids(vault)).toEqual(['Post it', 'Write it', 'Proof it']);
+
+    await m.reorderSubtask('tsk-proof', 'tsk-write');           // Proof it, with its own child under it
+    const lines = (await vault.read('02 PROJECTS/Solo/Solo.md')).split('\n');
+    const at = lines.findIndex((l) => l.includes('Proof it'));
+    expect(lines[at + 1]).toBe('\t\t- [ ] Read it aloud');
+    expect(await kids(vault)).toEqual(['Post it', 'Proof it', 'Write it']);
+  });
+
+  it('sends one to the end when there is nothing to put it before', async () => {
+    const { m, vault } = await setup({ '02 PROJECTS/Solo/Solo.md': NOTE });
+    await m.reorderSubtask('tsk-write');
+    expect(await kids(vault)).toEqual(['Proof it', 'Post it', 'Write it']);
+    // The task after the list is left where it is.
+    expect((await vault.read('02 PROJECTS/Solo/Solo.md')).trim().endsWith('- [ ] Something else')).toBe(true);
+  });
+
+  it('refuses anything that is not a straight swap of siblings', async () => {
+    const { m, index } = await setup({ '02 PROJECTS/Solo/Solo.md': NOTE });
+    const parent = [...index.snapshot.tasks.values()].find((t) => t.text === 'Ship the thing')!;
+    const stranger = [...index.snapshot.tasks.values()].find((t) => t.text === 'Something else')!;
+    await expect(m.reorderSubtask(parent.key, 'tsk-write')).rejects.toThrow(/only a subtask/i);
+    await expect(m.reorderSubtask('tsk-write', stranger.key)).rejects.toThrow(/not siblings/i);
+  });
+});

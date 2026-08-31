@@ -482,6 +482,32 @@ export class Mutations {
     }
   }
 
+  /**
+   * Put one subtask before another, or last when there is nothing to put it before. Both have to be
+   * children of the same task in the same note — this reorders a list, it does not re-parent anything.
+   * The subtask takes its own children with it, and the lines are moved verbatim, so ids, times and
+   * everything else on them are untouched.
+   */
+  async reorderSubtask(key: string, beforeKey?: string): Promise<void> {
+    const t = this.fresh(key);
+    if (!t.parentKey) throw new Error('Only a subtask can be reordered among its siblings');
+    if (beforeKey === key) return;
+    const before = beforeKey ? this.fresh(beforeKey) : undefined;
+    if (before && (before.parentKey !== t.parentKey || before.path !== t.path)) throw new Error('Those two are not siblings');
+    await this.editFile(t.path, (lines) => {
+      const cut = this.subtreeRange(lines, t);
+      const block = lines.slice(cut.start, cut.end);
+      if (block.length === 0) return false;
+      // Where it lands, in the file as it stands *before* the cut.
+      let at = before ? before.line : this.subtreeRange(lines, this.fresh(t.parentKey!)).end;
+      lines.splice(cut.start, cut.end - cut.start);
+      if (at > cut.start) at -= block.length;                  // the cut moved everything below it up
+      if (at === cut.start) return false;                      // already there
+      lines.splice(at, 0, ...block);
+      return true;
+    });
+  }
+
   /** An inbox line moves into the day's note. */
   private async moveLineToDay(t: Task, date: IsoDate, part: DayPart = 'anytime'): Promise<void> {
     let carried: TaskLine[] = [];

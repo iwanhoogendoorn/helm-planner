@@ -93,6 +93,38 @@ describe('Today tab', () => {
     expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);
   });
 
+  it('reorders subtasks by dragging one onto another', async () => {
+    const day = dailyPath(TODAY);
+    const list = ['- [ ] Ship the thing', '\t- [ ] Write it', '\t- [ ] Proof it', '\t- [ ] Post it'];
+    const { ctx, index, vault } = await ctxFor({ [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n### Anytime\n${list.join('\n')}\n` });
+    const order = async (): Promise<string[]> => (await vault.read(day)).split('\n').filter((l) => l.startsWith('\t- [')).map((l) => l.replace('\t- [ ] ', ''));
+    expect(await order()).toEqual(['Write it', 'Proof it', 'Post it']);
+
+    const view = (): HTMLElement => render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const rowFor = (root: HTMLElement, text: string): HTMLElement =>
+      [...root.querySelectorAll<HTMLElement>('.helm-task')].find((x) => x.querySelector('.helm-task-text')?.textContent === text)!;
+    let root = view();
+    // Subtask rows can be picked up, even though the parent row is the draggable one in the day.
+    expect(rowFor(root, 'Post it').getAttribute('draggable')).toBe('true');
+
+    const post = [...index.snapshot.tasks.values()].find((t) => t.text === 'Post it' && t.path === day)!;
+    const drop = (onto: HTMLElement, key: string): void => {
+      const ev = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? key : '') } });
+      onto.dispatchEvent(ev);
+    };
+    drop(rowFor(root, 'Write it'), post.key);                 // Post it, to the front of its siblings
+    await waitFor(async () => ((await order())[0] === 'Post it' ? true : undefined), 'the reorder');
+    expect(await order()).toEqual(['Post it', 'Write it', 'Proof it']);
+
+    // Dropping on a stranger does nothing to the order — it is not a sibling.
+    root = view();
+    const parent = [...index.snapshot.tasks.values()].find((t) => t.text === 'Ship the thing')!;
+    drop(rowFor(root, 'Proof it'), parent.key);
+    await flush(); await flush();
+    expect(await order()).toEqual(['Post it', 'Write it', 'Proof it']);
+  });
+
   it('picks several tasks and moves them all in one go', async () => {
     const { ctx, index } = await ctxFor();
     const day = '2026-08-25';
