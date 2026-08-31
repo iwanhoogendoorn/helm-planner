@@ -460,10 +460,15 @@ export class Mutations {
       carried = lines.slice(start, end).map((l) => parseTaskLine(l)).filter((x): x is TaskLine => x !== undefined);
       if (t.noteDate !== undefined && t.noteDate < today) {
         // A past day keeps a record of what moved on: the task and its subtasks are marked forwarded,
-        // never left open, or they would come back as carried-over work of their own.
+        // never left open, or they would come back as carried-over work of their own. The record gives
+        // up its 🆔 — the task itself has moved on with it, and two lines wearing one id send every
+        // lookup, every subtask and every attachment to whichever note the index happened to read first.
         for (let i = start; i < end; i++) {
           const tl = parseTaskLine(lines[i]!);
-          if (tl) lines[i] = serialiseTaskLine(withStatus(tl, 'forwarded', t.noteDate), { force: true });
+          if (!tl) continue;
+          const record = withStatus(tl, 'forwarded', t.noteDate);
+          delete record.id;
+          lines[i] = serialiseTaskLine(record, { force: true });
         }
       } else lines.splice(start, end - start);
       return true;

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Subtasks show up under the task you added them to.** When two notes hold the same
+  🆔 — a day you moved work off leaves a “forwarded” record behind wearing the same
+  id — the second copy was given a key of its own, but its subtasks were still keyed
+  to the id, so they hung themselves on whichever copy the index read first. The
+  lines were always written in the right place; they were drawn under a dead twin,
+  or nowhere you were looking. Three fixes: subtasks now follow their own copy; a
+  lookup by id returns the live line and only falls back to a closed record when
+  there is nothing else; and a forwarded record **gives up its id**, so the clash
+  stops happening in the first place.
+
 ## 1.23.0 — 2026-08-31
 
 - **Drag a subtask onto one of its siblings to put it in that place**, or onto the

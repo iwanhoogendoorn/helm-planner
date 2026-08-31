@@ -114,3 +114,37 @@ describe('putting subtasks in the order you want them', () => {
     await expect(m.reorderSubtask('tsk-write', stranger.key)).rejects.toThrow(/not siblings/i);
   });
 });
+
+describe('two notes wearing the same id', () => {
+  const DUP = (note: string, id: string, kid: string): string =>
+    `---\ntitle: ${note}\n---\n\n# Day planner\n\n### Anytime\n- [ ] Set up the bots 🆔 ${id}\n\t- [ ] ${kid}\n`;
+
+  it('keeps each copy’s subtasks under that copy, not under the first one it finds', async () => {
+    const { index } = await setup({
+      [dailyPath('2026-08-25')]: DUP('25, Tuesday, Aug, 2026', 'tsk-dup', 'Old child'),
+      [dailyPath('2026-08-28')]: DUP('28, Friday, Aug, 2026', 'tsk-dup', 'New child'),
+    });
+    const copies = [...index.snapshot.tasks.values()].filter((t) => t.text === 'Set up the bots');
+    expect(copies).toHaveLength(2);
+    for (const c of copies) {
+      const kids = c.childKeys.map((k) => index.task(k)!);
+      expect(kids.map((x) => x.text), c.path).toHaveLength(1);
+      expect(kids[0]!.path, 'a subtask belongs to the copy in its own note').toBe(c.path);
+    }
+    expect(index.snapshot.diagnostics.some((d) => d.code === 'HELM-T01')).toBe(true); // still reported
+  });
+
+  it('finds the live copy by id, never the record left behind', async () => {
+    const { index, m, vault } = await setup({
+      [dailyPath('2026-08-25')]: `---\ntitle: 25, Tuesday, Aug, 2026\n---\n\n# Day planner\n\n### Anytime\n- [ ] Ring the plumber 🆔 tsk-ring\n\t- [ ] Find the number\n`,
+    });
+    // Moving it off a past day leaves a record — which must not keep the id.
+    await m.schedule('tsk-ring', TODAY);
+    const old = await vault.read(dailyPath('2026-08-25'));
+    expect(old).toContain('Ring the plumber');
+    expect(old).not.toContain('tsk-ring');
+    expect(index.taskById('tsk-ring')!.noteDate).toBe(TODAY);
+    expect(index.taskById('tsk-ring')!.status).toBe('todo');
+    expect(index.taskById('tsk-ring')!.childKeys).toHaveLength(1);   // the subtask came along
+  });
+});

@@ -309,15 +309,22 @@ export class HelmIndex {
       diagnostics.push(...f.diagnostics);
       completions.push(...f.completions);
       const keys: string[] = [];
+      // A task whose id is already taken gets a key of its own. Its subtasks were keyed to the id back
+      // when the file was parsed, so they have to be re-pointed at it — otherwise they hang themselves
+      // on the first task carrying that id, in whatever other note it happens to live.
+      const renamed = new Map<string, string>();
       for (const t of f.tasks) {
         const copy: Task = { ...t, childKeys: [] };
         if (tasks.has(copy.key)) {
           diagnostics.push({ severity: 'warning', code: 'HELM-T01', message: `Duplicate task id ${copy.key} (also in ${tasks.get(copy.key)!.path})`, path: f.path, line: t.line });
-          copy.key = `${copy.key}~${keys.length}`;
+          const next = `${copy.key}~${keys.length}`;
+          renamed.set(copy.key, next);
+          copy.key = next;
         }
         tasks.set(copy.key, copy);
         keys.push(copy.key);
       }
+      if (renamed.size > 0) for (const k of keys) { const t = tasks.get(k); if (t?.parentKey && renamed.has(t.parentKey)) t.parentKey = renamed.get(t.parentKey)!; }
       tasksByPath.set(f.path, keys);
       if (f.kind === 'project' && f.project) {
         const p = f.project;
@@ -575,9 +582,19 @@ export class HelmIndex {
 
   task(key: string): Task | undefined { return this.snapshot.tasks.get(key); }
   /** The task carrying this 🆔, ignoring the copy mirrored onto a day. */
+  /**
+   * The task carrying this id. Two notes can end up holding the same id — a day that was moved on
+   * leaves a “forwarded” record behind — so a live line always wins over a closed record, and the
+   * record is only returned when there is nothing else.
+   */
   taskById(id: string): Task | undefined {
-    for (const t of this.snapshot.tasks.values()) if (t.id === id && t.origin !== 'daily-mirror') return t;
-    return undefined;
+    let record: Task | undefined;
+    for (const t of this.snapshot.tasks.values()) {
+      if (t.id !== id || t.origin === 'daily-mirror') continue;
+      if (t.status !== 'forwarded' && t.status !== 'cancelled') return t;
+      record ??= t;
+    }
+    return record;
   }
   project(id: string): Project | undefined { return this.snapshot.projects.get(id); }
   projectByTitle(title: string): Project | undefined {
