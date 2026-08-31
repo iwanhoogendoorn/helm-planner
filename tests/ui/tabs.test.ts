@@ -93,6 +93,31 @@ describe('Today tab', () => {
     expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);
   });
 
+  it('shows how far along a task is, and sets it from the checkbox', async () => {
+    const { ctx, index, m } = await ctxFor();
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
+    await m.setProgress(t.key, 40);
+    const at = () => [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
+
+    const row = taskRow(ctx, at());
+    expect(texts(row, '.helm-chip.progress')).toEqual(['40%']);
+    expect(row.querySelector<HTMLElement>('.helm-task-progress span')!.style.width).toBe('40%');
+    expect(row.querySelector<HTMLElement>('.helm-check-half')!.style.height).toBe('40%');   // the box fills as you go
+
+    // Right-clicking the box offers the percentages.
+    row.querySelector('.helm-check')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['40% done', 'No percentage', '10%', '25%', '50%', '75%', '90%', '100% — done']);
+    Menu.last!.items.find((i) => i.title === '75%')!.click!();
+    await waitFor(() => (at().progress === 75 ? true : undefined), 'the new percentage');
+
+    // And 100% finishes it.
+    taskRow(ctx, at()).querySelector('.helm-check')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    Menu.last!.items.find((i) => i.title === '100% — done')!.click!();
+    await waitFor(() => (at().status === 'done' ? true : undefined), 'the task to finish');
+    expect(at().progress).toBeUndefined();
+    expect(taskRow(ctx, at()).querySelector('.helm-task-progress')).toBeNull();
+  });
+
   it('reorders subtasks by dragging one onto another', async () => {
     const day = dailyPath(TODAY);
     const list = ['- [ ] Ship the thing', '\t- [ ] Write it', '\t- [ ] Proof it', '\t- [ ] Post it'];
@@ -932,7 +957,7 @@ describe('Calendar tab', () => {
     expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-08-28');
     cell.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['New task on Fri 28 Aug…', 'Plan this day…', 'Open day', 'Open daily note']);
-    Menu.last!.items[2]!.click!();
+    Menu.last!.items[2]!.click!();                 // Open day
     expect(nav.at(-1)).toEqual({ tab: 'today', opts: { date: '2026-08-28' } });
     // Yesterday has no Plan entry.
     root.querySelector<HTMLElement>('.helm-month-cell[data-date="2026-08-25"]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
@@ -1537,8 +1562,8 @@ describe('Follow up from the UI', () => {
     const { ctx, index, vault } = await ctxFor();
     const t = [...index.snapshot.tasks.values()].find((x) => x.origin === 'daily' && x.noteDate === '2026-08-25' && x.status === 'todo' && x.section !== 'outside')!;
     click(taskRow(ctx, t).querySelector('button[aria-label="More…"]'));
-    expect(Menu.last!.items.map((i) => i.title).slice(0, 3)).toEqual(['Edit…', 'Add subtask…', 'Follow up…']);
-    Menu.last!.items[2]!.click!();
+    expect(Menu.last!.items.map((i) => i.title).slice(0, 4)).toEqual(['Edit…', 'Add subtask…', 'Progress', 'Follow up…']);
+    Menu.last!.items.find((i) => i.title === 'Follow up…')!.click!();
     const m = Modal.last!;
     expect(m.titleEl.textContent).toBe('Follow up');
     const text = m.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;

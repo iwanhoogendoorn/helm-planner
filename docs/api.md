@@ -65,7 +65,7 @@ curl -s "$HELM/tasks?overdue=true" -H "Authorization: Bearer $TOKEN"
 ### `GET /tasks/:id`
 
 The whole task: `id`, `key`, `text`, `status`, `open`, `blocked`, `source`, `path`, `line`, `depth`,
-`project`, `phase`, `scheduled`, `due`, `part`, `time`, `effortMinutes`, `priority`, `tags`, `links`,
+`project`, `phase`, `scheduled`, `due`, `part`, `time`, `effortMinutes`, `progress`, `priority`, `tags`, `links`,
 `blockedBy`, `parentId`, `subtasks`, `recurrence`.
 
 ### `POST /tasks`
@@ -97,6 +97,8 @@ Send only what changes:
 
 - `"projectId"` (with an optional `phaseId`) moves the task into that project,
   taking its notes, drawings and links with it.
+- `"progress": 40` says you are 40% of the way and puts the task in progress; `100`
+  finishes it, `null` takes the percentage off.
 - `"scheduled": null` unschedules.
 - `"due": null` and `"effortMinutes": null` clear those.
 - `part` on its own moves it within its day.

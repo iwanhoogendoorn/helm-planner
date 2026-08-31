@@ -27,6 +27,7 @@ export const SYMBOLS = {
   recurrence: '🔁',
   link: '🔗',
   effort: '⏱️',
+  progress: '📈',
 } as const;
 
 const PRIORITY_SYMBOLS: Record<string, Priority> = { '🔺': 'highest', '⏫': 'high', '🔼': 'medium', '🔽': 'low', '⏬': 'lowest' };
@@ -48,7 +49,7 @@ export function isTerminal(status: TaskStatus): boolean {
   return status === 'done' || status === 'cancelled';
 }
 
-const SYMBOL_ALT = ['🆔', '⛔', '➕', '🛫', '⏳', '📅', '✅', '❌', '🔁', '🔗', '⏱️', '⏱', '🔺', '⏫', '🔼', '🔽', '⏬']
+const SYMBOL_ALT = ['🆔', '⛔', '➕', '🛫', '⏳', '📅', '✅', '❌', '🔁', '🔗', '⏱️', '⏱', '📈', '🔺', '⏫', '🔼', '🔽', '⏬']
   .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   .join('|');
 const SYMBOL_RE = new RegExp(`(${SYMBOL_ALT})`, 'gu');
@@ -57,6 +58,7 @@ const ID_RE = /^\s*([A-Za-z0-9][\w-]*)(?=\s|$)/u;
 const IDS_RE = /^\s*([A-Za-z0-9][\w-]*(?:~\d+)?(?:\s*,\s*[A-Za-z0-9][\w-]*(?:~\d+)?)*)(?=\s|$)/u; // `~n` = an index key written by mistake; parsed as the id
 const LINK_RE = /^\s*(\[\[[^\]]+\]\])/u;
 const EFFORT_RE = /^\s*((?:\d+h)?(?:\d+m)?)(?=\s|$)/u;
+const PERCENT_RE = /^\s*(\d{1,3})\s*%?(?=\s|$)/u;
 const TAG_RE = /(?:^|[\s(])#([\p{L}\p{N}_\-/]+)/gu;
 const TIME_RE = /^(\d{1,2}:\d{2})\s*(?:-\s*(\d{1,2}:\d{2}))?\s*:?\s*(.*)$/u;
 
@@ -129,6 +131,7 @@ export function parseTaskLine(line: string): TaskLine | undefined {
       case '🔁': out.recurrence = parseRecurrence(t.value); break;
       case '🔗': out.mirrorLink = t.value; break;
       case '⏱️': case '⏱': out.effortRaw = t.value; out.effortMinutes = parseEffort(t.value); break;
+      case '📈': out.progress = Math.max(0, Math.min(100, Number(t.value))); break;
       default: {
         const p = PRIORITY_SYMBOLS[t.symbol];
         if (p) {
@@ -197,6 +200,10 @@ function readValue(symbol: string, after: string, body: string, index: number): 
       if (!m || m[1] === '' || parseEffort(m[1]!) === undefined) return undefined;
       return mk(m[1]!, m[0].length);
     }
+    case '📈': {
+      const m = PERCENT_RE.exec(after);
+      return m ? mk(m[1]!, m[0].length) : undefined;
+    }
     case '🔁': {
       // Provisional: value trimmed later once all tokens are known.
       if (after.trim() === '') return undefined;
@@ -236,6 +243,7 @@ export function serialiseTaskLine(t: TaskLine, opts: SerialiseOptions = {}): str
   if (t.mirrorLink) parts.push(`🔗 ${t.mirrorLink}`);
   if (t.effortRaw) parts.push(`⏱️ ${t.effortRaw}`);
   else if (t.effortMinutes !== undefined) parts.push(`⏱️ ${minutesToEffort(t.effortMinutes)}`);
+  if (t.progress !== undefined) parts.push(`📈 ${t.progress}%`);
   for (const u of t.unknown) parts.push(u.raw);
   if (t.done) parts.push(`✅ ${t.done}`);
   if (t.cancelled) parts.push(`❌ ${t.cancelled}`);
@@ -253,7 +261,7 @@ function parseEquals(a: TaskLine, b: TaskLine | undefined): boolean {
   if (!b) return false;
   const pick = (t: TaskLine): string => JSON.stringify([
     t.marker, t.text, t.id, t.priority, t.created, t.start, t.scheduled, t.due, t.done, t.cancelled,
-    t.recurrence?.raw, t.blockedBy, t.effortRaw ?? t.effortMinutes, t.mirrorLink, t.time, t.unknown.map((u) => u.raw),
+    t.recurrence?.raw, t.blockedBy, t.effortRaw ?? t.effortMinutes, t.progress, t.mirrorLink, t.time, t.unknown.map((u) => u.raw),
   ]);
   return pick(a) === pick(b);
 }
@@ -279,6 +287,7 @@ export function withStatus(t: TaskLine, status: TaskStatus, today: IsoDate): Tas
   const next: TaskLine = { ...t, status, marker: STATUS_MARKER[status] };
   delete next.done;
   delete next.cancelled;
+  if (status !== 'doing') delete next.progress;   // a percentage only means something while you are on it
   if (status === 'done') next.done = today;
   if (status === 'cancelled') next.cancelled = today;
   return next;

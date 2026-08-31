@@ -488,6 +488,31 @@ export class Mutations {
   }
 
   /**
+   * How far along a task is, 0–100. A percentage means “I am on this”, so it puts the task in progress;
+   * 100 finishes it outright, and clearing it leaves the task where it stands.
+   */
+  async setProgress(key: string, percent: number | undefined): Promise<void> {
+    const t = this.fresh(key);
+    if (t.origin === 'daily-mirror' && t.mirrorOf) {
+      const src = this.index.task(t.mirrorOf);
+      if (src) { await this.setProgress(src.key, percent); return; }
+    }
+    if (percent !== undefined && (!Number.isFinite(percent) || percent < 0 || percent > 100)) throw new Error('Progress runs from 0 to 100');
+    const pct = percent === undefined ? undefined : Math.round(percent);
+    if (pct === 100) { await this.setStatus(key, 'done'); return; }
+    await this.editFile(t.path, (lines) => {
+      const tl = this.lineOf(lines, t);
+      const next: TaskLine = { ...tl };
+      if (pct === undefined || pct === 0) delete next.progress;
+      else { next.progress = pct; next.status = 'doing'; next.marker = STATUS_MARKER['doing']; }
+      lines[t.line] = serialiseTaskLine(next, { force: true });
+      return true;
+    });
+    const fresh = this.index.task(t.key);
+    if (fresh) await this.refreshMirrors(fresh);
+  }
+
+  /**
    * Put one subtask before another, or last when there is nothing to put it before. Both have to be
    * children of the same task in the same note — this reorders a list, it does not re-parent anything.
    * The subtask takes its own children with it, and the lines are moved verbatim, so ids, times and

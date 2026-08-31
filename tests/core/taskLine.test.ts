@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { newTaskLine, parseTaskLine, serialiseTaskLine, withStatus } from '../../src/core/taskLine';
 
+describe('how far along a task is', () => {
+  it('reads and writes 📈 as a percentage, and keeps it out of a finished line', () => {
+    const t = parseTaskLine('- [/] Build the deck 📈 40% ⏱️ 2h')!;
+    expect(t.progress).toBe(40);
+    expect(t.status).toBe('doing');
+    expect(t.text).toBe('Build the deck');
+    expect(serialiseTaskLine(t, { force: true })).toBe('- [/] Build the deck ⏱️ 2h 📈 40%');
+    // Bare numbers count too, and nonsense is left as it was written.
+    expect(parseTaskLine('- [/] x 📈 75')!.progress).toBe(75);
+    expect(parseTaskLine('- [ ] x 📈 soon')!.progress).toBeUndefined();
+    // Finishing it drops the percentage: a done task is not “40% done”.
+    expect(withStatus(t, 'done', '2026-08-31').progress).toBeUndefined();
+    expect(withStatus(t, 'todo', '2026-08-31').progress).toBeUndefined();
+    expect(withStatus(t, 'doing', '2026-08-31').progress).toBe(40);
+  });
+});
+
 describe('parseTaskLine', () => {
   it('parses a fully loaded line', () => {
     const line = '- [ ] Draft chapter list #writing #book/oci 🆔 tsk-8821 ➕ 2026-08-20 🛫 2026-08-25 ⏳ 2026-08-26 📅 2026-09-05 ⏫ 🔁 every week when done ⛔ tsk-7712 ⏱️ 2h [context:: office]';

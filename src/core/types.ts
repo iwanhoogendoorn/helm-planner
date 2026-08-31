@@ -52,6 +52,8 @@ export interface TaskLine {
   blockedBy: string[];
   effortMinutes?: number;
   effortRaw?: string;
+  /** `📈 40%` — how far along a task is, 0–100. Only meaningful while it is open. */
+  progress?: number;
   /** `🔗 [[Project]]` — this line mirrors a project task. */
   mirrorLink?: string;
   time?: TimeBlock;

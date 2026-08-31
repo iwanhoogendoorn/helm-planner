@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **How far along a task is.** A task in progress can carry a percentage, written on
+  the line as `📈 40%`:
+  - **right-click the checkbox** for the quick steps — 10 · 25 · 50 · 75 · 90 —
+    “No percentage”, or “100% — done”, which finishes it outright;
+  - the same list is under **Progress** in the task menu, and the editor has a
+    **How far along** slider you can drag;
+  - the row shows a **40%** chip and a thin bar, and the checkbox itself **fills up**
+    as you go, so a long list shows its state at a glance.
+  Setting a percentage puts the task in progress — nothing sits at “to do” with 40%
+  against its name — and finishing or reopening it clears the number, because a done
+  task is not “40% done”. Setting it on a mirrored line sets it on the task itself.
+
 ## 1.23.1 — 2026-08-31
 
 - **Subtasks show up under the task you added them to.** When two notes hold the same

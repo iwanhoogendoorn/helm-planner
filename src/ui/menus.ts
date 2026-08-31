@@ -62,10 +62,32 @@ export const STATUS_LABELS: Record<TaskStatus, { label: string; icon: string }> 
   cancelled: { label: 'Cancelled', icon: 'x-circle' },
 };
 
+export const PROGRESS_STEPS = [0, 10, 25, 50, 75, 90, 100];
+
+/** Fill a menu with the percentages; 100 finishes the task, 0 takes the percentage off. */
+export function addProgressItems(menu: Menu, ctx: UiContext, task: Task): void {
+  for (const pct of PROGRESS_STEPS) {
+    menu.addItem((i) => i
+      .setTitle(pct === 0 ? 'No percentage' : pct === 100 ? '100% — done' : `${pct}%`)
+      .setIcon(pct === 100 ? 'check' : 'trending-up')
+      .setChecked(task.progress === pct || (pct === 0 && task.progress === undefined))
+      .onClick(() => void ctx.run('Progress', () => ctx.mutations.setProgress(task.key, pct === 0 ? undefined : pct))));
+  }
+}
+
+/** Right-clicking the checkbox: how far along is this? */
+export function progressMenu(ctx: UiContext, task: Task, ev: MouseEvent): void {
+  const menu = new Menu();
+  menu.addItem((i) => i.setTitle(task.progress !== undefined ? `${task.progress}% done` : 'How far along?').setIcon('trending-up').setDisabled(true));
+  addProgressItems(menu, ctx, task);
+  menu.showAtMouseEvent(ev);
+}
+
 export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onEdit?: () => void } = {}): void {
   const menu = new Menu();
   menu.addItem((i) => i.setTitle('Edit…').setIcon('pencil').onClick(() => opts.onEdit ? opts.onEdit() : openTaskEditor(ctx, task)));
   menu.addItem((i) => i.setTitle('Add subtask…').setIcon('list-plus').onClick(() => openSubtask(ctx, task)));
+  menu.addItem((i) => { i.setTitle(task.progress !== undefined ? `Progress — ${task.progress}%` : 'Progress').setIcon('trending-up'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addProgressItems(sub, ctx, task); });
   const hasSubtasks = task.childKeys.length > 0;
   menu.addItem((i) => hasSubtasks
     ? i.setTitle('Follow up… — move it instead (it has subtasks)').setIcon('corner-down-right').setDisabled(true)

@@ -4,7 +4,7 @@ import { humanDate, minutesToHuman } from '../core/dates';
 import { formatRecurrence } from '../core/recurrence';
 import { chip, h, icon, iconButton, richText } from './dom';
 import type { UiContext } from './context';
-import { taskMenu } from './menus';
+import { progressMenu, taskMenu } from './menus';
 import { openTaskEditor } from './modals/taskEditor';
 import { followsOf, followUpsOf, isBlocked, isOpen } from '../data/planner';
 import { drawingsIndicator } from './drawings';
@@ -90,7 +90,10 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
         const next = ev.shiftKey ? (t.status === 'doing' ? 'todo' : 'doing') : open ? 'done' : 'todo';
         void ctx.run('Status', () => ctx.mutations.setStatus(t.key, next));
       },
-    }, t.status === 'done' ? icon('check') : t.status === 'cancelled' ? icon('x') : t.status === 'doing' ? h('span', { cls: 'helm-check-half' }) : t.status === 'waiting' ? icon('clock') : t.status === 'forwarded' ? icon('arrow-right') : null);
+      onContextMenu: (ev) => { ev.preventDefault(); ev.stopPropagation(); progressMenu(ctx, t, ev); },
+    }, t.status === 'done' ? icon('check') : t.status === 'cancelled' ? icon('x')
+      : t.status === 'doing' ? h('span', { cls: 'helm-check-half', style: t.progress !== undefined ? { height: `${t.progress}%` } : {} })   // the box fills as you go
+      : t.status === 'waiting' ? icon('clock') : t.status === 'forwarded' ? icon('arrow-right') : null);
     row.appendChild(cb);
   }
 
@@ -125,6 +128,7 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if ((showDate === 'scheduled' || showDate === 'both') && t.scheduled && t.origin !== 'daily') meta.appendChild(chip(humanDate(t.scheduled, today), 'scheduled', `Planned for ${t.scheduled}`));
   if (t.origin === 'daily' && t.noteDate && t.due && t.due > t.noteDate && open) meta.appendChild(chip(`in ${humanDate(t.noteDate, today)}'s note`, 'note', 'Dated later than the note it sits in — Helm moves it to the right note'));
   if (t.effortMinutes !== undefined) meta.appendChild(chip(minutesToHuman(t.effortMinutes), 'effort'));
+  if (t.progress !== undefined && open) meta.appendChild(chip(`${t.progress}%`, 'progress', `${t.progress}% of the way — right-click the box to change it`));
   if (t.recurrence) meta.appendChild(chip(formatRecurrence(t.recurrence), 'recurrence', t.recurrence.parsed ? '' : 'Unrecognised rule'));
   // Links live in the line but are shown as pills, like notes and drawings.
   for (const l of linksIn(t.text)) meta.appendChild(h('a', { cls: 'helm-chip link', title: l.url, attr: { href: l.url, target: '_blank', rel: 'noopener' }, onClick: (ev) => ev.stopPropagation() }, h('span', { cls: 'helm-chip-label', text: l.label })));
@@ -141,6 +145,8 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   }
   if (t.done) meta.appendChild(chip(`✓ ${humanDate(t.done, today)}`, 'done-date'));
   if (meta.childElementCount > 0) main.appendChild(meta);
+  // How far along, as a bar: a number is easy to miss in a long list.
+  if (t.progress !== undefined && open) main.appendChild(h('div', { cls: 'helm-task-progress', title: `${t.progress}%` }, h('span', { style: { width: `${t.progress}%` } })));
   row.appendChild(main);
 
   const actions = h('div', { cls: 'helm-task-actions' });

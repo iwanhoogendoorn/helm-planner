@@ -68,6 +68,12 @@
 .helm-chip.effort.is-over { background: rgba(var(--color-red-rgb), 0.16); color: var(--color-red); }
 .helm-chip.spill { background: rgba(var(--color-purple-rgb), 0.12); color: var(--color-purple); }
 .helm-chip.spill .helm-icon { width: 12px; height: 12px; }
+.helm-chip.progress { background: rgba(var(--color-cyan-rgb), 0.16); color: var(--color-cyan); font-variant-numeric: tabular-nums; }
+.helm-task-progress { height: 3px; border-radius: 2px; background: var(--background-modifier-border); margin-top: 4px; overflow: hidden; max-width: 320px; }
+.helm-task-progress span { display: block; height: 100%; background: var(--color-cyan); border-radius: 2px; }
+.helm-progress-row { align-items: center; gap: 8px; }
+.helm-progress-range { flex: 1 1 auto; }
+.helm-progress-num { width: 64px; }
 .helm-task.is-reordering { box-shadow: inset 0 2px 0 var(--interactive-accent); }
 .helm-task.is-selected { background: rgba(var(--interactive-accent-rgb), 0.12); box-shadow: inset 2px 0 0 var(--interactive-accent); }
 .helm-selection-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 8px; border-radius: var(--radius-s); background: var(--background-secondary); border: 1px solid var(--interactive-accent); }
@@ -113,7 +119,8 @@
 .helm-check.mark-done { background: var(--interactive-accent); border-color: var(--interactive-accent); }
 .helm-check.mark-cancelled { background: var(--text-faint); border-color: var(--text-faint); }
 .helm-check.mark-doing { border-color: var(--interactive-accent); }
-.helm-check-half { width: 8px; height: 8px; border-radius: 2px; background: var(--interactive-accent); }
+.helm-check { position: relative; }
+.helm-check-half { width: 100%; height: 8px; border-radius: 2px; background: var(--interactive-accent); position: absolute; bottom: 0; left: 0; align-self: flex-end; }
 .helm-check.mark-waiting, .helm-check.mark-forwarded { color: var(--text-muted); border-color: var(--text-muted); }
 .helm-task-main { flex: 1; min-width: 0; cursor: pointer; }
 .helm-task-line { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; line-height: 1.4; }

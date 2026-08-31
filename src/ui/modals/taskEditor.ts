@@ -37,6 +37,12 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
   const due = h('input', { attr: { type: 'date', value: src.due ?? '' } });
   const start = h('input', { attr: { type: 'date', value: src.start ?? '' } });
   const effort = effortField(src.effortMinutes);
+  // How far along: a slider you can drag, a number you can type, and the quick steps.
+  const progress = h('input', { cls: 'helm-progress-range', attr: { type: 'range', min: '0', max: '100', step: '5', value: String(src.progress ?? 0) } });
+  const progressNum = h('input', { cls: 'helm-progress-num', attr: { type: 'number', min: '0', max: '100', value: src.progress === undefined ? '' : String(src.progress), placeholder: '—' } });
+  const progressRow = h('div', { cls: 'helm-row helm-progress-row' }, progress, progressNum, h('span', { cls: 'helm-hint', text: '%' }));
+  progress.addEventListener('input', () => { progressNum.value = progress.value === '0' ? '' : progress.value; });
+  progressNum.addEventListener('input', () => { progress.value = progressNum.value === '' ? '0' : progressNum.value; });
   const recurrence = h('input', { attr: { type: 'text', placeholder: 'every week on monday', value: src.recurrence ? src.recurrence.raw : '' } });
   // The same buttons Capture offers, writing into the field rather than into a sentence.
   const repeatRow = h('div', { cls: 'helm-capture-tags helm-capture-repeat' });
@@ -85,6 +91,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     h('div', { cls: 'helm-grid3' }, field('Planned for', h('div', { cls: 'helm-row' }, scheduled, partSel)), field('Due', due), field('Start (not before)', start)),
     conflict,
     h('div', { cls: 'helm-grid3' }, field('Effort', effort.el), field('Time block', h('div', { cls: 'helm-row' }, timeStart, timeEnd)), field('Repeat', h('div', {}, recurrence, repeatRow))),
+    h('div', { cls: 'helm-grid2' }, field('How far along', progressRow), h('div', {})),
     field('Blocked by (ids)', blockedBy),
     where,
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Notes' }), notesSection(ctx, targetForTask(task))),
@@ -116,6 +123,13 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     const min = effort.get();
     if (min === undefined) { if (src.effortMinutes !== undefined) { patch.effortMinutes = undefined; patch.effortRaw = undefined; } }
     else if (min !== src.effortMinutes) { patch.effortMinutes = min; patch.effortRaw = minutesToHuman(min); }
+    const pv = progressNum.value.trim();
+    const pct = pv === '' ? undefined : Math.max(0, Math.min(100, Math.round(Number(pv))));
+    if (pct !== src.progress) {
+      patch.progress = pct === undefined || pct === 0 ? undefined : pct;
+      // A percentage says you are on it: don't leave it sitting at “to do” with 40% against its name.
+      if (patch.progress !== undefined && (patch.status ?? src.status) === 'todo') patch.status = 'doing';
+    }
     const rv = recurrence.value.trim();
     if (rv === '') { if (src.recurrence) patch.recurrence = undefined; }
     else if (rv !== src.recurrence?.raw) { const r = parseRecurrence(rv); if (!r.parsed) { ctx.notify(`I do not understand “${rv}”. Try “every week on monday”.`); return; } patch.recurrence = { ...r, raw: formatRecurrence(r) }; }
