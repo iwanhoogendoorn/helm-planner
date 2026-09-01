@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.24.3 — 2026-09-01
 
 - **The calendar covers the whole day**, midnight to midnight, instead of stopping at
   the end of your working day — a 22:30 line had nowhere to be, and nothing could be
