@@ -69,7 +69,8 @@ describe('subtasks', () => {
     // Dragged to another part of the same day: the subtasks come along.
     await m.setPart(index.task(orig.key)!.key, 'evening');
     const day = await vault.read(dailyPath('2026-08-25'));
-    expect(day).toMatch(/### C\. Evening\n(?:.*\n)*?- \[ \] 08:00 - 09:00: Start with OIB\n\t- \[ \] Sub A\n\t- \[ \] Sub B/);
+    // Its 08:00 slot belongs to the morning, so landing in the evening gives it an evening one.
+    expect(day).toMatch(/### C\. Evening\n(?:.*\n)*?- \[ \] 1[89]:\d\d[^\n]*Start with OIB\n\t- \[ \] Sub A\n\t- \[ \] Sub B/);
     expect(day.split('### A. Morning')[1]!.split('###')[0]).not.toContain('Sub A');
     // Moved to another day: parent and subtasks land there together.
     await m.schedule(index.task(orig.key)!.key, '2026-08-28');

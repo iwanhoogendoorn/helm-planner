@@ -45,7 +45,22 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   const poke = (el: HTMLInputElement): void => { programmatic = true; try { el.dispatchEvent(new Event('input')); } finally { programmatic = false; } };
   timeStart.addEventListener('input', () => { if (programmatic) return; timeTouched = true; timeAuto = false; });
   /** Put the block at `hhmm` (end follows from the effort) without it counting as the user typing. */
-  const setStart = (hhmm: string): void => { timeStart.value = hhmm; timeTouched = true; timeAuto = false; poke(timeStart); render(); };
+  const setStart = (hhmm: string, opts: { fillEnd?: boolean } = {}): void => {
+    timeStart.value = hhmm;
+    timeTouched = true;
+    timeAuto = false;
+    poke(timeStart);
+    // A part of the day is a block of time, so give it an end too — after the poke, because moving the
+    // start drags the whole block along with it and would carry any end we had just written.
+    if (opts.fillEnd) {
+      const mins = effort.get() ?? ctx.settings().defaultEffortMinutes;
+      const [hh, mm] = hhmm.split(':').map(Number);
+      const end = (hh ?? 0) * 60 + (mm ?? 0) + mins;
+      timeEnd.value = end >= 24 * 60 ? '23:59' : `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+      poke(timeEnd);
+    }
+    render();
+  };
   /** The first free slot in a part of the day — or its plain start time when the day is unknown. */
   const slotFor = (p: 'morning' | 'afternoon' | 'evening'): string => {
     const s = ctx.settings();
@@ -113,7 +128,18 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   const dest = h('div', { cls: 'helm-capture-dest' });
   const help = h('div', { cls: 'helm-hint', text: 'Dates: today, tomorrow, fri, next week, in 3 days, 1/9, due friday · Part: morning, afternoon, evening, tonight · Priority: !, !!, !!! · Project: @Name · Effort: ~45m · Time: 14:00-15:00 · Repeat: every week' });
 
+  let rendering = false;
+  let renderAgain = false;
   const render = (): void => {
+    // Setting a time programmatically fires `input`, which can call render again from inside this pass —
+    // the chips would then be drawn twice and the last write would be the older one. One pass at a time.
+    if (rendering) { renderAgain = true; return; }
+    rendering = true;
+    try { draw(); } finally { rendering = false; }
+    if (renderAgain) { renderAgain = false; render(); }
+  };
+
+  const draw = (): void => {
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);
     preview.replaceChildren();
     preview.appendChild(h('span', { cls: 'helm-capture-text', text: c.text || '…' }));
@@ -145,7 +171,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
       h('span', { cls: 'helm-spacer' }),
       button(project ? 'Change project' : 'Project…', { icon: 'folder', onClick: () => pickProject(ctx, (p, ph) => { project = p; phaseId = ph; render(); }, { phases: true }) }),
       project ? button('', { icon: 'x', title: 'No project', onClick: () => { project = undefined; phaseId = undefined; render(); } }) : null,
-      date ? h('span', { cls: 'helm-segmented' }, ...(['morning', 'afternoon', 'evening'] as const).map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: p, onClick: () => { explicitPart = true; const on = part !== p; part = on ? p : undefined; if (on) { setStart(slotFor(p)); return; } render(); } }))) : null,
+      date ? h('span', { cls: 'helm-segmented' }, ...(['morning', 'afternoon', 'evening'] as const).map((p) => h('button', { cls: ['helm-seg', part === p && 'is-active'], text: p, onClick: () => { explicitPart = true; const on = part !== p; part = on ? p : undefined; if (on) { setStart(slotFor(p), { fillEnd: true }); return; } render(); } }))) : null,
       date ? h('span', { cls: 'helm-capture-time' }, timeStart, h('span', { cls: 'helm-hint', text: '–' }), timeEnd) : null,
       h('span', { cls: 'helm-capture-effort' }, h('span', { cls: 'helm-hint', text: 'effort' }), effort.el),
     ]);

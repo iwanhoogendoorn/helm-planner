@@ -78,3 +78,40 @@ describe('a part-done task that moves day', () => {
     expect(moved.status).toBe('todo');
   });
 });
+
+describe('a part of the day is a time of day', () => {
+  it('gives an untimed task a free slot in the part it lands in, and takes it back in Anytime', async () => {
+    const { m, index, vault } = await setup();
+    await m.addTask({ text: 'Tidy the desk', date: TODAY });
+    const at = () => [...index.snapshot.tasks.values()].find((t) => t.text === 'Tidy the desk')!;
+    expect({ part: at().part, time: at().time }).toEqual({ part: 'anytime', time: undefined });
+
+    await m.setPart(at().key, 'evening');
+    expect(at().part).toBe('evening');
+    expect(at().time!.start >= '18:00').toBe(true);
+    expect(at().time!.end).toBeTruthy();                       // a block, not a bare start
+
+    // A second task in the same part takes the next free slot, not the same one.
+    await m.addTask({ text: 'Water the plants', date: TODAY });
+    const other = [...index.snapshot.tasks.values()].find((t) => t.text === 'Water the plants')!;
+    await m.setPart(other.key, 'evening');
+    const second = [...index.snapshot.tasks.values()].find((t) => t.text === 'Water the plants')!;
+    expect(second.time!.start).not.toBe(at().time!.start);
+
+    await m.setPart(at().key, 'anytime');
+    expect({ part: at().part, time: at().time }).toEqual({ part: 'anytime', time: undefined });
+    expect(await vault.read(at().path)).toMatch(/- \[ \] Tidy the desk\s*$/m);
+  });
+
+  it('leaves a time that already suits the part alone', async () => {
+    const { m, index } = await setup();
+    await m.addTask({ text: 'Stand-up', date: TODAY, part: 'morning', fields: { time: { start: '09:15', end: '09:30' } } });
+    const at = () => [...index.snapshot.tasks.values()].find((t) => t.text === 'Stand-up')!;
+    await m.setPart(at().key, 'morning');
+    expect(at().time).toEqual({ start: '09:15', end: '09:30' });   // it is already a morning time
+    // Moved to the afternoon it is retimed, keeping how long it takes.
+    await m.setPart(at().key, 'afternoon');
+    expect(at().time!.start >= '12:00' && at().time!.start < '18:00').toBe(true);
+    expect(at().time!.end).toBeTruthy();
+  });
+});

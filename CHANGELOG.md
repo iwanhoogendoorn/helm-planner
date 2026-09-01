@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **A part of the day is a time of day.** A task with no time belongs in **Anytime**;
+  the moment it lands in Morning, Afternoon or Evening — dragged, moved from the
+  menu, planned with a part, or set through the API — it takes the **first free slot
+  in that part**, long enough for its estimate, and stays there. Move it back to
+  **Anytime for that day** and the time is given back. A time that already suits the
+  part it lands in is left exactly as it is.
+- Capture: picking **morning / afternoon / evening** now fills the whole block — a
+  free slot in that part *and* an end time — instead of leaving the day's first hour
+  in the box. Fixes the preview drawing itself twice, and the end time sliding away
+  when the start moved.
 - **A phase can hold its own notes, drawings and web links.** Each phase header now
   carries the same three buttons a project and a task have; what you attach belongs
   to that phase, not to the project as a whole, and shows under it. A note or drawing

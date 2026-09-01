@@ -675,6 +675,28 @@ describe('Modals', () => {
     expect(Notice.messages.at(-1)).toMatch(/Convert \*\.excalidraw to \*\.md files/);
   });
 
+  it('picking a part in Capture takes a free slot in it, with an end, and draws the preview once', async () => {
+    const { ctx } = await ctxFor();
+    openCapture(ctx, { date: TODAY });
+    const m = Modal.last!;
+    const input = m.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;
+    input.value = 'Call the plumber'; input.dispatchEvent(new Event('input'));
+    const times = (): HTMLInputElement[] => [...m.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')];
+
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'evening'));
+    const [start, end] = times();
+    expect(start!.value >= '18:00').toBe(true);          // inside the evening, not the day's first free hour
+    expect(end!.value > start!.value).toBe(true);         // and it has an end
+    const mins = (v: string): number => Number(v.slice(0, 2)) * 60 + Number(v.slice(3));
+    expect(mins(end!.value) - mins(start!.value)).toBe(ctx.settings().defaultEffortMinutes);   // one estimate long
+
+    // The preview says each thing once — a nested render used to draw the chips twice.
+    const chips = [...m.contentEl.querySelectorAll('.helm-capture-preview .helm-chip')].map((c) => c.textContent);
+    expect(chips.filter((c) => c?.includes('evening'))).toHaveLength(1);
+    expect(new Set(chips).size).toBe(chips.length);
+    expect(chips.some((c) => c === `${start!.value}–${end!.value}`)).toBe(true);
+  });
+
   it('capture has repeat buttons that write the phrase the parser reads', async () => {
     const { ctx, m: mut, index } = await ctxFor();
     openCapture(ctx);
@@ -2066,7 +2088,8 @@ describe('dragging a task between parts of the day', () => {
     el.dispatchEvent(ev);
     await flush(); await flush(); await flush();
     const note = await vault.read(dailyPath(TODAY));
-    expect(note).toMatch(/#+ Evening\n(?:.*\n)*?- \[ \] Ship the draft\n\t- \[x\] Proof it[^\n]*\n\t- \[ \] Send it/);
+    // The parent lands in the evening with an evening slot; its subtasks follow it, untouched.
+    expect(note).toMatch(/#+ Evening\n(?:.*\n)*?- \[ \] \d\d:\d\d[^\n]*Ship the draft\n\t- \[x\] Proof it[^\n]*\n\t- \[ \] Send it/);
     expect(note.split('# Morning')[1]?.split('#')[0] ?? '').not.toContain('Proof it');
   });
 
@@ -2089,19 +2112,30 @@ describe('dragging a task between parts of the day', () => {
     expect(note).not.toContain('21:00 - 22:00');
   });
 
-  it('leaves a task without a time alone', async () => {
+  it('gives a task without a time a slot in the part it lands in, and takes it back in Anytime', async () => {
     const { ctx, m, index, vault } = await ctxFor();
-    await m.addTask({ text: 'Tidy desk', date: TODAY, part: 'evening' });
-    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    const task = [...index.snapshot.tasks.values()].find((x) => x.text === 'Tidy desk')!;
-    const el = root.querySelector<HTMLElement>('.helm-section.part-afternoon')!;
-    const ev = new Event('drop', { bubbles: true, cancelable: true });
-    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? task.key : '') } });
-    el.dispatchEvent(ev);
-    await flush(); await flush(); await flush();
-    const note = await vault.read(dailyPath(TODAY));
-    expect(note).toMatch(/#+ Afternoon\n(?:.*\n)*?- \[ \] Tidy desk/);
-    expect(note).not.toMatch(/- \[ \] \d\d:\d\d.*Tidy desk/);
+    await m.addTask({ text: 'Tidy desk', date: TODAY });                    // no time: it belongs in Anytime
+    const drop = (section: string, key: string): void => {
+      const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+      const el = root.querySelector<HTMLElement>(`.helm-section.part-${section}`)!;
+      const ev = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? key : '') } });
+      el.dispatchEvent(ev);
+    };
+    const at = () => [...index.snapshot.tasks.values()].find((x) => x.text === 'Tidy desk')!;
+    expect(at().time).toBeUndefined();
+
+    drop('afternoon', at().key);
+    const timed = await waitFor(() => (at().time ? at() : undefined), 'a time in the afternoon');
+    expect(timed.part).toBe('afternoon');
+    expect(timed.time!.start >= '12:00' && timed.time!.start < '18:00').toBe(true);   // inside the afternoon
+    expect(await vault.read(dailyPath(TODAY))).toMatch(/#+ Afternoon\n(?:.*\n)*?- \[ \] \d\d:\d\d.*Tidy desk/);
+
+    // Back to Anytime for the same day: the time goes with it.
+    drop('anytime', at().key);
+    const untimed = await waitFor(() => (at().time === undefined ? at() : undefined), 'the time to be given back');
+    expect(untimed.part).toBe('anytime');
+    expect(await vault.read(dailyPath(TODAY))).not.toMatch(/- \[ \] \d\d:\d\d.*Tidy desk/);
   });
 });
 

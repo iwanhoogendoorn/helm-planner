@@ -24,6 +24,8 @@ import type { HelmIndex } from './index';
 import { baseName, type VaultAdapter } from './vault';
 import { habitDue, habitOccurrences } from './habits';
 import { misfiledDate } from './planner';
+import { partWindow, preferredSlot } from './conflicts';
+import { toHhmm, toMinutes } from './timegrid';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
 import { bundledTemplate, bundledDailyTemplate, type TemplateConfig } from '../core/periodicTemplates';
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
@@ -420,6 +422,8 @@ export class Mutations {
   /** Move a line that already sits on a day to another part of that day. */
   async setPart(key: string, part: DayPart): Promise<void> {
     const t = this.fresh(key);
+    const settled = await this.settleTime(t, part);
+    if (settled) { await this.setPart(settled, part); return; }
     if ((t.origin === 'daily' || t.origin === 'daily-mirror') && t.noteDate !== undefined && t.section !== 'outside') {
       const date = t.noteDate;
       await this.editRegion(date, (rc) => {
@@ -448,6 +452,45 @@ export class Mutations {
     const mirror = this.index.mirrorsOf(t.key).find((m) => m.noteDate !== undefined && m.noteDate >= this.today);
     if (mirror) { await this.setPart(mirror.key, part); return; }
     this.d.notify('Plan the task onto a day first, then pick a part of the day.');
+  }
+
+  /**
+   * A part of the day is a time of day: a task that lands in the morning, the afternoon or the evening
+   * gets the first free slot there, and one moved to Anytime gives its time back. So a row in a part
+   * always says when, and a row in Anytime always means “today, whenever”.
+   *
+   * Returns the key to carry on with when the line was rewritten, or undefined when nothing was needed.
+   */
+  private async settleTime(t: Task, part: DayPart): Promise<string | undefined> {
+    if (t.origin === 'daily-mirror' || t.section === 'outside') return undefined;
+    const date = t.noteDate ?? t.scheduled;
+    if (!date) return undefined;
+    const keep = part === 'anytime' ? undefined : this.timeForPart(t, date, part);
+    if (part === 'anytime' ? t.time === undefined : keep === undefined) return undefined;
+    await this.editFile(t.path, (lines) => {
+      const tl = this.lineOf(lines, t);
+      const next: TaskLine = { ...tl };
+      if (part === 'anytime') delete next.time; else next.time = keep!;
+      lines[t.line] = serialiseTaskLine(next, { force: true });
+      return true;
+    });
+    const fresh = this.index.task(t.key) ?? this.index.taskById(t.id ?? '');
+    return fresh?.key ?? t.key;
+  }
+
+  /** The slot a task should take in this part: the one it already has when it fits, else the first free one. */
+  private timeForPart(t: Task, date: IsoDate, part: Exclude<DayPart, 'anytime'>): { start: string; end?: string } | undefined {
+    const w = partWindow(part, this.settings);
+    if (t.time && t.time.start >= w.from && t.time.start < w.to) return undefined;   // already sitting in that part
+    // Its own length when it has one, else what it is estimated to take, else the standard estimate —
+    // a block in a part of the day always has a start and an end.
+    const length = t.time?.end ? toMinutes(t.time.end) - toMinutes(t.time.start) : t.effortMinutes ?? this.settings.defaultEffortMinutes;
+    const start = preferredSlot(this.index.snapshot, date, this.settings, {
+      part,
+      effortMinutes: length,
+      excludeKeys: [t.key, ...(t.id ? [t.id] : []), ...(t.mirrorOf ? [t.mirrorOf] : [])],
+    });
+    return { start, end: toHhmm(Math.min(toMinutes(start) + length, 24 * 60 - 1)) };
   }
 
   /** A daily-owned task moves between notes; leaving a past note marks it forwarded. */
