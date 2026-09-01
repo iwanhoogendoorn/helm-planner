@@ -7,6 +7,8 @@
   the task menu offers **“Skip this one — next Tue 8 Sep”**, and marking any repeating
   task cancelled does the same. To end a repeat for good there is **“Stop repeating”**,
   which takes the 🔁 off and leaves the occurrence you are looking at.
+- A cancelled line now **says so**: “skipped Today” on a repeating task, “cancelled”
+  on any other. A greyed-out row with a line through it was leaving you to guess.
 
 ## 1.23.5 — 2026-09-01
 

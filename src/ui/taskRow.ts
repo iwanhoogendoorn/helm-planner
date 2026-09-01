@@ -144,6 +144,14 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     meta.appendChild(chip(`${done}/${kids.length}`, 'subtasks', 'Subtasks'));
   }
   if (t.done) meta.appendChild(chip(`✓ ${humanDate(t.done, today)}`, 'done-date'));
+  // A cancelled line says so in words — and when it repeats, that it was this one occurrence that went.
+  if (t.status === 'cancelled') {
+    meta.appendChild(chip(
+      `${t.recurrence?.parsed ? 'skipped' : 'cancelled'}${t.cancelled ? ` ${humanDate(t.cancelled, today)}` : ''}`,
+      'cancelled',
+      t.recurrence?.parsed ? 'This occurrence was skipped; the next one still comes' : 'Cancelled',
+    ));
+  }
   if (meta.childElementCount > 0) main.appendChild(meta);
   // How far along, as a bar: a number is easy to miss in a long list.
   if (t.progress !== undefined && open) main.appendChild(h('div', { cls: 'helm-task-progress', title: `${t.progress}%` }, h('span', { style: { width: `${t.progress}%` } })));

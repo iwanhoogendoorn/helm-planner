@@ -17,6 +17,7 @@ import { selection, selectionBar, dragKeys, setDragKeys } from '../../src/ui/sel
 import { openDatePicker } from '../../src/ui/modals/datePicker';
 import { openSearch } from '../../src/ui/modals/search';
 import { taskMenu } from '../../src/ui/menus';
+import { humanDate } from '../../src/core/dates';
 import { taskRow } from '../../src/ui/taskRow';
 import { openProjectForm, parsePhases } from '../../src/ui/modals/projectForm';
 import { openHabitForm } from '../../src/ui/modals/habitForm';
@@ -107,6 +108,15 @@ describe('Today tab', () => {
     await waitFor(() => { const all = [...index.snapshot.tasks.values()].filter((t) => t.text.includes('Team meeting')); return all.length === 2 ? all : undefined; }, 'the next occurrence');
     const all = [...index.snapshot.tasks.values()].filter((t) => t.text.includes('Team meeting'));
     expect(all.map((t) => t.status).sort()).toEqual(['cancelled', 'todo']);
+
+    // The skipped one says so on its row, so a greyed line is not a mystery.
+    const skipped = all.find((t) => t.status === 'cancelled')!;
+    expect(texts(taskRow(ctx, skipped), '.helm-chip.cancelled')).toEqual([`skipped ${humanDate(skipped.cancelled!, TODAY)}`]);
+    // A cancelled task that does not repeat says “cancelled” instead.
+    const plainTask = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB')!;
+    await m.setStatus(plainTask.key, 'cancelled');
+    const done = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB' && t.status === 'cancelled')!;
+    expect(texts(taskRow(ctx, done), '.helm-chip.cancelled')[0]).toMatch(/^cancelled /);
 
     // A task that does not repeat is offered neither.
     const plain = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB')!;
