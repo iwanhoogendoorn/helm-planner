@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.24.0 — 2026-09-01
 
 - **The daybook, in the day view.** Every day now shows what happened under a
   **Daybook** section: each entry with its time, its icon and whatever came back
