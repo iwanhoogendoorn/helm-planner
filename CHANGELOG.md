@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Capture suggests a time that is actually free.** It used to offer the current
+  hour, which is how you got 11:00 sitting on top of an 11:00 meeting; it now offers
+  the first free slot from now on, with an end from the estimate. And opening Capture
+  from a part of the day — the **+** on Morning, Afternoon or Evening — starts in
+  that part with a free slot in it, instead of the current hour with the part button
+  merely lit.
 - The task menu offers each day **once**. For a task already on today, “Today ▸” and
   “Part of Today ▸” were the same list doing the same thing — scheduling a task to
   the day it is already on is not a move. The day it sits on is now only offered as

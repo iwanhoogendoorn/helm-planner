@@ -45,10 +45,10 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   const poke = (el: HTMLInputElement): void => { programmatic = true; try { el.dispatchEvent(new Event('input')); } finally { programmatic = false; } };
   timeStart.addEventListener('input', () => { if (programmatic) return; timeTouched = true; timeAuto = false; });
   /** Put the block at `hhmm` (end follows from the effort) without it counting as the user typing. */
-  const setStart = (hhmm: string, opts: { fillEnd?: boolean } = {}): void => {
+  const setStart = (hhmm: string, opts: { fillEnd?: boolean; auto?: boolean } = {}): void => {
     timeStart.value = hhmm;
-    timeTouched = true;
-    timeAuto = false;
+    timeTouched = !opts.auto;              // a suggestion stays open to being replaced by what you type
+    timeAuto = opts.auto ?? false;
     poke(timeStart);
     // A part of the day is a block of time, so give it an end too — after the poke, because moving the
     // start drags the whole block along with it and would carry any end we had just written.
@@ -62,11 +62,11 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     render();
   };
   /** The first free slot in a part of the day — or its plain start time when the day is unknown. */
-  const slotFor = (p: 'morning' | 'afternoon' | 'evening'): string => {
+  const slotFor = (p: 'morning' | 'afternoon' | 'evening' | 'anytime'): string => {
     const s = ctx.settings();
-    if (!date) return partWindow(p, s).from;
+    if (!date) return partWindow(p === 'anytime' ? undefined : p, s).from;
     const notBefore = date === today ? ctx.now() : undefined;
-    return preferredSlot(ctx.index.snapshot, date, s, { part: p, effortMinutes: effort.get() ?? s.defaultEffortMinutes, ...(notBefore ? { notBefore } : {}) });
+    return preferredSlot(ctx.index.snapshot, date, s, { ...(p === 'anytime' ? {} : { part: p }), effortMinutes: effort.get() ?? s.defaultEffortMinutes, ...(notBefore ? { notBefore } : {}) });
   };
   timeEnd.addEventListener('input', () => { if (programmatic) return; timeTouched = true; });
   linkTimes(timeStart, timeEnd, effort);
@@ -74,8 +74,10 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   /** Today's capture starts at the current hour unless the user or the text says otherwise. */
   const applyDefaultTime = (grammarTime: { start: string } | undefined): void => {
     if (!ctx.settings().defaultCaptureTime || timeTouched || grammarTime) { if (timeAuto && (grammarTime || date !== today)) { timeStart.value = ''; timeEnd.value = ''; timeAuto = false; } return; }
-    if (date === today && !timeStart.value) { timeStart.value = `${ctx.now().slice(0, 2)}:00`; timeAuto = true; poke(timeStart); }
-    else if (date !== today && timeAuto) { timeStart.value = ''; timeEnd.value = ''; timeAuto = false; }
+    // A free slot, not simply the next hour: the point of a suggested time is that it is free. When a
+    // part of the day is chosen — by the button, or by the + that opened this — the slot comes from it.
+    if (date && !timeStart.value && (date === today || part)) { setStart(slotFor(part ?? 'anytime'), { fillEnd: true, auto: true }); }
+    else if (date !== today && !part && timeAuto) { timeStart.value = ''; timeEnd.value = ''; timeAuto = false; }
   };
 
   const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Call the plumber tomorrow !high #home @Kitchen ~30m', value: defaults.text ?? '' } });

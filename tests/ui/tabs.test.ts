@@ -687,6 +687,20 @@ describe('Modals', () => {
     expect(Notice.messages.at(-1)).toMatch(/Convert \*\.excalidraw to \*\.md files/);
   });
 
+  it('opening Capture from a part of the day starts in that part, in a free slot', async () => {
+    const { ctx, m: mut } = await ctxFor();
+    // The + in the Evening section opens Capture with the part already chosen.
+    await mut.addTask({ text: 'Evening meeting', date: TODAY, part: 'evening', fields: { time: { start: '18:00', end: '19:00' } } });
+    openCapture(ctx, { date: TODAY, part: 'evening' });
+    const modal = Modal.last!;
+    const [start, end] = [...modal.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')];
+    expect(start!.value >= '18:00').toBe(true);                 // in the evening, not the current hour
+    expect(start!.value).not.toBe('18:00');                     // and not on top of the 18:00 meeting
+    expect(end!.value > start!.value).toBe(true);
+    expect(modal.contentEl.querySelector('.helm-conflict')?.textContent ?? '').not.toMatch(/overlaps/i);
+    void mut;
+  });
+
   it('picking a part in Capture takes a free slot in it, with an end, and draws the preview once', async () => {
     const { ctx } = await ctxFor();
     openCapture(ctx, { date: TODAY });
@@ -1142,15 +1156,16 @@ describe('effort field and time linking', () => {
     expect(end.value).toBe('14:10');
   });
 
-  it('a capture for today defaults to the current hour; a typed time wins', async () => {
+  it('a capture for today is offered a free slot from now on; a typed time wins', async () => {
     const { ctx, vault } = await ctxFor();
     openCapture(ctx, { date: TODAY });
     const m = Modal.last!;
     const start = m.contentEl.querySelector<HTMLInputElement>('.helm-capture-time input[type="time"]')!;
-    expect(start.value).toBe('14:00');
+    expect(start.value >= ctx.now()).toBe(true);              // never a time that has already gone
+    expect(start.value).toBe('14:40');                        // the first slot free from now
     const input = m.contentEl.querySelector<HTMLInputElement>('.helm-capture-input')!;
     input.value = 'Call back ~30m'; input.dispatchEvent(new Event('input'));
-    expect(m.contentEl.querySelectorAll<HTMLInputElement>('.helm-capture-time input[type="time"]')[1]!.value).toBe('14:30');
+    expect(m.contentEl.querySelectorAll<HTMLInputElement>('.helm-capture-time input[type="time"]')[1]!.value).toBe('15:10');
     input.value = 'Call back 16:15 ~30m'; input.dispatchEvent(new Event('input'));
     expect(start.value).toBe('');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
