@@ -30,6 +30,7 @@ import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/per
 import { bundledTemplate, bundledDailyTemplate, type TemplateConfig } from '../core/periodicTemplates';
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
 import { noteTitle, renderNewNote, listValues, type NoteRef } from '../core/noteRef';
+import { parseDaybook, renderEntry, renderReply } from '../core/daybook';
 import type { DrawingTarget } from '../core/types';
 import { addLinkToText, linkLabel, linksIn, normaliseLink, removeLinkFromText } from '../core/links';
 import { plainLabel } from '../core/label';
@@ -39,6 +40,8 @@ export interface MutationDeps {
   index: HelmIndex;
   settings: () => HelmSettings;
   today: () => IsoDate;
+  /** Wall-clock time, HH:MM — what a daybook entry is stamped with. */
+  now?: () => string;
   notify: (msg: string) => void;
   /** Daily-note template text, when configured. */
   dailyTemplate?: () => Promise<string | undefined>;
@@ -508,6 +511,78 @@ export class Mutations {
       excludeKeys: [t.key, ...(t.id ? [t.id] : []), ...(t.mirrorOf ? [t.mirrorOf] : [])],
     });
     return { start, end: toHhmm(Math.min(toMinutes(start) + length, 24 * 60 - 1)) };
+  }
+
+  /* ── The daybook: what happened, as it happens ─────────────────────── */
+
+  /**
+   * Write a moment into a day's diary. Entries stay in time order, the heading is made when the day has
+   * none yet, and the shape written is the shape read — a plain markdown bullet.
+   */
+  async addDaybookEntry(date: IsoDate, text: string, opts: { time?: string; icon?: string } = {}): Promise<void> {
+    const body = text.trim();
+    if (body === '') return;
+    const time = opts.time ?? this.d.now?.() ?? '00:00';
+    const path = await this.ensureDailyNote(date);
+    await this.editFile(path, (lines, doc) => {
+      const db = parseDaybook(doc, this.settings.daybookHeading);
+      const line = renderEntry(time, body, opts.icon);
+      if (db.heading === -1) {
+        // No diary in this note yet: start one at the end, with its own heading.
+        while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
+        lines.push('', `## ${this.settings.daybookHeading}`, '', line, '');
+        return true;
+      }
+      // In time order: before the first entry that is later than this one, else at the end.
+      const after = db.entries.find((e) => e.time > time);
+      const at = after ? after.line : Math.max(db.start, ...db.entries.map((e) => e.endLine));
+      const pad = at > db.start && lines[at - 1]!.trim() !== '' ? [''] : [];
+      lines.splice(at, 0, ...pad, line, ...(after ? [''] : []));
+      return true;
+    });
+  }
+
+  /** A note under an entry — what the bots write back, and what you can add yourself. */
+  async addDaybookReply(date: IsoDate, entryLine: number, text: string, icon?: string): Promise<void> {
+    const body = text.trim();
+    if (body === '') return;
+    const path = this.index.dailyPath(date);
+    if (!path) throw new Error('That day has no note yet');
+    await this.editFile(path, (lines, doc) => {
+      const db = parseDaybook(doc, this.settings.daybookHeading);
+      const entry = db.entries.find((e) => e.line === entryLine);
+      if (!entry) return false;
+      lines.splice(entry.endLine, 0, renderReply(body, this.settings.indentUnit || '\t', icon));
+      return true;
+    });
+  }
+
+  /** Reword an entry, keeping its time and its replies. */
+  async updateDaybookEntry(date: IsoDate, entryLine: number, text: string): Promise<void> {
+    const path = this.index.dailyPath(date);
+    if (!path) throw new Error('That day has no note yet');
+    await this.editFile(path, (lines, doc) => {
+      const db = parseDaybook(doc, this.settings.daybookHeading);
+      const entry = db.entries.find((e) => e.line === entryLine);
+      if (!entry || text.trim() === '') return false;
+      lines[entry.line] = renderEntry(entry.time, text, entry.icon || undefined);
+      return true;
+    });
+  }
+
+  /** Take an entry out, replies and all. */
+  async removeDaybookEntry(date: IsoDate, entryLine: number): Promise<void> {
+    const path = this.index.dailyPath(date);
+    if (!path) throw new Error('That day has no note yet');
+    await this.editFile(path, (lines, doc) => {
+      const db = parseDaybook(doc, this.settings.daybookHeading);
+      const entry = db.entries.find((e) => e.line === entryLine);
+      if (!entry) return false;
+      let end = entry.endLine;
+      while (end < lines.length && lines[end]!.trim() === '') end++;      // and the blank line after it
+      lines.splice(entry.line, end - entry.line);
+      return true;
+    });
   }
 
   /** A daily-owned task moves between notes; leaving a past note marks it forwarded. */

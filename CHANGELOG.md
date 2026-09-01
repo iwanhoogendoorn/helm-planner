@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **The daybook, in the day view.** Every day now shows what happened under a
+  **Daybook** section: each entry with its time, its icon and whatever came back
+  written underneath it, the way your notes already look.
+  - **Jot a line** in the box at the bottom and press Enter — it lands in the day's
+    note stamped with the current time, in time order, wherever in the day it belongs.
+  - **Right-click an entry** to reply to it, reword it, open that exact line in the
+    note, or delete it (replies and all).
+  - It reads and writes the plain markdown you already keep — `- **13:42** ⌨️ …` with
+    tab-indented `- 💬 *…*` replies — so the note stays yours, editable and syncable
+    without Helm. An existing daybook is added to, never rewritten.
+  - Browse to any day to read its diary. A past day with nothing in it stays quiet.
+  - Settings → the heading name, if yours is not “Daybook”.
+
 ## 1.23.6 — 2026-09-01
 
 - **Skipping one occurrence of a repeating task no longer ends the series.** A

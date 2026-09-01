@@ -4,6 +4,7 @@ import { Mutations } from '../../src/data/mutations';
 import { MemoryVault } from '../../src/data/vault';
 
 export const TODAY = '2026-08-26'; // Wednesday
+export const NOW = '14:37';   // the test clock, matching the UI harness
 export const DAILY_FOLDER = '70 OBSIDIAN/70-06 Daily Notes';
 export const DAILY_FORMAT = 'YYYY/MM - MMMM/ww/DD, dddd, MMM, YYYY';
 
@@ -185,6 +186,6 @@ export async function setup(extra: Record<string, string> = {}, settings: Partia
   let seed = 42;
   const rng = (): number => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
   const notices: string[] = [];
-  const m = new Mutations({ vault, index, settings: () => s, today: () => TODAY, notify: (x) => notices.push(x), rng });
+  const m = new Mutations({ vault, index, settings: () => s, today: () => TODAY, now: () => NOW, notify: (x) => notices.push(x), rng });
   return { vault, index, m, notices, settings: s };
 }

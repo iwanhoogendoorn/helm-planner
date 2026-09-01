@@ -14,6 +14,7 @@ import { derivedKey, hash } from '../core/ids';
 import { formatDate, parseDateFromPath } from '../core/dates';
 import { isDrawingPath, parseDrawing, type Drawing } from '../core/drawing';
 import { contentHasHelmKeys, hasHelmKeys, notesSectionLinks, noteTitle, parseNoteRef, wikilinksIn, type NoteRef } from '../core/noteRef';
+import { parseDaybook, type DaybookEntry } from '../core/daybook';
 import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
 
 export const DAILY_FALLBACK = { folder: 'Daily Notes', format: 'YYYY-MM-DD' };
@@ -34,6 +35,8 @@ interface FileEntry {
   drawing?: Drawing;
   /** Attachment keys, for any note that carries them. */
   noteRef?: NoteRef;
+  /** A daily note's diary entries. */
+  daybook?: DaybookEntry[];
   /** Basenames linked under this note's Notes heading. */
   noteLinks?: string[];
   /** Basenames of drawings this note embeds or links (`![[X.excalidraw]]`). */
@@ -268,6 +271,7 @@ export class HelmIndex {
     const scan = date !== undefined ? findRegion(doc.lines, s) : { broken: false };
     if (scan.broken) entry.diagnostics.push({ severity: 'error', code: 'HELM-D01', message: 'Helm region has a start marker without an end marker; the note is read-only until fixed.', path });
     entry.hasRegion = scan.region !== undefined;
+    if (date !== undefined) entry.daybook = parseDaybook(doc, s.daybookHeading).entries;
     const sectionOfLine = new Map<number, Section>();
     if (scan.region) for (const sec of ['habits', 'morning', 'afternoon', 'evening', 'anytime'] as Section[]) for (const l of scan.region.sections[sec].taskLines) sectionOfLine.set(l, sec);
 
@@ -591,6 +595,12 @@ export class HelmIndex {
    * leaves a “forwarded” record behind — so a live line always wins over a closed record, and the
    * record is only returned when there is nothing else.
    */
+  /** The diary of a day. Empty when the day has no note, or no daybook heading in it. */
+  daybook(date: IsoDate): DaybookEntry[] {
+    const path = this.dailyPath(date);
+    return (path ? this.files.get(path)?.daybook : undefined) ?? [];
+  }
+
   taskById(id: string): Task | undefined {
     let record: Task | undefined;
     for (const t of this.snapshot.tasks.values()) {

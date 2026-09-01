@@ -54,6 +54,7 @@ export default class HelmPlugin extends Plugin {
       index: this.index,
       settings: () => this.settings,
       today: () => this.today(),
+      now: () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; },
       notify: (m) => { new Notice(m); },
       dailyTemplate: () => this.readDailyTemplate(),
       periodicTemplate: (kind) => this.readTemplate(this.periodicTemplatePath(kind) ?? ''),

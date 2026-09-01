@@ -83,7 +83,7 @@ describe('Today tab', () => {
     const { ctx } = await ctxFor();
     const titles = (date: string): string[] => texts(render((r) => renderToday(ctx, r, { date, collapsed: new Map() })), '.helm-section-title');
     // A quiet Sunday well ahead: nothing planned, but Morning, Afternoon and Evening are there to fill.
-    expect(titles('2026-09-06')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
+    expect(titles('2026-09-06')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime', 'Daybook']);
     const root = render((r) => renderToday(ctx, r, { date: '2026-09-06', collapsed: new Map() }));
     expect(texts(root, '.helm-dropzone-hint')).toEqual([
       'drop a task here for the morning', 'drop a task here for the afternoon',
@@ -91,7 +91,7 @@ describe('Today tab', () => {
     ]);
     expect([...root.querySelectorAll('.helm-empty')].map((e) => e.textContent).join(' ')).toContain('Nothing planned yet');
     // Yesterday is a record: an empty evening is simply not part of it.
-    expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);
+    expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);   // a past day with no diary keeps quiet
   });
 
   it('offers Skip this one and Stop repeating on a repeating task', async () => {
@@ -151,6 +151,30 @@ describe('Today tab', () => {
     part.sub!.items.find((i) => i.title.startsWith('Afternoon'))!.click!();
     const after = await waitFor(() => { const x = [...index.snapshot.tasks.values()].find((y) => y.text === 'Start with OIB' && y.status === 'todo'); return x?.part === 'afternoon' ? x : undefined; }, 'the part to change');
     expect(after.noteDate ?? after.scheduled).toBe('2026-08-27');   // still Thursday, not today
+  });
+
+  it('shows the day’s daybook and jots a new entry into it', async () => {
+    const { ctx, index, m, vault } = await ctxFor({
+      [dailyPath(TODAY)]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### Anytime\n\n## Daybook\n\n- **11:13** 🔔 How is it going?\n\n- **12:49** ⌨️ Picked up a new SR.\n\t- 💬 *What is next?*\n`,
+    });
+    const view = (): HTMLElement => render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    let root = view();
+    const sec = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Daybook')!;
+    expect(sec.querySelector('.helm-count')!.textContent).toBe('2');
+    expect(texts(sec, '.helm-daybook-time')).toEqual(['11:13', '12:49']);
+    expect(texts(sec, '.helm-daybook-text')).toEqual(['How is it going?', 'Picked up a new SR.']);
+    expect(texts(sec, '.helm-daybook-reply')).toEqual(['💬What is next?']);
+
+    // Jot a line: Enter writes it into the note, stamped with the time.
+    const jot = sec.querySelector<HTMLInputElement>('.helm-daybook-input')!;
+    jot.value = 'Rang the plumber';
+    jot.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await waitFor(() => (index.daybook(TODAY).length === 3 ? true : undefined), 'the new entry');
+    const added = index.daybook(TODAY).find((e) => e.text === 'Rang the plumber')!;
+    expect(added.time).toBe(ctx.now());
+    expect(await vault.read(dailyPath(TODAY))).toMatch(new RegExp(`- \\*\\*${ctx.now()}\\*\\* ⌨️ Rang the plumber`));
+    expect(texts(view(), '.helm-daybook-text')).toContain('Rang the plumber');
+    void m;
   });
 
   it('shows how far along a task is, and sets it from the checkbox', async () => {
@@ -1035,7 +1059,7 @@ describe('Dashboard tab', () => {
     const { ctx, vault } = await ctxFor();
     await ctx.mutations.schedule('tsk-0001', TODAY, 'morning');
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    expect(texts(root, '.helm-section-title')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime', 'Daybook']);
     // 'Collect diagrams' is a finished subtask: under its parent, and again as a ghost among the morning's done work.
     expect(texts(root, '.helm-section.part-morning .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams', 'Collect diagrams']);
     const ghost = [...root.querySelectorAll('.helm-section.part-morning .helm-ghost')].find((r) => r.querySelector('.helm-chip.subtask-of'))!;

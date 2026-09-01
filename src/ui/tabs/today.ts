@@ -12,6 +12,7 @@ import { openWrapUp } from '../modals/wrapUp';
 import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
+import { daybookSection } from '../daybook';
 import { habitBadge } from '../fields';
 import { dayPartOf } from '../../data/habits';
 import { plainLabel, shortLabel } from '../../core/label';
@@ -140,6 +141,11 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     makeDropZone(ctx, sec, date, part);
     root.appendChild(sec);
   }
+  // The day's diary, under the plan: what happened, and a line to add the next thing. A past day that
+  // holds none is left alone — there is nothing to read and nothing you are about to write.
+  const diary = ctx.index.daybook(date);
+  if (diary.length > 0 || !isPast) root.appendChild(daybookSection(ctx, date, store));
+
   if (plan.unmirrored.length > 0 && !isPast) root.appendChild(h('div', { cls: 'helm-hint' }, `${plan.unmirrored.length} planned project task(s) are not in the daily note yet. `, button('Write them', { onClick: () => void ctx.run('Sync', async () => { for (const t of plan.unmirrored) await ctx.mutations.schedule(t.key, date); }) })));
 
 }

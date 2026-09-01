@@ -244,6 +244,8 @@ export interface HelmSettings {
   projectsFolder: string;
   habitsFolder: string;
   inboxNote: string;
+  /** The heading a day's diary lives under. */
+  daybookHeading: string;
   dailyNoteFolder: string; // empty → read Obsidian's daily-notes config
   dailyNoteFormat: string; // empty → read Obsidian's daily-notes config
   dailyNoteTemplate: string;
@@ -317,6 +319,7 @@ export interface HelmSettings {
 }
 
 export const DEFAULT_SETTINGS: HelmSettings = {
+  daybookHeading: 'Daybook',
   projectsFolder: '02 PROJECTS',
   habitsFolder: '02 PROJECTS/Habits',
   inboxNote: '01 INBOX/Inbox.md',

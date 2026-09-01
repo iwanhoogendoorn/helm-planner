@@ -887,3 +887,16 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-cal-event.is-done { opacity: 0.55; }
 .helm-cal-event.is-done .helm-cal-event-title { text-decoration: line-through; }
 
+
+/* ── The daybook: the day as it happened ────────────────────────────── */
+.helm-daybook-entry { padding: 3px 0; }
+.helm-daybook-line { display: flex; align-items: baseline; gap: 7px; }
+.helm-daybook-time { background: none; border: none; box-shadow: none; padding: 0; height: auto; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 12px; color: var(--color-red); cursor: pointer; }
+.helm-daybook-time:hover { text-decoration: underline; }
+.helm-daybook-icon { font-size: 12px; }
+.helm-daybook-text { flex: 1 1 auto; line-height: 1.45; }
+.helm-daybook-reply { display: flex; gap: 6px; margin: 2px 0 4px 46px; padding-left: 8px; border-left: 2px solid rgba(var(--color-green-rgb), 0.4); color: var(--color-green); font-style: italic; line-height: 1.4; }
+.helm-daybook-more { opacity: 0; }
+.helm-daybook-entry:hover .helm-daybook-more { opacity: 1; }
+.helm-daybook-add { margin-top: 6px; }
+.helm-daybook-input { flex: 1 1 auto; }
