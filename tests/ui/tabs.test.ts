@@ -635,6 +635,31 @@ describe('Calendar view', () => {
     expect(days.some((d) => d.textContent === '26' && d.classList.contains('is-today'))).toBe(true);
   });
 
+  it('picking a slot on the grid opens Capture already filled in', async () => {
+    const { ctx } = await ctxFor();
+    const root = render((r) => renderCalendar(ctx, r, state({ scope: 'day', anchor: TODAY })));
+    const col = root.querySelector<HTMLElement>('.helm-cal-col')!;
+    // jsdom has no layout, so the column sits at 0 and a pixel is a pixel.
+    col.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 100, height: 840, x: 0, y: 0, toJSON: () => ({}) });
+    const at = (y: number, type: string): MouseEvent => { const ev = new MouseEvent(type, { bubbles: true, button: 0 }); Object.defineProperty(ev, 'clientY', { value: y }); return ev; };
+
+    // A click: one estimate's worth, starting at the slot clicked. 07:00 + 2h = 09:00.
+    col.dispatchEvent(at(112, 'mousedown'));
+    col.dispatchEvent(at(112, 'mouseup'));
+    const one = Modal.last!;
+    const times = (m: typeof one): string[] => [...m.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')].map((i) => i.value);
+    expect(times(one)).toEqual(['09:00', `09:${String(ctx.settings().defaultEffortMinutes).padStart(2, '0')}`]);
+    one.close();
+
+    // A drag: exactly what was dragged over, snapped to the quarter — 09:00 to 10:30.
+    col.dispatchEvent(at(112, 'mousedown'));
+    col.dispatchEvent(at(196, 'mousemove'));
+    expect(root.querySelector('.helm-cal-band')!.textContent).toBe('09:00–10:30');
+    col.dispatchEvent(at(196, 'mouseup'));
+    expect(times(Modal.last!)).toEqual(['09:00', '10:30']);
+    expect(root.querySelector('.helm-cal-band')).toBeNull();          // the band goes with it
+  });
+
   it('drops a task onto a day of the grid, at the hour it landed on', async () => {
     const { ctx, index } = await ctxFor();
     const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;

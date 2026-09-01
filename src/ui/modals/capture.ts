@@ -17,6 +17,8 @@ import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot 
 export interface CaptureDefaults {
   date?: IsoDate;
   part?: 'morning' | 'afternoon' | 'evening';
+  /** A slot picked on the calendar: the dialog opens on it instead of suggesting one. */
+  time?: { start: string; end?: string };
   projectId?: string;
   phaseId?: string;
   text?: string;
@@ -34,12 +36,12 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   let explicitDate = defaults.date !== undefined;
   let part: 'morning' | 'afternoon' | 'evening' | undefined = defaults.part;
   let explicitPart = defaults.part !== undefined;
-  const timeStart = h('input', { attr: { type: 'time' }, title: 'Start time' });
-  const timeEnd = h('input', { attr: { type: 'time' }, title: 'End time' });
+  const timeStart = h('input', { attr: { type: 'time', value: defaults.time?.start ?? '' }, title: 'Start time' });
+  const timeEnd = h('input', { attr: { type: 'time', value: defaults.time?.end ?? '' }, title: 'End time' });
   const timeOf = (c: { time?: { start: string; end?: string } }): { start: string; end?: string } | undefined => timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : c.time;
   const effort = effortField();
   let grammarEffort: number | undefined;
-  let timeTouched = false;
+  let timeTouched = defaults.time !== undefined;   // a slot you picked is not a suggestion to be replaced
   let timeAuto = false;
   let programmatic = false;
   const poke = (el: HTMLInputElement): void => { programmatic = true; try { el.dispatchEvent(new Event('input')); } finally { programmatic = false; } };

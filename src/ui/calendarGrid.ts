@@ -88,6 +88,49 @@ function eventBox(ctx: UiContext, t: Task, opts: { compact?: boolean } = {}): HT
   return box;
 }
 
+/**
+ * Picking a slot on the grid: press, drag, let go. A plain click takes one estimate's worth of time,
+ * a drag takes exactly what you dragged over, and either way Capture opens already filled in.
+ */
+function pickRange(ctx: UiContext, col: HTMLElement, date: IsoDate, from: number, to: number, settings: HelmSettings): void {
+  let band: HTMLElement | undefined;
+  let anchorMin: number | undefined;
+
+  const minutesAt = (clientY: number): number => snapToSlot(clientY - col.getBoundingClientRect().top, from, to, { pxPerHour: PX_PER_HOUR });
+  const draw = (a: number, b: number): void => {
+    const top = ((Math.min(a, b) - from) / 60) * PX_PER_HOUR;
+    const height = (Math.abs(b - a) / 60) * PX_PER_HOUR;
+    band ??= col.appendChild(h('div', { cls: 'helm-cal-band' }));
+    band.style.top = `${top}px`;
+    band.style.height = `${Math.max(2, height)}px`;
+    band.setText(`${toHhmm(Math.min(a, b))}–${toHhmm(Math.max(a, b))}`);
+  };
+  const clear = (): void => { band?.remove(); band = undefined; anchorMin = undefined; };
+
+  col.addEventListener('mousedown', (ev) => {
+    if ((ev.target as HTMLElement).closest('.helm-cal-event')) return;   // that is a box being dragged
+    if (ev.button !== 0) return;
+    anchorMin = minutesAt(ev.clientY);
+  });
+  col.addEventListener('mousemove', (ev) => {
+    if (anchorMin === undefined) return;
+    const now = minutesAt(ev.clientY);
+    if (now !== anchorMin) draw(anchorMin, now);
+  });
+  const finish = (ev: MouseEvent): void => {
+    if (anchorMin === undefined) return;
+    const other = minutesAt(ev.clientY);
+    const start = Math.min(anchorMin, other);
+    const end = Math.max(anchorMin, other);
+    const length = end - start;
+    clear();
+    const minutes = length >= 15 ? length : settings.defaultEffortMinutes;
+    openCapture(ctx, { date, time: { start: toHhmm(start), end: toHhmm(Math.min(start + minutes, 24 * 60 - 1)) } });
+  };
+  col.addEventListener('mouseup', finish);
+  col.addEventListener('mouseleave', () => clear());
+}
+
 /** A day, three days, a week: hours down the side, days across the top, boxes where the time is. */
 export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate[], buckets: Map<IsoDate, DayBucket>, settings: HelmSettings): void {
   const today = ctx.today();
@@ -119,9 +162,10 @@ export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate
 
     const col = h('div', { cls: ['helm-cal-col', isToday && 'is-today'], style: { height: `${height}px` } });
     for (const m of hours.slice(0, -1)) {
-      const slot = h('div', { cls: 'helm-cal-slot', style: { height: `${PX_PER_HOUR}px` }, title: `Add a task at ${toHhmm(m)}`, onClick: () => openCapture(ctx, { date: d, text: '' }) });
-      col.appendChild(slot);
+      col.appendChild(h('div', { cls: 'helm-cal-slot', style: { height: `${PX_PER_HOUR}px` }, title: `New task at ${toHhmm(m)} — drag to pick a longer slot` }));
     }
+    // Click an empty slot for a task at that time; drag across the grid to pick the hours yourself.
+    pickRange(ctx, col, d, from, to, settings);
     for (const e of layout.timed) {
       const box = eventBox(ctx, e.task);
       box.classList.add('is-placed');

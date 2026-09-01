@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Pick a slot on the calendar and Capture opens on it.** Click an empty hour for a
+  task there, or **press and drag across the grid** to choose the hours yourself — a
+  band follows the pointer showing “14:00–15:30”, and the dialog opens with exactly
+  that, snapped to the quarter. Clicking used to open Capture with no time at all.
 - The **Next / Previous day arrows on a single day in the Calendar tab** now keep you
   in the Calendar. The day is drawn by the same view the Today tab uses, and its
   arrows were navigating to Today, so stepping to the next day threw you out of the
