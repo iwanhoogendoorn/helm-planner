@@ -394,6 +394,9 @@ export class Mutations {
   async schedule(key: string, date: IsoDate | undefined, part?: DayPart): Promise<void> {
     let t = this.fresh(key);
     const today = this.today;
+    // A subtask stays in its task's list — planning one for another day writes the day on its own line,
+    // so a step can be done tomorrow while the task it belongs to is still today's.
+    if (t.parentKey && this.index.task(t.parentKey)) { await this.planSubtask(t, date, part); return; }
     if (t.origin === 'daily-mirror' && t.mirrorOf) {
       const src = this.index.task(t.mirrorOf);
       if (src) { await this.schedule(src.key, date, part ?? (date === t.noteDate ? undefined : t.part)); return; }
@@ -581,6 +584,29 @@ export class Mutations {
       let end = entry.endLine;
       while (end < lines.length && lines[end]!.trim() === '') end++;      // and the blank line after it
       lines.splice(entry.line, end - entry.line);
+      return true;
+    });
+  }
+
+  /** Give one subtask a day of its own, without taking it out of the list it belongs to. */
+  private async planSubtask(t: Task, date: IsoDate | undefined, part?: DayPart): Promise<void> {
+    await this.editFile(t.path, (lines) => {
+      const tl = this.lineOf(lines, t);
+      const next: TaskLine = { ...tl };
+      if (date === undefined) { delete next.scheduled; delete next.time; }
+      else {
+        next.scheduled = date;
+        // The same rule as anywhere else: a part of the day means a time of day.
+        if (part && part !== 'anytime') {
+          const w = partWindow(part, this.settings);
+          if (!next.time || next.time.start < w.from || next.time.start >= w.to) {
+            const length = next.time?.end ? toMinutes(next.time.end) - toMinutes(next.time.start) : next.effortMinutes ?? this.settings.defaultEffortMinutes;
+            const start = preferredSlot(this.index.snapshot, date, this.settings, { part, effortMinutes: length });
+            next.time = { start, end: toHhmm(Math.min(toMinutes(start) + length, 24 * 60 - 1)) };
+          }
+        } else if (part === 'anytime') delete next.time;
+      }
+      lines[t.line] = serialiseTaskLine(next, { force: true });
       return true;
     });
   }

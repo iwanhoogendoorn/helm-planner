@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Plan one step of a task for another day, without taking it out of the task.**
+  Schedule a subtask — from its menu, the date picker, or a bulk move — and the day is
+  written on its own line (`⏳ 2026-09-04`) while it stays exactly where it is, in
+  order, under the task it belongs to.
+  - On its **task's day** it is still listed with its brothers and sisters, now saying
+    where it is going: “→ Fri 4 Sep”.
+  - On **that day** it turns up in the plan, naming the task it is a step of — “part of
+    Practice Spardha Assignments” — so the day has the context without the whole task
+    moving.
+  - Give it a part of the day and it takes a free slot there, like anything else; take
+    the day off again and it goes back to being a plain step.
+
 ## 1.24.3 — 2026-09-01
 
 - **The calendar covers the whole day**, midnight to midnight, instead of stopping at

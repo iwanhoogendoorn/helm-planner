@@ -17,6 +17,8 @@ import { selection, selectionClick, selectionMenu, setDragKeys } from './selecti
 
 export interface RowOptions {
   showProject?: boolean;
+  /** Name the task this row is a step of — context when a subtask is shown on a day of its own. */
+  showParent?: boolean;
   showDate?: 'scheduled' | 'due' | 'both' | 'none';
   showChildren?: boolean;
   depth?: number;
@@ -126,12 +128,22 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   const showDate = opts.showDate ?? 'both';
   if ((showDate === 'due' || showDate === 'both') && t.due) meta.appendChild(chip(`due ${humanDate(t.due, today)}`, overdue ? 'due is-overdue' : 'due', t.due));
   if ((showDate === 'scheduled' || showDate === 'both') && t.scheduled && t.origin !== 'daily') meta.appendChild(chip(humanDate(t.scheduled, today), 'scheduled', `Planned for ${t.scheduled}`));
+  // A subtask can be planned for a day of its own while staying in its task's list.
+  else if (t.depth > 0 && t.scheduled && t.scheduled !== t.noteDate) meta.appendChild(chip(`→ ${humanDate(t.scheduled, today)}`, 'scheduled', `This step is planned for ${t.scheduled}; its task stays where it is`));
   if (t.origin === 'daily' && t.noteDate && t.due && t.due > t.noteDate && open) meta.appendChild(chip(`in ${humanDate(t.noteDate, today)}'s note`, 'note', 'Dated later than the note it sits in — Helm moves it to the right note'));
   if (t.effortMinutes !== undefined) meta.appendChild(chip(minutesToHuman(t.effortMinutes), 'effort'));
   if (t.progress !== undefined && open) meta.appendChild(chip(`${t.progress}%`, 'progress', `${t.progress}% of the way — right-click the box to change it`));
   if (t.recurrence) meta.appendChild(chip(formatRecurrence(t.recurrence), 'recurrence', t.recurrence.parsed ? '' : 'Unrecognised rule'));
   // Links live in the line but are shown as pills, like notes and drawings.
   for (const l of linksIn(t.text)) meta.appendChild(h('a', { cls: 'helm-chip link', title: l.url, attr: { href: l.url, target: '_blank', rel: 'noopener' }, onClick: (ev) => ev.stopPropagation() }, h('span', { cls: 'helm-chip-label', text: l.label })));
+  if (opts.showParent && t.parentKey) {
+    const parent = snap.tasks.get(t.parentKey);
+    if (parent) meta.appendChild(h('button', {
+      cls: 'helm-chip subtask-of',
+      title: `Part of “${plainLabel(parent.text)}”${parent.noteDate ? ` on ${parent.noteDate}` : ''} — click to open`,
+      onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(parent.path, parent.line); },
+    }, icon('corner-down-right'), h('span', { cls: 'helm-chip-label', text: `part of ${shortLabel(parent.text, 40)}` })));
+  }
   const follows = followsOf(snap, t);
   if (follows) meta.appendChild(h('button', { cls: 'helm-chip followup', title: `Continues “${plainLabel(follows.text)}” — click to open`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(follows.path, follows.line); } }, icon('corner-down-right'), h('span', { cls: 'helm-chip-label', text: `follows: ${shortLabel(follows.text)}${isOpen(follows) ? ' (open)' : ''}` })));
   else if (blocked) meta.appendChild(chip('blocked', 'blocked', `Waiting on ${t.blockedBy.join(', ')}`));

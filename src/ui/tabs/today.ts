@@ -167,7 +167,8 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
 }
 
 function itemRow(ctx: UiContext, it: DayItem): HTMLElement {
-  const row = taskRow(ctx, it.display, { showDate: 'due', showChildren: true, draggable: it.kind !== 'timeblock', showProject: true });
+  // A step borrowed from a task on another day names that task, so the day still makes sense.
+  const row = taskRow(ctx, it.display, { showDate: 'due', showChildren: it.kind !== 'subtask', draggable: it.kind !== 'timeblock', showProject: true, showParent: it.kind === 'subtask' });
   if (it.kind === 'mirror' || it.kind === 'unmirrored' || it.kind === 'elsewhere') {
     const el = row.classList.contains('helm-task') ? row : row.querySelector<HTMLElement>('.helm-task');
     el?.setAttribute('data-day-key', it.task.key);

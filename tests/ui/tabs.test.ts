@@ -266,6 +266,29 @@ describe('Today tab', () => {
     expect(Notice.messages.at(-1)).toMatch(/siblings to reorder/);
   });
 
+  it('plans one step for another day, keeping it in its task and giving it context there', async () => {
+    const day = dailyPath(TODAY);
+    const list = ['- [ ] Practice the assignments', '\t- [ ] CH-02: Penny Candy', '\t- [ ] CH-02: The Kangarooster', '\t- [ ] CH-02: Morning'];
+    const { ctx, index, m } = await ctxFor({ [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### B. Afternoon\n\n${list.join('\n')}\n\n### Anytime\n` });
+    const kid = [...index.snapshot.tasks.values()].find((t) => t.text === 'CH-02: The Kangarooster')!;
+    await m.schedule(kid.key, '2026-08-27');
+
+    // Today: the task still has all three steps, and the planned one says where it is going.
+    const today = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const rows = [...today.querySelectorAll<HTMLElement>('.helm-task')].map((r) => r.querySelector('.helm-task-text')?.textContent);
+    expect(rows).toEqual(expect.arrayContaining(['Practice the assignments', 'CH-02: Penny Candy', 'CH-02: The Kangarooster', 'CH-02: Morning']));
+    const plannedRow = [...today.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === 'CH-02: The Kangarooster')!;
+    expect(texts(plannedRow, '.helm-chip.scheduled')).toEqual(['→ Tomorrow']);
+
+    // Tomorrow: the step is on the day, naming the task it belongs to.
+    const tomorrow = render((r) => renderToday(ctx, r, { date: '2026-08-27', collapsed: new Map() }));
+    const borrowed = [...tomorrow.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === 'CH-02: The Kangarooster')!;
+    expect(borrowed).toBeTruthy();
+    expect(texts(borrowed, '.helm-chip.subtask-of')).toEqual(['part of Practice the assignments']);
+    // Its brothers and sisters stayed behind.
+    expect([...tomorrow.querySelectorAll<HTMLElement>('.helm-task')].map((r) => r.querySelector('.helm-task-text')?.textContent)).not.toContain('CH-02: Penny Candy');
+  });
+
   it('reorders subtasks by dragging one onto another', async () => {
     const day = dailyPath(TODAY);
     const list = ['- [ ] Ship the thing', '\t- [ ] Write it', '\t- [ ] Proof it', '\t- [ ] Post it'];

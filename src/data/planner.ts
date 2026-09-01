@@ -62,7 +62,7 @@ export interface DayItem {
   /** The task to display (the source for a mirror). */
   display: Task;
   part: DayPart;
-  kind: 'daily' | 'mirror' | 'unmirrored' | 'elsewhere' | 'timeblock';
+  kind: 'daily' | 'mirror' | 'unmirrored' | 'elsewhere' | 'timeblock' | 'subtask';
 }
 
 export interface DayPlan {
@@ -78,6 +78,8 @@ export interface DayPlan {
   unmirrored: Task[];
   /** Inbox/note tasks scheduled for this date (they live elsewhere). */
   elsewhere: Task[];
+  /** Subtasks planned for this day whose parent sits on another one. */
+  subtasks: Task[];
   timeBlocks: Task[];
   done: Task[];
   openCount: number;
@@ -87,7 +89,7 @@ export interface DayPlan {
 }
 
 export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): DayPlan {
-  const plan: DayPlan = { date, byPart: { morning: [], afternoon: [], evening: [], anytime: [] }, items: [], today: [], mirrors: [], unmirrored: [], elsewhere: [], timeBlocks: [], done: [], openCount: 0, doneCount: 0, plannedMinutes: 0, doneMinutes: 0 };
+  const plan: DayPlan = { date, byPart: { morning: [], afternoon: [], evening: [], anytime: [] }, items: [], today: [], mirrors: [], unmirrored: [], elsewhere: [], timeBlocks: [], subtasks: [], done: [], openCount: 0, doneCount: 0, plannedMinutes: 0, doneMinutes: 0 };
   const mirroredSources = new Set<string>();
   for (const t of snap.tasks.values()) {
     if (t.depth > 0) continue; // subtasks travel with their parent
@@ -105,7 +107,14 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
     } else if (t.origin === 'project' && t.scheduled === date && !mirroredSources.has(t.key)) plan.unmirrored.push(t);
     else if ((t.origin === 'inbox' || t.origin === 'note') && t.scheduled === date) plan.elsewhere.push(t);
   }
-  const all = [...plan.today, ...plan.timeBlocks, ...plan.mirrors.map((m) => m.source ?? m.mirror), ...plan.unmirrored, ...plan.elsewhere];
+  // A subtask planned for a day of its own: it stays in its parent's list, and shows up here too, so a
+  // day can hold one step of a bigger task without the task itself moving.
+  for (const t of snap.tasks.values()) {
+    if (t.depth === 0 || t.origin === 'daily-mirror' || t.scheduled !== date) continue;
+    if (t.noteDate === date) continue;                       // already on this day with its parent
+    plan.subtasks.push(t);
+  }
+  const all = [...plan.today, ...plan.timeBlocks, ...plan.mirrors.map((m) => m.source ?? m.mirror), ...plan.unmirrored, ...plan.elsewhere, ...plan.subtasks];
   for (const t of all) {
     const e = effortOf(t, settings);
     if (isOpen(t)) { plan.openCount++; plan.plannedMinutes += e; }
@@ -115,6 +124,7 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
   plan.timeBlocks.sort(compareTasks);
   plan.mirrors.sort((a, b) => compareTasks(a.source ?? a.mirror, b.source ?? b.mirror));
   plan.unmirrored.sort(compareTasks);
+  plan.subtasks.sort(compareTasks);
   const partOf = (t: Task): DayPart => t.part ?? (t.time ? (t.time.start < settings.morningEnds ? 'morning' : t.time.start < settings.afternoonEnds ? 'afternoon' : 'evening') : 'anytime');
   const push = (task: Task, display: Task, kind: DayItem['kind']): void => { const part = partOf(task); const it = { task, display, part, kind }; plan.items.push(it); plan.byPart[part].push(it); };
   for (const t of plan.timeBlocks) push(t, t, 'timeblock');
@@ -122,6 +132,7 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
   for (const m of plan.mirrors) push(m.mirror, m.source ?? m.mirror, 'mirror');
   for (const t of plan.unmirrored) push(t, t, 'unmirrored');
   for (const t of plan.elsewhere) push(t, t, 'elsewhere');
+  for (const t of plan.subtasks) push(t, t, 'subtask');
   for (const p of DAY_PARTS) plan.byPart[p].sort((a, b) => compareTasks(a.display, b.display));
   return plan;
 }
