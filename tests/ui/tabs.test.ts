@@ -635,6 +635,41 @@ describe('Calendar view', () => {
     expect(days.some((d) => d.textContent === '26' && d.classList.contains('is-today'))).toBe(true);
   });
 
+  it('shows where a dragged task will land, snapping as it moves', async () => {
+    const { ctx, m } = await ctxFor();
+    await m.addTask({ text: 'Standup', date: TODAY, part: 'morning', fields: { time: { start: '09:00', end: '09:45' } } });
+    const root = render((r) => renderCalendar(ctx, r, state({ scope: 'day', anchor: TODAY })));
+    const col = root.querySelector<HTMLElement>('.helm-cal-col')!;
+    col.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 100, height: 840, x: 0, y: 0, toJSON: () => ({}) });
+    const box = [...root.querySelectorAll<HTMLElement>('.helm-cal-event.is-placed')].find((b) => b.textContent?.includes('Standup'))!;
+    box.getBoundingClientRect = () => ({ top: 112, left: 0, bottom: 154, right: 0, width: 100, height: 42, x: 0, y: 112, toJSON: () => ({}) });
+
+    // Picked up 20px below its own top…
+    const start = new MouseEvent('dragstart', { bubbles: true });
+    Object.defineProperty(start, 'clientY', { value: 132 });
+    Object.defineProperty(start, 'dataTransfer', { value: { setData: () => undefined, getData: () => '', types: [] } });
+    box.dispatchEvent(start);
+
+    // …and moved down the grid: the label follows, showing the whole block, snapped.
+    const over = (y: number): void => {
+      const ev = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'clientY', { value: y });
+      Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'] } });
+      col.dispatchEvent(ev);
+    };
+    over(132 + 168);                                    // three hours down
+    expect(root.querySelector('.helm-cal-landing')!.textContent).toBe('12:00–12:45');
+    over(132 + 168 + 14);                               // a quarter more
+    expect(root.querySelector('.helm-cal-landing')!.textContent).toBe('12:15–13:00');
+
+    // Letting go there is what happens: the label and the drop agree.
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'clientY', { value: 132 + 168 + 14 });
+    Object.defineProperty(drop, 'dataTransfer', { value: { types: ['text/helm-task'], getData: () => '' } });
+    col.dispatchEvent(drop);
+    expect(root.querySelector('.helm-cal-landing')).toBeNull();     // and it clears up after itself
+  });
+
   it('picking a slot on the grid opens Capture already filled in', async () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderCalendar(ctx, r, state({ scope: 'day', anchor: TODAY })));

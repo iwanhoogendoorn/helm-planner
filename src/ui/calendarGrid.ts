@@ -24,6 +24,8 @@ const PX_PER_HOUR = 56;
 
 /** How far down the dragged box the pointer was when it was picked up, in pixels. */
 let grabOffset = 0;
+/** How long the dragged task is, so the label can show the whole block while it moves. */
+let grabLength = 0;
 
 /** Everything that belongs on a day's grid: what is planned for it, plus what was finished on it. */
 function tasksOn(bucket: DayBucket | undefined): Task[] {
@@ -82,9 +84,10 @@ function eventBox(ctx: UiContext, t: Task, opts: { compact?: boolean } = {}): HT
     setDragKeys(ev, t.key);
     // Remember where in the box it was grabbed, so it lands where it looks like it will.
     grabOffset = Math.max(0, (ev as DragEvent).clientY - box.getBoundingClientRect().top);
+    grabLength = t.time?.end ? toMinutes(t.time.end) - toMinutes(t.time.start) : t.effortMinutes ?? 0;
     box.classList.add('is-dragging');
   });
-  box.addEventListener('dragend', () => { grabOffset = 0; box.classList.remove('is-dragging'); });
+  box.addEventListener('dragend', () => { grabOffset = 0; grabLength = 0; box.classList.remove('is-dragging'); });
   return box;
 }
 
@@ -179,13 +182,31 @@ export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate
       const now = toMinutes(ctx.now());
       if (now >= from && now <= to) col.appendChild(h('div', { cls: 'helm-cal-now', style: { top: `${((now - from) / 60) * PX_PER_HOUR}px` } }));
     }
-    // Dropping on a column plans the task for that day at the hour it landed on.
-    dropOnDay(ctx, col, d, (ev) => {
+    // While a task is being dragged over the column, show where it would land — snapped, and with its
+    // own length — so you can aim instead of guess.
+    const landingAt = (ev: DragEvent): number | undefined => {
       const rect = col.getBoundingClientRect();
-      const y = (ev as DragEvent).clientY - rect.top - grabOffset;   // the top of the box, not the pointer
+      const y = ev.clientY - rect.top - grabOffset;                  // the top of the box, not the pointer
       if (!Number.isFinite(y) || rect.height === 0) return undefined;
-      return toHhmm(snapToSlot(y, from, to, { pxPerHour: PX_PER_HOUR }));
+      return snapToSlot(y, from, to, { pxPerHour: PX_PER_HOUR, length: grabLength || undefined });
+    };
+    let landing: HTMLElement | undefined;
+    col.addEventListener('dragover', (ev) => {
+      if (!ev.dataTransfer?.types.includes('text/helm-task')) return;
+      const at = landingAt(ev);
+      if (at === undefined) return;
+      landing ??= col.appendChild(h('div', { cls: 'helm-cal-landing' }));
+      landing.style.top = `${((at - from) / 60) * PX_PER_HOUR}px`;
+      landing.style.height = `${Math.max(3, ((grabLength || 30) / 60) * PX_PER_HOUR)}px`;
+      landing.setText(grabLength ? `${toHhmm(at)}–${toHhmm(at + grabLength)}` : toHhmm(at));
     });
+    const clearLanding = (): void => { landing?.remove(); landing = undefined; };
+    col.addEventListener('dragleave', (ev) => { if (!col.contains(ev.relatedTarget as Node | null)) clearLanding(); });
+    col.addEventListener('drop', clearLanding);
+    col.addEventListener('dragend', clearLanding);
+
+    // Dropping on a column plans the task for that day at the hour it landed on.
+    dropOnDay(ctx, col, d, (ev) => { const at = landingAt(ev as DragEvent); return at === undefined ? undefined : toHhmm(at); });
     body.appendChild(col);
   }
 

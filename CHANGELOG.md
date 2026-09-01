@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Dragging a task on the calendar now shows where it will land.** Pick a box up and
+  a dashed block follows the pointer with the time on it — “10:15–11:00” — moving in
+  quarter-hour steps and carrying the task's own length, so you aim at a time instead
+  of guessing. Where the label says it will land is where it lands.
 - **Pick a slot on the calendar and Capture opens on it.** Click an empty hour for a
   task there, or **press and drag across the grid** to choose the hours yourself — a
   band follows the pointer showing “14:00–15:30”, and the dialog opens with exactly
