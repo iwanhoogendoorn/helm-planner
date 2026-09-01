@@ -93,6 +93,18 @@ describe('Today tab', () => {
     expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);
   });
 
+  it('offers each day once — the day it is on is “Part of …”, not a move', async () => {
+    const { ctx, index, m } = await ctxFor();
+    await m.addTask({ text: 'On today already', date: TODAY });
+    const onToday = [...index.snapshot.tasks.values()].find((t) => t.text === 'On today already')!;
+    taskMenu(ctx, onToday, new MouseEvent('contextmenu'));
+    const titles = Menu.last!.items.map((i) => i.title);
+    expect(titles).not.toContain('Today');                    // it is already there; moving it there is nothing
+    expect(titles).toContain('Part of Today');                // this is the one that means something
+    expect(titles).toContain('Tomorrow');
+    expect(titles.filter((t) => /^(Today|Part of Today)$/.test(t))).toHaveLength(1);
+  });
+
   it('names the day in the part menu, and moving a part never changes the date', async () => {
     const { ctx, index, m } = await ctxFor();
     const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Start with OIB')!;
@@ -2150,10 +2162,15 @@ describe('moving a task to another day', () => {
     await flush(); await flush();
     const note = await vault.read(dailyPath('2026-08-27'));
     expect(note).toMatch(/#+ Morning\n+- \[ \] .*Draft chapter list/);
-    // A task that already sits in a part offers to keep it.
+    // The day it now sits on is not offered as a move — “Part of Tomorrow” is the same thing, once.
     const moved = [...index.snapshot.tasks.values()].find((x) => x.id === 'tsk-0001' && x.origin === 'daily-mirror')!;
     taskMenu(ctx, moved, new MouseEvent('contextmenu'));
-    expect(Menu.last!.items.find((i) => i.title === 'Tomorrow')!.sub!.items[0]!.title).toBe('Keep the morning');
+    const titles = Menu.last!.items.map((i) => i.title);
+    expect(titles).not.toContain('Tomorrow');
+    expect(titles).toContain('Part of Tomorrow');
+    expect(titles).toContain('Today');                       // other days still move it
+    // A task that already sits in a part offers to keep it when it does move.
+    expect(Menu.last!.items.find((i) => i.title === 'Today')!.sub!.items[0]!.title).toBe('Keep the morning');
     // Pick a date… opens the picker with a part row.
     taskMenu(ctx, t, new MouseEvent('contextmenu'));
     Menu.last!.items.find((i) => i.title === 'Pick a date…')!.click!();

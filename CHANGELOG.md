@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The task menu offers each day **once**. For a task already on today, “Today ▸” and
+  “Part of Today ▸” were the same list doing the same thing — scheduling a task to
+  the day it is already on is not a move. The day it sits on is now only offered as
+  “Part of …”; the other days still move it, and still offer to keep its part.
+
 ## 1.23.4 — 2026-09-01
 
 - **A part of the day is a time of day.** A task with no time belongs in **Anytime**;

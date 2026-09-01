@@ -36,7 +36,11 @@ export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task): void {
   const today = ctx.today();
   const move = (date: IsoDate | undefined, part?: DayPart): void => void ctx.run(date ? 'Schedule' : 'Unschedule', () => ctx.mutations.schedule(task.key, date, part));
   const partIcon = (p: DayPart): string => (p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock');
+  // The day it already sits on is not a move: its submenu would be the parts of that day, which is
+  // exactly what “Part of …” below already offers. Offer each day once.
+  const its = task.scheduled ?? task.noteDate;
   for (const o of scheduleOptions(today, ctx.settings().weekStartsOn)) {
+    if (o.date !== undefined && (o.date as unknown) !== 'pick' && o.date === its) continue;
     if ((o.date as unknown) === 'pick') {
       menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => openDatePicker(ctx, { title: `Schedule “${task.text}”`, initial: task.scheduled ?? task.noteDate ?? today, parts: true }, (d, part) => move(d, part))));
       continue;
