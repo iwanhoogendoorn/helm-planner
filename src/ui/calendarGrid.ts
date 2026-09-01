@@ -22,6 +22,9 @@ import { onDayContext } from './dayMenu';
 
 const PX_PER_HOUR = 56;
 
+/** Where each grid was last scrolled to, so a re-render does not yank you back to the working hours. */
+const gridScroll = new Map<string, number>();
+
 /** How far down the dragged box the pointer was when it was picked up, in pixels. */
 let grabOffset = 0;
 /** How long the dragged task is, so the label can show the whole block while it moves. */
@@ -138,7 +141,11 @@ function pickRange(ctx: UiContext, col: HTMLElement, date: IsoDate, from: number
 export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate[], buckets: Map<IsoDate, DayBucket>, settings: HelmSettings): void {
   const today = ctx.today();
   const layouts: DayLayout[] = dates.map((d) => layOutDay(d, tasksOn(buckets.get(d)), settings));
-  const { from, to } = gridHours(layouts, settings);
+  // The grid is the whole day — nothing is out of reach at either end. It simply opens on the hours you
+  // work, so a 23:30 line or a 05:00 flight is a scroll away rather than missing.
+  const from = 0;
+  const to = 24 * 60;
+  const focus = gridHours(layouts, settings);
   const hours: number[] = [];
   for (let m = from; m <= to; m += 60) hours.push(m);
   const height = ((to - from) / 60) * PX_PER_HOUR;
@@ -147,7 +154,8 @@ export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate
   const allDay = h('div', { cls: 'helm-cal-allday' }, h('div', { cls: 'helm-cal-gutter-head', text: 'ALL-DAY' }));
   const body = h('div', { cls: 'helm-cal-body' });
   const gutter = h('div', { cls: 'helm-cal-gutter', style: { height: `${height}px` } });
-  for (const m of hours) gutter.appendChild(h('div', { cls: 'helm-cal-hour', style: { height: `${PX_PER_HOUR}px` } }, h('span', { text: toHhmm(m) })));
+  // Midnight at the end of the day is 24:00, not another 00:00.
+  for (const m of hours) gutter.appendChild(h('div', { cls: 'helm-cal-hour', style: { height: `${PX_PER_HOUR}px` } }, h('span', { text: m === 24 * 60 ? '24:00' : toHhmm(m) })));
   body.appendChild(gutter);
 
   for (const layout of layouts) {
@@ -212,4 +220,11 @@ export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate
 
   const grid = h('div', { cls: 'helm-cal-grid', attr: { 'data-days': String(dates.length) }, style: { '--cal-days': String(dates.length) } as never }, head, allDay, body);
   root.appendChild(grid);
+  // Open on the working hours — today a little before now, so what is next is on screen. Where you
+  // scrolled to is remembered, so the grid does not jump back every time the index changes.
+  const key = dates.join(',');
+  const openAt = dates.includes(today) ? Math.min(Math.max(focus.from, toMinutes(ctx.now()) - 60), focus.to - 60) : focus.from;
+  const want = gridScroll.get(key) ?? (Math.max(0, openAt) / 60) * PX_PER_HOUR;
+  requestAnimationFrame(() => { body.scrollTop = want; });      // after layout, or it has nowhere to scroll
+  body.addEventListener('scroll', () => gridScroll.set(key, body.scrollTop));
 }

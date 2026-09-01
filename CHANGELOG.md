@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **The calendar covers the whole day**, midnight to midnight, instead of stopping at
+  the end of your working day — a 22:30 line had nowhere to be, and nothing could be
+  dropped there. It opens on the hours you work (today, a little before now), and it
+  stays where you scrolled it when the view refreshes.
 - **Dragging a task on the calendar now shows where it will land.** Pick a box up and
   a dashed block follows the pointer with the time on it — “10:15–11:00” — moving in
   quarter-hour steps and carrying the task's own length, so you aim at a time instead

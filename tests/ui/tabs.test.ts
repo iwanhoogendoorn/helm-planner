@@ -602,7 +602,9 @@ describe('Calendar view', () => {
     expect(grid.getAttribute('data-days')).toBe('1');
     expect(texts(grid, '.helm-cal-day-head')[0]).toContain('26');
     // The hour gutter runs from the working day, and the boxes are placed, not listed.
-    expect(texts(grid, '.helm-cal-hour')[0]).toBe('07:00');
+    expect(texts(grid, '.helm-cal-hour')[0]).toBe('00:00');            // the whole day is there…
+    expect(texts(grid, '.helm-cal-hour').at(-1)).toBe('24:00');
+    expect(grid.querySelectorAll('.helm-cal-hour')).toHaveLength(25);   // …every hour of it, opened on the working ones
     const placed = [...grid.querySelectorAll<HTMLElement>('.helm-cal-event.is-placed')].map((e) => e.textContent);
     expect(placed.some((t) => t?.includes('Eten met JV'))).toBe(true);
     expect(placed.some((t) => t?.includes('Standup'))).toBe(true);
@@ -610,7 +612,7 @@ describe('Calendar view', () => {
     expect(texts(grid, '.helm-cal-allday-cell .helm-cal-event')).toContain('Sort the drive');
     const dinner = [...grid.querySelectorAll<HTMLElement>('.helm-cal-event.is-placed')].find((e) => e.textContent?.includes('Eten met JV'))!;
     expect(dinner.style.height).toBe(`${2.5 * 56 - 2}px`);        // 17:00–19:30 is two and a half hours tall
-    expect(dinner.style.top).toBe(`${10 * 56}px`);                 // ten hours below the 07:00 line
+    expect(dinner.style.top).toBe(`${17 * 56}px`);                 // seventeen hours below midnight
   });
 
   it('gives each scope its own run of days', async () => {
@@ -642,11 +644,11 @@ describe('Calendar view', () => {
     const col = root.querySelector<HTMLElement>('.helm-cal-col')!;
     col.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 100, height: 840, x: 0, y: 0, toJSON: () => ({}) });
     const box = [...root.querySelectorAll<HTMLElement>('.helm-cal-event.is-placed')].find((b) => b.textContent?.includes('Standup'))!;
-    box.getBoundingClientRect = () => ({ top: 112, left: 0, bottom: 154, right: 0, width: 100, height: 42, x: 0, y: 112, toJSON: () => ({}) });
+    box.getBoundingClientRect = () => ({ top: 9 * 56, left: 0, bottom: 9 * 56 + 42, right: 0, width: 100, height: 42, x: 0, y: 9 * 56, toJSON: () => ({}) });
 
     // Picked up 20px below its own top…
     const start = new MouseEvent('dragstart', { bubbles: true });
-    Object.defineProperty(start, 'clientY', { value: 132 });
+    Object.defineProperty(start, 'clientY', { value: 9 * 56 + 20 });
     Object.defineProperty(start, 'dataTransfer', { value: { setData: () => undefined, getData: () => '', types: [] } });
     box.dispatchEvent(start);
 
@@ -657,14 +659,14 @@ describe('Calendar view', () => {
       Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'] } });
       col.dispatchEvent(ev);
     };
-    over(132 + 168);                                    // three hours down
+    over(9 * 56 + 20 + 168);                            // three hours down
     expect(root.querySelector('.helm-cal-landing')!.textContent).toBe('12:00–12:45');
-    over(132 + 168 + 14);                               // a quarter more
+    over(9 * 56 + 20 + 168 + 14);                       // a quarter more
     expect(root.querySelector('.helm-cal-landing')!.textContent).toBe('12:15–13:00');
 
     // Letting go there is what happens: the label and the drop agree.
     const drop = new Event('drop', { bubbles: true, cancelable: true });
-    Object.defineProperty(drop, 'clientY', { value: 132 + 168 + 14 });
+    Object.defineProperty(drop, 'clientY', { value: 9 * 56 + 20 + 168 + 14 });
     Object.defineProperty(drop, 'dataTransfer', { value: { types: ['text/helm-task'], getData: () => '' } });
     col.dispatchEvent(drop);
     expect(root.querySelector('.helm-cal-landing')).toBeNull();     // and it clears up after itself
@@ -678,19 +680,19 @@ describe('Calendar view', () => {
     col.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 100, height: 840, x: 0, y: 0, toJSON: () => ({}) });
     const at = (y: number, type: string): MouseEvent => { const ev = new MouseEvent(type, { bubbles: true, button: 0 }); Object.defineProperty(ev, 'clientY', { value: y }); return ev; };
 
-    // A click: one estimate's worth, starting at the slot clicked. 07:00 + 2h = 09:00.
-    col.dispatchEvent(at(112, 'mousedown'));
-    col.dispatchEvent(at(112, 'mouseup'));
+    // A click: one estimate's worth, starting at the slot clicked — nine hours down is 09:00.
+    col.dispatchEvent(at(9 * 56, 'mousedown'));
+    col.dispatchEvent(at(9 * 56, 'mouseup'));
     const one = Modal.last!;
     const times = (m: typeof one): string[] => [...m.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')].map((i) => i.value);
     expect(times(one)).toEqual(['09:00', `09:${String(ctx.settings().defaultEffortMinutes).padStart(2, '0')}`]);
     one.close();
 
     // A drag: exactly what was dragged over, snapped to the quarter — 09:00 to 10:30.
-    col.dispatchEvent(at(112, 'mousedown'));
-    col.dispatchEvent(at(196, 'mousemove'));
+    col.dispatchEvent(at(9 * 56, 'mousedown'));
+    col.dispatchEvent(at(9 * 56 + 84, 'mousemove'));
     expect(root.querySelector('.helm-cal-band')!.textContent).toBe('09:00–10:30');
-    col.dispatchEvent(at(196, 'mouseup'));
+    col.dispatchEvent(at(9 * 56 + 84, 'mouseup'));
     expect(times(Modal.last!)).toEqual(['09:00', '10:30']);
     expect(root.querySelector('.helm-cal-band')).toBeNull();          // the band goes with it
   });
