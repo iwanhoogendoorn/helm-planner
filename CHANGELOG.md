@@ -8,9 +8,11 @@
   order, under the task it belongs to.
   - On its **task's day** it is still listed with its brothers and sisters, now saying
     where it is going: “→ Fri 4 Sep”.
-  - On **that day** it turns up in the plan, naming the task it is a step of — “part of
-    Practice Spardha Assignments” — so the day has the context without the whole task
-    moving.
+  - On **that day** the whole task turns up around it: the task itself and its other
+    steps in ghost, faded, with the step planned for that day solid among them. The
+    context is the task, not a label — you can see what this belongs to, what is
+    already done, and which day each of the other steps is waiting for. Two steps
+    planned for the same day share one block.
   - Give it a part of the day and it takes a free slot there, like anything else; take
     the day off again and it goes back to being a plain step.
 

@@ -149,7 +149,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
         minutes > 0 ? chip(minutesToHuman(minutes), 'effort') : null,
         iconButton('plus', `Add a task to the ${PART_LABEL[part].toLowerCase()}`, () => openCapture(ctx, { date, part: part === 'anytime' ? undefined : part })),
       ],
-    }, partHabits, ...spills.map((sp) => spillRow(ctx, sp)), ...items.map((it) => itemRow(ctx, it)),
+    }, partHabits, ...spills.map((sp) => spillRow(ctx, sp)), ...renderItems(ctx, items, date),
       ...doneItems.map((it) => { const row = taskRow(ctx, it.display, { showDate: 'none' }); row.classList.add('helm-ghost'); return row; }),
       ...doneSubtasks.map(({ child, parent }) => subtaskGhost(ctx, child, parent)),
       items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && spills.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
@@ -164,6 +164,41 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
 
   if (plan.unmirrored.length > 0 && !isPast) root.appendChild(h('div', { cls: 'helm-hint' }, `${plan.unmirrored.length} planned project task(s) are not in the daily note yet. `, button('Write them', { onClick: () => void ctx.run('Sync', async () => { for (const t of plan.unmirrored) await ctx.mutations.schedule(t.key, date); }) })));
 
+}
+
+/**
+ * The rows of one part of the day. Steps borrowed from a task on another day are drawn with that task
+ * around them — the task itself and its other steps in ghost, the step planned for today solid — so the
+ * day says what this is part of and what else is coming, without any of it moving here.
+ */
+function renderItems(ctx: UiContext, items: DayItem[], date: IsoDate): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  const done = new Set<string>();
+  for (const it of items) {
+    if (it.kind !== 'subtask') { out.push(itemRow(ctx, it)); continue; }
+    const parent = it.display.parentKey ? ctx.index.task(it.display.parentKey) : undefined;
+    if (!parent) { out.push(itemRow(ctx, it)); continue; }
+    if (done.has(parent.key)) continue;                 // its brothers and sisters are already in the block
+    done.add(parent.key);
+    out.push(borrowedBlock(ctx, parent, date));
+  }
+  return out;
+}
+
+/** A task from another day, faded, holding the step (or steps) planned for this one. */
+function borrowedBlock(ctx: UiContext, parent: Task, date: IsoDate): HTMLElement {
+  const snap = ctx.index.snapshot;
+  const head = taskRow(ctx, parent, { showDate: 'both', showChildren: false, showProject: true });
+  head.classList.add('helm-ghost', 'helm-context');
+  const kids = h('div', { cls: 'helm-task-children' });
+  for (const key of parent.childKeys) {
+    const child = snap.tasks.get(key);
+    if (!child) continue;
+    const row = taskRow(ctx, child, { showDate: 'both', showProject: false, depth: 1 });
+    if (child.scheduled !== date) row.classList.add('helm-ghost', 'helm-context');   // here for context only
+    kids.appendChild(row);
+  }
+  return h('div', { cls: 'helm-task-tree helm-borrowed' }, head, kids);
 }
 
 function itemRow(ctx: UiContext, it: DayItem): HTMLElement {

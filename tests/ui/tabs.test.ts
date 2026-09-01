@@ -280,13 +280,15 @@ describe('Today tab', () => {
     const plannedRow = [...today.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === 'CH-02: The Kangarooster')!;
     expect(texts(plannedRow, '.helm-chip.scheduled')).toEqual(['→ Tomorrow']);
 
-    // Tomorrow: the step is on the day, naming the task it belongs to.
+    // Tomorrow: the step is on the day, inside its task — the task and the other steps faded for context.
     const tomorrow = render((r) => renderToday(ctx, r, { date: '2026-08-27', collapsed: new Map() }));
-    const borrowed = [...tomorrow.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === 'CH-02: The Kangarooster')!;
-    expect(borrowed).toBeTruthy();
-    expect(texts(borrowed, '.helm-chip.subtask-of')).toEqual(['part of Practice the assignments']);
-    // Its brothers and sisters stayed behind.
-    expect([...tomorrow.querySelectorAll<HTMLElement>('.helm-task')].map((r) => r.querySelector('.helm-task-text')?.textContent)).not.toContain('CH-02: Penny Candy');
+    const block = tomorrow.querySelector<HTMLElement>('.helm-borrowed')!;
+    expect(block).toBeTruthy();
+    const rowOf = (text: string): HTMLElement => [...block.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === text)!;
+    expect(texts(block, '.helm-task-text')).toEqual(['Practice the assignments', 'CH-02: Penny Candy', 'CH-02: The Kangarooster', 'CH-02: Morning']);
+    expect(rowOf('Practice the assignments').classList.contains('helm-context')).toBe(true);   // the task, faded
+    expect(rowOf('CH-02: Penny Candy').classList.contains('helm-context')).toBe(true);         // its other steps too
+    expect(rowOf('CH-02: The Kangarooster').classList.contains('helm-context')).toBe(false);   // today's step, solid
   });
 
   it('reorders subtasks by dragging one onto another', async () => {

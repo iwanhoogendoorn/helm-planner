@@ -77,6 +77,9 @@
 .helm-progress-row { align-items: center; gap: 8px; }
 .helm-progress-range { flex: 1 1 auto; }
 .helm-progress-num { width: 64px; }
+.helm-borrowed { border-left: 2px solid var(--background-modifier-border); padding-left: 6px; margin: 2px 0; }
+.helm-task.helm-context { opacity: 0.55; }
+.helm-task.helm-context:hover { opacity: 0.8; }
 .helm-task.is-reordering { box-shadow: inset 0 2px 0 var(--interactive-accent); }
 .helm-task.is-selected { background: rgba(var(--interactive-accent-rgb), 0.12); box-shadow: inset 2px 0 0 var(--interactive-accent); }
 .helm-selection-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 8px; border-radius: var(--radius-s); background: var(--background-secondary); border: 1px solid var(--interactive-accent); }
