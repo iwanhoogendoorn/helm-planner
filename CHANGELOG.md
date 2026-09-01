@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.6 — 2026-09-01
 
 - **Skipping one occurrence of a repeating task no longer ends the series.** A
   meeting that was called off is cancelled for that day and the next one still comes:
