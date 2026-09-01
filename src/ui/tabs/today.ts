@@ -194,8 +194,9 @@ function borrowedBlock(ctx: UiContext, parent: Task, date: IsoDate): HTMLElement
   for (const key of parent.childKeys) {
     const child = snap.tasks.get(key);
     if (!child) continue;
-    const row = taskRow(ctx, child, { showDate: 'both', showProject: false, depth: 1 });
-    if (child.scheduled !== date) row.classList.add('helm-ghost', 'helm-context');   // here for context only
+    const planned = child.scheduled === date;
+    const row = taskRow(ctx, child, { showDate: 'both', showProject: false, depth: 1, draggable: planned });
+    if (!planned) row.classList.add('helm-ghost', 'helm-context');                   // here for context only
     kids.appendChild(row);
   }
   return h('div', { cls: 'helm-task-tree helm-borrowed' }, head, kids);

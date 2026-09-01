@@ -15,6 +15,11 @@
     planned for the same day share one block.
   - Give it a part of the day and it takes a free slot there, like anything else; take
     the day off again and it goes back to being a plain step.
+  - **Moving things around respects all of it.** Drag a step onto another day, or a
+    part of one, and it is planned there — it never leaves the task it belongs to. On
+    the day it is planned for you can drag it between parts; the ghost rows around it
+    cannot be dragged, because they live somewhere else. And moving the **task**
+    itself to another day carries its steps along with each one's own plan intact.
 
 ## 1.24.3 — 2026-09-01
 

@@ -445,6 +445,8 @@ export class Mutations {
   /** Move a line that already sits on a day to another part of that day. */
   async setPart(key: string, part: DayPart): Promise<void> {
     const t = this.fresh(key);
+    // A step keeps its place in its task: giving it a part is planning it, not moving the line.
+    if (t.parentKey && this.index.task(t.parentKey)) { await this.planSubtask(t, t.scheduled ?? t.noteDate, part); return; }
     const settled = await this.settleTime(t, part);
     if (settled) { await this.setPart(settled, part); return; }
     if ((t.origin === 'daily' || t.origin === 'daily-mirror') && t.noteDate !== undefined && t.section !== 'outside') {

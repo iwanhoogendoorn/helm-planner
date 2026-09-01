@@ -266,6 +266,33 @@ describe('Today tab', () => {
     expect(Notice.messages.at(-1)).toMatch(/siblings to reorder/);
   });
 
+  it('dragging a planned step around keeps it inside its task', async () => {
+    const day = dailyPath(TODAY);
+    const list = ['- [ ] Practice the assignments', '\t- [ ] Step one', '\t- [ ] Step two'];
+    const { ctx, index, m, vault } = await ctxFor({ [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n### B. Afternoon\n\n${list.join('\n')}\n\n### C. Evening\n\n### Anytime\n` });
+    const step = () => [...index.snapshot.tasks.values()].find((t) => t.text === 'Step two')!;
+    await m.schedule(step().key, '2026-08-27');
+
+    // On the day it is planned for, it can be dragged into a part — and stays a step of its task.
+    const root = render((r) => renderToday(ctx, r, { date: '2026-08-27', collapsed: new Map() }));
+    const solid = [...root.querySelectorAll<HTMLElement>('.helm-borrowed .helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === 'Step two')!;
+    expect(solid.getAttribute('draggable')).toBe('true');
+    expect([...root.querySelectorAll<HTMLElement>('.helm-borrowed .helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === 'Practice the assignments')!.getAttribute('draggable')).not.toBe('true');
+
+    const evening = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Evening')!;
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? step().key : '') } });
+    evening.dispatchEvent(ev);
+    await waitFor(() => (step().time ? true : undefined), 'a time in the evening');
+
+    expect(step().parentKey).toBeTruthy();                         // still a step of the task
+    expect(step().scheduled).toBe('2026-08-27');
+    expect(step().time!.start >= '18:00').toBe(true);
+    const note = await vault.read(day);
+    expect(note).toMatch(/- \[ \] Practice the assignments\n\t- \[ \] Step one\n\t- \[ \] \d\d:\d\d[^\n]*Step two ⏳ 2026-08-27/);
+    expect(note.split('### C. Evening')[1]).not.toContain('Step two');   // the line never left its task
+  });
+
   it('plans one step for another day, keeping it in its task and giving it context there', async () => {
     const day = dailyPath(TODAY);
     const list = ['- [ ] Practice the assignments', '\t- [ ] CH-02: Penny Candy', '\t- [ ] CH-02: The Kangarooster', '\t- [ ] CH-02: Morning'];
