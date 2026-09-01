@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- A finished task that has since **moved to another day** now shows the date it was
+  actually finished — “✓ Tue 1 Sep” — instead of “✓ Today”. Subtasks travel with
+  their task, so a subtask ticked yesterday would sit on tomorrow's plan claiming it
+  was done today.
+
 ## 1.24.0 — 2026-09-01
 
 - **The daybook, in the day view.** Every day now shows what happened under a

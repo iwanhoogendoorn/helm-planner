@@ -143,7 +143,12 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     const done = kids.filter((k) => !isOpen(k)).length;
     meta.appendChild(chip(`${done}/${kids.length}`, 'subtasks', 'Subtasks'));
   }
-  if (t.done) meta.appendChild(chip(`✓ ${humanDate(t.done, today)}`, 'done-date'));
+  if (t.done) {
+    // “Today” only means something when the line still sits on the day it was finished. Once it has
+    // travelled — a subtask carried along when its task moved on — say the date it actually happened.
+    const onItsDay = (t.noteDate ?? t.scheduled) === t.done;
+    meta.appendChild(chip(`✓ ${humanDate(t.done, onItsDay ? today : undefined, onItsDay ? {} : { year: t.done.slice(0, 4) !== today.slice(0, 4) })}`, 'done-date', `Finished on ${t.done}`));
+  }
   // A cancelled line says so in words — and when it repeats, that it was this one occurrence that went.
   if (t.status === 'cancelled') {
     meta.appendChild(chip(

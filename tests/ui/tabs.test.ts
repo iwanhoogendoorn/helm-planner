@@ -153,6 +153,26 @@ describe('Today tab', () => {
     expect(after.noteDate ?? after.scheduled).toBe('2026-08-27');   // still Thursday, not today
   });
 
+  it('a subtask finished before its task moved says the day it was finished', async () => {
+    const { ctx, index, m } = await ctxFor();
+    await m.addTask({ text: 'Set up the bots', date: TODAY, part: 'morning' });
+    const parent = [...index.snapshot.tasks.values()].find((t) => t.text === 'Set up the bots')!;
+    await m.addTask({ text: 'Sports Bot', parentKey: parent.key });
+    const kid = index.task(parent.key)!.childKeys.map((k) => index.task(k)!)[0]!;
+    await m.setStatus(kid.key, 'done');
+
+    // Finished today, sitting on today: “Today” is the plain truth.
+    const here = [...index.snapshot.tasks.values()].find((t) => t.text === 'Sports Bot')!;
+    expect(texts(taskRow(ctx, here), '.helm-chip.done-date')).toEqual(['✓ Today']);
+
+    // Its task moves to tomorrow and it goes along; the date it was finished stays put.
+    await m.schedule(index.task(parent.key)!.key, '2026-08-27');
+    const moved = [...index.snapshot.tasks.values()].find((t) => t.text === 'Sports Bot')!;
+    expect(moved.noteDate).toBe('2026-08-27');
+    expect(moved.done).toBe(TODAY);
+    expect(texts(taskRow(ctx, moved), '.helm-chip.done-date')).toEqual(['✓ Wed 26 Aug']);   // not “Today”
+  });
+
   it('shows the day’s daybook and jots a new entry into it', async () => {
     const { ctx, index, m, vault } = await ctxFor({
       [dailyPath(TODAY)]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### Anytime\n\n## Daybook\n\n- **11:13** 🔔 How is it going?\n\n- **12:49** ⌨️ Picked up a new SR.\n\t- 💬 *What is next?*\n`,
