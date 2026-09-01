@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.4 — 2026-09-01
 
 - **A part of the day is a time of day.** A task with no time belongs in **Anytime**;
   the moment it lands in Morning, Afternoon or Evening — dragged, moved from the
