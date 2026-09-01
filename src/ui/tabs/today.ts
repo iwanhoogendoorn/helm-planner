@@ -23,7 +23,17 @@ import { drawingsButton, targetForDate } from '../drawings';
 import { notesButton } from '../notes';
 import { dragKeys, selection } from '../selection';
 
-export interface TodayState { date: IsoDate; collapsed: Map<string, boolean> }
+export interface TodayState {
+  date: IsoDate;
+  collapsed: Map<string, boolean>;
+  /**
+   * Which tab this day belongs to. The Calendar tab draws a single day with this same view; its arrows
+   * have to stay in the Calendar, not throw you back to Today.
+   */
+  tab?: 'today' | 'week';
+  /** The Calendar's scope, so its own day keeps it when you step to the next one. */
+  scope?: 'day';
+}
 
 const PART_ICON: Record<DayPart, string> = { morning: 'sunrise', afternoon: 'sun', evening: 'moon', anytime: 'clock' };
 
@@ -39,15 +49,17 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   const note = snap.dailyNotes.get(date);
 
   const cap = settings.dailyCapacityMinutes;
-  root.appendChild(crumbBar(ctx, 'today', dateCrumbs(ctx, date, 'day', { day: true }), { homeClick: () => ctx.navigate('today', { date: today }), homeTitle: 'Jump to today' }));
+  const owner = state.tab ?? 'today';
+  const go = (d: IsoDate): void => ctx.navigate(owner, { date: d, ...(state.scope ? { scope: state.scope } : {}) });
+  root.appendChild(crumbBar(ctx, 'today', dateCrumbs(ctx, date, 'day', { day: true }), { homeClick: () => go(today), homeTitle: 'Jump to today' }));
   root.append(h('div', { cls: 'helm-day-head' },
     h('div', { cls: 'helm-day-nav' },
-      iconButton('chevron-left', 'Previous day', () => ctx.navigate('today', { date: addDays(date, -1) })),
-      h('button', { cls: ['helm-day-title', isToday && 'is-today'], onClick: () => ctx.navigate('today', { date: today }), title: isToday ? date : 'Jump to today' },
+      iconButton('chevron-left', 'Previous day', () => go(addDays(date, -1))),
+      h('button', { cls: ['helm-day-title', isToday && 'is-today'], onClick: () => go(today), title: isToday ? date : 'Jump to today' },
         h('span', { cls: 'helm-day-title-main', text: humanDate(date, today) }),
         h('span', { cls: 'helm-day-title-sub', text: humanDate(date, undefined, { year: true }) }),
       ),
-      iconButton('chevron-right', 'Next day', () => ctx.navigate('today', { date: addDays(date, 1) })),
+      iconButton('chevron-right', 'Next day', () => go(addDays(date, 1))),
     ),
     h('div', { cls: 'helm-day-actions' },
       button('Plan day', { icon: 'list-plus', primary: !isPast && plan.openCount === 0, onClick: () => openPlanDay(ctx, date) }),

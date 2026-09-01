@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The **Next / Previous day arrows on a single day in the Calendar tab** now keep you
+  in the Calendar. The day is drawn by the same view the Today tab uses, and its
+  arrows were navigating to Today, so stepping to the next day threw you out of the
+  tab you were in.
 - **Dragging on the calendar lands on the quarter hour, where the box looks like it
   will.** The drop used the pointer's position rather than the top of the box, so a
   box grabbed by its middle jumped upwards by however far down you had taken hold of

@@ -562,6 +562,20 @@ describe('Calendar view', () => {
   const state = (over: Record<string, unknown> = {}): Parameters<typeof renderCalendar>[2] =>
     ({ scope: 'week', anchor: TODAY, collapsed: new Map(), view: 'calendar', ...over }) as Parameters<typeof renderCalendar>[2];
 
+  it('the arrows on a day inside the Calendar keep you in the Calendar', async () => {
+    const { ctx, nav } = await ctxFor();
+    const root = render((r) => renderCalendar(ctx, r, state({ scope: 'day', view: 'list' })));
+    click([...root.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Next day'));
+    expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: '2026-08-27', scope: 'day' } });   // not the Today tab
+    click([...root.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Previous day'));
+    expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: '2026-08-25', scope: 'day' } });
+
+    // The Today tab's own day still navigates to Today, as it always did.
+    const day = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    click([...day.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Next day'));
+    expect(nav.at(-1)).toEqual({ tab: 'today', opts: { date: '2026-08-27' } });
+  });
+
   it('stays on the Calendar tab when a single day is listed', async () => {
     const { ctx, nav } = await ctxFor();
     const before = nav.length;
