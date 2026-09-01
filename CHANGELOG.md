@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.24.1 — 2026-09-01
 
 - A finished task that has since **moved to another day** now shows the date it was
   actually finished — “✓ Tue 1 Sep” — instead of “✓ Today”. Subtasks travel with
