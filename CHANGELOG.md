@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.24.2 — 2026-09-01
 
 - A part of the day that holds tasks **without a time** now says so, with a button to
   **move them to Anytime** in one go. Helm gives a task a slot when it puts it in a

@@ -1,7 +1,7 @@
 {
   "id": "helm-planner",
   "name": "Helm",
-  "version": "1.24.1",
+  "version": "1.24.2",
   "minAppVersion": "1.5.0",
   "description": "Steer projects, phases, tasks and habits from your daily note: plan the day, work it, wrap it up, review the week.",
   "author": "Iwan Hoogendoorn",
