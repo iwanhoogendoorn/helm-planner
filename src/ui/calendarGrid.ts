@@ -10,7 +10,7 @@
 import type { HelmSettings, IsoDate, Task } from '../core/types';
 import { MONTH_SHORT, WEEKDAY_SHORT, isoWeekday } from '../core/dates';
 import { isOpen, type DayBucket } from '../data/planner';
-import { gridHours, layOutDay, toHhmm, toMinutes, toneOf, type DayLayout } from '../data/timegrid';
+import { gridHours, layOutDay, snapToSlot, toHhmm, toMinutes, toneOf, type DayLayout } from '../data/timegrid';
 import { h } from './dom';
 import type { UiContext } from './context';
 import { openTaskEditor } from './modals/taskEditor';
@@ -21,6 +21,9 @@ import { dragKeys, selection, setDragKeys } from './selection';
 import { onDayContext } from './dayMenu';
 
 const PX_PER_HOUR = 56;
+
+/** How far down the dragged box the pointer was when it was picked up, in pixels. */
+let grabOffset = 0;
 
 /** Everything that belongs on a day's grid: what is planned for it, plus what was finished on it. */
 function tasksOn(bucket: DayBucket | undefined): Task[] {
@@ -74,8 +77,14 @@ function eventBox(ctx: UiContext, t: Task, opts: { compact?: boolean } = {}): HT
     t.time ? h('span', { cls: 'helm-cal-event-time', text: t.time.start }) : null,
     h('span', { cls: 'helm-cal-event-title', text: plainLabel(t.text) }),
   );
-  box.addEventListener('dragstart', (ev) => { ev.stopPropagation(); setDragKeys(ev, t.key); box.classList.add('is-dragging'); });
-  box.addEventListener('dragend', () => box.classList.remove('is-dragging'));
+  box.addEventListener('dragstart', (ev) => {
+    ev.stopPropagation();
+    setDragKeys(ev, t.key);
+    // Remember where in the box it was grabbed, so it lands where it looks like it will.
+    grabOffset = Math.max(0, (ev as DragEvent).clientY - box.getBoundingClientRect().top);
+    box.classList.add('is-dragging');
+  });
+  box.addEventListener('dragend', () => { grabOffset = 0; box.classList.remove('is-dragging'); });
   return box;
 }
 
@@ -129,10 +138,9 @@ export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate
     // Dropping on a column plans the task for that day at the hour it landed on.
     dropOnDay(ctx, col, d, (ev) => {
       const rect = col.getBoundingClientRect();
-      const y = (ev as DragEvent).clientY - rect.top;
+      const y = (ev as DragEvent).clientY - rect.top - grabOffset;   // the top of the box, not the pointer
       if (!Number.isFinite(y) || rect.height === 0) return undefined;
-      const minutes = from + Math.max(0, Math.round((y / PX_PER_HOUR) * 4)) * 15;
-      return toHhmm(Math.min(minutes, to - 15));
+      return toHhmm(snapToSlot(y, from, to, { pxPerHour: PX_PER_HOUR }));
     });
     body.appendChild(col);
   }

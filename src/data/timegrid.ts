@@ -104,3 +104,17 @@ export function toneOf(t: Task): string {
   if (/#meeting\b/i.test(t.text)) return 'meeting';
   return 'task';
 }
+
+/**
+ * The time a drop lands on: where the *top of the box* falls on the grid, snapped to the quarter hour.
+ *
+ * `y` is measured from the top of the column, which is `from`. The grab offset is how far down the box
+ * the pointer was when it was picked up — without it, a box grabbed by its middle jumps half an hour up.
+ */
+export function snapToSlot(y: number, from: number, to: number, opts: { pxPerHour: number; step?: number; length?: number } = { pxPerHour: 56 }): number {
+  const step = opts.step ?? 15;
+  const minutes = from + (y / opts.pxPerHour) * 60;
+  const snapped = Math.round(minutes / step) * step;
+  const last = to - (opts.length ?? step);
+  return Math.max(from, Math.min(snapped, Math.max(from, last)));
+}

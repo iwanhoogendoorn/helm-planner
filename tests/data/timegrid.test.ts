@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gridHours, layOutDay, toneOf, windowOf } from '../../src/data/timegrid';
+import { gridHours, layOutDay, snapToSlot, toHhmm, toneOf, windowOf } from '../../src/data/timegrid';
 import { SETTINGS } from './fixture';
 import type { Task } from '../../src/core/types';
 
@@ -60,5 +60,30 @@ describe('laying a day out as a grid', () => {
     expect(toneOf(task('#meeting Standup'))).toBe('meeting');
     expect(toneOf(task('Draft', undefined, { projectId: 'prj-book' }))).toBe('project');
     expect(toneOf(task('Done thing', undefined, { status: 'done' }))).toBe('done');
+  });
+});
+
+describe('dropping on the grid', () => {
+  const from = 7 * 60;                      // the grid starts at 07:00
+  const to = 22 * 60;
+  const at = (y: number, opts = {}): string => toHhmm(snapToSlot(y, from, to, { pxPerHour: 56, ...opts }));
+
+  it('snaps to the quarter hour, from the top of the box', () => {
+    expect(at(0)).toBe('07:00');
+    expect(at(56)).toBe('08:00');            // one hour down
+    expect(at(14)).toBe('07:15');            // a quarter is 14px
+    expect(at(28)).toBe('07:30');
+    expect(at(42)).toBe('07:45');
+    // Anything in between goes to the nearest quarter, not the nearest hour.
+    expect(at(20)).toBe('07:15');
+    expect(at(24)).toBe('07:30');
+    expect(at(45)).toBe('07:45');            // 48 minutes past → the 45 mark
+    expect(at(50)).toBe('08:00');            // 54 minutes past → the hour
+  });
+
+  it('never lands above the grid or past its end', () => {
+    expect(at(-40)).toBe('07:00');
+    expect(at(10_000)).toBe('21:45');
+    expect(at(10_000, { length: 60 })).toBe('21:00');   // an hour-long box still fits
   });
 });

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Dragging on the calendar lands on the quarter hour, where the box looks like it
+  will.** The drop used the pointer's position rather than the top of the box, so a
+  box grabbed by its middle jumped upwards by however far down you had taken hold of
+  it, and the rounding fell to the nearest hour as often as the nearest quarter. It
+  now snaps to 07:15, 07:30, 07:45 … measured from the box's own top, keeps the
+  task's length, and never lands above the grid or past its end.
+
 ## 1.24.2 — 2026-09-01
 
 - A part of the day that holds tasks **without a time** now says so, with a button to
