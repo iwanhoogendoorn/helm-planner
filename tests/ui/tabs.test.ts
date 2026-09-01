@@ -153,6 +153,30 @@ describe('Today tab', () => {
     expect(after.noteDate ?? after.scheduled).toBe('2026-08-27');   // still Thursday, not today
   });
 
+  it('offers to move a part’s untimed tasks to Anytime, and does it', async () => {
+    const day = dailyPath(TODAY);
+    const { ctx, index, vault } = await ctxFor({
+      [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] 11:00 - 11:30: Upload the data\n- [ ] 🎂 Birthdays this month\n- [ ] 🎂 No birthdays today\n\n### Anytime\n`,
+    });
+    const view = (): HTMLElement => render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const morning = (root: HTMLElement): HTMLElement => [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Morning')!;
+    let root = view();
+    const btn = morning(root).querySelector<HTMLElement>('.helm-untimed-btn')!;
+    expect(btn.getAttribute('title')).toBe('2 without a time — move them to Anytime');
+
+    click(btn);
+    await waitFor(() => (index.daybook(TODAY), [...index.snapshot.tasks.values()].filter((t) => t.text.includes('Birthdays') && t.part === 'anytime').length === 1 ? true : undefined), 'the tidy');
+    root = view();
+    expect(texts(morning(root), '.helm-task-text')).toEqual(['Upload the data']);          // the timed one stays
+    const anytime = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Anytime')!;
+    expect(texts(anytime, '.helm-task-text')).toEqual(['🎂 Birthdays this month', '🎂 No birthdays today']);
+    expect(morning(root).querySelector('.helm-untimed-btn')).toBeNull();                    // nothing left to tidy
+    // They went to the Anytime section of the note, without gaining a time.
+    const note = await vault.read(day);
+    expect(note.split('### Anytime')[1]).toContain('🎂 Birthdays this month');
+    expect(note).not.toMatch(/\d\d:\d\d.*Birthdays/);
+  });
+
   it('a subtask finished before its task moved says the day it was finished', async () => {
     const { ctx, index, m } = await ctxFor();
     await m.addTask({ text: 'Set up the bots', date: TODAY, part: 'morning' });

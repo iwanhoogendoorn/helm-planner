@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- A part of the day that holds tasks **without a time** now says so, with a button to
+  **move them to Anytime** in one go. Helm gives a task a slot when it puts it in a
+  part, but it does not rewrite lines it did not write — birthday lines from a daily
+  template, say — so this is the one click that tidies them.
+
 ## 1.24.1 — 2026-09-01
 
 - A finished task that has since **moved to another day** now shows the date it was
