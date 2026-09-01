@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.5 — 2026-09-01
 
 - **Capture suggests a time that is actually free.** It used to offer the current
   hour, which is how you got 11:00 sitting on top of an 11:00 meeting; it now offers
