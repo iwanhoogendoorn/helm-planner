@@ -340,7 +340,24 @@ export class Mutations {
     for (const m of this.index.mirrorsOf(t.key)) {
       if (m.noteDate !== undefined && m.noteDate >= today && m.status !== status) await this.writeLineStatus(m.path, m.line, status, doneDate);
     }
-    if (status === 'done' && t.recurrence?.parsed) await this.spawnNextOccurrence(t);
+    // Cancelling one occurrence is skipping it, not ending the series: the next one still comes. To stop
+    // a repeat altogether, take the 🔁 off with `stopRepeating`.
+    if ((status === 'done' || status === 'cancelled') && t.recurrence?.parsed) await this.spawnNextOccurrence(t);
+  }
+
+  /** Take the repeat off a task: this one stays, no further occurrence follows it. */
+  async stopRepeating(key: string): Promise<void> {
+    const t = this.fresh(key);
+    if (!t.recurrence) return;
+    await this.editFile(t.path, (lines) => {
+      const tl = this.lineOf(lines, t);
+      const next: TaskLine = { ...tl };
+      delete next.recurrence;
+      lines[t.line] = serialiseTaskLine(next, { force: true });
+      return true;
+    });
+    const fresh = this.index.task(t.key);
+    if (fresh) await this.refreshMirrors(fresh);
   }
 
   private async spawnNextOccurrence(t: Task): Promise<void> {

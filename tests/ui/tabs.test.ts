@@ -93,6 +93,27 @@ describe('Today tab', () => {
     expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);
   });
 
+  it('offers Skip this one and Stop repeating on a repeating task', async () => {
+    const { ctx, index, m } = await ctxFor();
+    await m.addTask({ text: '#meeting Team meeting', date: TODAY, fields: { recurrence: { raw: 'every week on wednesday', parsed: true, frequency: 'weekly', interval: 1, weekdays: [3], monthDays: [], whenDone: false }, due: TODAY } });
+    const at = () => [...index.snapshot.tasks.values()].find((t) => t.text.includes('Team meeting') && t.status === 'todo')!;
+
+    taskMenu(ctx, at(), new MouseEvent('contextmenu'));
+    const skip = Menu.last!.items.find((i) => i.title.startsWith('Skip this one'))!;
+    expect(skip.title).toBe('Skip this one — next Wed 2 Sep');
+    expect(Menu.last!.items.some((i) => i.title.startsWith('Stop repeating'))).toBe(true);
+
+    skip.click!();
+    await waitFor(() => { const all = [...index.snapshot.tasks.values()].filter((t) => t.text.includes('Team meeting')); return all.length === 2 ? all : undefined; }, 'the next occurrence');
+    const all = [...index.snapshot.tasks.values()].filter((t) => t.text.includes('Team meeting'));
+    expect(all.map((t) => t.status).sort()).toEqual(['cancelled', 'todo']);
+
+    // A task that does not repeat is offered neither.
+    const plain = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB')!;
+    taskMenu(ctx, plain, new MouseEvent('contextmenu'));
+    expect(Menu.last!.items.some((i) => /Skip this one|Stop repeating/.test(i.title))).toBe(false);
+  });
+
   it('offers each day once — the day it is on is “Part of …”, not a move', async () => {
     const { ctx, index, m } = await ctxFor();
     await m.addTask({ text: 'On today already', date: TODAY });

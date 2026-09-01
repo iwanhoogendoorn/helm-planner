@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Skipping one occurrence of a repeating task no longer ends the series.** A
+  meeting that was called off is cancelled for that day and the next one still comes:
+  the task menu offers **“Skip this one — next Tue 8 Sep”**, and marking any repeating
+  task cancelled does the same. To end a repeat for good there is **“Stop repeating”**,
+  which takes the 🔁 off and leaves the occurrence you are looking at.
+
 ## 1.23.5 — 2026-09-01
 
 - **Capture suggests a time that is actually free.** It used to offer the current

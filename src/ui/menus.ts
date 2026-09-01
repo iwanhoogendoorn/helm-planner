@@ -10,6 +10,7 @@ import { openFollowUp } from './modals/followUp';
 import { openSubtask } from './modals/subtask';
 import { openProjectForm } from './modals/projectForm';
 import { plainLabel } from '../core/label';
+import { formatRecurrence, nextOccurrence } from '../core/recurrence';
 import { isOpen } from '../data/planner';
 import { baseName } from '../data/vault';
 import { openDatePicker } from './modals/datePicker';
@@ -93,6 +94,16 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   menu.addItem((i) => i.setTitle('Edit…').setIcon('pencil').onClick(() => opts.onEdit ? opts.onEdit() : openTaskEditor(ctx, task)));
   menu.addItem((i) => i.setTitle('Add subtask…').setIcon('list-plus').onClick(() => openSubtask(ctx, task)));
   menu.addItem((i) => { i.setTitle(task.progress !== undefined ? `Progress — ${task.progress}%` : 'Progress').setIcon('trending-up'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addProgressItems(sub, ctx, task); });
+  // A repeating task: skipping one occurrence is not the same as ending the series, so say both plainly.
+  if (task.recurrence?.parsed) {
+    const from = task.due ?? task.scheduled ?? task.noteDate ?? today;
+    const next = nextOccurrence(task.recurrence, task.recurrence.whenDone ? today : from);
+    menu.addItem((i) => i
+      .setTitle(next ? `Skip this one — next ${humanDate(next, today)}` : 'Skip this one')
+      .setIcon('skip-forward')
+      .onClick(() => void ctx.run('Skip', () => ctx.mutations.setStatus(task.key, 'cancelled'))));
+    menu.addItem((i) => i.setTitle(`Stop repeating (${formatRecurrence(task.recurrence!)})`).setIcon('repeat-1').onClick(() => void ctx.run('Stop repeating', () => ctx.mutations.stopRepeating(task.key))));
+  }
   const hasSubtasks = task.childKeys.length > 0;
   menu.addItem((i) => hasSubtasks
     ? i.setTitle('Follow up… — move it instead (it has subtasks)').setIcon('corner-down-right').setDisabled(true)
