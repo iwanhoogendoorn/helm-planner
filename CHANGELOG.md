@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Work that moved on is a record, not a day's worth of done.** Moving a task off a
+  past day leaves a `[>]` line behind so the day still says what happened — but Helm
+  was drawing that line as finished: struck through, counted in the day's “done”, and
+  a task whose steps had all moved read “4/4”. A left-behind line now says **“moved
+  on”**, sits with the day's record rather than among its open work, is counted
+  separately (“2 moved on”), and a task's own count only counts steps you actually
+  finished.
+
 - **Plan one step of a task for another day, without taking it out of the task.**
   Schedule a subtask — from its menu, the date picker, or a bulk move — and the day is
   written on its own line (`⏳ 2026-09-04`) while it stays exactly where it is, in

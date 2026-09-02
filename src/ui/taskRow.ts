@@ -152,8 +152,10 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (t.status === 'waiting') meta.appendChild(chip('waiting', 'waiting'));
   if (t.childKeys.length > 0) {
     const kids = t.childKeys.map((k) => snap.tasks.get(k)).filter((x): x is Task => x !== undefined);
-    const done = kids.filter((k) => !isOpen(k)).length;
-    meta.appendChild(chip(`${done}/${kids.length}`, 'subtasks', 'Subtasks'));
+    // What is finished — a step that moved on with its task is not a step you have done.
+    const done = kids.filter((k) => k.status === 'done').length;
+    const gone = kids.filter((k) => k.status === 'forwarded').length;
+    meta.appendChild(chip(`${done}/${kids.length}`, 'subtasks', gone > 0 ? `${done} done · ${gone} moved on` : 'Subtasks'));
   }
   if (t.done) {
     // “Today” only means something when the line still sits on the day it was finished. Once it has
@@ -161,6 +163,8 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     const onItsDay = (t.noteDate ?? t.scheduled) === t.done;
     meta.appendChild(chip(`✓ ${humanDate(t.done, onItsDay ? today : undefined, onItsDay ? {} : { year: t.done.slice(0, 4) !== today.slice(0, 4) })}`, 'done-date', `Finished on ${t.done}`));
   }
+  // A line left behind when the work moved on is a record, not a finished task.
+  if (t.status === 'forwarded') meta.appendChild(chip('moved on', 'forwarded', 'This is the record on the day it left; the task itself is on another day'));
   // A cancelled line says so in words — and when it repeats, that it was this one occurrence that went.
   if (t.status === 'cancelled') {
     meta.appendChild(chip(

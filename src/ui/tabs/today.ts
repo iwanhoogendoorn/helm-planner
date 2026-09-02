@@ -124,7 +124,9 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   }
   const spillsInto = spillovers(plan, settings);
   for (const part of DAY_PARTS) {
-    const items = plan.byPart[part].filter((it) => it.display.status !== 'done' && it.display.status !== 'cancelled');
+    const items = plan.byPart[part].filter((it) => it.display.status !== 'done' && it.display.status !== 'cancelled' && it.display.status !== 'forwarded');
+    // What left this day: the record of work that moved on, kept but never counted as done.
+    const movedOn = plan.byPart[part].filter((it) => it.display.status === 'forwarded');
     // Work that starts earlier but is still running when this part begins: dinner at 17:00–19:30 eats
     // into the evening, so the evening has to say so rather than read as a free night.
     const spills = spillsInto[part] ?? [];
@@ -136,7 +138,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     const untimed = part === 'anytime' ? [] : items.filter((it) => !it.display.time && it.kind !== 'timeblock');
     // A past day is a record: parts with nothing in them are left out. A day still ahead is a plan, so
     // every part stands there ready to be dropped into, even when the whole day is empty.
-    if (items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && spills.length === 0 && !partHabits && isPast) continue;
+    if (items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && movedOn.length === 0 && spills.length === 0 && !partHabits && isPast) continue;
     const minutes = items.reduce((s, it) => s + (it.display.effortMinutes ?? settings.defaultEffortMinutes), 0);
     const sec = section(PART_LABEL[part], {
       count: items.length, store, key: `part:${part}`, cls: `part-${part}`,
@@ -145,14 +147,16 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
         // A part of the day is a time of day. Lines that arrived here without one — from a template, or
         // written by hand — can be sent to Anytime where they belong, in one go.
         untimed.length > 0 ? iconButton('clock-alert', `${untimed.length} without a time — move ${untimed.length === 1 ? 'it' : 'them'} to Anytime`, () => void ctx.run('Tidy', async () => { for (const it of untimed) await ctx.mutations.setPart(it.display.key, 'anytime'); }), 'helm-untimed-btn') : null,
+        movedOn.length > 0 ? chip(`${movedOn.length} moved on`, 'forwarded', `${movedOn.length} task(s) left this day for another`) : null,
         spills.length > 0 ? chip(`${spills.length} running in`, 'spill', `${spills.length} task(s) started earlier and are still running when the ${PART_LABEL[part].toLowerCase()} begins`) : null,
         minutes > 0 ? chip(minutesToHuman(minutes), 'effort') : null,
         iconButton('plus', `Add a task to the ${PART_LABEL[part].toLowerCase()}`, () => openCapture(ctx, { date, part: part === 'anytime' ? undefined : part })),
       ],
     }, partHabits, ...spills.map((sp) => spillRow(ctx, sp)), ...renderItems(ctx, items, date),
       ...doneItems.map((it) => { const row = taskRow(ctx, it.display, { showDate: 'none' }); row.classList.add('helm-ghost'); return row; }),
+      ...movedOn.map((it) => { const row = taskRow(ctx, it.display, { showDate: 'none', showChildren: true }); row.classList.add('helm-ghost'); return row; }),
       ...doneSubtasks.map(({ child, parent }) => subtaskGhost(ctx, child, parent)),
-      items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && spills.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
+      items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && movedOn.length === 0 && spills.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
     sec.querySelector('.helm-section-head')?.prepend(icon(PART_ICON[part], 'helm-part-icon'));
     makeDropZone(ctx, sec, date, part);
     root.appendChild(sec);

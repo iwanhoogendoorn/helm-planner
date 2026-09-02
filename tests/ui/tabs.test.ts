@@ -266,6 +266,29 @@ describe('Today tab', () => {
     expect(Notice.messages.at(-1)).toMatch(/siblings to reorder/);
   });
 
+  it('work that moved on is a record, not a day’s worth of done', async () => {
+    const yesterday = '2026-08-25';
+    const list = ['- [ ] Practice the assignments', '\t- [ ] Step one', '\t- [ ] Step two'];
+    const { ctx, index, m } = await ctxFor({ [dailyPath(yesterday)]: `---\ntitle: 25, Tuesday, Aug, 2026\n---\n\n# Day planner\n\n### B. Afternoon\n\n${list.join('\n')}\n\n### Anytime\n` });
+    const parent = [...index.snapshot.tasks.values()].find((t) => t.text === 'Practice the assignments')!;
+    await m.schedule(parent.key, TODAY);          // moved off a past day: a record stays behind
+
+    const past = render((r) => renderToday(ctx, r, { date: yesterday, collapsed: new Map() }));
+    const record = [...past.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === 'Practice the assignments')!;
+    expect(texts(record, '.helm-chip.forwarded')).toEqual(['moved on']);     // not “done”
+    expect(texts(record, '.helm-chip.subtasks')).toEqual(['0/2']);           // nothing was finished
+    const section = record.closest<HTMLElement>('.helm-section')!;
+    expect(texts(section, '.helm-section-actions .helm-chip.forwarded')).toEqual(['1 moved on']);
+    expect(texts(section, '.helm-section-actions .helm-chip.done')).toEqual([]);
+    expect(section.querySelector('.helm-count')!.textContent).toBe('0');     // and nothing is open there either
+
+    // Today has the real thing, with its steps unfinished.
+    const today = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const live = [...today.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === 'Practice the assignments')!;
+    expect(texts(live, '.helm-chip.forwarded')).toEqual([]);
+    expect(texts(live, '.helm-chip.subtasks')).toEqual(['0/2']);
+  });
+
   it('dragging a planned step around keeps it inside its task', async () => {
     const day = dailyPath(TODAY);
     const list = ['- [ ] Practice the assignments', '\t- [ ] Step one', '\t- [ ] Step two'];
