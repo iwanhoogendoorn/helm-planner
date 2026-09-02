@@ -266,6 +266,40 @@ describe('Today tab', () => {
     expect(Notice.messages.at(-1)).toMatch(/siblings to reorder/);
   });
 
+  it('on its own day a task is solid, its step for today solid, the rest faded', async () => {
+    const day = dailyPath(TODAY);
+    const list = ['- [ ] Practice the assignments', '\t- [ ] Step one', '\t- [ ] Step two', '\t- [ ] Step three', '\t- [ ] Step four'];
+    const { ctx, index, m } = await ctxFor({ [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### B. Afternoon\n\n${list.join('\n')}\n\n### Anytime\n` });
+    const at = (text: string) => [...index.snapshot.tasks.values()].find((t) => t.text === text)!;
+    await m.schedule(at('Step one').key, '2026-08-25');    // yesterday
+    await m.schedule(at('Step two').key, TODAY);           // today
+    await m.schedule(at('Step three').key, '2026-08-27');  // tomorrow
+
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const rowOf = (text: string): HTMLElement => [...root.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.querySelector('.helm-task-text')?.textContent === text)!;
+    const faded = (text: string): boolean => rowOf(text).classList.contains('helm-context');
+    expect(faded('Practice the assignments')).toBe(false);  // the task itself: solid
+    expect(faded('Step two')).toBe(false);                  // today's step: solid
+    expect(faded('Step four')).toBe(false);                 // no day of its own: part of the task, solid
+    expect(faded('Step one')).toBe(true);                   // yesterday's: context
+    expect(faded('Step three')).toBe(true);                 // tomorrow's: context
+  });
+
+  it('a record left on a past day is not borrowed into the day it was planned for', async () => {
+    const yesterday = '2026-08-25';
+    const list = ['- [ ] Practice the assignments', '\t- [ ] Step one', '\t- [ ] Step two'];
+    const { ctx, index, m } = await ctxFor({ [dailyPath(yesterday)]: `---\ntitle: 25, Tuesday, Aug, 2026\n---\n\n# Day planner\n\n### B. Afternoon\n\n${list.join('\n')}\n\n### Anytime\n` });
+    const at = (text: string) => [...index.snapshot.tasks.values()].find((t) => t.text === text && t.status !== 'forwarded')!;
+    await m.schedule(at('Step two').key, TODAY);            // a step planned for today…
+    await m.schedule(at('Practice the assignments').key, TODAY);  // …then the whole task moves to today
+
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const rows = [...root.querySelectorAll<HTMLElement>('.helm-task')].filter((r) => r.querySelector('.helm-task-text')?.textContent === 'Step two');
+    expect(rows).toHaveLength(1);                            // once, inside its task — not again as a ghost
+    expect(rows[0]!.classList.contains('helm-ghost')).toBe(false);
+    expect(texts(root, '.helm-chip.forwarded')).toEqual([]); // and no “moved on” record borrowed in
+  });
+
   it('work that moved on is a record, not a day’s worth of done', async () => {
     const yesterday = '2026-08-25';
     const list = ['- [ ] Practice the assignments', '\t- [ ] Step one', '\t- [ ] Step two'];

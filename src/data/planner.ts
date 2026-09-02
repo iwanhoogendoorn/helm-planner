@@ -112,6 +112,7 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
   for (const t of snap.tasks.values()) {
     if (t.depth === 0 || t.origin === 'daily-mirror' || t.scheduled !== date) continue;
     if (t.noteDate === date) continue;                       // already on this day with its parent
+    if (!isOpen(t)) continue;                                // a finished or forwarded line is a record, not work
     plan.subtasks.push(t);
   }
   const all = [...plan.today, ...plan.timeBlocks, ...plan.mirrors.map((m) => m.source ?? m.mirror), ...plan.unmirrored, ...plan.elsewhere, ...plan.subtasks];

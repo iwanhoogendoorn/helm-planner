@@ -179,9 +179,9 @@ function renderItems(ctx: UiContext, items: DayItem[], date: IsoDate): HTMLEleme
   const out: HTMLElement[] = [];
   const done = new Set<string>();
   for (const it of items) {
-    if (it.kind !== 'subtask') { out.push(itemRow(ctx, it)); continue; }
+    if (it.kind !== 'subtask') { out.push(itemRow(ctx, it, date)); continue; }
     const parent = it.display.parentKey ? ctx.index.task(it.display.parentKey) : undefined;
-    if (!parent) { out.push(itemRow(ctx, it)); continue; }
+    if (!parent) { out.push(itemRow(ctx, it, date)); continue; }
     if (done.has(parent.key)) continue;                 // its brothers and sisters are already in the block
     done.add(parent.key);
     out.push(borrowedBlock(ctx, parent, date));
@@ -206,9 +206,9 @@ function borrowedBlock(ctx: UiContext, parent: Task, date: IsoDate): HTMLElement
   return h('div', { cls: 'helm-task-tree helm-borrowed' }, head, kids);
 }
 
-function itemRow(ctx: UiContext, it: DayItem): HTMLElement {
+function itemRow(ctx: UiContext, it: DayItem, date?: IsoDate): HTMLElement {
   // A step borrowed from a task on another day names that task, so the day still makes sense.
-  const row = taskRow(ctx, it.display, { showDate: 'due', showChildren: it.kind !== 'subtask', draggable: it.kind !== 'timeblock', showProject: true, showParent: it.kind === 'subtask' });
+  const row = taskRow(ctx, it.display, { showDate: 'due', showChildren: it.kind !== 'subtask', draggable: it.kind !== 'timeblock', showProject: true, showParent: it.kind === 'subtask', ...(date ? { dayContext: date } : {}) });
   if (it.kind === 'mirror' || it.kind === 'unmirrored' || it.kind === 'elsewhere') {
     const el = row.classList.contains('helm-task') ? row : row.querySelector<HTMLElement>('.helm-task');
     el?.setAttribute('data-day-key', it.task.key);

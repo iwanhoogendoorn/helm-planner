@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **A day reads at a glance: the task solid, today's step solid, the rest faded.** On
+  any day a task is shown on, the steps planned for other days are dimmed as context
+  and the one for the day you are looking at stands out — the same way a step
+  borrowed onto another day already worked. A step with no day of its own is part of
+  the task, so it stays solid.
+- A **record left on a past day is no longer borrowed** into the day it was planned
+  for. Moving a task off yesterday leaves `[>]` lines behind carrying their `⏳`
+  dates; the one planned for today turned up on today as a ghost “moved on” row
+  beside the real thing. A record is a record; only live steps are borrowed.
+
 ## 1.24.4 — 2026-09-02
 
 - **Work that moved on is a record, not a day's worth of done.** Moving a task off a

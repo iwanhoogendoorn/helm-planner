@@ -1,5 +1,5 @@
 /** One task line as a row: checkbox, text, chips, quick actions. */
-import type { Task } from '../core/types';
+import type { IsoDate, Task } from '../core/types';
 import { humanDate, minutesToHuman } from '../core/dates';
 import { formatRecurrence } from '../core/recurrence';
 import { chip, h, icon, iconButton, richText } from './dom';
@@ -19,6 +19,8 @@ export interface RowOptions {
   showProject?: boolean;
   /** Name the task this row is a step of — context when a subtask is shown on a day of its own. */
   showParent?: boolean;
+  /** The day being looked at: steps planned for another one are faded, as context rather than work. */
+  dayContext?: IsoDate;
   showDate?: 'scheduled' | 'due' | 'both' | 'none';
   showChildren?: boolean;
   depth?: number;
@@ -195,7 +197,11 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     const kids = h('div', { cls: 'helm-task-children' });
     for (const k of t.childKeys) {
       const c = snap.tasks.get(k);
-      if (c) kids.appendChild(taskRow(ctx, c, { ...opts, draggable: true, depth: (opts.depth ?? 0) + 1, showProject: false, reason: undefined as unknown as string }));
+      if (!c) continue;
+      const row = taskRow(ctx, c, { ...opts, draggable: true, depth: (opts.depth ?? 0) + 1, showProject: false, reason: undefined as unknown as string });
+      // A step planned for another day is here for context; the one for the day you are looking at is not.
+      if (opts.dayContext && c.scheduled && c.scheduled !== opts.dayContext) row.classList.add('helm-context');
+      kids.appendChild(row);
     }
     // Below the last one: drop here to send a subtask to the end of the list.
     kids.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task')) { ev.preventDefault(); } });
