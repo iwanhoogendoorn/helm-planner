@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.24.4 — 2026-09-02
 
 - **Work that moved on is a record, not a day's worth of done.** Moving a task off a
   past day leaves a `[>]` line behind so the day still says what happened — but Helm

@@ -1,6 +1,6 @@
 {
   "name": "helm-planner",
-  "version": "1.24.3",
+  "version": "1.24.4",
   "description": "Helm — steer projects, phases, tasks and habits from your daily note. An Obsidian plugin.",
   "main": "main.js",
   "type": "module",
