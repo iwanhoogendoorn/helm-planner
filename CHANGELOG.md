@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.24.5 — 2026-09-02
 
 - **A day reads at a glance: the task solid, today's step solid, the rest faded.** On
   any day a task is shown on, the steps planned for other days are dimmed as context
