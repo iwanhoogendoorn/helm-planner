@@ -2015,6 +2015,27 @@ describe('dragging a task between parts of the day', () => {
     expect(Menu.last!.items.map((i) => i.title)).toEqual(['Add link…']);
   });
 
+  it('keeps a project’s finished tasks in view, faded, under what is left', async () => {
+    const { ctx, index, m } = await ctxFor();
+    const state = { projectId: 'prj-book', filter: '', showClosed: false, showDone: true, collapsed: new Map() } as Parameters<typeof renderProjects>[2];
+    const view = (): HTMLElement => render((r) => renderProjects(ctx, r, state));
+    const phase = (root: HTMLElement): HTMLElement => [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Outline')!;
+
+    // Finish one, and it stays — greyed, and after the work that is left.
+    const draft = index.task('tsk-0001')!;
+    await m.setStatus(draft.key, 'done');
+    const rows = [...phase(view()).querySelectorAll<HTMLElement>('.helm-task')];
+    const draftRow = rows.find((r) => r.querySelector('.helm-task-text')?.textContent === 'Draft chapter list')!;
+    expect(draftRow).toBeTruthy();
+    expect(draftRow.classList.contains('helm-ghost')).toBe(true);
+    const order = rows.map((r) => r.querySelector('.helm-task-text')?.textContent);
+    expect(order.indexOf('Draft chapter list')).toBeGreaterThan(order.indexOf('Review with editor'));
+
+    // And “Show done” still puts them away when you want the list clean.
+    state.showDone = false;
+    expect(texts(phase(view()), '.helm-task-text')).not.toContain('Draft chapter list');
+  });
+
   it('gives every phase its own notes, drawings and links', async () => {
     const { ctx, index, m } = await ctxFor();
     const view = (): HTMLElement => render((r) => renderProjects(ctx, r, { projectId: 'prj-book', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));

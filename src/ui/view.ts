@@ -32,7 +32,7 @@ export class HelmView extends ItemView {
   private tab: TabId;
   private todayState: TodayState;
   private weekState: CalendarState;
-  private projectsState: ProjectsState = { filter: '', showClosed: false, collapsed: new Map(), showDone: false };
+  private projectsState: ProjectsState = { filter: '', showClosed: false, collapsed: new Map(), showDone: true };   // a project keeps its finished work in view
   private inboxState: InboxState = { collapsed: new Map() };
   private reviewState: ReviewState = { collapsed: new Map(), checks: new Set() };
   private horizonsState: HorizonsState;

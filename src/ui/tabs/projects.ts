@@ -233,8 +233,16 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   const renderTasks = (keys: string[]): HTMLElement[] => {
     const tasks = keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined);
     const roots = tasks.filter((t) => !t.parentKey || !keys.includes(t.parentKey));
-    const shown = state.showDone ? roots : roots.filter((t) => isOpen(t) || t.childKeys.some((k) => { const c = snap.tasks.get(k); return c && isOpen(c); }));
-    return shown.map((t) => taskRow(ctx, t, { showProject: false, showChildren: true, showDate: 'both', draggable: true }));
+    const stillOpen = (t: Task): boolean => isOpen(t) || t.childKeys.some((k) => { const c = snap.tasks.get(k); return c && isOpen(c); });
+    // What is finished stays on show, faded and struck through under the work that is left — the same
+    // as a day keeps its done work. Untick “Show done” to put it away.
+    const shown = state.showDone ? [...roots.filter(stillOpen), ...roots.filter((t) => !stillOpen(t))] : roots.filter(stillOpen);
+    return shown.map((t) => {
+      const row = taskRow(ctx, t, { showProject: false, showChildren: true, showDate: 'both', draggable: true });
+      // A task with subtasks comes back wrapped; the fading belongs on the task's own row.
+      if (!stillOpen(t)) (row.classList.contains('helm-task') ? row : row.querySelector<HTMLElement>('.helm-task') ?? row).classList.add('helm-ghost');
+      return row;
+    });
   };
 
   const view: ProjectView = state.view ?? 'list';
@@ -561,6 +569,7 @@ function renderBoard(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectH
   const board = h('div', { cls: 'helm-board' });
   for (const col of projectColumns(ctx, p, hh)) {
     const tasks = col.keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined && (state.showDone || isOpen(t)));
+    tasks.sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)));   // what is left first, what is finished after
     const cards = h('div', { cls: 'helm-board-cards' });
     for (const t of tasks) {
       const card = h('div', { cls: ['helm-board-card', !isOpen(t) && 'is-done'], attr: { draggable: 'true' }, onClick: () => openTaskEditor(ctx, t), onContextMenu: (ev) => { ev.preventDefault(); taskMenu(ctx, t, ev); } },

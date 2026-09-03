@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **A project keeps its finished tasks in view.** Ticking one off used to make it
+  vanish from the phase unless you found the “Show done” box; it now stays, faded and
+  struck through, under the work that is left — the same way a day keeps what you
+  finished on it. The phase's `2/5` still counts what is done, and unticking **Show
+  done** puts them away when you want a clean list. The board, table and timeline of a
+  project sort the finished ones last too.
+
 ## 1.24.5 — 2026-09-02
 
 - **A day reads at a glance: the task solid, today's step solid, the rest faded.** On
