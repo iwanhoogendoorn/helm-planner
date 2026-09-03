@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.24.6 — 2026-09-03
 
 - **A project keeps its finished tasks in view.** Ticking one off used to make it
   vanish from the phase unless you found the “Show done” box; it now stays, faded and
