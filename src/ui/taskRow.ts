@@ -87,24 +87,26 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     });
   }
 
-  // The twisty, in its own slot so rows with steps and rows without still line up. Alt-click folds
-  // every task in the list at once, which is the quickest way to see a long day as its headlines.
+  // The twisty keeps its slot on every row, whether or not that row has steps to fold — a finished task
+  // and a task with steps have to start at the same place, or the list reads as a ragged edge.
+  // Alt-click folds every task in the list at once, the quickest way to see a long day as its headlines.
   const hasKids = t.childKeys.length > 0;
+  const canFold = hasKids && (opts.showChildren === true || opts.foldable === true);
   const foldDefault = ctx.settings().foldStepsByDefault;
-  const folded = hasKids && isFolded(t, foldDefault);
-  if ((opts.showChildren || opts.foldable) && !opts.compact) {
+  const folded = canFold && isFolded(t, foldDefault);
+  if (!opts.compact) {
     row.appendChild(h('button', {
-      cls: ['helm-task-fold', !hasKids && 'is-empty', folded && 'is-folded'],
-      title: hasKids ? `${folded ? 'Show' : 'Hide'} the steps (alt-click: all of them)` : '',
-      attr: hasKids ? {} : { tabindex: '-1', 'aria-hidden': 'true' },
+      cls: ['helm-task-fold', !canFold && 'is-empty', folded && 'is-folded'],
+      title: canFold ? `${folded ? 'Show' : 'Hide'} the steps (alt-click: all of them)` : '',
+      attr: canFold ? {} : { tabindex: '-1', 'aria-hidden': 'true' },
       onClick: (ev) => {
-        if (!hasKids) return;
+        if (!canFold) return;
         ev.stopPropagation();
         if (ev.altKey) foldAll(everyParentAround(ctx, row), !folded);
         else toggleFold(t, foldDefault);
         ctx.refresh();
       },
-    }, hasKids ? icon(folded ? 'chevron-right' : 'chevron-down') : null));
+    }, canFold ? icon(folded ? 'chevron-right' : 'chevron-down') : null));
   }
 
   // Checkbox: click toggles done; shift-click cycles to in-progress.

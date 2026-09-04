@@ -29,6 +29,15 @@
   Helm's own data file, so what you folded this morning is still folded after a reload
   or a restart. A task borrowed onto a day (its steps planned here, the task itself
   living elsewhere) folds like any other.
+- **A day has one left edge again.** The twisty took up room only on rows that had steps
+  to fold, so a finished or moved-on task started twenty-odd pixels further left than
+  the task above it. Every row keeps the slot now, whether or not there is anything in
+  it, and a list reads as one column instead of a ragged one.
+- **A finished step is no longer listed twice.** Ticking off a step used to put a copy
+  of it at the foot of the part, labelled “part of …”, as well as leaving it under the
+  task it belongs to — which read as work with no home, especially once a task could be
+  folded. It now sits under its task, where the `3/5` already counts it; the part's
+  “N done” still counts it too.
 - New setting, **Start with steps folded**: a task with steps shows only itself and its
   count until you open it. It applies to tasks you have never touched — anything you
   folded or opened by hand keeps what you chose, so turning the setting on or off never

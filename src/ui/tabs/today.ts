@@ -18,7 +18,7 @@ import { openPlanDayAi } from '../modals/planDayAi';
 import { timerBar } from '../focusTimer';
 import { habitBadge } from '../fields';
 import { dayPartOf } from '../../data/habits';
-import { plainLabel, shortLabel } from '../../core/label';
+import { plainLabel } from '../../core/label';
 import { partWindow, preferredSlot } from '../../data/conflicts';
 import { habitMenu } from '../habits';
 import { habitCard, colourise } from '../habitCard';
@@ -138,8 +138,9 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     const spills = spillsInto[part] ?? [];
     // Finished tasks stay in their part as ghosts, so a part you worked through does not read as an empty morning.
     const doneItems = plan.byPart[part].filter((it) => it.display.status === 'done' || it.display.status === 'cancelled');
-    // Subtasks that got done still sit under their parent; they also show here, so the day's record is complete.
-    const doneSubtasks = plan.byPart[part].flatMap((it) => it.display.childKeys.map((k) => snap.tasks.get(k)).filter((c): c is Task => c !== undefined && (c.status === 'done' || c.status === 'cancelled')).map((c) => ({ child: c, parent: it.display })));
+    // A step you finished belongs under the task it is a step of, where its “3/5” already counts it —
+    // listing it again at the foot of the part reads as work with no home. It is still counted here.
+    const doneSubtasks = plan.byPart[part].flatMap((it) => it.display.childKeys.map((k) => snap.tasks.get(k)).filter((c): c is Task => c !== undefined && (c.status === 'done' || c.status === 'cancelled')));
     const partHabits = part !== 'anytime' ? habitChipsFor(part) : null;
     const untimed = part === 'anytime' ? [] : items.filter((it) => !it.display.time && it.kind !== 'timeblock');
     // A past day is a record: parts with nothing in them are left out. A day still ahead is a plan, so
@@ -161,7 +162,6 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     }, partHabits, ...spills.map((sp) => spillRow(ctx, sp)), ...renderItems(ctx, items, date),
       ...doneItems.map((it) => { const row = taskRow(ctx, it.display, { showDate: 'none' }); row.classList.add('helm-ghost'); return row; }),
       ...movedOn.map((it) => { const row = taskRow(ctx, it.display, { showDate: 'none', showChildren: true }); row.classList.add('helm-ghost'); return row; }),
-      ...doneSubtasks.map(({ child, parent }) => subtaskGhost(ctx, child, parent)),
       items.length === 0 && doneItems.length === 0 && doneSubtasks.length === 0 && movedOn.length === 0 && spills.length === 0 ? h('div', { cls: 'helm-dropzone-hint', text: `drop a task here for the ${PART_LABEL[part].toLowerCase()}` }) : null);
     sec.querySelector('.helm-section-head')?.prepend(icon(PART_ICON[part], 'helm-part-icon'));
     makeDropZone(ctx, sec, date, part);
@@ -296,16 +296,6 @@ function spillRow(ctx: UiContext, sp: Spill): HTMLElement {
   const meta = main.querySelector('.helm-task-meta') ?? main.appendChild(h('div', { cls: 'helm-task-meta' }));
   const label = sp.end ? `runs on until ${sp.end}` : 'still running';
   meta.appendChild(h('span', { cls: 'helm-chip spill', title: `Started in the ${PART_LABEL[sp.from].toLowerCase()} at ${sp.start} — shown here because it is still running` }, icon('arrow-down-right'), h('span', { cls: 'helm-chip-label', text: `from the ${PART_LABEL[sp.from].toLowerCase()}, ${label}` })));
-  return row;
-}
-
-/** A finished subtask listed among the day's done work: it names the task it belongs to, so it cannot read as the row above's child. */
-function subtaskGhost(ctx: UiContext, child: Task, parent: Task): HTMLElement {
-  const row = taskRow(ctx, child, { showDate: 'none' });
-  row.classList.add('helm-ghost');
-  const main = row.querySelector('.helm-task-main') ?? row;
-  const meta = main.querySelector('.helm-task-meta') ?? main.appendChild(h('div', { cls: 'helm-task-meta' }));
-  meta.appendChild(h('button', { cls: 'helm-chip subtask-of', title: `Subtask of “${plainLabel(parent.text)}” — click to open`, onClick: (ev) => { ev.stopPropagation(); void ctx.openFile(parent.path, parent.line); } }, icon('corner-down-right'), h('span', { cls: 'helm-chip-label', text: `part of ${shortLabel(parent.text, 40)}` })));
   return row;
 }
 

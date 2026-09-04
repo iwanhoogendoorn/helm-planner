@@ -848,6 +848,18 @@ describe('Folding a task’s steps away', () => {
     expect(shed(root)).toEqual(['Build the shed', 'Pour the slab', 'Put up the frame']);
   });
 
+  it('gives every row the twisty slot, so a finished task starts where a foldable one does', async () => {
+    const { ctx } = await ctxFor({
+      [dailyPath(TODAY)]: `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Build the shed\n    - [ ] Pour the slab\n- [x] Ring the plumber ✅ ${TODAY}\n- [>] Off it went\n\n### Anytime\n`,
+    });
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const rows = [...root.querySelectorAll<HTMLElement>('.helm-section.part-morning .helm-task')];
+    expect(rows.length).toBeGreaterThan(2);
+    // Every row has the slot — the finished and the moved-on ones included — and only one can be pressed.
+    expect(rows.every((r) => r.querySelector(':scope > .helm-task-fold'))).toBe(true);
+    expect(rows.filter((r) => r.querySelector(':scope > .helm-task-fold:not(.is-empty)'))).toHaveLength(1);
+  });
+
   it('starts folded when the setting says so, and keeps every choice made by hand', async () => {
     const { ctx, settings } = await ctxFor({ [dailyPath(TODAY)]: NOTE });
     settings.foldStepsByDefault = true;
@@ -1526,11 +1538,10 @@ describe('Dashboard tab', () => {
     await ctx.mutations.schedule('tsk-0001', TODAY, 'morning');
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     expect(texts(root, '.helm-section-title')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime', 'Daybook']);
-    // 'Collect diagrams' is a finished subtask: under its parent, and again as a ghost among the morning's done work.
-    expect(texts(root, '.helm-section.part-morning .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams', 'Collect diagrams']);
-    const ghost = [...root.querySelectorAll('.helm-section.part-morning .helm-ghost')].find((r) => r.querySelector('.helm-chip.subtask-of'))!;
-    expect(ghost.querySelector('.helm-task-text')!.textContent).toBe('Collect diagrams');
-    expect(ghost.querySelector('.helm-chip.subtask-of')!.textContent).toBe('part of Draft chapter list'); // says whose subtask it is
+    // 'Collect diagrams' is a finished subtask: it sits under its task, once, and nowhere else.
+    expect(texts(root, '.helm-section.part-morning .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams']);
+    expect(texts(root, '.helm-section.part-morning .helm-chip.subtasks')).toEqual(['1/1']);   // its task already counts it
+    expect(texts(root, '.helm-section.part-morning .helm-chip.done')).toEqual(['1 done']);    // and so does the part
     const evening = root.querySelector('.helm-section.part-evening')!;
     const dt = { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? `tsk-0001@${TODAY}` : '') };
     const ev = new Event('drop', { bubbles: true, cancelable: true });
@@ -2618,7 +2629,7 @@ describe('dragging a task between parts of the day', () => {
     expect(kidItem.disabled).toBe(false);
   });
 
-  it('deleting a finished subtask from the day\'s done list removes it from under its parent too', async () => {
+  it('deleting a finished step removes it from the task it belongs to', async () => {
     const { ctx, m, index, vault } = await ctxFor();
     await m.addTask({ text: 'Ship the draft', date: TODAY, part: 'morning' });
     const parent = [...index.snapshot.tasks.values()].find((x) => x.text === 'Ship the draft')!;
@@ -2627,19 +2638,19 @@ describe('dragging a task between parts of the day', () => {
     await m.setStatus(proof.key, 'done');
     let root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     const rows = () => texts(root, '.helm-section.part-morning .helm-task-text');
-    expect(rows()).toEqual(['Ship the draft', 'Proof it', 'Proof it']); // under its parent, and in the done list
-    // Delete it from the ghost row: it is the same task, so both go.
-    const ghost = [...root.querySelectorAll<HTMLElement>('.helm-section.part-morning .helm-ghost')].find((r) => r.querySelector('.helm-chip.subtask-of'))!;
+    expect(rows()).toEqual(['Ship the draft', 'Proof it']);        // under its task, once — not listed again below
+    // Delete it from where it sits, under its task.
+    const step = [...root.querySelectorAll<HTMLElement>('.helm-section.part-morning .helm-task-children .helm-task')][0]!;
     const confirmOrig = window.confirm;
     window.confirm = () => true;
     try {
-      click(ghost.querySelector('button[aria-label="More…"]'));
+      click(step.querySelector('button[aria-label="More…"]'));
       Menu.last!.items.find((i) => i.title.startsWith('Delete'))!.click!();
       await flush(); await flush();
     } finally { window.confirm = confirmOrig; }
     expect(await vault.read(dailyPath(TODAY))).not.toContain('Proof it');
     root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    expect(rows()).toEqual(['Ship the draft']); // gone from both places, parent untouched
+    expect(rows()).toEqual(['Ship the draft']); // gone, its task untouched
   });
 
   it('takes the subtasks along, done ones included', async () => {
