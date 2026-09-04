@@ -70,9 +70,12 @@ describe('Today tab', () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderToday(ctx, r, { date: '2026-08-25', collapsed: new Map() }));
     expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('Yesterday');
-    expect(texts(root, '.helm-section-title')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']); // no Done section: finished tasks ghost inside their part
+    // No Done section: finished tasks ghost inside their part. No Afternoon either — the lines under
+    // that heading carry no time, so they belong in Anytime.
+    expect(texts(root, '.helm-section-title')).toEqual(['Habits', 'Morning', 'Anytime']);
     expect(texts(root, '.helm-section:nth-of-type(2) .helm-task-text')).toEqual(['Start with OIB']);
-    expect(texts(root, '.helm-section:nth-of-type(3) .helm-task-text')).toEqual(['Fix router config', 'Pay invoice']); // open first, then the ghost
+    // Anytime holds everything without a time: the open ones first, then the ghost of what was finished.
+    expect(texts(root, '.helm-section:nth-of-type(3) .helm-task-text')).toEqual(['Chapter 1', 'Fix router config', 'Pay invoice']);
     const ghost = root.querySelector('.helm-ghost')!;
     expect(ghost.querySelector('.helm-task-text')!.textContent).toBe('Pay invoice');
     const ghostSection = ghost.closest('.helm-section')!;
@@ -94,7 +97,7 @@ describe('Today tab', () => {
     ]);
     expect([...root.querySelectorAll('.helm-empty')].map((e) => e.textContent).join(' ')).toContain('Nothing planned yet');
     // Yesterday is a record: an empty evening is simply not part of it.
-    expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Afternoon', 'Anytime']);   // a past day with no diary keeps quiet
+    expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Anytime']);   // a past day with no diary keeps quiet
   });
 
   it('offers Skip this one and Stop repeating on a repeating task', async () => {
@@ -156,24 +159,27 @@ describe('Today tab', () => {
     expect(after.noteDate ?? after.scheduled).toBe('2026-08-27');   // still Thursday, not today
   });
 
-  it('offers to move a part’s untimed tasks to Anytime, and does it', async () => {
+  it('shows a task with no time in Anytime whatever heading it sits under, and tidies the note on demand', async () => {
     const day = dailyPath(TODAY);
     const { ctx, index, vault } = await ctxFor({
       [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] 11:00 - 11:30: Upload the data\n- [ ] 🎂 Birthdays this month\n- [ ] 🎂 No birthdays today\n\n### Anytime\n`,
     });
     const view = (): HTMLElement => render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    const morning = (root: HTMLElement): HTMLElement => [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Morning')!;
+    const named = (root: HTMLElement, title: string): HTMLElement => [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === title)!;
     let root = view();
-    const btn = morning(root).querySelector<HTMLElement>('.helm-untimed-btn')!;
-    expect(btn.getAttribute('title')).toBe('2 without a time — move them to Anytime');
+    // A part of the day is a time of day: only the timed line is in the morning, the other two are not.
+    expect(texts(named(root, 'Morning'), '.helm-task-text')).toEqual(['Upload the data']);
+    expect(texts(named(root, 'Anytime'), '.helm-task-text')).toEqual(['🎂 Birthdays this month', '🎂 No birthdays today']);
+    // The lines themselves are still under the morning heading; Anytime offers to bring them across.
+    const btn = named(root, 'Anytime').querySelector<HTMLElement>('.helm-untimed-btn')!;
+    expect(btn.getAttribute('title')).toBe('2 of these sit under another heading in the note — move them here');
 
     click(btn);
-    await waitFor(() => (index.daybook(TODAY), [...index.snapshot.tasks.values()].filter((t) => t.text.includes('Birthdays') && t.part === 'anytime').length === 1 ? true : undefined), 'the tidy');
+    await waitFor(() => ([...index.snapshot.tasks.values()].filter((t) => t.text.includes('irthdays') && t.part === 'anytime').length === 2 ? true : undefined), 'the tidy');
     root = view();
-    expect(texts(morning(root), '.helm-task-text')).toEqual(['Upload the data']);          // the timed one stays
-    const anytime = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === 'Anytime')!;
-    expect(texts(anytime, '.helm-task-text')).toEqual(['🎂 Birthdays this month', '🎂 No birthdays today']);
-    expect(morning(root).querySelector('.helm-untimed-btn')).toBeNull();                    // nothing left to tidy
+    expect(texts(named(root, 'Morning'), '.helm-task-text')).toEqual(['Upload the data']);          // the timed one stays
+    expect(named(root, 'Anytime').querySelector('.helm-untimed-btn')).toBeNull();                   // nothing left to tidy
+    expect(texts(named(root, 'Anytime'), '.helm-task-text')).toEqual(['🎂 Birthdays this month', '🎂 No birthdays today']);
     // They went to the Anytime section of the note, without gaining a time.
     const note = await vault.read(day);
     expect(note.split('### Anytime')[1]).toContain('🎂 Birthdays this month');
@@ -599,7 +605,8 @@ describe('Week tab', () => {
     expect(root.querySelectorAll('.helm-week-day')).toHaveLength(7);
     expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('Week 35');
     expect(root.querySelector('.helm-week-day.is-today .helm-week-dom')!.textContent).toBe('26');
-    expect(texts(root, '.helm-week-day:nth-child(2) .helm-task-text')).toEqual(['Start with OIB', 'Fix router config', 'Chapter 1']); // morning · afternoon · anytime
+    // Morning, then everything without a time — a part of the day is a time of day here too.
+    expect(texts(root, '.helm-week-day:nth-child(2) .helm-task-text')).toEqual(['Start with OIB', 'Chapter 1', 'Fix router config']);
     expect(texts(root, '.helm-week-side .helm-section-title')).toEqual(['Overdue']);
     // Drop tsk-0001 on Friday.
     const fri = root.querySelectorAll('.helm-week-day')[4]!;
@@ -853,7 +860,7 @@ describe('Folding a task’s steps away', () => {
       [dailyPath(TODAY)]: `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Build the shed\n    - [ ] Pour the slab\n- [x] Ring the plumber ✅ ${TODAY}\n- [>] Off it went\n\n### Anytime\n`,
     });
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    const rows = [...root.querySelectorAll<HTMLElement>('.helm-section.part-morning .helm-task')];
+    const rows = [...root.querySelectorAll<HTMLElement>('.helm-section.part-anytime .helm-task')];
     expect(rows.length).toBeGreaterThan(2);
     // Every row has the slot — the finished and the moved-on ones included — and only one can be pressed.
     expect(rows.every((r) => r.querySelector(':scope > .helm-task-fold'))).toBe(true);
@@ -1539,9 +1546,9 @@ describe('Dashboard tab', () => {
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     expect(texts(root, '.helm-section-title')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime', 'Daybook']);
     // 'Collect diagrams' is a finished subtask: it sits under its task, once, and nowhere else.
-    expect(texts(root, '.helm-section.part-morning .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams']);
-    expect(texts(root, '.helm-section.part-morning .helm-chip.subtasks')).toEqual(['1/1']);   // its task already counts it
-    expect(texts(root, '.helm-section.part-morning .helm-chip.done')).toEqual(['1 done']);    // and so does the part
+    expect(texts(root, '.helm-section.part-anytime .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams']);
+    expect(texts(root, '.helm-section.part-anytime .helm-chip.subtasks')).toEqual(['1/1']);   // its task already counts it
+    expect(texts(root, '.helm-section.part-anytime .helm-chip.done')).toEqual(['1 done']);    // and so does the part
     const evening = root.querySelector('.helm-section.part-evening')!;
     const dt = { types: ['text/helm-task'], getData: (k: string) => (k === 'text/helm-task' ? `tsk-0001@${TODAY}` : '') };
     const ev = new Event('drop', { bubbles: true, cancelable: true });
@@ -1655,8 +1662,8 @@ describe('Calendar tab', () => {
     expect(w.querySelectorAll('.helm-week-day')).toHaveLength(7);
     expect(texts(w, '.helm-crumb')).toEqual(['Calendar', '2026', 'Q3', 'Aug', 'W35']);
     const tue = w.querySelectorAll('.helm-week-day')[1]!;
-    expect([...tue.querySelectorAll('.helm-week-part')].map((p) => p.className.match(/part-(\w+)/)![1])).toEqual(['morning', 'afternoon', 'anytime']);
-    expect(texts(tue as HTMLElement, '.helm-week-part.part-afternoon .helm-task-text')).toEqual(['Fix router config']);
+    expect([...tue.querySelectorAll('.helm-week-part')].map((p) => p.className.match(/part-(\w+)/)![1])).toEqual(['morning', 'anytime']);
+    expect(texts(tue as HTMLElement, '.helm-week-part.part-anytime .helm-task-text')).toEqual(['Chapter 1', 'Fix router config']);
     click(w.querySelectorAll('.helm-crumb')[2]);
     expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: TODAY, scope: 'quarter' } });
   });
@@ -2637,10 +2644,10 @@ describe('dragging a task between parts of the day', () => {
     const proof = index.task(parent.key)!.childKeys.map((k) => index.task(k)!)[0]!;
     await m.setStatus(proof.key, 'done');
     let root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    const rows = () => texts(root, '.helm-section.part-morning .helm-task-text');
+    const rows = () => texts(root, '.helm-section.part-anytime .helm-task-text');
     expect(rows()).toEqual(['Ship the draft', 'Proof it']);        // under its task, once — not listed again below
     // Delete it from where it sits, under its task.
-    const step = [...root.querySelectorAll<HTMLElement>('.helm-section.part-morning .helm-task-children .helm-task')][0]!;
+    const step = [...root.querySelectorAll<HTMLElement>('.helm-section.part-anytime .helm-task-children .helm-task')][0]!;
     const confirmOrig = window.confirm;
     window.confirm = () => true;
     try {

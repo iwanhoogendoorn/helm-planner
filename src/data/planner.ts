@@ -126,7 +126,10 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
   plan.mirrors.sort((a, b) => compareTasks(a.source ?? a.mirror, b.source ?? b.mirror));
   plan.unmirrored.sort(compareTasks);
   plan.subtasks.sort(compareTasks);
-  const partOf = (t: Task): DayPart => t.part ?? (t.time ? (t.time.start < settings.morningEnds ? 'morning' : t.time.start < settings.afternoonEnds ? 'afternoon' : 'evening') : 'anytime');
+  // A part of the day is a time of day. A line with no time belongs in Anytime whichever heading it
+  // happens to sit under in the note — dragging it into a part is what gives it a time, and that is
+  // what puts it there. Without this a task can sit in the afternoon saying nothing about when.
+  const partOf = (t: Task): DayPart => (t.time ? (t.time.start < settings.morningEnds ? 'morning' : t.time.start < settings.afternoonEnds ? 'afternoon' : 'evening') : 'anytime');
   const push = (task: Task, display: Task, kind: DayItem['kind']): void => { const part = partOf(task); const it = { task, display, part, kind }; plan.items.push(it); plan.byPart[part].push(it); };
   for (const t of plan.timeBlocks) push(t, t, 'timeblock');
   for (const t of plan.today) push(t, t, 'daily');

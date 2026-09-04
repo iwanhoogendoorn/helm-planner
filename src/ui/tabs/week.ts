@@ -100,7 +100,9 @@ const PART_ICON: Record<DayPart, string> = { morning: 'sunrise', afternoon: 'sun
 /** A day column split into parts; each part is a drop zone for that part of that day. */
 function weekDayBody(ctx: UiContext, date: string, open: Task[], doneCount: number, isPast: boolean): HTMLElement {
   const settings = ctx.settings();
-  const partOf = (t: Task): DayPart => t.part ?? (t.time ? (t.time.start < settings.morningEnds ? 'morning' : t.time.start < settings.afternoonEnds ? 'afternoon' : 'evening') : 'anytime');
+  // The same rule the day uses: a part of the day is a time of day, so a line without one is Anytime
+  // whatever heading it sits under.
+  const partOf = (t: Task): DayPart => (t.time ? (t.time.start < settings.morningEnds ? 'morning' : t.time.start < settings.afternoonEnds ? 'afternoon' : 'evening') : 'anytime');
   const groups: Record<DayPart, Task[]> = { morning: [], afternoon: [], evening: [], anytime: [] };
   for (const t of open) groups[partOf(t)].push(t);
   const body = h('div', { cls: 'helm-week-day-body' });

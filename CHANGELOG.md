@@ -34,6 +34,12 @@
   Helm's own data file, so what you folded this morning is still folded after a reload
   or a restart. A task borrowed onto a day (its steps planned here, the task itself
   living elsewhere) folds like any other.
+- **A part of the day is a time of day, without exception.** A line with no time now
+  shows in **Anytime** whichever heading it happens to sit under in the note — before,
+  a task written under “B. Afternoon” by hand or by a template sat in the afternoon
+  saying nothing about when. Dragging it into a part is still what gives it a time, and
+  that is what puts it there. Anytime offers to move the wandering lines themselves, so
+  the note ends up reading the way the day does. The week's columns follow the same rule.
 - **A day has one left edge again.** The twisty took up room only on rows that had steps
   to fold, so a finished or moved-on task started twenty-odd pixels further left than
   the task above it. Every row keeps the slot now, whether or not there is anything in
