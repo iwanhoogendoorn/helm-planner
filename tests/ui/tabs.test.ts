@@ -848,6 +848,29 @@ describe('Folding a task’s steps away', () => {
     expect(shed(root)).toEqual(['Build the shed', 'Pour the slab', 'Put up the frame']);
   });
 
+  it('folds a task borrowed onto the day, whose steps the day draws itself', async () => {
+    const day = dailyPath(TODAY);
+    const list = ['- [ ] Practice the assignments', '\t- [ ] Step one', '\t- [ ] Step two'];
+    const { ctx, index, m } = await ctxFor({ [day]: `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n${list.join('\n')}\n\n### Anytime\n` });
+    const step = (): string => [...index.snapshot.tasks.values()].find((t) => t.text === 'Step two')!.key;
+    await m.schedule(step(), '2026-08-27');                     // one step is planned for the next day
+
+    const draw = (): HTMLElement => render((r) => renderToday(ctx, r, { date: '2026-08-27', collapsed: new Map() }));
+    let root = draw();
+    const block = (r: HTMLElement): HTMLElement => r.querySelector<HTMLElement>('.helm-borrowed')!;
+    expect(texts(block(root), '.helm-task-text')).toEqual(['Practice the assignments', 'Step one', 'Step two']);
+
+    // The task itself is on another day, so the row draws no steps of its own — it still folds them.
+    click(block(root).querySelector('.helm-task-fold'));
+    root = draw();
+    expect(texts(block(root), '.helm-task-text')).toEqual(['Practice the assignments']);
+    expect(block(root).classList.contains('is-folded')).toBe(true);
+
+    click(block(root).querySelector('.helm-chip.subtasks'));
+    root = draw();
+    expect(texts(block(root), '.helm-task-text')).toEqual(['Practice the assignments', 'Step one', 'Step two']);
+  });
+
   it('folds every task in the view at once on alt-click, steps within steps included', async () => {
     const { ctx } = await ctxFor({
       [dailyPath(TODAY)]: `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Build the shed\n    - [ ] Pour the slab\n        - [ ] Hire the mixer\n- [ ] Paint the hall\n    - [ ] Sand it back\n\n### Anytime\n`,

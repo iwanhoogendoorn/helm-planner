@@ -25,6 +25,8 @@ export interface RowOptions {
   dayContext?: IsoDate;
   showDate?: 'scheduled' | 'due' | 'both' | 'none';
   showChildren?: boolean;
+  /** A twisty on a row whose steps the caller draws itself — the borrowed block on a day. */
+  foldable?: boolean;
   depth?: number;
   draggable?: boolean;
   /** Hide the checkbox (e.g. for a summary row). */
@@ -89,7 +91,7 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   // every task in the list at once, which is the quickest way to see a long day as its headlines.
   const hasKids = t.childKeys.length > 0;
   const folded = hasKids && isFolded(t);
-  if (opts.showChildren && !opts.compact) {
+  if ((opts.showChildren || opts.foldable) && !opts.compact) {
     row.appendChild(h('button', {
       cls: ['helm-task-fold', !hasKids && 'is-empty', folded && 'is-folded'],
       title: hasKids ? `${folded ? 'Show' : 'Hide'} the steps (alt-click: all of them)` : '',
@@ -179,7 +181,7 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     const done = kids.filter((k) => k.status === 'done').length;
     const gone = kids.filter((k) => k.status === 'forwarded').length;
     const count = chip(`${done}/${kids.length}`, 'subtasks', gone > 0 ? `${done} done · ${gone} moved on` : 'Subtasks');
-    if (opts.showChildren) {
+    if (opts.showChildren || opts.foldable) {
       count.addClass('is-clickable');
       count.setAttribute('title', `${done}/${kids.length} done — click to ${folded ? 'show' : 'hide'} the steps`);
       count.addEventListener('click', (ev) => { ev.stopPropagation(); toggleFold(t); ctx.refresh(); });

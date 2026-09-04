@@ -25,7 +25,9 @@
   included, which is the quickest way to read a long day as its headlines. A task
   without steps keeps the slot, so nothing shuffles sideways. Folding is how you are
   looking at the list, not something about the task: it is remembered while Obsidian
-  is open and nothing is written to your notes.
+  is open and nothing is written to your notes. Everything starts unfolded, always —
+  a fold only lasts until you undo it or restart Obsidian. A task borrowed onto a day
+  (its steps planned here, the task itself living elsewhere) folds like any other.
 - New **Focus and breaks** settings: the longest and shortest stretch, the short and
   long break, how many stretches before a long one, and the Claude command to run.
 

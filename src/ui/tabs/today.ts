@@ -7,6 +7,7 @@ import { PART_LABEL } from '../../core/dailyNote';
 import { button, chip, empty, h, icon, iconButton, progressBar, section } from '../dom';
 import type { UiContext } from '../context';
 import { taskRow } from '../taskRow';
+import { isFolded } from '../fold';
 import { openPlanDay } from '../modals/planDay';
 import { openWrapUp } from '../modals/wrapUp';
 import { openCapture } from '../modals/capture';
@@ -197,10 +198,12 @@ function renderItems(ctx: UiContext, items: DayItem[], date: IsoDate): HTMLEleme
 /** A task from another day, faded, holding the step (or steps) planned for this one. */
 function borrowedBlock(ctx: UiContext, parent: Task, date: IsoDate): HTMLElement {
   const snap = ctx.index.snapshot;
-  const head = taskRow(ctx, parent, { showDate: 'both', showChildren: false, showProject: true });
+  // The steps are drawn here rather than by the row, so the row is told to carry a twisty anyway.
+  const folded = isFolded(parent);
+  const head = taskRow(ctx, parent, { showDate: 'both', showChildren: false, foldable: true, showProject: true });
   head.classList.add('helm-ghost', 'helm-context');
   const kids = h('div', { cls: 'helm-task-children' });
-  for (const key of parent.childKeys) {
+  for (const key of folded ? [] : parent.childKeys) {
     const child = snap.tasks.get(key);
     if (!child) continue;
     const planned = child.scheduled === date;
@@ -208,7 +211,7 @@ function borrowedBlock(ctx: UiContext, parent: Task, date: IsoDate): HTMLElement
     if (!planned) row.classList.add('helm-ghost', 'helm-context');                   // here for context only
     kids.appendChild(row);
   }
-  return h('div', { cls: 'helm-task-tree helm-borrowed' }, head, kids);
+  return h('div', { cls: ['helm-task-tree', 'helm-borrowed', folded && 'is-folded'] }, head, kids);
 }
 
 function itemRow(ctx: UiContext, it: DayItem, date?: IsoDate): HTMLElement {
