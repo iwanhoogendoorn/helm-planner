@@ -1,5 +1,6 @@
 /** Helm — plugin entry point. Wires the index, mutations and views to Obsidian. */
 import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
+import { loadFolds } from './ui/fold';
 import { DEFAULT_SETTINGS, type HelmSettings, type IsoDate } from './core/types';
 import { todayLocal } from './core/dates';
 import { HelmIndex, DAILY_FALLBACK } from './data/index';
@@ -41,6 +42,12 @@ export default class HelmPlugin extends Plugin {
   override async onload(): Promise<void> {
     await this.loadSettings();
     await this.readDailyConfig();
+    // Folds are yours, not the note's: kept in Helm's own data file so they survive a reload.
+    loadFolds({ folded: this.settings.foldedTasks, unfolded: this.settings.unfoldedTasks }, (m) => {
+      this.settings.foldedTasks = m.folded;
+      this.settings.unfoldedTasks = m.unfolded;
+      void this.saveSettings();
+    });
 
     this.vault = new ObsidianVault(this.app);
     this.index = new HelmIndex(this.vault, {

@@ -90,7 +90,8 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   // The twisty, in its own slot so rows with steps and rows without still line up. Alt-click folds
   // every task in the list at once, which is the quickest way to see a long day as its headlines.
   const hasKids = t.childKeys.length > 0;
-  const folded = hasKids && isFolded(t);
+  const foldDefault = ctx.settings().foldStepsByDefault;
+  const folded = hasKids && isFolded(t, foldDefault);
   if ((opts.showChildren || opts.foldable) && !opts.compact) {
     row.appendChild(h('button', {
       cls: ['helm-task-fold', !hasKids && 'is-empty', folded && 'is-folded'],
@@ -100,7 +101,7 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
         if (!hasKids) return;
         ev.stopPropagation();
         if (ev.altKey) foldAll(everyParentAround(ctx, row), !folded);
-        else toggleFold(t);
+        else toggleFold(t, foldDefault);
         ctx.refresh();
       },
     }, hasKids ? icon(folded ? 'chevron-right' : 'chevron-down') : null));
@@ -184,7 +185,7 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     if (opts.showChildren || opts.foldable) {
       count.addClass('is-clickable');
       count.setAttribute('title', `${done}/${kids.length} done — click to ${folded ? 'show' : 'hide'} the steps`);
-      count.addEventListener('click', (ev) => { ev.stopPropagation(); toggleFold(t); ctx.refresh(); });
+      count.addEventListener('click', (ev) => { ev.stopPropagation(); toggleFold(t, foldDefault); ctx.refresh(); });
     }
     meta.appendChild(count);
   }

@@ -368,6 +368,7 @@ export class HelmSettingTab extends PluginSettingTab {
     this.toggle(beh.content, 'autoMoveRecurring', 'Move spawned recurrences to their date', 'When a recurring task is ticked, the next occurrence lands in the same note dated later. Helm moves it into the right day’s note.', 'Only occurrences dated today or later move automatically; older ones are left for the “Move recurring tasks to their next date” command, which moves everything.');
     this.toggle(beh.content, 'defaultCaptureTime', 'Capture starts at the current hour', 'A task captured for today gets the current hour as start time (14:37 → 14:00); the end follows the effort.');
     this.toggle(beh.content, 'writeCreatedDate', 'Stamp ➕ created date on new tasks', 'Off keeps daily notes clean; on gives every captured task an Obsidian Tasks created date.');
+    this.toggle(beh.content, 'foldStepsByDefault', 'Start with steps folded', 'A task with steps shows only itself and its count until you open it. Tasks you have folded or unfolded by hand keep what you chose — this is only for the ones you have never touched.', 'Press the twisty beside a task to fold or open it; alt-click folds the whole list at once. Your choices are remembered between sessions.');
   }
 
   // ── horizons ──────────────────────────────────────────────────────────

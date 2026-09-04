@@ -199,7 +199,7 @@ function renderItems(ctx: UiContext, items: DayItem[], date: IsoDate): HTMLEleme
 function borrowedBlock(ctx: UiContext, parent: Task, date: IsoDate): HTMLElement {
   const snap = ctx.index.snapshot;
   // The steps are drawn here rather than by the row, so the row is told to carry a twisty anyway.
-  const folded = isFolded(parent);
+  const folded = isFolded(parent, ctx.settings().foldStepsByDefault);
   const head = taskRow(ctx, parent, { showDate: 'both', showChildren: false, foldable: true, showProject: true });
   head.classList.add('helm-ghost', 'helm-context');
   const kids = h('div', { cls: 'helm-task-children' });

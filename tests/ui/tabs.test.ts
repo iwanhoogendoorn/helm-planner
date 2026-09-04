@@ -16,7 +16,7 @@ import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { linkExisting } from '../../src/ui/drawings';
 import { selection, selectionBar, dragKeys, setDragKeys } from '../../src/ui/selection';
-import { clearFolds } from '../../src/ui/fold';
+import { clearFolds, loadFolds } from '../../src/ui/fold';
 import { openDatePicker } from '../../src/ui/modals/datePicker';
 import { openSearch } from '../../src/ui/modals/search';
 import { taskMenu } from '../../src/ui/menus';
@@ -846,6 +846,44 @@ describe('Folding a task’s steps away', () => {
     click(count(root));
     root = draw();
     expect(shed(root)).toEqual(['Build the shed', 'Pour the slab', 'Put up the frame']);
+  });
+
+  it('starts folded when the setting says so, and keeps every choice made by hand', async () => {
+    const { ctx, settings } = await ctxFor({ [dailyPath(TODAY)]: NOTE });
+    settings.foldStepsByDefault = true;
+    const draw = (): HTMLElement => render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const shed = (r: HTMLElement): string[] => texts(r, '.helm-task-text').filter((x) => ['Build the shed', 'Pour the slab', 'Put up the frame'].includes(x));
+    const twisty = (r: HTMLElement): HTMLElement => [...r.querySelectorAll<HTMLElement>('.helm-task-tree > .helm-task')].find((x) => x.textContent?.startsWith('Build the shed'))!.querySelector('.helm-task-fold')!;
+
+    let root = draw();
+    expect(shed(root)).toEqual(['Build the shed']);              // nothing touched yet: it follows the setting
+
+    click(twisty(root));                                         // opened by hand
+    root = draw();
+    expect(shed(root)).toEqual(['Build the shed', 'Pour the slab', 'Put up the frame']);
+
+    // Turning the setting off again leaves that choice alone — it was made by hand, not by default.
+    settings.foldStepsByDefault = false;
+    expect(shed(draw())).toEqual(['Build the shed', 'Pour the slab', 'Put up the frame']);
+  });
+
+  it('remembers folds between sessions, and hands them back on the next load', async () => {
+    const saved: { folded: string[]; unfolded: string[] }[] = [];
+    const { ctx } = await ctxFor({ [dailyPath(TODAY)]: NOTE });
+    loadFolds(undefined, (m) => saved.push(m));
+    const draw = (): HTMLElement => render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const shed = (r: HTMLElement): string[] => texts(r, '.helm-task-text').filter((x) => ['Build the shed', 'Pour the slab', 'Put up the frame'].includes(x));
+    const twisty = (r: HTMLElement): HTMLElement => [...r.querySelectorAll<HTMLElement>('.helm-task-tree > .helm-task')].find((x) => x.textContent?.startsWith('Build the shed'))!.querySelector('.helm-task-fold')!;
+
+    click(twisty(draw()));
+    expect(saved.at(-1)!.folded).toHaveLength(1);                // written out the moment it is folded
+    expect(shed(draw())).toEqual(['Build the shed']);
+
+    // A new session: the store is empty until Helm hands it what it kept.
+    clearFolds();
+    expect(shed(draw())).toEqual(['Build the shed', 'Pour the slab', 'Put up the frame']);
+    loadFolds(saved.at(-1)!, () => undefined);
+    expect(shed(draw())).toEqual(['Build the shed']);            // folded again, as it was left
   });
 
   it('folds a task borrowed onto the day, whose steps the day draws itself', async () => {

@@ -322,6 +322,11 @@ export interface HelmSettings {
   defaultTab: 'today' | 'week' | 'projects' | 'inbox' | 'review' | 'horizons' | 'dashboard';
   openOnStartup: boolean;
   showTimeBlocks: boolean;
+  /** Whether a task's steps start folded away. Tasks you have folded or unfolded by hand ignore it. */
+  foldStepsByDefault: boolean;
+  /** The folds you have made by hand, kept so they survive a reload. Not shown in the settings. */
+  foldedTasks: string[];
+  unfoldedTasks: string[];
   indentUnit: string;
   developerActions: boolean;
 }
@@ -387,6 +392,9 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   defaultTab: 'today',
   openOnStartup: false,
   showTimeBlocks: true,
+  foldStepsByDefault: false,
+  foldedTasks: [],
+  unfoldedTasks: [],
   indentUnit: '\t',
   developerActions: false,
 };

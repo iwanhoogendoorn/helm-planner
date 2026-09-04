@@ -25,9 +25,14 @@
   included, which is the quickest way to read a long day as its headlines. A task
   without steps keeps the slot, so nothing shuffles sideways. Folding is how you are
   looking at the list, not something about the task: it is remembered while Obsidian
-  is open and nothing is written to your notes. Everything starts unfolded, always —
-  a fold only lasts until you undo it or restart Obsidian. A task borrowed onto a day
-  (its steps planned here, the task itself living elsewhere) folds like any other.
+  is open and nothing is written to your notes — but a fold does **last**: it is kept in
+  Helm's own data file, so what you folded this morning is still folded after a reload
+  or a restart. A task borrowed onto a day (its steps planned here, the task itself
+  living elsewhere) folds like any other.
+- New setting, **Start with steps folded**: a task with steps shows only itself and its
+  count until you open it. It applies to tasks you have never touched — anything you
+  folded or opened by hand keeps what you chose, so turning the setting on or off never
+  throws a choice away.
 - New **Focus and breaks** settings: the longest and shortest stretch, the short and
   long break, how many stretches before a long one, and the Claude command to run.
 
