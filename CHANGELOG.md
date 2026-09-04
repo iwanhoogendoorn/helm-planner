@@ -12,6 +12,11 @@
   week, and the plan re-lays itself as you go. With no CLI installed the button still
   works — Helm sizes and spreads the work with the estimates it already has, and says
   whose plan you are looking at.
+- **“Fit the day” reads as a table.** The proposal was a line of words per task, so a
+  long name was cut to “Practi…”, the minute boxes were all different widths and the
+  times landed wherever the words happened to end. It is columns now — name, minutes,
+  times — lined up down the whole day, with Claude's reasoning on its own line under the
+  task instead of a truncated tail. The week's proposal uses the same columns.
 - **A pomodoro that bends to the task.** Not everything fits in twenty-five minutes,
   so a task's stretch is as long as the task needs, up to the maximum you set; a long
   one is split into as few equal stretches as will hold it, with a break after each

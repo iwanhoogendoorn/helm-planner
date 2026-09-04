@@ -127,7 +127,7 @@ export function openPlanWeekAi(ctx: UiContext, anchor: IsoDate): void {
         h('span', { cls: 'helm-planai-text', text: plainLabel(task.text) }),
         h('span', { cls: 'helm-planai-mins' }, num, h('span', { cls: 'helm-hint', text: 'min' })),
         pick,
-        h('span', { cls: 'helm-planweek-times' },
+        h('span', { cls: 'helm-planai-times' },
           ...(out ? [chip('another week', 'warn')] : blocks.map((b) => chip(`${b.start}–${b.end}${b.of && b.of > 1 ? ` (${b.index}/${b.of})` : ''}`, 'time')))),
       );
     };

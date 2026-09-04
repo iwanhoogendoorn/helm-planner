@@ -105,18 +105,19 @@ export function openPlanDayAi(ctx: UiContext, date: IsoDate): void {
       const num = h('input', { cls: 'helm-planai-min', attr: { type: 'number', min: '5', step: '5', value: String(minutes[key] ?? 30) } });
       num.addEventListener('change', () => { minutes[key] = Math.max(5, Math.round(Number(num.value) || 30)); draw(p); });
       const out = dropped.has(key);
+      // Four columns and a line of its own for the reasoning: a task's name is worth more room than a
+      // truncated tail, and the times line up down the day rather than landing wherever the words end.
       rows.appendChild(h('div', { cls: ['helm-planai-row', out && 'is-out'] },
         h('button', {
           cls: 'helm-planai-toggle', title: out ? 'Bring it back into the day' : 'Leave it out of today',
           onClick: () => { if (out) dropped.delete(key); else dropped.add(key); draw(p); },
         }, icon(out ? 'plus-circle' : 'minus-circle')),
-        h('span', { cls: 'helm-planai-text', text: plainLabel(task.text) }),
-        num,
-        h('span', { cls: 'helm-hint', text: 'min' }),
-        h('span', { cls: 'helm-spacer' }),
-        ...(out
-          ? [chip('another day', 'warn')]
-          : blocks.map((b) => chip(`${b.start}–${b.end}${b.of && b.of > 1 ? ` (${b.index}/${b.of})` : ''}`, 'time'))),
+        h('span', { cls: 'helm-planai-text', text: plainLabel(task.text), attr: { title: plainLabel(task.text) } }),
+        h('span', { cls: 'helm-planai-mins' }, num, h('span', { cls: 'helm-hint', text: 'min' })),
+        h('span', { cls: 'helm-planai-times' },
+          ...(out
+            ? [chip('another day', 'warn')]
+            : blocks.map((b) => chip(`${b.start}–${b.end}${b.of && b.of > 1 ? ` (${b.index}/${b.of})` : ''}`, 'time')))),
         p.answer.notes?.[key] ? h('span', { cls: 'helm-hint helm-planai-note', text: p.answer.notes[key]! }) : null,
       ));
     }
