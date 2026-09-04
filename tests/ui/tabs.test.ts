@@ -16,6 +16,7 @@ import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
 import { linkExisting } from '../../src/ui/drawings';
 import { selection, selectionBar, dragKeys, setDragKeys } from '../../src/ui/selection';
+import { clearFolds } from '../../src/ui/fold';
 import { openDatePicker } from '../../src/ui/modals/datePicker';
 import { openSearch } from '../../src/ui/modals/search';
 import { taskMenu } from '../../src/ui/menus';
@@ -62,7 +63,7 @@ const waitFor = async <T>(get: () => T | null | undefined, what = 'condition', t
   throw new Error(`waitFor: ${what} never happened`);
 };
 
-beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; selection.clear(); });
+beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; selection.clear(); clearFolds(); });
 
 describe('Today tab', () => {
   it('renders yesterday: time blocks, tasks, mirrors, habits, done', async () => {
@@ -818,6 +819,60 @@ describe('Calendar view', () => {
     Object.defineProperty(ev, 'clientY', { value: 0 });
     col.dispatchEvent(ev);
     await waitFor(() => { const x = [...index.snapshot.tasks.values()].find((y) => y.text === 'Start with OIB' && y.status === 'todo'); return (x?.noteDate ?? x?.scheduled) === '2026-08-27' ? x : undefined; }, 'the task to land on Thursday');
+  });
+});
+
+describe('Folding a task’s steps away', () => {
+  const NOTE = `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Build the shed\n    - [ ] Pour the slab\n    - [ ] Put up the frame\n- [ ] Ring the plumber\n\n### Anytime\n`;
+
+  it('folds the steps into the task and back, and remembers which way round it was', async () => {
+    const { ctx } = await ctxFor({ [dailyPath(TODAY)]: NOTE });
+    const draw = (): HTMLElement => render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const shed = (r: HTMLElement): string[] => texts(r, '.helm-task-text').filter((x) => ['Build the shed', 'Pour the slab', 'Put up the frame'].includes(x));
+    const twisty = (r: HTMLElement): HTMLElement => [...r.querySelectorAll<HTMLElement>('.helm-task-tree > .helm-task')].find((x) => x.textContent?.startsWith('Build the shed'))!.querySelector('.helm-task-fold')!;
+    let root = draw();
+    expect(shed(root)).toEqual(['Build the shed', 'Pour the slab', 'Put up the frame']);
+    // A task without steps keeps the slot, so nothing shifts sideways when its neighbour has some.
+    expect(root.querySelectorAll('.helm-task-fold.is-empty').length).toBeGreaterThan(0);
+
+    click(twisty(root));
+    root = draw();
+    expect(shed(root)).toEqual(['Build the shed']);                                           // the steps are folded in
+    expect(twisty(root).classList.contains('is-folded')).toBe(true);
+    const count = (r: HTMLElement): HTMLElement => [...r.querySelectorAll<HTMLElement>('.helm-task-tree > .helm-task')].find((x) => x.textContent?.startsWith('Build the shed'))!.querySelector('.helm-chip.subtasks')!;
+    expect(count(root).textContent).toBe('0/2');                                              // it still says how many
+
+    // The count chip is the other way in.
+    click(count(root));
+    root = draw();
+    expect(shed(root)).toEqual(['Build the shed', 'Pour the slab', 'Put up the frame']);
+  });
+
+  it('folds every task in the view at once on alt-click, steps within steps included', async () => {
+    const { ctx } = await ctxFor({
+      [dailyPath(TODAY)]: `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Build the shed\n    - [ ] Pour the slab\n        - [ ] Hire the mixer\n- [ ] Paint the hall\n    - [ ] Sand it back\n\n### Anytime\n`,
+    });
+    const draw = (): HTMLElement => {
+      const leaf = document.createElement('div');
+      leaf.className = 'workspace-leaf-content';
+      document.body.appendChild(leaf);
+      renderToday(ctx, leaf, { date: TODAY, collapsed: new Map() });
+      return leaf;
+    };
+    const mine = (r: HTMLElement): string[] => texts(r, '.helm-task-text').filter((x) => ['Build the shed', 'Pour the slab', 'Hire the mixer', 'Paint the hall', 'Sand it back'].includes(x));
+    const twisties = (r: HTMLElement): HTMLElement[] => [...r.querySelectorAll<HTMLElement>('.helm-task-tree > .helm-task')].filter((x) => /^(Build the shed|Paint the hall)/.test(x.textContent ?? '')).map((x) => x.querySelector<HTMLElement>('.helm-task-fold')!);
+    let root = draw();
+    expect(mine(root)).toEqual(['Build the shed', 'Pour the slab', 'Hire the mixer', 'Paint the hall', 'Sand it back']);
+    twisties(root)[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
+    document.body.innerHTML = '';
+    root = draw();
+    expect(mine(root)).toEqual(['Build the shed', 'Paint the hall']);
+    // …and back again, from either twisty — including the step inside a step, which was out of sight
+    // when the fold happened.
+    twisties(root)[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
+    document.body.innerHTML = '';
+    root = draw();
+    expect(mine(root)).toEqual(['Build the shed', 'Pour the slab', 'Hire the mixer', 'Paint the hall', 'Sand it back']);
   });
 });
 

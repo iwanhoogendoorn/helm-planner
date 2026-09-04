@@ -148,6 +148,13 @@
 .helm-task-actions .helm-iconbtn { padding: 3px; height: 22px; }
 .helm-task-actions .helm-iconbtn svg { width: 15px; height: 15px; }
 @media (hover: none) { .helm-task-actions { visibility: visible; } }
+/* The twisty keeps its slot whether or not a task has steps, so nothing shuffles sideways. */
+.helm-task-fold { flex: none; width: 16px; height: 18px; margin-top: 2px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; box-shadow: none; color: var(--text-faint); cursor: pointer; }
+.helm-task-fold:hover { color: var(--text-normal); background: none; box-shadow: none; }
+.helm-task-fold.is-empty { visibility: hidden; cursor: default; }
+.helm-task-fold svg { width: 14px; height: 14px; }
+.helm-chip.subtasks.is-clickable { cursor: pointer; }
+.helm-chip.subtasks.is-clickable:hover { background: var(--background-modifier-hover); }
 .helm-task-tree { display: contents; }
 
 /* Day header */

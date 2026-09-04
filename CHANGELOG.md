@@ -19,6 +19,13 @@
   it and a bar sits above the day counting down, through tab switches and reloads,
   because what is left is worked out from the clock rather than ticked down. When it
   is up, Helm offers you the break, another stretch, or done.
+- **Steps fold into their task.** Every task with steps has a twisty beside it: press it and the
+  steps fold in, leaving the task and its `2/5` count — the count is a button too, so either
+  one gets you back. **Alt-click folds the whole list at once**, steps within steps
+  included, which is the quickest way to read a long day as its headlines. A task
+  without steps keeps the slot, so nothing shuffles sideways. Folding is how you are
+  looking at the list, not something about the task: it is remembered while Obsidian
+  is open and nothing is written to your notes.
 - New **Focus and breaks** settings: the longest and shortest stretch, the short and
   long break, how many stretches before a long one, and the Claude command to run.
 

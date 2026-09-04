@@ -15,6 +15,7 @@ import { linksIn, textWithoutLinks } from '../core/links';
 import { plainLabel, shortLabel } from '../core/label';
 import { taskLabel } from './context';
 import { selection, selectionClick, selectionMenu, setDragKeys } from './selection';
+import { foldAll, isFolded, toggleFold } from './fold';
 
 export interface RowOptions {
   showProject?: boolean;
@@ -82,6 +83,25 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
       ev.stopPropagation();
       void ctx.run('Reorder', () => ctx.mutations.reorderSubtask(key, t.key));
     });
+  }
+
+  // The twisty, in its own slot so rows with steps and rows without still line up. Alt-click folds
+  // every task in the list at once, which is the quickest way to see a long day as its headlines.
+  const hasKids = t.childKeys.length > 0;
+  const folded = hasKids && isFolded(t);
+  if (opts.showChildren && !opts.compact) {
+    row.appendChild(h('button', {
+      cls: ['helm-task-fold', !hasKids && 'is-empty', folded && 'is-folded'],
+      title: hasKids ? `${folded ? 'Show' : 'Hide'} the steps (alt-click: all of them)` : '',
+      attr: hasKids ? {} : { tabindex: '-1', 'aria-hidden': 'true' },
+      onClick: (ev) => {
+        if (!hasKids) return;
+        ev.stopPropagation();
+        if (ev.altKey) foldAll(everyParentAround(ctx, row), !folded);
+        else toggleFold(t);
+        ctx.refresh();
+      },
+    }, hasKids ? icon(folded ? 'chevron-right' : 'chevron-down') : null));
   }
 
   // Checkbox: click toggles done; shift-click cycles to in-progress.
@@ -158,7 +178,13 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     // What is finished — a step that moved on with its task is not a step you have done.
     const done = kids.filter((k) => k.status === 'done').length;
     const gone = kids.filter((k) => k.status === 'forwarded').length;
-    meta.appendChild(chip(`${done}/${kids.length}`, 'subtasks', gone > 0 ? `${done} done · ${gone} moved on` : 'Subtasks'));
+    const count = chip(`${done}/${kids.length}`, 'subtasks', gone > 0 ? `${done} done · ${gone} moved on` : 'Subtasks');
+    if (opts.showChildren) {
+      count.addClass('is-clickable');
+      count.setAttribute('title', `${done}/${kids.length} done — click to ${folded ? 'show' : 'hide'} the steps`);
+      count.addEventListener('click', (ev) => { ev.stopPropagation(); toggleFold(t); ctx.refresh(); });
+    }
+    meta.appendChild(count);
   }
   if (t.done) {
     // “Today” only means something when the line still sits on the day it was finished. Once it has
@@ -198,7 +224,7 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
 
   if (opts.showChildren && t.childKeys.length > 0) {
     const kids = h('div', { cls: 'helm-task-children' });
-    for (const k of t.childKeys) {
+    for (const k of folded ? [] : t.childKeys) {
       const c = snap.tasks.get(k);
       if (!c) continue;
       const row = taskRow(ctx, c, { ...opts, draggable: true, depth: (opts.depth ?? 0) + 1, showProject: false, reason: undefined as unknown as string });
@@ -216,10 +242,31 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
       ev.stopPropagation();
       void ctx.run('Reorder', () => ctx.mutations.reorderSubtask(dragged.key));
     });
-    const wrap = h('div', { cls: 'helm-task-tree' }, row, kids);
-    return wrap;
+    return h('div', { cls: ['helm-task-tree', folded && 'is-folded'] }, row, kids);
   }
   return row;
+}
+
+/**
+ * Every task with steps in the same view — what an alt-click on one twisty acts on. It follows the
+ * tree rather than the screen: a step that has steps of its own is folded away with the rest, even
+ * though it is out of sight inside a task that is already folded.
+ */
+function everyParentAround(ctx: UiContext, row: HTMLElement): Task[] {
+  const scope = row.closest('.workspace-leaf-content') ?? row.ownerDocument;
+  const out: Task[] = [];
+  const seen = new Set<string>();
+  const walk = (t: Task): void => {
+    if (t.childKeys.length === 0 || seen.has(t.key)) return;
+    seen.add(t.key);
+    out.push(t);
+    for (const k of t.childKeys) { const c = ctx.index.task(k); if (c) walk(c); }
+  };
+  for (const el of scope.querySelectorAll<HTMLElement>('.helm-task-tree > .helm-task[data-key]')) {
+    const t = ctx.index.task(el.dataset.key ?? '');
+    if (t) walk(t);
+  }
+  return out;
 }
 
 function markerClass(s: Task['status']): string {
