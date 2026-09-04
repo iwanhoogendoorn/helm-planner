@@ -29,6 +29,8 @@ export interface UiContext {
   resourceUrl: (path: string) => string | undefined;
   /** Register an open modal so the plugin can close it on unload (a reload must never leave a dead overlay). */
   trackModal: (m: { close: () => void; onClose?: () => void }) => void;
+  /** Run the Claude CLI with a prompt on stdin; undefined when no command is configured. */
+  runClaude?: (args: string[], stdin: string) => Promise<string>;
 }
 
 export function taskLabel(t: Task): string {

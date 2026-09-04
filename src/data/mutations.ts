@@ -800,6 +800,22 @@ export class Mutations {
 
   /* ── Editing ────────────────────────────────────────────────────────── */
 
+  /**
+   * Put a task on a day and give it its stretch of that day, in one go. Moving a task between notes can
+   * change the key it is known by, so the task is found again afterwards — by its id where it has one,
+   * else by its words on the day it just landed on.
+   */
+  async planInto(key: string, date: IsoDate, time: { start: string; end: string }, effortMinutes: number): Promise<void> {
+    const before = this.fresh(key);
+    const where = before.noteDate ?? before.scheduled;
+    if (where !== date) await this.schedule(key, date);
+    const after = this.index.task(key)
+      ?? (before.id ? this.index.taskById(before.id) : undefined)
+      ?? this.index.allTasks().find((t) => t.text === before.text && (t.noteDate ?? t.scheduled) === date);
+    if (!after) throw new Error(`Task no longer exists: ${key}`);
+    await this.updateTask(after.key, { time, effortMinutes });
+  }
+
   async updateTask(key: string, patch: Partial<TaskLine> & { scheduled?: IsoDate | undefined }): Promise<void> {
     let t = this.fresh(key);
     if (t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf)) { await this.updateTask(t.mirrorOf, patch); return; }

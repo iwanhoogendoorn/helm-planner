@@ -9,6 +9,8 @@ import { renderProjects } from '../../src/ui/tabs/projects';
 import { renderInbox } from '../../src/ui/tabs/inbox';
 import { renderReview } from '../../src/ui/tabs/review';
 import { openCapture } from '../../src/ui/modals/capture';
+import { openPlanDayAi } from '../../src/ui/modals/planDayAi';
+import { openPlanWeekAi } from '../../src/ui/modals/planWeekAi';
 import { openPlanDay } from '../../src/ui/modals/planDay';
 import { openWrapUp } from '../../src/ui/modals/wrapUp';
 import { openTaskEditor } from '../../src/ui/modals/taskEditor';
@@ -17,7 +19,7 @@ import { selection, selectionBar, dragKeys, setDragKeys } from '../../src/ui/sel
 import { openDatePicker } from '../../src/ui/modals/datePicker';
 import { openSearch } from '../../src/ui/modals/search';
 import { taskMenu } from '../../src/ui/menus';
-import { humanDate } from '../../src/core/dates';
+import { addDays, humanDate } from '../../src/core/dates';
 import { taskRow } from '../../src/ui/taskRow';
 import { openProjectForm, parsePhases } from '../../src/ui/modals/projectForm';
 import { openHabitForm } from '../../src/ui/modals/habitForm';
@@ -816,6 +818,125 @@ describe('Calendar view', () => {
     Object.defineProperty(ev, 'clientY', { value: 0 });
     col.dispatchEvent(ev);
     await waitFor(() => { const x = [...index.snapshot.tasks.values()].find((y) => y.text === 'Start with OIB' && y.status === 'todo'); return (x?.noteDate ?? x?.scheduled) === '2026-08-27' ? x : undefined; }, 'the task to land on Thursday');
+  });
+});
+
+describe('Fitting the day', () => {
+  it('proposes, lets you adjust, and writes only when you confirm', async () => {
+    const day = dailyPath(TODAY);
+    const { ctx, index, vault } = await ctxFor({
+      [day]: `---\ntitle: 26, Wednesday, Aug, 2026\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Write the report ⏱️ 90m\n- [ ] Ring the plumber\n- [ ] 11:00 - 12:00: #meeting Team meeting\n\n### Anytime\n`,
+    });
+    // Claude answers with its own sizing and order.
+    const asked: string[] = [];
+    const keyOf = (text: string): string => [...index.snapshot.tasks.values()].find((t) => t.text.startsWith(text))!.key;
+    ctx.runClaude = async (_args, stdin) => { asked.push(stdin); return JSON.stringify({ order: [keyOf('Write the report'), keyOf('Ring the plumber')], minutes: { [keyOf('Write the report')]: 90, [keyOf('Ring the plumber')]: 20 } }); };
+
+    openPlanDayAi(ctx, TODAY);
+    const m = Modal.last!;
+    await waitFor(() => (m.contentEl.querySelector('.helm-planai-rows') ? true : undefined), 'the proposal');
+
+    // It asked about the day's work, and knew what was already booked.
+    expect(asked[0]).toContain('Write the report');
+    expect(asked[0]).toContain('11:00–12:00');
+    // Two tasks, the long one split into two stretches.
+    const rows = [...m.contentEl.querySelectorAll<HTMLElement>('.helm-planai-row')];
+    expect(rows.map((r) => r.querySelector('.helm-planai-text')?.textContent)).toEqual(['Write the report', 'Ring the plumber']);
+    expect(texts(rows[0]!, '.helm-chip.time')).toHaveLength(2);
+    expect(m.contentEl.querySelector('.helm-planai-head')!.textContent).toContain('Claude’s plan');
+
+    // Nothing written yet.
+    expect(await vault.read(day)).not.toMatch(/\d\d:\d\d[^\n]*Write the report/);
+
+    // Adjust: the plumber takes 45 minutes, not 20.
+    const min = rows[1]!.querySelector<HTMLInputElement>('.helm-planai-min')!;
+    min.value = '45';
+    min.dispatchEvent(new Event('change'));
+    expect([...m.contentEl.querySelectorAll<HTMLElement>('.helm-planai-row')][1]!.querySelector('.helm-chip.time')!.textContent).toMatch(/^\d\d:\d\d–/);
+
+    // Confirm: now it writes times and estimates.
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Plan the day'));
+    await waitFor(() => Notice.messages.find((n) => n.startsWith('Planned ')), 'the day to be written');
+    const note = await vault.read(day);
+    expect(note).toMatch(/- \[ \] \d\d:\d\d - \d\d:\d\d: Write the report ⏱️ 90m/);
+    expect(note).toMatch(/- \[ \] \d\d:\d\d - \d\d:\d\d: Ring the plumber ⏱️ 45m/);
+    expect(note).toContain('11:00 - 12:00: #meeting Team meeting');   // what was booked is untouched
+  });
+
+  it('still proposes a day with no Claude on the machine, and says whose sizing it is', async () => {
+    const day = dailyPath(TODAY);
+    const { ctx } = await ctxFor({ [day]: `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Write the report ⏱️ 90m\n\n### Anytime\n` });
+    ctx.runClaude = undefined;
+    openPlanDayAi(ctx, TODAY);
+    const m = Modal.last!;
+    await waitFor(() => (m.contentEl.querySelector('.helm-planai-rows') ? true : undefined), 'the proposal');
+    expect(m.contentEl.querySelector('.helm-planai-head')!.textContent).toContain('Helm’s own sizing');
+  });
+});
+
+describe('Fitting the week', () => {
+  it('spreads the week over the days that are left, and moves a task when you ask it to', async () => {
+    const tomorrow = addDays(TODAY, 1);
+    const today = dailyPath(TODAY);
+    const next = dailyPath(tomorrow);
+    const { ctx, index, vault } = await ctxFor({
+      [today]: `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Write the report ⏱️ 90m\n- [ ] Ring the plumber ⏱️ 30m\n\n### Anytime\n`,
+      [next]: `---\ntitle: 27\n---\n\n# Day planner\n\n### A. Morning\n\n### Anytime\n`,
+    });
+    const keyOf = (text: string): string => [...index.snapshot.tasks.values()].find((t) => t.text.startsWith(text))!.key;
+    const asked: string[] = [];
+    ctx.runClaude = async (_args, stdin) => {
+      asked.push(stdin);
+      return JSON.stringify({
+        days: { [TODAY]: [keyOf('Write the report')], [tomorrow]: [keyOf('Ring the plumber')] },
+        minutes: { [keyOf('Write the report')]: 90, [keyOf('Ring the plumber')]: 30 },
+      });
+    };
+
+    openPlanWeekAi(ctx, TODAY);
+    const m = Modal.last!;
+    await waitFor(() => (m.contentEl.querySelector('.helm-planweek-days') ? true : undefined), 'the week');
+
+    // It asked about every day still to come, and about the work sitting on them.
+    expect(asked[0]).toContain(`- ${TODAY} 08:00`);
+    expect(asked[0]).toContain(`| ${TODAY}`);                          // the report, on the day it sits
+    expect(m.contentEl.querySelector('.helm-planai-head')!.textContent).toContain('Claude’s week');
+
+    // One day block per day left in the week, the plumber on tomorrow's.
+    const blocks = [...m.contentEl.querySelectorAll<HTMLElement>('.helm-planweek-day')];
+    expect(blocks.length).toBeGreaterThanOrEqual(2);
+    expect(texts(blocks[1]!, '.helm-planai-text')).toEqual(['Ring the plumber']);
+
+    // Nothing written yet.
+    expect(await vault.read(next)).not.toContain('plumber');
+
+    // Adjust: put the plumber back on today after all.
+    const pick = blocks[1]!.querySelector<HTMLSelectElement>('.helm-planai-day')!;
+    pick.value = TODAY;
+    pick.dispatchEvent(new Event('change'));
+    expect(texts([...m.contentEl.querySelectorAll<HTMLElement>('.helm-planweek-day')][0]!, '.helm-planai-text')).toEqual(['Write the report', 'Ring the plumber']);
+
+    // …and back to tomorrow, which is where it should end up.
+    const again = [...m.contentEl.querySelectorAll<HTMLElement>('.helm-planweek-day')][0]!.querySelectorAll<HTMLSelectElement>('.helm-planai-day')[1]!;
+    again.value = tomorrow;
+    again.dispatchEvent(new Event('change'));
+
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Plan the week'));
+    await waitFor(() => Notice.messages.find((n) => n.startsWith('Planned ')), 'the week to be written');
+    expect(await vault.read(today)).toMatch(/- \[ \] \d\d:\d\d - \d\d:\d\d: Write the report ⏱️ 90m/);
+    expect(await vault.read(today)).not.toContain('plumber');
+    expect(await vault.read(next)).toMatch(/- \[ \] \d\d:\d\d - \d\d:\d\d: Ring the plumber ⏱️ 30m/);
+  });
+
+  it('says whose spreading it is with no Claude, and refuses a week that has already gone', async () => {
+    const { ctx } = await ctxFor({ [dailyPath(TODAY)]: `---\ntitle: 26\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Write the report ⏱️ 90m\n\n### Anytime\n` });
+    ctx.runClaude = undefined;
+    openPlanWeekAi(ctx, TODAY);
+    await waitFor(() => (Modal.last!.contentEl.querySelector('.helm-planweek-days') ? true : undefined), 'the week');
+    expect(Modal.last!.contentEl.querySelector('.helm-planai-head')!.textContent).toContain('Helm’s own spreading');
+
+    openPlanWeekAi(ctx, addDays(TODAY, -21));
+    expect(Modal.last!.contentEl.textContent).toContain('already been and gone');
   });
 });
 

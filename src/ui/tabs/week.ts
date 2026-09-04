@@ -8,6 +8,7 @@ import type { UiContext } from '../context';
 import { wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
 import { openPlanDay } from '../modals/planDay';
+import { openPlanWeekAi } from '../modals/planWeekAi';
 import { openCapture } from '../modals/capture';
 import { onDayContext } from '../dayMenu';
 import { periodOf } from '../../core/periods';
@@ -38,6 +39,7 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
     ),
     h('div', { cls: 'helm-day-actions' },
       h('span', { cls: 'helm-hint', text: `${totalOpen} open · ${totalDone} done` }),
+      button('Fit the week', { icon: 'sparkles', title: 'Size the week’s work, spread it over the days that are left, and propose times', onClick: () => openPlanWeekAi(ctx, w.start) }),
       button('', { icon: 'plus', title: 'Capture', onClick: () => openCapture(ctx) }),
     ),
   ));

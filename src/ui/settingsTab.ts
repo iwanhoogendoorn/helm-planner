@@ -52,7 +52,7 @@ type ChipTone = 'ok' | 'warn' | 'pending';
 interface GroupHandle { content: HTMLElement; setChip(text: string, tone: ChipTone): void }
 type StrKey = { [K in keyof HelmSettings]: HelmSettings[K] extends string ? K : never }[keyof HelmSettings];
 type BoolKey = { [K in keyof HelmSettings]: HelmSettings[K] extends boolean ? K : never }[keyof HelmSettings];
-type NumKey = 'dailyCapacityMinutes' | 'defaultEffortMinutes' | 'staleProjectDays';
+type NumKey = 'dailyCapacityMinutes' | 'defaultEffortMinutes' | 'staleProjectDays' | 'focusMaxMinutes' | 'breakMinutes' | 'longBreakMinutes' | 'blocksBeforeLongBreak';
 
 export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
   { id: 'setup', label: 'Setup', icon: 'wrench' },
@@ -331,7 +331,6 @@ export class HelmSettingTab extends PluginSettingTab {
     this.text(where.content, 'inboxNote', { name: 'Inbox note', desc: 'Where captures with no date and no project land.', placeholder: DEFAULT_SETTINGS.inboxNote, pick: 'note', fallback: DEFAULT_SETTINGS.inboxNote });
     this.text(where.content, 'daybookHeading', { name: 'Daybook heading', desc: 'The heading a day’s diary lives under in its note.', placeholder: 'Daybook', fallback: 'Daybook' });
     this.text(where.content, 'archiveFolder', { name: 'Archive folder', desc: '“Archive project” moves a project folder here.', placeholder: DEFAULT_SETTINGS.archiveFolder, pick: 'folder', help: 'Keep the archive in the excluded paths below so archived projects stay out of the index and the Inbox.' });
-
     const scan = this.group(body, { icon: 'scan-search', title: 'What Helm scans', subtitle: 'Keep the index lean: skip archives, pull in extra task notes.' });
     const scanChip = (): void => scan.setChip(`${s.excludePaths.length} excluded · ${s.extraFolders.length} extra`, 'pending');
     scanChip();
@@ -422,6 +421,13 @@ export class HelmSettingTab extends PluginSettingTab {
     const cap = this.group(body, { icon: 'gauge', title: 'Capacity', subtitle: 'What a day holds and what an unestimated task costs.', chip: { text: `${Math.round(s.dailyCapacityMinutes / 60 * 10) / 10}h a day`, tone: 'pending' } });
     this.slider(cap.content, 'dailyCapacityMinutes', 'Daily capacity', 'Minutes of focused work a day holds. Drives the capacity bar on Today.', 60, 720, 30, 'min');
     this.slider(cap.content, 'defaultEffortMinutes', 'Default effort', 'Minutes assumed for a task without a ⏱️ estimate.', 5, 120, 5, 'min');
+
+    const focus = this.group(body, { icon: 'timer', title: 'Focus and breaks', subtitle: 'How long a stretch of work is, and the rests around it. “Fit the day” and “Fit the week” use these.' });
+    this.slider(focus.content, 'focusMaxMinutes', 'Longest stretch', 'A task longer than this is split into equal stretches.', 15, 120, 5, 'min');
+    this.slider(focus.content, 'breakMinutes', 'Break', 'After each stretch.', 0, 30, 1, 'min');
+    this.slider(focus.content, 'longBreakMinutes', 'Long break', 'After a few stretches in a row.', 0, 60, 5, 'min');
+    this.slider(focus.content, 'blocksBeforeLongBreak', 'Stretches before a long break', '', 2, 8, 1, '');
+    this.text(focus.content, 'claudeCommand', { name: 'Claude command', desc: 'The CLI “Fit the day” and “Fit the week” ask for estimates. Leave empty to use Helm’s own sizing only.', placeholder: 'claude', fallback: 'claude' });
 
     const rhythm = this.group(body, { icon: 'repeat', title: 'Rhythm', subtitle: 'Wrap-up, review and the shape of the week.' });
     this.dropdown(rhythm.content, 'rolloverTarget', 'Wrap-up default for unfinished tasks', 'What Wrap up proposes for tasks that did not get done.', { tomorrow: 'Move to tomorrow', unschedule: 'Take off the calendar' });

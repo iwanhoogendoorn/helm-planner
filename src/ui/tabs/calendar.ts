@@ -10,6 +10,8 @@ import { button, chip, h, icon, iconButton, progressBar, richText, section } fro
 import type { UiContext } from '../context';
 import { wikilinkSuggest } from '../fields';
 import { renderWeek } from './week';
+import { openPlanDayAi } from '../modals/planDayAi';
+import { openPlanWeekAi } from '../modals/planWeekAi';
 import { renderToday } from './today';
 import { openPlanDay } from '../modals/planDay';
 import { openProjectForm } from '../modals/projectForm';
@@ -61,6 +63,12 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
     griddable ? h('span', { cls: 'helm-segmented helm-cal-views' }, ...([['list', 'List', 'list'], ['calendar', 'Calendar', 'calendar-days']] as const).map(([id, label, ic]) =>
       h('button', { cls: ['helm-seg', view === id && 'is-active'], title: `${label} view`, onClick: () => { state.view = id; ctx.refresh(); } }, icon(ic), h('span', { text: label })))) : null,
     h('span', { cls: 'helm-spacer' }),
+    // The list views carry their own button in the day or week header; the grid has no header of its own.
+    view === 'calendar' && state.scope === 'day'
+      ? button('Fit the day', { icon: 'sparkles', title: 'Size the day’s work, split it into stretches with breaks, and propose times', onClick: () => openPlanDayAi(ctx, state.anchor) })
+      : view === 'calendar' && griddable
+        ? button('Fit the week', { icon: 'sparkles', title: 'Size the week’s work, spread it over the days that are left, and propose times', onClick: () => openPlanWeekAi(ctx, span[0]!) })
+        : null,
     h('span', { cls: 'helm-hint', text: griddable ? `${span[0]} → ${span[span.length - 1]}` : `${period.start} → ${period.end}` }),
   ));
 

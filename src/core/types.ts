@@ -246,6 +246,14 @@ export interface HelmSettings {
   inboxNote: string;
   /** The heading a day's diary lives under. */
   daybookHeading: string;
+  /** The command that runs Claude for the “Plan with AI” button; empty turns it off. */
+  claudeCommand: string;
+  /** The longest single stretch of work, and the rests around it. */
+  focusMaxMinutes: number;
+  focusMinMinutes: number;
+  breakMinutes: number;
+  longBreakMinutes: number;
+  blocksBeforeLongBreak: number;
   dailyNoteFolder: string; // empty → read Obsidian's daily-notes config
   dailyNoteFormat: string; // empty → read Obsidian's daily-notes config
   dailyNoteTemplate: string;
@@ -320,6 +328,12 @@ export interface HelmSettings {
 
 export const DEFAULT_SETTINGS: HelmSettings = {
   daybookHeading: 'Daybook',
+  claudeCommand: 'claude',
+  focusMaxMinutes: 50,
+  focusMinMinutes: 15,
+  breakMinutes: 5,
+  longBreakMinutes: 20,
+  blocksBeforeLongBreak: 3,
   projectsFolder: '02 PROJECTS',
   habitsFolder: '02 PROJECTS/Habits',
   inboxNote: '01 INBOX/Inbox.md',

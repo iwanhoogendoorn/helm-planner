@@ -13,6 +13,8 @@ import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { daybookSection } from '../daybook';
+import { openPlanDayAi } from '../modals/planDayAi';
+import { timerBar } from '../focusTimer';
 import { habitBadge } from '../fields';
 import { dayPartOf } from '../../data/habits';
 import { plainLabel, shortLabel } from '../../core/label';
@@ -51,6 +53,8 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   const cap = settings.dailyCapacityMinutes;
   const owner = state.tab ?? 'today';
   const go = (d: IsoDate): void => ctx.navigate(owner, { date: d, ...(state.scope ? { scope: state.scope } : {}) });
+  const timer = timerBar(ctx);
+  if (timer) root.appendChild(timer);
   root.appendChild(crumbBar(ctx, 'today', dateCrumbs(ctx, date, 'day', { day: true }), { homeClick: () => go(today), homeTitle: 'Jump to today' }));
   root.append(h('div', { cls: 'helm-day-head' },
     h('div', { cls: 'helm-day-nav' },
@@ -63,6 +67,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     ),
     h('div', { cls: 'helm-day-actions' },
       button('Plan day', { icon: 'list-plus', primary: !isPast && plan.openCount === 0, onClick: () => openPlanDay(ctx, date) }),
+      button('Fit the day', { icon: 'sparkles', title: 'Size the day’s work, split it into stretches with breaks, and propose times', onClick: () => openPlanDayAi(ctx, date) }),
       button('Wrap up', { icon: 'moon', onClick: () => openWrapUp(ctx, date) }),
       button('', { icon: 'plus', title: 'Capture into this day', onClick: () => openCapture(ctx, { date }) }),
       notesButton(ctx, targetForDate(date)),

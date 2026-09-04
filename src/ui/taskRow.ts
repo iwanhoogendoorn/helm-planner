@@ -5,6 +5,7 @@ import { formatRecurrence } from '../core/recurrence';
 import { chip, h, icon, iconButton, richText } from './dom';
 import type { UiContext } from './context';
 import { progressMenu, taskMenu } from './menus';
+import { startFocus } from './focusTimer';
 import { openTaskEditor } from './modals/taskEditor';
 import { followsOf, followUpsOf, isBlocked, isOpen } from '../data/planner';
 import { drawingsIndicator } from './drawings';
@@ -190,6 +191,8 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (opts.quickAction) actions.appendChild(iconButton(opts.quickAction.icon, opts.quickAction.title, (ev) => { ev.stopPropagation(); opts.quickAction!.onClick(t); }));
   else if (open) actions.appendChild(iconButton('calendar', 'Schedule…', (ev) => { ev.stopPropagation(); taskMenu(ctx, t, ev); }));
   for (const a of opts.extraActions ?? []) actions.appendChild(iconButton(a.icon, a.title, (ev) => { ev.stopPropagation(); a.onClick(t, ev); }));
+  // Start a stretch of work on this task — after its own actions, before the menu.
+  if (open) actions.appendChild(iconButton('timer', `Work on this${t.effortMinutes ? ` (${minutesToHuman(t.effortMinutes)})` : ''}`, (ev) => { ev.stopPropagation(); startFocus(ctx, t); }, 'helm-focus-btn'));
   actions.appendChild(iconButton('more-horizontal', 'More…', (ev) => { ev.stopPropagation(); taskMenu(ctx, t, ev); }));
   row.appendChild(actions);
 

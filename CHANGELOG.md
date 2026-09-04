@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- **“Fit the day”, and “Fit the week”.** Two buttons — one in the day header, one in
+  the week — that take the work already on your days, ask the Claude CLI on your own
+  machine how long each piece really takes and in what order to do it, and lay the
+  answer out as stretches of work with breaks between them. The week button also says
+  which day each task belongs on, keeping every day inside the capacity you set and
+  rolling the rest forward. **Nothing is written until you confirm**: change the
+  minutes, move a task to another day, drop it out of the day or push it to another
+  week, and the plan re-lays itself as you go. With no CLI installed the button still
+  works — Helm sizes and spreads the work with the estimates it already has, and says
+  whose plan you are looking at.
+- **A pomodoro that bends to the task.** Not everything fits in twenty-five minutes,
+  so a task's stretch is as long as the task needs, up to the maximum you set; a long
+  one is split into as few equal stretches as will hold it, with a break after each
+  and a longer one after a few in a row. Every task row has a **timer button**: press
+  it and a bar sits above the day counting down, through tab switches and reloads,
+  because what is left is worked out from the clock rather than ticked down. When it
+  is up, Helm offers you the break, another stretch, or done.
+- New **Focus and breaks** settings: the longest and shortest stretch, the short and
+  long break, how many stretches before a long one, and the Claude command to run.
+
 ## 1.24.6 — 2026-09-03
 
 - **A project keeps its finished tasks in view.** Ticking one off used to make it

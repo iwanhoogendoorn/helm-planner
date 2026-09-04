@@ -140,6 +140,36 @@ export default class HelmPlugin extends Plugin {
     if (this.updateTimer) window.clearTimeout(this.updateTimer);
   }
 
+  /**
+   * Run the Claude CLI with the prompt on stdin. It is a plain command on your own machine — Helm never
+   * sends anything anywhere itself — and it only runs when you press a button that says it will.
+   */
+  async runClaude(args: string[], stdin: string): Promise<string> {
+    // Obsidian's own `require`, not a bundled import: a static import would break the plugin on mobile,
+    // and a dynamic one is fetched over the network rather than loaded from Node.
+    const req = (window as unknown as { require?: (m: string) => typeof import('node:child_process') }).require;
+    if (!req) throw new Error('no Node here — this only works on the desktop app');
+    const { spawn } = req('child_process');
+    const cmd = this.settings.claudeCommand.trim();
+    const [bin, ...rest] = cmd.split(/\s+/);
+    return new Promise<string>((resolve, reject) => {
+      const child = spawn(bin!, [...rest, ...args], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let out = '';
+      let err = '';
+      const timer = setTimeout(() => { child.kill(); reject(new Error('Claude took too long')); }, 120_000);
+      child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+      child.stderr.on('data', (d: Buffer) => { err += d.toString(); });
+      child.on('error', (e: Error) => { clearTimeout(timer); reject(new Error(`${cmd}: ${e.message}`)); });
+      child.on('close', (code: number | null) => {
+        clearTimeout(timer);
+        if (code === 0) resolve(out);
+        else reject(new Error(err.trim().split('\n')[0] || `${cmd} exited with ${code}`));
+      });
+      child.stdin.write(stdin);
+      child.stdin.end();
+    });
+  }
+
   today(): IsoDate { return todayLocal(); }
   dailyConfig(): { folder: string; format: string; template: string } { return this.daily; }
   onSettingsChanged(): void { void this.index.rebuild(); }
@@ -296,6 +326,8 @@ export default class HelmPlugin extends Plugin {
       run: (label, fn) => this.run(label, fn),
       trackModal: (m) => { this.openModals.add(m); const orig = m.onClose?.bind(m); m.onClose = () => { orig?.(); this.openModals.delete(m); }; },
       resourceUrl: (path) => this.vault.resourceUrl(path),
+      // Only when there is a command to run: with the setting cleared, Helm sizes the day itself.
+      ...(this.settings.claudeCommand.trim() ? { runClaude: (args: string[], stdin: string) => this.runClaude(args, stdin) } : {}),
     };
   }
 
