@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.27.0 — 2026-09-06
 
 - **A profiled project says what it means, in words.** Chips are quick to read once you
   know the code and opaque before that, so every song now carries the arrangement as a
