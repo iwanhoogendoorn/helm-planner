@@ -324,6 +324,9 @@ export interface HelmSettings {
   showTimeBlocks: boolean;
   /** Whether a task's steps start folded away. Tasks you have folded or unfolded by hand ignore it. */
   foldStepsByDefault: boolean;
+  /** The period an export starts on, and which parts of a report you last asked for. */
+  reportScope: 'day' | 'week' | 'month' | 'quarter' | 'year';
+  reportSections: string[];
   /** The folds you have made by hand, kept so they survive a reload. Not shown in the settings. */
   foldedTasks: string[];
   unfoldedTasks: string[];
@@ -393,6 +396,8 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   openOnStartup: false,
   showTimeBlocks: true,
   foldStepsByDefault: false,
+  reportScope: 'week',
+  reportSections: ['history', 'plan', 'ahead', 'projects', 'goals', 'habits', 'daybook'],
   foldedTasks: [],
   unfoldedTasks: [],
   indentUnit: '\t',

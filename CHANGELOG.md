@@ -34,6 +34,21 @@
   Helm's own data file, so what you folded this morning is still folded after a reload
   or a restart. A task borrowed onto a day (its steps planned here, the task itself
   living elsewhere) folds like any other.
+- **Export a PDF of any period.** A day, a week, a month, a quarter or a year, as a
+  proper A4 document: the headline figures, what happened (done per day as a chart, by
+  project, by part of the day, by weekday, and how much of the plan held), the day's own
+  plan or the week's days, **what is still ahead** with everything carried in overdue,
+  the projects with their progress and next actions, the goals, the habits, and the
+  diary. Tick the parts you want — the dialogue counts what each report will hold before
+  a page is rendered, so an empty one is something you find out here rather than in a
+  PDF reader. A project can be exported on its own too, phases and all.
+  The **buttons sit where the work is**: the day header, the week header, the calendar
+  (whatever period you are looking at), the Projects list, a project's own header, the
+  Review page, the Dashboard, and Horizons — plus `Export a PDF of this day / week /
+  month / quarter / year` and `Export a report…` in the command palette.
+  Nothing leaves the machine: the page is rendered and printed locally, the same way the
+  other plugins in this vault do it, and where there is no PDF writer the print dialogue
+  is offered instead.
 - **A project has a button for its own sub-projects.** The list had “New project” and a
   project had nothing — starting a sub-project meant knowing to right-click a card on the
   list behind you. There is a **New sub-project** button in the project's header now, and

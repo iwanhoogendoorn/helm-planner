@@ -1,5 +1,6 @@
 /** Dashboard: filterable stats with charts you can click into. */
 import type { IsoDate, Task } from '../../core/types';
+import { openExportReport } from '../modals/exportReport';
 import { addDays, humanDate, minutesToHuman, startOfWeek, WEEKDAY_NAMES } from '../../core/dates';
 import { periodOf, type Period, type PeriodKind } from '../../core/periods';
 import { ghostHabits, habitHistories } from '../../data/habits';
@@ -91,7 +92,9 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   const periodSel = h('select', { cls: 'helm-select-inline', onChange: (ev) => { state.periodKey = (ev.target as HTMLSelectElement).value || undefined; refresh(); } });
   periodSel.appendChild(h('option', { text: 'Any horizon', attr: { value: '' } }));
   for (const key of [periodOf(today, 'year').key, periodOf(today, 'quarter').key, periodOf(today, 'month').key]) periodSel.appendChild(h('option', { text: `Bound to ${key}`, attr: { value: key, selected: state.periodKey === key } }));
-  const bar = h('div', { cls: 'helm-toolbar helm-dash-filters' }, icon('filter'), presetSel, projSel, areaSel, tagSel, periodSel);
+  const bar = h('div', { cls: 'helm-toolbar helm-dash-filters' }, icon('filter'), presetSel, projSel, areaSel, tagSel, periodSel,
+    h('span', { cls: 'helm-spacer' }),
+    button('Export', { icon: 'file-down', title: 'A PDF of this period: the same figures, on paper', onClick: () => openExportReport(ctx, { scope: state.preset === 'year' ? 'year' : state.preset === 'quarter' ? 'quarter' : state.preset === 'month' ? 'month' : 'week', anchor: range.from, ...(state.projectId ? { projectId: state.projectId } : {}) }) }));
   if (state.preset === 'custom') {
     bar.append(
       h('input', { attr: { type: 'date', value: range.from }, onChange: (ev) => { state.from = (ev.target as HTMLInputElement).value; refresh(); } }),

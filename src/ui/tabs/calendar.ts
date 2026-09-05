@@ -3,6 +3,7 @@
  * clickable into the next, each with the goals and projects of its period.
  */
 import type { HelmSettings, IsoDate, Task } from '../../core/types';
+import { openExportReport } from '../modals/exportReport';
 import { addDays, addMonths, addYears, humanDate, isoWeek, minutesToHuman, MONTH_SHORT, startOfWeek, WEEKDAY_SHORT } from '../../core/dates';
 import { monthPeriod, periodOf, quarterPeriod, weekPeriod, yearPeriod, type Period } from '../../core/periods';
 import { horizonPeriod, tasksByDay, type DayBucket, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../../data/planner';
@@ -69,6 +70,7 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
       : view === 'calendar' && griddable
         ? button('Fit the week', { icon: 'sparkles', title: 'Size the week’s work, spread it over the days that are left, and propose times', onClick: () => openPlanWeekAi(ctx, span[0]!) })
         : null,
+    button('', { icon: 'file-down', title: 'Export what you are looking at as a PDF', onClick: () => openExportReport(ctx, { scope: state.scope === 'day' ? 'day' : state.scope === 'month' || state.scope === 'quarter' || state.scope === 'year' ? state.scope : 'week', anchor: state.anchor }) }),
     h('span', { cls: 'helm-hint', text: griddable ? `${span[0]} → ${span[span.length - 1]}` : `${period.start} → ${period.end}` }),
   ));
 

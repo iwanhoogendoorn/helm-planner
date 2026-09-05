@@ -10,6 +10,7 @@ import type { UiContext } from '../context';
 import { askText, wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
 import { openProjectForm } from '../modals/projectForm';
+import { openExportReport } from '../modals/exportReport';
 import { openCapture } from '../modals/capture';
 import { openDatePicker } from '../modals/datePicker';
 import { minutesToHuman } from '../../core/dates';
@@ -64,6 +65,7 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     h('label', { cls: 'helm-toggle' }, h('input', { attr: { type: 'checkbox', checked: state.showClosed }, onChange: (ev) => { state.showClosed = (ev.target as HTMLInputElement).checked; ctx.refresh(); } }), h('span', { text: 'Show closed' })),
     h('span', { cls: 'helm-spacer' }),
     viewSwitcher(ctx, state, 'listView'),
+    button('', { icon: 'file-down', title: 'Export the projects as a PDF', onClick: () => openExportReport(ctx, { scope: 'quarter' }) }),
     button('New project', { icon: 'folder-plus', primary: true, onClick: () => openProjectForm(ctx, { onCreated: (p) => ctx.navigate('projects', { projectId: p.id }) }) }),
   ));
   if (all.length === 0) {
@@ -199,6 +201,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       h('span', { cls: 'helm-spacer' }),
       // The mirror of “New project” on the list: a project is where its own sub-projects begin.
       button('New sub-project', { icon: 'folder-plus', title: `A project under “${p.title}”`, onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) }),
+      button('', { icon: 'file-down', title: `Export “${p.title}” as a PDF`, onClick: () => openExportReport(ctx, { scope: 'quarter', projectId: p.id }) }),
       button('Open note', { icon: 'file-text', onClick: () => void ctx.openFile(p.path) }),
       notesButton(ctx, targetForProject(p.id, p.title)),
       drawingsButton(ctx, targetForProject(p.id, p.title)),

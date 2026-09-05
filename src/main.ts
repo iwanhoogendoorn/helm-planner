@@ -1,5 +1,6 @@
 /** Helm — plugin entry point. Wires the index, mutations and views to Obsidian. */
 import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
+import { openExportReport } from './ui/modals/exportReport';
 import { loadFolds } from './ui/fold';
 import { DEFAULT_SETTINGS, type HelmSettings, type IsoDate } from './core/types';
 import { todayLocal } from './core/dates';
@@ -455,6 +456,11 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'open-quarter', name: 'Open Quarter', callback: () => void this.openView().then((v) => v.navigate('week', { date: this.today(), scope: 'quarter' })) });
     this.addCommand({ id: 'open-year', name: 'Open Year', callback: () => void this.openView().then((v) => v.navigate('week', { date: this.today(), scope: 'year' })) });
     this.addCommand({ id: 'open-projects', name: 'Open Projects', callback: () => void this.openView().then((v) => v.navigate('projects')) });
+    // One command per period, so a report is a keystroke rather than a hunt for the right tab.
+    for (const [scope, name] of [['day', 'day'], ['week', 'week'], ['month', 'month'], ['quarter', 'quarter'], ['year', 'year']] as const) {
+      this.addCommand({ id: `export-${scope}`, name: `Export a PDF of this ${name}`, callback: () => openExportReport(this.uiContext(this.activeView()), { scope, anchor: this.today() }) });
+    }
+    this.addCommand({ id: 'export-report', name: 'Export a report…', callback: () => openExportReport(this.uiContext(this.activeView())) });
     this.addCommand({ id: 'open-inbox', name: 'Open Inbox', callback: () => void this.openView().then((v) => v.navigate('inbox')) });
     this.addCommand({ id: 'open-review', name: 'Open Review', callback: () => void this.openView().then((v) => v.navigate('review')) });
     this.addCommand({ id: 'open-dashboard', name: 'Open Dashboard', callback: () => void this.openView().then((v) => v.navigate('dashboard')) });

@@ -1,5 +1,6 @@
 /** Horizons: the year, its quarters and months — goals and the projects bound to each. */
 import type { Goal, Project } from '../../core/types';
+import { openExportReport } from '../modals/exportReport';
 import { humanDate } from '../../core/dates';
 import { parsePeriod, periodOf, type Period } from '../../core/periods';
 import { yearPeriod } from '../../core/periods';
@@ -42,6 +43,7 @@ export function renderHorizons(ctx: UiContext, root: HTMLElement, state: Horizon
     h('div', { cls: 'helm-day-actions' },
       notesButton(ctx, selP ? targetForPeriod(selP) : targetForPeriod(yearPeriod(state.year))),
       drawingsButton(ctx, selP ? targetForPeriod(selP) : targetForPeriod(yearPeriod(state.year))),
+      button('', { icon: 'file-down', title: 'Export this horizon as a PDF', onClick: () => openExportReport(ctx, { scope: selP ? (selP.kind === 'week' ? 'week' : selP.kind) : 'year', anchor: selP ? selP.start : `${state.year}-01-01` }) }),
       button('Open year note', { icon: 'file-text', onClick: () => openPeriodNote(ctx, hz.year.period) }),
     ),
   ));

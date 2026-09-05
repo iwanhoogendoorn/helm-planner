@@ -949,3 +949,14 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-planweek-day.is-out { opacity: 0.75; border-style: dashed; }
 .helm-planweek-day-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
 .helm-planweek-dow { font-weight: 600; }
+
+/* ── Exporting a report ─────────────────────────────────────────────── */
+/* Wide enough for the five periods, the stepper and the range without any of it running off. */
+.modal:has(.helm-export) { width: min(640px, 94vw); }
+.helm-export-head .helm-hint { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.helm-export-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.helm-export-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.helm-export-period { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1.3; text-align: center; }
+.helm-export-counts { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-radius: var(--radius-s); background: var(--background-secondary); margin-bottom: 10px; }
+.helm-export-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; margin: 4px 0 10px; }
+.helm-export-section { padding: 2px 0; }

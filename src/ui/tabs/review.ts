@@ -1,5 +1,6 @@
 /** Weekly review: numbers, what needs attention, habits, what got done. */
 import { humanDate, relativeDays, minutesToHuman } from '../../core/dates';
+import { openExportReport } from '../modals/exportReport';
 import { review, type ProjectHealth } from '../../data/planner';
 import { habitStats } from '../../data/habits';
 import { button, chip, empty, h, icon, section } from '../dom';
@@ -26,6 +27,9 @@ export function renderReview(ctx: UiContext, root: HTMLElement, state: ReviewSta
   const r = review(snap, today, settings);
   const store = state.collapsed;
   root.appendChild(crumbBar(ctx, 'review', dateCrumbs(ctx, today, 'week', { day: false }).map((c) => ({ ...c, active: false }))));
+
+  root.appendChild(h('div', { cls: 'helm-toolbar' }, h('span', { cls: 'helm-spacer' }),
+    button('Export the week', { icon: 'file-down', title: 'A PDF of this week: what happened, what is ahead, the projects', onClick: () => openExportReport(ctx, { scope: 'week', anchor: today }) })));
 
   const stat = (value: string | number, label: string, cls = '', onClick?: () => void): HTMLElement => h('button', { cls: ['helm-stat', cls, onClick && 'is-clickable'], onClick }, h('div', { cls: 'helm-stat-value', text: String(value) }), h('div', { cls: 'helm-stat-label', text: label }));
   root.appendChild(h('div', { cls: 'helm-stats' },

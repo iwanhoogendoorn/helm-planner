@@ -15,6 +15,7 @@ import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { daybookSection } from '../daybook';
 import { openPlanDayAi } from '../modals/planDayAi';
+import { openExportReport } from '../modals/exportReport';
 import { timerBar } from '../focusTimer';
 import { habitBadge } from '../fields';
 import { dayPartOf } from '../../data/habits';
@@ -70,6 +71,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
       button('Plan day', { icon: 'list-plus', primary: !isPast && plan.openCount === 0, onClick: () => openPlanDay(ctx, date) }),
       button('Fit the day', { icon: 'sparkles', title: 'Size the day’s work, split it into stretches with breaks, and propose times', onClick: () => openPlanDayAi(ctx, date) }),
       button('Wrap up', { icon: 'moon', onClick: () => openWrapUp(ctx, date) }),
+      button('', { icon: 'file-down', title: 'Export this day as a PDF', onClick: () => openExportReport(ctx, { scope: 'day', anchor: date }) }),
       button('', { icon: 'plus', title: 'Capture into this day', onClick: () => openCapture(ctx, { date }) }),
       notesButton(ctx, targetForDate(date)),
       drawingsButton(ctx, targetForDate(date)),
