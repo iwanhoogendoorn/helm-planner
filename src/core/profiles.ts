@@ -142,3 +142,59 @@ export function parseAssignment(text: string, profile: ProjectProfile): Assignme
   }
   return { ...(person ? { person } : {}), mode: known };
 }
+
+/**
+ * What a set of assignments actually says, in words.
+ *
+ * A row of chips is quick to read once you know the code and opaque before that: “Iwan Chords, Zaara
+ * Sing” is a lookup, “Zaara sings and Iwan plays the chords” is a sentence. The sentence is generated
+ * from the same assignments the chips are, so the two can never drift apart.
+ */
+const VERBS: Record<string, string> = {
+  'singing': 'sings',
+  'piano solo': 'plays it on piano',
+  'piano chords': 'plays the chords',
+  'producing': 'produces it',
+  'outline': 'outlines it',
+  'draft': 'drafts it',
+  'revise': 'revises it',
+  'review': 'reviews it',
+  'final': 'finishes it',
+  'read': 'reads it',
+  'notes': 'takes the notes',
+  'lab': 'does the lab',
+  'practice test': 'sits a practice test',
+  'reviewed': 'reviews it',
+  'define': 'defines it',
+  'build': 'builds it',
+  'test': 'tests it',
+  'communicate': 'communicates it',
+  'handover': 'hands it over',
+};
+
+const verbFor = (mode: string): string => VERBS[mode.toLowerCase()] ?? `does the ${mode.toLowerCase()}`;
+
+/** “sings and plays the chords” — one person's part of it. */
+export function describePart(modes: string[]): string {
+  const verbs = modes.map(verbFor);
+  if (verbs.length === 0) return '';
+  if (verbs.length === 1) return verbs[0]!;
+  return `${verbs.slice(0, -1).join(', ')} and ${verbs[verbs.length - 1]}`;
+}
+
+/**
+ * The whole arrangement: “Zaara sings, Iwan plays the chords”. Without people it is the work itself —
+ * “drafted and reviewed” — because a chapter has no one to name.
+ */
+export function describeWork(assignments: Assignment[], _profile?: ProjectProfile): string {
+  if (assignments.length === 0) return '';
+  const order: string[] = [];
+  const byPerson = new Map<string, string[]>();
+  for (const a of assignments) {
+    const who = a.person ?? '';
+    if (!byPerson.has(who)) { byPerson.set(who, []); order.push(who); }
+    byPerson.get(who)!.push(a.mode);
+  }
+  const parts = order.map((who) => (who ? `${who} ${describePart(byPerson.get(who)!)}` : describePart(byPerson.get(who)!)));
+  return parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')}, ${parts[parts.length - 1]}`;
+}

@@ -7,7 +7,7 @@
  */
 import { Modal } from 'obsidian';
 import type { IsoDate, Project } from '../../core/types';
-import type { Assignment, ProjectProfile } from '../../core/profiles';
+import { describeWork, type Assignment, type ProjectProfile } from '../../core/profiles';
 import { monthPeriod, parsePeriod } from '../../core/periods';
 import { button, h } from '../dom';
 import type { UiContext } from '../context';
@@ -86,6 +86,17 @@ export function openProfileItem(ctx: UiContext, p: Project, profile: ProjectProf
     grid.appendChild(row);
   }
 
+  // What the ticks add up to, in the words the board will use — so the dialogue and the card agree.
+  const says = h('div', { cls: 'helm-profile-says helm-profile-says-preview', text: 'Nobody is doing anything to it yet.' });
+  const refreshSays = (): void => {
+    const all: Assignment[] = [];
+    for (const person of rows) for (const mode of profile.modes) if (picked.has(`${person}|${mode}`)) all.push({ ...(person ? { person } : {}), mode });
+    const sentence = describeWork(all, profile);
+    says.setText(sentence === '' ? 'Nobody is doing anything to it yet.' : `${title.value.trim() || `This ${profile.itemNoun}`}: ${sentence}.`);
+  };
+  grid.addEventListener('click', () => window.setTimeout(refreshSays, 0));
+  title.addEventListener('input', refreshSays);
+
   const field = (label: string, el: HTMLElement): HTMLElement => h('div', { cls: 'helm-field' }, h('label', { text: label }), el);
   root.append(
     field('Name', title),
@@ -93,6 +104,7 @@ export function openProfileItem(ctx: UiContext, p: Project, profile: ProjectProf
     field(profile.groupNoun[0]!.toUpperCase() + profile.groupNoun.slice(1), h('div', {}, groupSel, newGroup)),
     h('div', { cls: 'helm-hint', text: profile.people.length > 0 ? 'Who is doing what:' : 'What has to happen:' }),
     grid,
+    says,
     h('div', { cls: 'helm-modal-buttons' },
       button('Cancel', { onClick: () => m.close() }),
       button(`Add the ${profile.itemNoun}`, { primary: true, icon: 'plus', onClick: () => void create() }),

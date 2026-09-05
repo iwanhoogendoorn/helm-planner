@@ -193,6 +193,9 @@ export function renderProjectNote(p: {
   fm.push('tags:', '  - project', ...(p.tags ?? []).map((t) => `  - ${t}`));
   fm.push('---', '');
   const body: string[] = [`# ${p.title}`, '', '## Objective', '', p.objective ?? 'This project is successful when…', ''];
+  // A profiled note explains its own shape, so it still makes sense to someone reading the file
+  // without Helm — which is the whole point of keeping it as ordinary task lines.
+  if (p.profile && p.profile !== 'generic') body.push(...howItWorks(p.profile, p.modes));
   for (const ph of p.phases ?? []) {
     body.push(`## Phase: ${ph.title}${ph.due ? ` 📅 ${ph.due}` : ''}`, '');
     for (const t of ph.tasks ?? []) body.push(t.startsWith('- [') ? t : `- [ ] ${t}`);
@@ -202,6 +205,25 @@ export function renderProjectNote(p: {
   for (const t of p.tasks ?? []) body.push(t.startsWith('- [') ? t : `- [ ] ${t}`);
   body.push('', '## Log', '');
   return [...fm, ...body].join('\n');
+}
+
+/** Three lines telling a reader how the headings and indents below are meant to be read. */
+function howItWorks(profile: string, modes?: string[]): string[] {
+  const words: Record<string, { group: string; item: string; who: string; example: string }> = {
+    music: { group: 'month', item: 'song', who: 'who plays or sings it', example: 'Zaara · Singing' },
+    writing: { group: 'part', item: 'chapter', who: 'how far it has got', example: 'Draft' },
+    exam: { group: 'topic', item: 'subject', who: 'how it was studied', example: 'Practice test' },
+    client: { group: 'customer', item: 'request', who: 'which step it is at', example: 'Build' },
+  };
+  const w = words[profile] ?? { group: 'group', item: 'item', who: 'what has to happen', example: 'Step' };
+  return [
+    '## How this works',
+    '',
+    `Each **${w.group}** is a \`## Phase:\` heading below. Under it, one line per **${w.item}**; indented under that, one line for ${w.who} — \`${w.example}\`.`,
+    `Two indented lines under one ${w.item} means two of them at once${profile === 'music' ? ' — one sings while the other plays' : ''}.`,
+    `They are ordinary task lines${modes?.length ? ` (${modes.join(' · ')})` : ''}: tick one here or in Helm, it is the same line.`,
+    '',
+  ];
 }
 
 function quote(s: string): string {

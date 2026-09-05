@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { setup } from './fixture';
-import { parseAssignment, profileFor, shortOf, shortsFor } from '../../src/core/profiles';
+import { describePart, describeWork, parseAssignment, profileFor, shortOf, shortsFor } from '../../src/core/profiles';
 
 describe('project profiles', () => {
   it('knows the built-in vocabularies, and lets a project override them', () => {
@@ -67,5 +67,43 @@ describe('adding an item to a profiled project', () => {
     // Adding a second song to the same month reuses it rather than making another heading.
     await m.addProfileItem('prj-book', { title: 'Schoonzoon - Luna', group: 'September 2026', assignments: [{ person: 'Zaara', mode: 'Singing' }] });
     expect(index.project('prj-book')!.phases.filter((ph) => ph.title === 'September 2026')).toHaveLength(1);
+  });
+});
+
+describe('saying what the work is, in words', () => {
+  const music = profileFor('music');
+
+  it('turns a set of assignments into a sentence anyone can read', () => {
+    expect(describeWork([{ person: 'Zaara', mode: 'Singing' }, { person: 'Iwan', mode: 'Piano chords' }], music))
+      .toBe('Zaara sings, Iwan plays the chords');
+    // One person doing two things is one clause, not two.
+    expect(describeWork([{ person: 'Iwan', mode: 'Piano chords' }, { person: 'Iwan', mode: 'Singing' }], music))
+      .toBe('Iwan plays the chords and sings');
+    expect(describeWork([{ person: 'Zaara', mode: 'Piano solo' }], music)).toBe('Zaara plays it on piano');
+    expect(describeWork([{ person: 'Iwan', mode: 'Producing' }], music)).toBe('Iwan produces it');
+    expect(describeWork([], music)).toBe('');
+  });
+
+  it('says it without names when the work has nobody to name', () => {
+    const writing = profileFor('writing');
+    expect(describeWork([{ mode: 'Draft' }, { mode: 'Review' }], writing)).toBe('drafts it and reviews it');
+    expect(describePart(['Read', 'Lab'])).toBe('reads it and does the lab');
+    // A mode Helm has no verb for still reads as English rather than as a code.
+    expect(describePart(['Mixing'])).toBe('does the mixing');
+  });
+});
+
+describe('a profiled note explains its own shape', () => {
+  it('tells a reader how the headings and indents are meant to be read', async () => {
+    const { m, vault } = await setup();
+    const p = await m.createProject({ title: 'Songs', status: 'active', priority: 'normal', profile: 'music', people: ['Iwan', 'Zaara'] });
+    const note = await vault.read(p.path);
+    expect(note).toContain('## How this works');
+    expect(note).toContain('Each **month** is a `## Phase:` heading');
+    expect(note).toContain('one line per **song**');
+    expect(note).toContain('one sings while the other plays');
+    // A plain project says nothing extra.
+    const plain = await m.createProject({ title: 'Shed', status: 'active', priority: 'normal' });
+    expect(await vault.read(plain.path)).not.toContain('## How this works');
   });
 });

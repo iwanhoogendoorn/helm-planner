@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **A profiled project says what it means, in words.** Chips are quick to read once you
+  know the code and opaque before that, so every song now carries the arrangement as a
+  sentence underneath: *“Zaara sings, Iwan plays the chords”*, *“Iwan plays the chords,
+  plays it on piano and sings”*. One person doing two things reads as one clause, not
+  two. The same sentence appears live in the **Add a song** dialogue as you tick, so what
+  you are about to write is in plain English before you write it, and on a lane row's
+  tooltip. It is generated from the very assignments the chips are, so the two cannot
+  drift apart.
+- **A profiled note explains its own shape.** A new music, writing, exam or customer
+  project gets a short **How this works** section: which heading is the month, which line
+  is the song, which indented line is who does what — so the file still makes sense to
+  someone reading it without Helm, which is the whole point of keeping it as ordinary
+  task lines.
+
 ## 1.26.0 — 2026-09-06
 
 - **Project profiles: the same project, in its own words.** A project can now say what

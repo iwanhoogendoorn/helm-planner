@@ -8,7 +8,7 @@
  */
 import type { Project, Task } from '../core/types';
 import type { ProjectProfile } from '../core/profiles';
-import { parseAssignment } from '../core/profiles';
+import { describeWork, parseAssignment } from '../core/profiles';
 import { isOpen } from '../data/planner';
 import { plainLabel } from '../core/label';
 import { monthPeriod, parsePeriod } from '../core/periods';
@@ -158,7 +158,7 @@ export function renderProfileBoard(ctx: UiContext, root: HTMLElement, p: Project
         h('div', { cls: 'helm-profile-lane-head' }, icon('user'), h('strong', { text: who }), h('span', { cls: 'helm-spacer' }), h('span', { cls: 'helm-hint', text: `${e.done}/${e.total}` })),
         progressBar(e.total ? e.done / e.total : 0, 'is-thin'),
         ...mine.map((it) => h('div', { cls: 'helm-profile-lane-item' },
-          h('span', { cls: 'helm-profile-lane-title', text: it.title, attr: { title: it.title } }),
+          h('span', { cls: 'helm-profile-lane-title', text: it.title, attr: { title: `${it.title} — ${describeWork(it.work.map((w) => ({ ...(w.person ? { person: w.person } : {}), mode: w.mode })), profile)}` } }),
           h('span', { cls: 'helm-profile-lane-chips' }, ...it.work.filter((w) => (w.person ?? 'This project') === who).map((w) => modeChip(ctx, profile, w))),
         )),
       ));
@@ -178,6 +178,7 @@ export function renderProfileBoard(ctx: UiContext, root: HTMLElement, p: Project
         total > 0 ? h('span', { cls: 'helm-hint', text: `${it.done}/${total}` }) : null,
         iconButton('more-horizontal', 'More…', (ev) => taskMenu(ctx, it.task, ev)),
       ),
+      it.work.length > 0 ? h('div', { cls: 'helm-profile-says' }, describeWork(it.work.map((w) => ({ ...(w.person ? { person: w.person } : {}), mode: w.mode })), profile)) : null,
       h('div', { cls: 'helm-profile-item-work' },
         ...it.work.map((w) => modeChip(ctx, profile, w, { withPerson: true })),
         ...it.other.map((o) => chip(plainLabel(o.text), o.status === 'done' ? 'done' : 'count')),
