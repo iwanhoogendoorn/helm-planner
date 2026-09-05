@@ -89,15 +89,16 @@ function columns(points: { key: string; label: string; value: number }[]): strin
 function aheadSection(r: Report): string {
   const rows: string[] = [];
   if (r.overdue.length > 0) {
-    rows.push(`<h3>Carried in — ${r.overdue.length} overdue</h3>${list(r.overdue, r.today, { date: true })}`);
+    rows.push(`<h3>Carried in — ${r.overdue.length} past its due date</h3>${list(r.overdue, r.today, { date: true })}`);
   }
   for (const day of r.ahead) rows.push(aheadDay(day, r.today));
   if (r.undated.length > 0) {
     rows.push(`<h3>No day yet — ${r.undated.length}</h3>${list(r.undated, r.today)}`);
   }
-  if (rows.length === 0) return `<section><h2>What is ahead</h2>${emptyNote('Nothing is planned in this period yet.')}</section>`;
+  const behind = r.leftBehind > 0 ? `<p class="note">Also ${r.leftBehind} open task${r.leftBehind === 1 ? '' : 's'} planned before this period with no due date — still open, not late.</p>` : '';
+  if (rows.length === 0) return `<section><h2>What is ahead</h2>${emptyNote('Nothing is planned in this period yet.')}${behind}</section>`;
   const total = r.ahead.reduce((s, d) => s + d.tasks.length, 0);
-  return `<section><h2>What is ahead</h2><p class="note">${total} task${total === 1 ? '' : 's'} planned across ${r.ahead.length} day${r.ahead.length === 1 ? '' : 's'}${r.overdue.length ? `, ${r.overdue.length} carried in overdue` : ''}.</p>${rows.join('')}</section>`;
+  return `<section><h2>What is ahead</h2><p class="note">${total} task${total === 1 ? '' : 's'} planned across ${r.ahead.length} day${r.ahead.length === 1 ? '' : 's'}${r.overdue.length ? `, ${r.overdue.length} carried in overdue` : ''}.</p>${behind}${rows.join('')}</section>`;
 }
 
 function aheadDay(day: AheadDay, today: string): string {

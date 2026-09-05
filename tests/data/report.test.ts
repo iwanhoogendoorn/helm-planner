@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { setup, TODAY } from './fixture';
+import { dailyPath, setup, TODAY } from './fixture';
 import { ALL_SECTIONS, buildReport, rangeOf, type ReportOptions } from '../../src/data/report';
 import { renderReport, reportFileName, esc } from '../../src/ui/report/html';
 
@@ -38,6 +38,21 @@ describe('building a report', () => {
     const r = buildReport(index.snapshot, opts(), TODAY, settings);
     expect(r.overdue.some((t) => t.id === 'tsk-0001' || t.text.includes('OIB'))).toBe(true);
     expect(r.ahead.every((d) => d.date >= TODAY)).toBe(true);        // nothing behind today is “ahead”
+  });
+
+  it('overdue means past its due date — an old task with no due date is left behind, not late', async () => {
+    const day = '2026-07-14';
+    const { index, settings } = await setup({
+      [dailyPath(day)]: `---\ntitle: 14\n---\n\n# Day planner\n\n### A. Morning\n\n- [ ] Sat in an old note, never due\n- [ ] 12:00 - 13:00: \n\n### Anytime\n`,
+    });
+    const r = buildReport(index.snapshot, opts(), TODAY, settings);
+    expect(r.overdue.every((t) => t.due !== undefined && t.due < TODAY)).toBe(true);
+    expect(r.overdue.map((t) => t.text)).not.toContain('Sat in an old note, never due');
+    expect(r.leftBehind).toBeGreaterThan(0);                        // counted, not dumped into the list
+    // Helm's own empty time blocks are scaffolding and never reach the page.
+    const all = [...r.overdue, ...r.undated, ...r.ahead.flatMap((d) => d.tasks), ...r.days.flatMap((d) => [...d.open, ...d.done])];
+    expect(all.every((t) => t.text.trim() !== '')).toBe(true);
+    expect(renderReport(r, 'now')).toContain('still open, not late');
   });
 
   it('a day report brings the day’s own plan, a year report does not', async () => {

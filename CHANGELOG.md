@@ -34,6 +34,13 @@
   Helm's own data file, so what you folded this morning is still folded after a reload
   or a restart. A task borrowed onto a day (its steps planned here, the task itself
   living elsewhere) folds like any other.
+- **“Overdue” in a report means past its due date**, the same as everywhere else in Helm.
+  It was counting anything still open in an older daily note, so a first export announced
+  “298 overdue” when none of them were actually late — they were simply not finished yet.
+  Work like that is now a single counted line (“also N open tasks planned before this
+  period with no due date — still open, not late”) rather than forty rows under the wrong
+  heading. Helm's own empty time blocks (`- [ ] 12:00 - 13:00:`) no longer reach the page
+  at all: they are scaffolding, not work.
 - **Export a PDF of any period.** A day, a week, a month, a quarter or a year, as a
   proper A4 document: the headline figures, what happened (done per day as a chart, by
   project, by part of the day, by weekday, and how much of the plan held), the day's own

@@ -12,6 +12,7 @@ import type { DaybookEntry } from '../core/daybook';
 import type { Habit, HelmSettings, IsoDate, Project, Snapshot, Task } from '../core/types';
 import { addDays, humanDate, isoWeek, isoWeekday, WEEKDAY_NAMES } from '../core/dates';
 import { monthPeriod, quarterPeriod, weekPeriod, yearPeriod, type Period } from '../core/periods';
+import { plainLabel } from '../core/label';
 import { computeStats, doneDate, type DashboardStats } from './stats';
 import { compareTasks, dayPlan, effortOf, goalProgress, isOpen, plannedDate, projectHealth, type DayPlan, type HorizonGoal, type ProjectHealth } from './planner';
 
@@ -72,8 +73,10 @@ export interface Report {
   /** The days of a week, when the report is one week. */
   days: { date: IsoDate; done: Task[]; open: Task[]; minutes: number }[];
   ahead: AheadDay[];
-  /** Open and overdue before the period starts — what you carry in. */
+  /** Open and past its due date — what you carry in late. */
   overdue: Task[];
+  /** Still open from before the period, with no due date: not late, just not done. A count, not a list. */
+  leftBehind: number;
   /** Open work inside the period with no day of its own. */
   undated: Task[];
   projects: ProjectHealth[];
@@ -121,18 +124,25 @@ export function buildReport(snap: Snapshot, opts: ReportOptions, today: IsoDate,
   const byDate = new Map<IsoDate, Task[]>();
   const undated: Task[] = [];
   const overdue: Task[] = [];
+  let leftBehind = 0;
   for (const t of snap.tasks.values()) {
     if (!isOpen(t) || t.origin === 'daily-mirror') continue;
     if (opts.projectId && t.projectId !== opts.projectId) continue;
+    // Helm's own empty time blocks (`- [ ] 12:00 - 13:00:`) are scaffolding, not work.
+    if (plainLabel(t.text).trim() === '') continue;
+    // Overdue means past its due date — the same thing it means everywhere else in Helm. A task
+    // sitting in an old daily note with no due date is not late, it is simply still open; it is
+    // counted as work left behind rather than dumped into the report by the hundred.
+    if (t.due !== undefined && t.due < today) { overdue.push(t); continue; }
     const when = plannedDate(t) ?? t.due;
     if (when === undefined) {
       // Undated project work is worth listing for a project report; for a period it is noise.
       if (opts.projectId) undated.push(t);
       continue;
     }
-    if (when < from) { if (when < today) overdue.push(t); continue; }
+    if (when < from) { leftBehind++; continue; }
     if (when > to) continue;
-    if (when < today) { overdue.push(t); continue; }
+    if (when < today) { leftBehind++; continue; }
     const list = byDate.get(when) ?? [];
     list.push(t);
     byDate.set(when, list);
@@ -149,7 +159,7 @@ export function buildReport(snap: Snapshot, opts: ReportOptions, today: IsoDate,
       const done: Task[] = [];
       const open: Task[] = [];
       for (const t of snap.tasks.values()) {
-        if (t.origin === 'daily-mirror') continue;
+        if (t.origin === 'daily-mirror' || plainLabel(t.text).trim() === '') continue;
         if (doneDate(t) === d) done.push(t);
         else if (isOpen(t) && plannedDate(t) === d) open.push(t);
       }
@@ -217,6 +227,7 @@ export function buildReport(snap: Snapshot, opts: ReportOptions, today: IsoDate,
     days,
     ahead,
     overdue,
+    leftBehind,
     undated: undated.sort(compareTasks),
     projects,
     ...(project ? { project } : {}),
