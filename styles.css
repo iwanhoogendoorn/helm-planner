@@ -965,13 +965,19 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-profile-kinds { flex-wrap: wrap; }
 .helm-profile-item .helm-spacer, .helm-profile-head .helm-spacer { flex: 1; }
 
-/* The who-does-what grid in the add dialogue */
-.helm-profile-grid { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 10px; }
-.helm-profile-gridhead, .helm-profile-gridrow { display: grid; grid-template-columns: minmax(80px, 1fr) repeat(var(--helm-modes, 4), 64px); align-items: center; gap: 4px; }
-.helm-profile-mode { font-size: var(--font-ui-smaller); color: var(--text-muted); text-align: center; }
-.helm-profile-person { font-weight: 600; }
-.helm-profile-cell { display: flex; align-items: center; justify-content: center; padding: 3px 0; border-radius: var(--radius-s); }
-.helm-profile-cell:hover { background: var(--background-modifier-hover); }
+/* Who does what: a named button per way of working, so nothing has to be decoded. */
+/* Wide enough that a person and their four ways of working sit on one line. */
+.modal:has(.helm-profile-item) { width: min(760px, 94vw); }
+.helm-profile-picker { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; }
+.helm-profile-pick-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--radius-s); border: 1px solid var(--background-modifier-border); }
+.helm-profile-pick-row.is-on { border-color: var(--interactive-accent); }
+.helm-profile-person { font-weight: 600; min-width: 76px; }
+.helm-profile-pick-modes { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+.helm-profile-pick { cursor: pointer; border: 1px solid var(--background-modifier-border); background: var(--background-primary); }
+.helm-profile-pick:hover { border-color: var(--interactive-accent); background: var(--background-modifier-hover); }
+.helm-profile-pick.is-on { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }
+.helm-profile-pick-sum { font-style: italic; white-space: nowrap; margin-left: auto; padding-left: 8px; }
+.helm-profile-groups { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
 
 /* One lane per person: what they are on this month */
 .helm-profile-lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 12px; }

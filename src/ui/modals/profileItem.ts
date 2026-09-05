@@ -54,22 +54,36 @@ export function openProfileItem(ctx: UiContext, p: Project, profile: ProjectProf
   newGroup.style.display = 'none';
   groupSel.addEventListener('change', () => { newGroup.style.display = groupSel.value === '__new' ? '' : 'none'; if (groupSel.value === '__new') newGroup.focus(); });
 
-  // Who does what: a checkbox per person and way of working, or just per way when nobody is named.
+  // Who does what. A row of named buttons per person rather than a grid of initials: “Chords” says what
+  // it is, “PC” makes you remember. Pressing one turns it on, and the row says what it adds up to.
   const picked = new Set<string>();
-  const grid = h('div', { cls: 'helm-profile-grid', style: { '--helm-modes': String(profile.modes.length) } as unknown as Partial<CSSStyleDeclaration> });
+  const grid = h('div', { cls: 'helm-profile-picker' });
   const rows = profile.people.length > 0 ? profile.people : [''];
-  grid.appendChild(h('div', { cls: 'helm-profile-gridhead' }, h('span'), ...profile.modes.map((mode, i) => h('span', { cls: 'helm-profile-mode', text: profile.short[i] ?? mode, attr: { title: mode } }))));
   for (const person of rows) {
-    grid.appendChild(h('div', { cls: 'helm-profile-gridrow' },
-      h('span', { cls: 'helm-profile-person', text: person || 'This work' }),
-      ...profile.modes.map((mode) => {
+    const sum = h('span', { cls: 'helm-hint helm-profile-pick-sum', text: summarise([]) });
+    const row = h('div', { cls: 'helm-profile-pick-row' },
+      h('span', { cls: 'helm-profile-person', text: person || `This ${profile.itemNoun}` }),
+      h('span', { cls: 'helm-profile-pick-modes' }, ...profile.modes.map((mode) => {
         const key = `${person}|${mode}`;
-        const box = h('input', { attr: { type: 'checkbox' }, cls: 'helm-profile-check' }) as HTMLInputElement;
-        box.title = person ? `${person} — ${mode}` : mode;
-        box.addEventListener('change', () => { if (box.checked) picked.add(key); else picked.delete(key); });
-        return h('label', { cls: 'helm-profile-cell' }, box);
-      }),
-    ));
+        // Toggled in place rather than redrawn: the button you pressed stays the button you pressed.
+        const b = h('button', {
+          cls: ['helm-chip', 'helm-profile-pick'],
+          attr: { type: 'button', title: person ? `${person} — ${mode}` : mode, 'aria-pressed': 'false' },
+        }, h('span', { cls: 'helm-chip-label', text: mode }));
+        b.addEventListener('click', () => {
+          const on = !picked.has(key);
+          if (on) picked.add(key); else picked.delete(key);
+          b.classList.toggle('is-on', on);
+          b.setAttribute('aria-pressed', String(on));
+          const mine = profile.modes.filter((m) => picked.has(`${person}|${m}`));
+          sum.setText(summarise(mine));
+          row.classList.toggle('is-on', mine.length > 0);
+        });
+        return b;
+      })),
+      sum,
+    );
+    grid.appendChild(row);
   }
 
   const field = (label: string, el: HTMLElement): HTMLElement => h('div', { cls: 'helm-field' }, h('label', { text: label }), el);
@@ -105,6 +119,13 @@ export function openProfileItem(ctx: UiContext, p: Project, profile: ProjectProf
   m.open();
   ctx.trackModal(m);
   window.setTimeout(() => title.focus(), 30);
+}
+
+/** What one person's ticks add up to, in words: “sings and plays the chords”. */
+function summarise(modes: string[]): string {
+  if (modes.length === 0) return 'nothing yet';
+  if (modes.length === 1) return modes[0]!.toLowerCase();
+  return `${modes.slice(0, -1).map((m) => m.toLowerCase()).join(', ')} and ${modes[modes.length - 1]!.toLowerCase()}`;
 }
 
 /** What a `[[link]]` says once the brackets are off. */

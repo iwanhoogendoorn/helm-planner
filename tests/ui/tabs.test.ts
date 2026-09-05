@@ -1083,12 +1083,12 @@ describe('A project with a profile', () => {
       profile: 'music', people: ['Iwan', 'Zaara'],
     });
     await m.addProfileItem(p.id, {
-      title: 'Dit is het leven - Luna', group: 'September 2026', note: 'Dit is het leven - Luna',
-      assignments: [{ person: 'Zaara', mode: 'Singing' }, { person: 'Iwan', mode: 'Piano with chords' }],
+      title: 'Dit is het leven - Luna', group: 'August 2026', note: 'Dit is het leven - Luna',
+      assignments: [{ person: 'Zaara', mode: 'Singing' }, { person: 'Iwan', mode: 'Piano chords' }],
     });
     await m.addProfileItem(p.id, {
-      title: 'Still - Karol G & Bruno Mars', group: 'September 2026',
-      assignments: [{ person: 'Iwan', mode: 'Piano' }, { person: 'Iwan', mode: 'Piano with singing' }],
+      title: 'Still - Karol G & Bruno Mars', group: 'August 2026',
+      assignments: [{ person: 'Iwan', mode: 'Piano solo' }, { person: 'Iwan', mode: 'Producing' }],
     });
     return { ctx, index, m, vault, nav, p };
   }
@@ -1111,7 +1111,7 @@ describe('A project with a profile', () => {
     const root = render((r) => renderProjects(ctx, r, state));
     // It leads with its own view, named after the month rather than “List”.
     expect(texts(root, '.helm-project-views .helm-seg')[0]).toBe('Months');
-    expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('September 2026');
+    expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('August 2026');   // the month we are in
     expect(root.querySelector('.helm-day-title-sub')!.textContent).toBe('2 songs');
 
     // A lane each, with what that person has on this month.
@@ -1123,20 +1123,44 @@ describe('A project with a profile', () => {
     // And the songs themselves, with a chip per hand on them, in the profile’s short forms.
     const items = [...root.querySelectorAll<HTMLElement>('.helm-profile-item')];
     expect(items.map((i) => i.querySelector('.helm-profile-item-title')!.textContent)).toEqual(['Dit is het leven - Luna', 'Still - Karol G & Bruno Mars']);
-    expect(texts(items[0]!, '.helm-profile-chip')).toEqual(['Zaara Z', 'Iwan P CH']);
-    expect(texts(items[1]!, '.helm-profile-chip')).toEqual(['Iwan P', 'Iwan PZ']);
+    expect(texts(items[0]!, '.helm-profile-chip')).toEqual(['Zaara Sing', 'Iwan Chords']);
+    expect(texts(items[1]!, '.helm-profile-chip')).toEqual(['Iwan Piano', 'Iwan Prod']);
   });
 
   it('ticking a chip is ticking the task it stands for', async () => {
     const { ctx, index, vault, p } = await musicProject();
     const state = { projectId: p.id, filter: '', showClosed: false, collapsed: new Map(), showDone: false };
     let root = render((r) => renderProjects(ctx, r, state));
-    click([...root.querySelectorAll('.helm-profile-chip')].find((c) => c.textContent === 'Zaara Z'));
+    click([...root.querySelectorAll('.helm-profile-chip')].find((c) => c.textContent === 'Zaara Sing'));
     await waitFor(() => ([...index.snapshot.tasks.values()].some((t) => t.text.includes('Zaara · Singing') && t.status === 'done') ? true : undefined), 'the chip to tick');
     expect(await vault.read(p.path)).toContain('- [x] Zaara · Singing');
     document.body.innerHTML = '';
     root = render((r) => renderProjects(ctx, r, state));
-    expect([...root.querySelectorAll('.helm-profile-chip')].find((c) => c.textContent === 'Zaara Z')!.classList.contains('is-done')).toBe(true);
+    expect([...root.querySelectorAll('.helm-profile-chip')].find((c) => c.textContent === 'Zaara Sing')!.classList.contains('is-done')).toBe(true);
+  });
+
+  it('walks the calendar, not just the months that exist', async () => {
+    const { ctx, p } = await musicProject();
+    const state = { projectId: p.id, filter: '', showClosed: false, collapsed: new Map(), showDone: false };
+    let root = render((r) => renderProjects(ctx, r, state));
+    expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('August 2026');
+
+    // September has nothing in it yet — the arrow still goes there, ready to be filled.
+    click(root.querySelector('button[aria-label="Next month"]'));
+    document.body.innerHTML = '';
+    root = render((r) => renderProjects(ctx, r, state));
+    expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('September 2026');
+    expect(root.querySelector('.helm-empty')!.textContent).toContain('Nothing in September 2026 yet');
+    expect(texts(root, '.helm-day-nav button')).toContain('This month');   // and a way back
+
+    // Two steps back from September lands in July, over a month that was never written.
+    click(root.querySelector('button[aria-label="Previous month"]'));
+    document.body.innerHTML = '';
+    root = render((r) => renderProjects(ctx, r, state));
+    click(root.querySelector('button[aria-label="Previous month"]'));
+    document.body.innerHTML = '';
+    root = render((r) => renderProjects(ctx, r, state));
+    expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('July 2026');
   });
 
   it('a plain project is untouched: no profile view, no extra words', async () => {

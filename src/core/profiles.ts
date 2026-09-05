@@ -45,8 +45,10 @@ export const BUILT_IN_PROFILES: ProjectProfile[] = [
     id: 'music', label: 'Music', icon: 'music', hint: 'Songs by month, and who plays or sings what.',
     groupNoun: 'month', groupBy: 'month', itemNoun: 'song', linksNote: true,
     people: ['Iwan', 'Zaara'],
-    modes: ['Piano with chords', 'Piano', 'Singing', 'Piano with singing'],
-    short: ['P CH', 'P', 'Z', 'PZ'],
+    // Three things you can do to a song — and piano is two of them: the whole piece on your own, or
+    // the chords underneath somebody's singing.
+    modes: ['Piano solo', 'Piano chords', 'Singing', 'Producing'],
+    short: ['Piano', 'Chords', 'Sing', 'Prod'],
   },
   {
     id: 'writing', label: 'Writing', icon: 'pen-line', hint: 'Chapters or articles, and how far each draft has got.',
@@ -81,7 +83,7 @@ export const profileById = (id: string | undefined): ProjectProfile =>
 export function profileFor(profileId: string | undefined, overrides: { people?: string[]; modes?: string[] } = {}): ProjectProfile {
   const base = profileById(profileId);
   const modes = overrides.modes && overrides.modes.length > 0 ? overrides.modes : base.modes;
-  const short = modes === base.modes ? base.short : modes.map(shortOf);
+  const short = modes === base.modes ? base.short : shortsFor(modes);
   return {
     ...base,
     ...(overrides.people && overrides.people.length > 0 ? { people: overrides.people } : {}),
@@ -90,13 +92,27 @@ export function profileFor(profileId: string | undefined, overrides: { people?: 
   };
 }
 
-/** A short form for a mode nobody gave one for: initials of the words that carry meaning. */
-export function shortOf(mode: string): string {
-  const words = mode.split(/\s+/).filter((w) => w.length > 0 && !/^(with|and|of|the|a|an|only)$/i.test(w));
-  if (words.length === 0) return mode.slice(0, 3);
-  if (words.length === 1) return words[0]!.slice(0, 4);
-  return words.map((w) => w.slice(0, 1).toUpperCase()).join('');
+/**
+ * Short forms for modes nobody gave one for. A chip has to be readable at a glance, so it keeps a word
+ * rather than collapsing to initials — “Chords”, not “PC” — and only borrows from the next word when two
+ * modes would otherwise say the same thing.
+ */
+export function shortsFor(modes: string[]): string[] {
+  const words = (m: string): string[] => m.split(/\s+/).filter((w) => w.length > 0 && !/^(with|and|of|the|a|an|only|to)$/i.test(w));
+  const first = modes.map((m) => (words(m)[0] ?? m).slice(0, 7));
+  // Whichever modes begin with the same word all take their second word instead — deciding that from
+  // the first pass, so an earlier fix cannot hide a collision from the one that follows it.
+  const clashes = new Set(first.filter((x, i) => first.some((y, j) => j !== i && y.toLowerCase() === x.toLowerCase())).map((x) => x.toLowerCase()));
+  const out = first.map((short, i) => {
+    if (!clashes.has(short.toLowerCase())) return short;
+    const second = words(modes[i] ?? '')[1];
+    return second ? second.slice(0, 7) : short;
+  });
+  return out.map((x) => x.charAt(0).toUpperCase() + x.slice(1));
 }
+
+/** The short form of one mode on its own. */
+export const shortOf = (mode: string): string => shortsFor([mode])[0]!;
 
 /** One person doing one thing to one item: `Zaara · Singing`, written as an ordinary subtask. */
 export interface Assignment {

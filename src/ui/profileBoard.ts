@@ -11,6 +11,7 @@ import type { ProjectProfile } from '../core/profiles';
 import { parseAssignment } from '../core/profiles';
 import { isOpen } from '../data/planner';
 import { plainLabel } from '../core/label';
+import { monthPeriod, parsePeriod } from '../core/periods';
 import { button, chip, h, icon, iconButton, progressBar } from './dom';
 import type { UiContext } from './context';
 import { openProfileItem } from './modals/profileItem';
@@ -60,17 +61,50 @@ export function itemsOf(ctx: UiContext, p: Project, profile: ProjectProfile, gro
   return out;
 }
 
-/** Every group this project has, newest first when they are months. */
+/** Every group this project has. */
 export function groupsOf(p: Project): string[] {
   return p.phases.map((ph) => ph.title);
 }
 
+/**
+ * Where the board should open, and where its arrows go.
+ *
+ * Music happens in months, so a month-based project walks the calendar rather than the phases that
+ * happen to exist: this month is one step from last month whether or not anything was written in it
+ * yet, and adding the first song is what brings the month into the note.
+ */
+export function stepGroup(p: Project, profile: ProjectProfile, group: string, by: number): string | undefined {
+  if (profile.groupBy === 'month') {
+    const period = parsePeriod(group);
+    if (period?.month) {
+      const total = period.year * 12 + (period.month - 1) + by;
+      return monthPeriod(Math.floor(total / 12), (total % 12) + 1).label;
+    }
+  }
+  const groups = groupsOf(p);
+  const at = groups.indexOf(group);
+  const next = groups[at + by];
+  return at === -1 ? groups[0] : next;
+}
+
+/** The group a board opens on: the month we are in, or the last thing that was worked on. */
+export function openingGroup(p: Project, profile: ProjectProfile, today: string): string {
+  const groups = groupsOf(p);
+  if (profile.groupBy === 'month') {
+    const now = monthPeriod(Number(today.slice(0, 4)), Number(today.slice(5, 7))).label;
+    return groups.includes(now) ? now : (groups.length > 0 ? groups[groups.length - 1]! : now);
+  }
+  return groups[groups.length - 1] ?? '';
+}
+
 export function renderProfileBoard(ctx: UiContext, root: HTMLElement, p: Project, profile: ProjectProfile, state: ProfileBoardState): void {
   const groups = groupsOf(p);
-  const group = state.group && groups.includes(state.group) ? state.group : (groups[groups.length - 1] ?? '');
-  const at = groups.indexOf(group);
+  const group = state.group ?? openingGroup(p, profile, ctx.today());
   const items = itemsOf(ctx, p, profile, group);
-  const go = (g: string): void => { state.group = g; ctx.refresh(); };
+  const go = (g: string | undefined): void => { if (g === undefined) return; state.group = g; ctx.refresh(); };
+  const back = stepGroup(p, profile, group, -1);
+  const forward = stepGroup(p, profile, group, 1);
+  const thisMonth = profile.groupBy === 'month' ? openingGroup(p, profile, ctx.today()) : undefined;
 
   // ── The month, with a step either side and what each person has on ──
   const perPerson = new Map<string, { items: Set<string>; done: number; total: number }>();
@@ -87,12 +121,13 @@ export function renderProfileBoard(ctx: UiContext, root: HTMLElement, p: Project
 
   root.appendChild(h('div', { cls: 'helm-day-head helm-profile-head' },
     h('div', { cls: 'helm-day-nav' },
-      iconButton('chevron-left', `Previous ${profile.groupNoun}`, () => { if (at > 0) go(groups[at - 1]!); }),
+      iconButton('chevron-left', `Previous ${profile.groupNoun}`, () => go(back)),
       h('div', { cls: 'helm-day-title' },
         h('span', { cls: 'helm-day-title-main', text: group || `No ${profile.groupNoun} yet` }),
         h('span', { cls: 'helm-day-title-sub', text: `${items.length} ${items.length === 1 ? profile.itemNoun : `${profile.itemNoun}s`}` }),
       ),
-      iconButton('chevron-right', `Next ${profile.groupNoun}`, () => { if (at >= 0 && at < groups.length - 1) go(groups[at + 1]!); }),
+      iconButton('chevron-right', `Next ${profile.groupNoun}`, () => go(forward)),
+      ...(thisMonth && thisMonth !== group ? [button('This month', { cls: 'helm-btn-quiet', onClick: () => go(thisMonth) })] : []),
     ),
     h('div', { cls: 'helm-day-actions' },
       ...[...perPerson.entries()].map(([who, e]) => chip(`${who}: ${e.items.size}`, 'count', `${e.done} of ${e.total} done`)),
@@ -100,8 +135,14 @@ export function renderProfileBoard(ctx: UiContext, root: HTMLElement, p: Project
     ),
   ));
 
+  if (groups.length > 1 || (groups.length === 1 && groups[0] !== group)) {
+    root.appendChild(h('div', { cls: 'helm-profile-groups' }, ...groups.map((g) => h('button', {
+      cls: ['helm-seg', g === group && 'is-active'], text: g, onClick: () => go(g),
+    }))));
+  }
+
   if (items.length === 0) {
-    root.appendChild(h('div', { cls: 'helm-empty' }, h('p', { text: `No ${profile.itemNoun}s in ${group || 'this project'} yet.` }),
+    root.appendChild(h('div', { cls: 'helm-empty' }, h('p', { text: `Nothing in ${group || 'this project'} yet.` }),
       button(`Add the first ${profile.itemNoun}`, { primary: true, onClick: () => openProfileItem(ctx, p, profile, { group }) })));
     return;
   }

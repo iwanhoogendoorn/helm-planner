@@ -6,11 +6,19 @@
   *kind* of work it is, and be planned in that kind's vocabulary instead of “phases and
   tasks”. Pick a kind when you create it (or add `profile:` to the note) and the project
   gains a view of its own, its own **Add a…** button, and words that fit:
-  - **Music** — songs by month, and who plays or sings what. One lane per person shows
-    what each of you has on this month; each song shows every hand on it as a chip —
-    `Iwan P CH`, `Zaara Z`, `Iwan PZ`. A chip *is* the subtask, so ticking it here ticks
-    it everywhere. Ways of working start as **Piano with chords · Piano · Singing ·
-    Piano with singing**, and both the people and the ways are editable per project.
+  - **Music** — songs by month, and who plays or sings what. Three things you can do to a
+    song, and piano is two of them: **Piano solo · Piano chords · Singing · Producing** —
+    the whole piece on your own, or the chords underneath somebody's singing. One lane per
+    person shows what each of you has on this month; each song shows every hand on it as a
+    chip — `Iwan Chords`, `Zaara Sing`. A chip *is* the subtask, so ticking it here ticks it
+    everywhere. People and ways of working are editable per project.
+    The board **walks the calendar**, not just the months that exist: it opens on the month
+    you are in, the arrows reach a month nothing has been written in yet, and adding the
+    first song is what brings that month into the note. Months that hold something are a row
+    of buttons to jump between.
+    Who does what is picked with **named buttons rather than a grid of initials** — “Piano
+    chords”, not “PC” — and each row says in plain words what it adds up to: *piano chords
+    and producing*.
   - **Writing** — chapters through Outline · Draft · Revise · Review · Final.
   - **Exam or certification** — topics through Read · Notes · Lab · Practice test · Reviewed.
   - **Customer request** — requests through Define · Build · Test · Communicate · Handover.

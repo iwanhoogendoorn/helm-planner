@@ -1226,12 +1226,16 @@ export class Mutations {
     // Writing a child rewrites the parent's line, and a derived key does not survive that. An id is
     // stamped on the item first so every assignment after the first can still find the task it belongs to.
     const id = await this.ensureId(item.key);
+    // Three ways to find the line again, because a project's files can be moving under us — its id, the
+    // key it had, or the line in the file that still says what it says.
+    const relocate = (): Task | undefined =>
+      this.index.taskById(id) ?? this.index.task(item.key) ?? this.index.tasksInFile(item.path).find((t) => t.id === id || t.text === item.text);
     for (const a of spec.assignments) {
-      const parent = this.index.taskById(id);
+      const parent = relocate();
       if (!parent) throw new Error(`The ${spec.title} line went missing while its steps were written`);
       await this.addTaskReturning({ text: assignmentLine(a), parentKey: parent.key });
     }
-    return this.index.taskById(id) ?? item;
+    return relocate() ?? item;
   }
 
   async addPhase(projectId: string, title: string, due?: IsoDate): Promise<void> {
