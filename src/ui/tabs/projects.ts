@@ -197,6 +197,8 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
     h('div', { cls: 'helm-detail-title' },
       h('h2', { text: p.title }),
       h('span', { cls: 'helm-spacer' }),
+      // The mirror of “New project” on the list: a project is where its own sub-projects begin.
+      button('New sub-project', { icon: 'folder-plus', title: `A project under “${p.title}”`, onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) }),
       button('Open note', { icon: 'file-text', onClick: () => void ctx.openFile(p.path) }),
       notesButton(ctx, targetForProject(p.id, p.title)),
       drawingsButton(ctx, targetForProject(p.id, p.title)),
@@ -216,8 +218,11 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   ));
 
   if (p.childIds.length > 0) {
-  root.appendChild(section('Sub-projects', { count: p.childIds.length, store: state.collapsed, key: 'children' },
-      ...p.childIds.map((cid) => ctx.index.project(cid)).filter((c): c is Project => c !== undefined).map((c) => projectCard(ctx, projectHealth(snap, c, today, settings), 0, today))));
+    const kids = p.childIds.map((cid) => ctx.index.project(cid)).filter((c): c is Project => c !== undefined);
+    root.appendChild(section('Sub-projects', {
+      count: p.childIds.length, store: state.collapsed, key: 'children',
+      actions: [button('New sub-project', { icon: 'folder-plus', onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) })],
+    }, ...kids.map((c) => projectCard(ctx, projectHealth(snap, c, today, settings), 0, today, p.childIds))));
   }
 
   const toolbar = h('div', { cls: 'helm-toolbar' },

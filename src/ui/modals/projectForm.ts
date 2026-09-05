@@ -29,7 +29,10 @@ export function draftToLine(text: string, today: string, weekStartsOn: 1 | 7 = 1
 export function openProjectForm(ctx: UiContext, opts: { parentId?: string; period?: string; goalKey?: string; title?: string; fromTask?: Task; onCreated?: (p: Project) => void } = {}): void {
   const today = ctx.today();
   const m = new Modal(ctx.app);
-  m.titleEl.setText('New project');
+  // Say which it is: a project under something else is a sub-project, and the dialogue should agree
+  // with the button that opened it.
+  const under = opts.parentId ? ctx.index.project(opts.parentId) : undefined;
+  m.titleEl.setText(under ? `New sub-project of ${under.title}` : 'New project');
   const root = m.contentEl;
   root.addClass('helm-modal', 'helm-project-form');
   const title = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: 'Project name', value: opts.title ?? '' } });

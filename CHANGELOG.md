@@ -34,6 +34,12 @@
   Helm's own data file, so what you folded this morning is still folded after a reload
   or a restart. A task borrowed onto a day (its steps planned here, the task itself
   living elsewhere) folds like any other.
+- **A project has a button for its own sub-projects.** The list had “New project” and a
+  project had nothing — starting a sub-project meant knowing to right-click a card on the
+  list behind you. There is a **New sub-project** button in the project's header now, and
+  another on its Sub-projects section, both opening the form with **Part of** already
+  filled in; the dialogue says whose sub-project it is going to be. Sub-projects listed on
+  a project can be reordered the same way they can on the list.
 - **A part of the day is a time of day, without exception.** A line with no time now
   shows in **Anytime** whichever heading it happens to sit under in the note — before,
   a task written under “B. Afternoon” by hand or by a template sat in the afternoon

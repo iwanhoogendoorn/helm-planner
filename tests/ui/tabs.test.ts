@@ -1667,6 +1667,27 @@ describe('Calendar tab', () => {
     click(w.querySelectorAll('.helm-crumb')[2]);
     expect(nav.at(-1)).toEqual({ tab: 'week', opts: { date: TODAY, scope: 'quarter' } });
   });
+  it('a project offers a button for its own sub-projects, with itself already filled in', async () => {
+    const { ctx, vault } = await ctxFor();
+    const detail = (id: string): HTMLElement => render((r) => renderProjects(ctx, r, { projectId: id, filter: '', showClosed: false, collapsed: new Map(), showDone: false }));
+    const root = detail('prj-oracle');                       // an umbrella, with sub-projects already
+    const buttons = [...root.querySelectorAll<HTMLElement>('button')].filter((b) => b.textContent === 'New sub-project');
+    expect(buttons.length).toBeGreaterThanOrEqual(2);         // in the header, and on the Sub-projects section
+
+    click(buttons[0]!);
+    expect(Modal.last!.titleEl.textContent).toBe('New sub-project of Oracle');   // the dialogue says which it is
+    const form = Modal.last!.contentEl;
+    // “Part of” is the project you pressed it from, so the new one lands underneath.
+    const parent = [...form.querySelectorAll<HTMLSelectElement>('select')].find((sel) => [...sel.options].some((o) => o.text.includes('none (top level)')))!;
+    expect([...parent.options].find((o) => o.selected)!.value).toBe('prj-oracle');
+
+    form.querySelector<HTMLInputElement>('input[placeholder="Project name"]')!.value = 'OCI Storage';
+    click([...form.querySelectorAll('button')].find((b) => b.textContent?.includes('Create project')));
+    await waitFor(() => (ctx.index.allProjects().find((x) => x.title === 'OCI Storage') ? true : undefined), 'the sub-project');
+    expect(ctx.index.allProjects().find((x) => x.title === 'OCI Storage')!.parentId).toBe('prj-oracle');
+    expect(await vault.read(ctx.index.allProjects().find((x) => x.title === 'OCI Storage')!.path)).toContain('parent: Oracle');
+  });
+
   it('project detail shows the full umbrella chain as breadcrumbs', async () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-cert', filter: '', showClosed: false, collapsed: new Map(), showDone: false }));
