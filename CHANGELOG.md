@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.26.0 — 2026-09-06
 
 - **Project profiles: the same project, in its own words.** A project can now say what
   *kind* of work it is, and be planned in that kind's vocabulary instead of “phases and
