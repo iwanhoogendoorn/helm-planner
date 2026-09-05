@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.25.0 — 2026-09-05
 
 - **“Fit the day”, and “Fit the week”.** Two buttons — one in the day header, one in
   the week — that take the work already on your days, ask the Claude CLI on your own
