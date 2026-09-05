@@ -1075,6 +1075,78 @@ describe('Fitting the week', () => {
   });
 });
 
+describe('A project with a profile', () => {
+  async function musicProject() {
+    const { ctx, index, m, vault, nav } = await ctxFor();
+    const p = await m.createProject({
+      title: 'Music with Zaara', status: 'active', priority: 'normal',
+      profile: 'music', people: ['Iwan', 'Zaara'],
+    });
+    await m.addProfileItem(p.id, {
+      title: 'Dit is het leven - Luna', group: 'September 2026', note: 'Dit is het leven - Luna',
+      assignments: [{ person: 'Zaara', mode: 'Singing' }, { person: 'Iwan', mode: 'Piano with chords' }],
+    });
+    await m.addProfileItem(p.id, {
+      title: 'Still - Karol G & Bruno Mars', group: 'September 2026',
+      assignments: [{ person: 'Iwan', mode: 'Piano' }, { person: 'Iwan', mode: 'Piano with singing' }],
+    });
+    return { ctx, index, m, vault, nav, p };
+  }
+
+  it('writes the profile into the note, and reads it back as the project’s own words', async () => {
+    const { vault, index, p } = await musicProject();
+    const note = await vault.read(p.path);
+    expect(note).toContain('profile: music');
+    expect(note).toContain('people:\n  - Iwan\n  - Zaara');
+    expect(note).not.toContain('modes:');                    // not overridden, so the built-in four apply
+    const fresh = index.project(p.id)!;
+    expect(fresh.profile).toBe('music');
+    expect(fresh.profilePeople).toEqual(['Iwan', 'Zaara']);
+    expect(fresh.profileModes).toBeUndefined();
+  });
+
+  it('shows the month, a lane per person, and every song with who is on it', async () => {
+    const { ctx, p } = await musicProject();
+    const state = { projectId: p.id, filter: '', showClosed: false, collapsed: new Map(), showDone: false };
+    const root = render((r) => renderProjects(ctx, r, state));
+    // It leads with its own view, named after the month rather than “List”.
+    expect(texts(root, '.helm-project-views .helm-seg')[0]).toBe('Months');
+    expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('September 2026');
+    expect(root.querySelector('.helm-day-title-sub')!.textContent).toBe('2 songs');
+
+    // A lane each, with what that person has on this month.
+    const lanes = [...root.querySelectorAll<HTMLElement>('.helm-profile-lane')];
+    expect(lanes.map((l) => l.querySelector('strong')!.textContent)).toEqual(['Iwan', 'Zaara']);
+    expect(texts(lanes[1]!, '.helm-profile-lane-title')).toEqual(['Dit is het leven - Luna']);   // Zaara sings one
+    expect(texts(lanes[0]!, '.helm-profile-lane-title')).toEqual(['Dit is het leven - Luna', 'Still - Karol G & Bruno Mars']);
+
+    // And the songs themselves, with a chip per hand on them, in the profile’s short forms.
+    const items = [...root.querySelectorAll<HTMLElement>('.helm-profile-item')];
+    expect(items.map((i) => i.querySelector('.helm-profile-item-title')!.textContent)).toEqual(['Dit is het leven - Luna', 'Still - Karol G & Bruno Mars']);
+    expect(texts(items[0]!, '.helm-profile-chip')).toEqual(['Zaara Z', 'Iwan P CH']);
+    expect(texts(items[1]!, '.helm-profile-chip')).toEqual(['Iwan P', 'Iwan PZ']);
+  });
+
+  it('ticking a chip is ticking the task it stands for', async () => {
+    const { ctx, index, vault, p } = await musicProject();
+    const state = { projectId: p.id, filter: '', showClosed: false, collapsed: new Map(), showDone: false };
+    let root = render((r) => renderProjects(ctx, r, state));
+    click([...root.querySelectorAll('.helm-profile-chip')].find((c) => c.textContent === 'Zaara Z'));
+    await waitFor(() => ([...index.snapshot.tasks.values()].some((t) => t.text.includes('Zaara · Singing') && t.status === 'done') ? true : undefined), 'the chip to tick');
+    expect(await vault.read(p.path)).toContain('- [x] Zaara · Singing');
+    document.body.innerHTML = '';
+    root = render((r) => renderProjects(ctx, r, state));
+    expect([...root.querySelectorAll('.helm-profile-chip')].find((c) => c.textContent === 'Zaara Z')!.classList.contains('is-done')).toBe(true);
+  });
+
+  it('a plain project is untouched: no profile view, no extra words', async () => {
+    const { ctx } = await ctxFor();
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-book', filter: '', showClosed: false, collapsed: new Map(), showDone: false }));
+    expect(texts(root, '.helm-project-views .helm-seg')).toEqual(['List', 'Board', 'Table', 'Timeline']);
+    expect(root.querySelector('.helm-profile-lane')).toBeNull();
+  });
+});
+
 describe('Modals', () => {
   it('search: starting points, grouped hits, keyboard, and acting on a result without leaving', async () => {
     const { ctx, nav, opened, vault } = await ctxFor();

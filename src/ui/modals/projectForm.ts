@@ -1,5 +1,6 @@
 /** New project: name, umbrella, status, priority, area, dates, horizon, goal — and a click-driven phase/task builder. */
 import { Modal } from 'obsidian';
+import { BUILT_IN_PROFILES, profileById } from '../../core/profiles';
 import type { Project, ProjectPriority, ProjectStatus, Task } from '../../core/types';
 import { humanDate, isIsoDate, minutesToHuman } from '../../core/dates';
 import { PROJECT_PRIORITIES, PROJECT_STATUSES } from '../../core/project';
@@ -25,6 +26,8 @@ export function draftToLine(text: string, today: string, weekStartsOn: 1 | 7 = 1
   });
   return serialiseTaskLine(line);
 }
+
+const splitList = (raw: string): string[] => raw.split(',').map((x) => x.trim()).filter(Boolean);
 
 export function openProjectForm(ctx: UiContext, opts: { parentId?: string; period?: string; goalKey?: string; title?: string; fromTask?: Task; onCreated?: (p: Project) => void } = {}): void {
   const today = ctx.today();
@@ -116,8 +119,37 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; perio
   draw();
 
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
+
+  // ── What kind of work this is. A profile changes the words the project is planned in, and gives it a
+  //    view of its own; the vocabulary it starts with is editable here and in the note afterwards.
+  let profileId = 'generic';
+  const people = h('input', { cls: 'helm-input', attr: { type: 'text', placeholder: 'Iwan, Zaara' } }) as HTMLInputElement;
+  const modes = h('input', { cls: 'helm-input', attr: { type: 'text' } }) as HTMLInputElement;
+  const vocab = h('div', { cls: 'helm-grid2' });
+  const kinds = h('div', { cls: 'helm-segmented helm-profile-kinds' });
+  const drawKinds = (): void => {
+    kinds.replaceChildren(...BUILT_IN_PROFILES.map((pr) => h('button', {
+      cls: ['helm-seg', profileId === pr.id && 'is-active'], title: pr.hint,
+      onClick: () => { profileId = pr.id; drawKinds(); drawVocab(); },
+    }, icon(pr.icon), h('span', { text: pr.label }))));
+  };
+  const drawVocab = (): void => {
+    const pr = profileById(profileId);
+    if (pr.id === 'generic') { vocab.replaceChildren(); return; }
+    people.value = pr.people.join(', ');
+    modes.value = pr.modes.join(', ');
+    vocab.replaceChildren(
+      ...(pr.people.length > 0 ? [h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'People' }), people)] : []),
+      h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: `Ways of working on a ${pr.itemNoun}` }), modes),
+    );
+  };
+  drawKinds();
+  drawVocab();
+
   root.append(
     field('Name', title),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Kind of project' }), kinds, h('span', { cls: 'helm-hint', text: 'A kind gives the project its own board and its own words — a plain project is phases and tasks.' })),
+    vocab,
     h('div', { cls: 'helm-grid2' }, field('Part of', parent), field('Area', area), areaList),
     h('div', { cls: 'helm-grid2' }, field('Status', status), field('Priority', priority)),
     h('div', { cls: 'helm-grid2' }, field('Start', start), field('Due', due)),
@@ -139,6 +171,11 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; perio
         ...(isIsoDate(start.value) ? { start: start.value } : {}), ...(isIsoDate(due.value) ? { due: due.value } : {}),
         ...(objective.value.trim() ? { objective: objective.value.trim() } : {}),
         ...(period.value ? { period: period.value } : {}), ...(goal.value ? { goal: ctx.index.goal(goal.value)?.id ?? goal.value } : {}),
+        ...(profileId !== 'generic' ? {
+          profile: profileId,
+          ...(splitList(people.value).length > 0 ? { people: splitList(people.value) } : {}),
+          ...(splitList(modes.value).length > 0 ? { modes: splitList(modes.value) } : {}),
+        } : {}),
         phases: phases.map((ph) => ({ title: ph.title.trim(), ...(isIsoDate(ph.due) ? { due: ph.due } : {}), tasks: ph.tasks.map((t) => draftToLine(t.text, today, wk)) })),
         tasks: loose.map((t) => draftToLine(t.text, today, wk)),
     });

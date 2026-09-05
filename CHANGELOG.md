@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- **Project profiles: the same project, in its own words.** A project can now say what
+  *kind* of work it is, and be planned in that kind's vocabulary instead of “phases and
+  tasks”. Pick a kind when you create it (or add `profile:` to the note) and the project
+  gains a view of its own, its own **Add a…** button, and words that fit:
+  - **Music** — songs by month, and who plays or sings what. One lane per person shows
+    what each of you has on this month; each song shows every hand on it as a chip —
+    `Iwan P CH`, `Zaara Z`, `Iwan PZ`. A chip *is* the subtask, so ticking it here ticks
+    it everywhere. Ways of working start as **Piano with chords · Piano · Singing ·
+    Piano with singing**, and both the people and the ways are editable per project.
+  - **Writing** — chapters through Outline · Draft · Revise · Review · Final.
+  - **Exam or certification** — topics through Read · Notes · Lab · Practice test · Reviewed.
+  - **Customer request** — requests through Define · Build · Test · Communicate · Handover.
+
+  Underneath it is still an ordinary Helm project: a phase per month or part, a task per
+  song or chapter, and a subtask per assignment written as `Zaara · Singing`. Nothing new
+  goes into your notes that Obsidian Tasks — or a person reading the file — would not
+  understand, so scheduling, the daily note, rollups and the PDF export all keep working
+  on the very same lines. A plain project is untouched.
+
 ## 1.25.0 — 2026-09-05
 
 - **“Fit the day”, and “Fit the week”.** Two buttons — one in the day header, one in

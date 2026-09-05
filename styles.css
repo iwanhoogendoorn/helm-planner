@@ -960,3 +960,36 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-export-counts { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-radius: var(--radius-s); background: var(--background-secondary); margin-bottom: 10px; }
 .helm-export-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; margin: 4px 0 10px; }
 .helm-export-section { padding: 2px 0; }
+
+/* ── Project profiles: the same project, in its own words ───────────── */
+.helm-profile-kinds { flex-wrap: wrap; }
+.helm-profile-item .helm-spacer, .helm-profile-head .helm-spacer { flex: 1; }
+
+/* The who-does-what grid in the add dialogue */
+.helm-profile-grid { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 10px; }
+.helm-profile-gridhead, .helm-profile-gridrow { display: grid; grid-template-columns: minmax(80px, 1fr) repeat(var(--helm-modes, 4), 64px); align-items: center; gap: 4px; }
+.helm-profile-mode { font-size: var(--font-ui-smaller); color: var(--text-muted); text-align: center; }
+.helm-profile-person { font-weight: 600; }
+.helm-profile-cell { display: flex; align-items: center; justify-content: center; padding: 3px 0; border-radius: var(--radius-s); }
+.helm-profile-cell:hover { background: var(--background-modifier-hover); }
+
+/* One lane per person: what they are on this month */
+.helm-profile-lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.helm-profile-lane { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); padding: 8px 10px; }
+.helm-profile-lane-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.helm-profile-lane-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.helm-profile-lane-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helm-profile-lane-chips { display: flex; gap: 3px; flex: none; }
+
+/* The items themselves */
+.helm-profile-items { display: flex; flex-direction: column; gap: 6px; }
+.helm-profile-item { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); padding: 7px 10px; }
+.helm-profile-item.is-done { opacity: 0.62; }
+.helm-profile-item-head { display: flex; align-items: center; gap: 6px; }
+.helm-profile-item-title { background: none; border: none; box-shadow: none; padding: 0; font-weight: 600; cursor: pointer; text-align: left; color: var(--text-normal); }
+.helm-profile-item-title:hover { color: var(--text-accent); background: none; }
+.helm-profile-item-work { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.helm-profile-chip { cursor: pointer; border: 1px solid var(--background-modifier-border); }
+.helm-profile-chip.is-done { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }
+.helm-profile-chip.is-doing { border-color: var(--interactive-accent); }
+.helm-profile-chip.is-off { opacity: 0.5; text-decoration: line-through; }

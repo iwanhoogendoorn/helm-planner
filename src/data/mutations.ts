@@ -18,6 +18,7 @@ import { formatHistoryEntry, formatPauseEntry } from '../core/habit';
 import { uniqueId } from '../core/ids';
 import { setFrontmatter } from '../core/frontmatter';
 import { renderProjectNote } from '../core/project';
+import { assignmentLine, type Assignment } from '../core/profiles';
 import { renderHabitNote } from '../core/habit';
 import { columnWidth } from '../core/tree';
 import type { HelmIndex } from './index';
@@ -1096,7 +1097,7 @@ export class Mutations {
 
   /* ── Projects ───────────────────────────────────────────────────────── */
 
-  async createProject(spec: { title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parentId?: string; period?: string; goal?: string; start?: IsoDate; due?: IsoDate; tags?: string[]; phases?: { title: string; due?: IsoDate; tasks?: string[] }[]; tasks?: string[]; objective?: string }): Promise<Project> {
+  async createProject(spec: { title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parentId?: string; period?: string; goal?: string; start?: IsoDate; due?: IsoDate; tags?: string[]; profile?: string; people?: string[]; modes?: string[]; phases?: { title: string; due?: IsoDate; tasks?: string[] }[]; tasks?: string[]; objective?: string }): Promise<Project> {
     const title = spec.title.trim().replace(/[\\/:*?"<>|]/g, '-');
     if (title === '') throw new Error('A project needs a name');
     const parent = spec.parentId ? this.index.project(spec.parentId) : undefined;
@@ -1105,7 +1106,7 @@ export class Mutations {
     const path = `${folder}/${title}.md`;
     if (await this.d.vault.exists(path)) throw new Error(`A project note already exists at ${path}`);
     const id = uniqueId('prj', (x) => this.index.snapshot.projects.has(x), this.d.rng);
-    const content = renderProjectNote({ id, title: spec.title.trim(), status: spec.status, priority: spec.priority, today: this.today, ...(spec.area ? { area: spec.area } : {}), ...(parent ? { parent: parent.title } : {}), ...(spec.period ? { period: spec.period } : {}), ...(spec.goal ? { goal: spec.goal } : {}), ...(spec.start ? { start: spec.start } : {}), ...(spec.due ? { due: spec.due } : {}), ...(spec.tags ? { tags: spec.tags } : {}), ...(spec.phases ? { phases: spec.phases } : {}), ...(spec.tasks ? { tasks: spec.tasks } : {}), ...(spec.objective ? { objective: spec.objective } : {}) });
+    const content = renderProjectNote({ id, title: spec.title.trim(), status: spec.status, priority: spec.priority, today: this.today, ...(spec.area ? { area: spec.area } : {}), ...(parent ? { parent: parent.title } : {}), ...(spec.period ? { period: spec.period } : {}), ...(spec.goal ? { goal: spec.goal } : {}), ...(spec.start ? { start: spec.start } : {}), ...(spec.due ? { due: spec.due } : {}), ...(spec.tags ? { tags: spec.tags } : {}), ...(spec.profile ? { profile: spec.profile } : {}), ...(spec.people ? { people: spec.people } : {}), ...(spec.modes ? { modes: spec.modes } : {}), ...(spec.phases ? { phases: spec.phases } : {}), ...(spec.tasks ? { tasks: spec.tasks } : {}), ...(spec.objective ? { objective: spec.objective } : {}) });
     await this.createFile(path, content);
     // Assign ids to the created tasks so they can be planned right away.
     const p = this.index.project(id);
@@ -1198,6 +1199,39 @@ export class Mutations {
     const next = [...siblingIds];
     next.splice(to, 0, ...next.splice(at, 1));
     await this.setProjectOrder(next);
+  }
+
+  /**
+   * Add one item of a profiled project — a song, a chapter, a topic — into its group, with a subtask for
+   * each person-and-way it is being worked on. Everything it writes is an ordinary task line: the profile
+   * is a way of reading them, so a song added here is still a task Obsidian Tasks understands.
+   */
+  async addProfileItem(projectId: string, spec: { title: string; group: string; note?: string; assignments: Assignment[]; due?: IsoDate }): Promise<Task> {
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    const group = spec.group.trim();
+    if (group !== '' && !p.phases.some((ph) => ph.title.trim().toLowerCase() === group.toLowerCase())) {
+      await this.addPhase(projectId, group);
+    }
+    const fresh = this.index.project(projectId)!;
+    const phase = group === '' ? undefined : fresh.phases.find((ph) => ph.title.trim().toLowerCase() === group.toLowerCase());
+    // A linked note carries the title, so the line reads as the song and opens as the note.
+    const title = spec.title.trim();
+    const text = spec.note ? (spec.note === title ? `[[${spec.note}]]` : `[[${spec.note}|${title}]]`) : title;
+    const item = await this.addTaskReturning({
+      text, projectId,
+      ...(phase ? { phaseId: phase.id } : {}),
+      ...(spec.due ? { fields: { due: spec.due } } : {}),
+    });
+    // Writing a child rewrites the parent's line, and a derived key does not survive that. An id is
+    // stamped on the item first so every assignment after the first can still find the task it belongs to.
+    const id = await this.ensureId(item.key);
+    for (const a of spec.assignments) {
+      const parent = this.index.taskById(id);
+      if (!parent) throw new Error(`The ${spec.title} line went missing while its steps were written`);
+      await this.addTaskReturning({ text: assignmentLine(a), parentKey: parent.key });
+    }
+    return this.index.taskById(id) ?? item;
   }
 
   async addPhase(projectId: string, title: string, due?: IsoDate): Promise<void> {

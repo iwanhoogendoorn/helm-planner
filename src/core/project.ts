@@ -110,6 +110,13 @@ export function parseProject(path: string, content: string, opts: { fallbackId?:
   if (goalRef) project.goalRef = goalRef.replace(/^\[\[|\]\]$/g, '').split('|')[0]!.trim();
   const area = scalar(fm['area']);
   if (area) project.area = area;
+  // A profile changes what the project is called and how it is shown, never how it is stored.
+  const profile = scalar(fm['profile']) ?? scalar(fm['kind']) ?? scalar(fm['type_of_project']);
+  if (profile) project.profile = profile.trim().toLowerCase();
+  const people = list(fm['people']).map((x) => x.replace(/^\[\[|\]\]$/g, '').split('|')[0]!.trim()).filter(Boolean);
+  if (people.length > 0) project.profilePeople = people;
+  const modes = list(fm['modes']).map((x) => x.trim()).filter(Boolean);
+  if (modes.length > 0) project.profileModes = modes;
   if (start) project.start = start;
   if (due) project.due = due;
   if (parentRef) project.parentRef = parentRef.replace(/^\[\[|\]\]$/g, '').split('|')[0]!;
@@ -169,6 +176,7 @@ function firstDate(fm: Record<string, string | string[] | null>, keys: string[])
 export function renderProjectNote(p: {
   id: string; title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parent?: string; period?: string; goal?: string;
   start?: string; due?: string; tags?: string[]; today: string;
+  profile?: string; people?: string[]; modes?: string[];
   phases?: { title: string; due?: string; tasks?: string[] }[]; tasks?: string[]; objective?: string;
 }): string {
   const fm: string[] = ['---', `title: ${quote(p.title)}`, 'type: project', `id: ${p.id}`, `status: ${p.status}`, `priority: ${p.priority}`];
@@ -176,6 +184,12 @@ export function renderProjectNote(p: {
   if (p.parent) fm.push(`parent: ${quote(p.parent)}`);
   fm.push(`period: ${p.period ?? ''}`, `goal: ${p.goal ? quote(p.goal) : ''}`);
   fm.push(`start_date: ${p.start ?? ''}`, `due_date: ${p.due ?? ''}`, `creation_date: ${p.today}`);
+  // The profile and its vocabulary live in the note, so they can be edited without Helm.
+  if (p.profile && p.profile !== 'generic') {
+    fm.push(`profile: ${p.profile}`);
+    if (p.people?.length) fm.push('people:', ...p.people.map((x) => `  - ${quote(x)}`));
+    if (p.modes?.length) fm.push('modes:', ...p.modes.map((x) => `  - ${quote(x)}`));
+  }
   fm.push('tags:', '  - project', ...(p.tags ?? []).map((t) => `  - ${t}`));
   fm.push('---', '');
   const body: string[] = [`# ${p.title}`, '', '## Objective', '', p.objective ?? 'This project is successful when…', ''];

@@ -11,6 +11,13 @@ import { askText, wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
 import { openProjectForm } from '../modals/projectForm';
 import { openExportReport } from '../modals/exportReport';
+import { profileFor, type ProjectProfile } from '../../core/profiles';
+import { renderProfileBoard, type ProfileBoardState } from '../profileBoard';
+import { openProfileItem } from '../modals/profileItem';
+
+/** The profile a project works under, with whatever vocabulary its own note overrides. */
+const profileOf = (p: Project): ProjectProfile =>
+  profileFor(p.profile, { ...(p.profilePeople ? { people: p.profilePeople } : {}), ...(p.profileModes ? { modes: p.profileModes } : {}) });
 import { openCapture } from '../modals/capture';
 import { openDatePicker } from '../modals/datePicker';
 import { minutesToHuman } from '../../core/dates';
@@ -24,9 +31,9 @@ import { openTaskEditor } from '../modals/taskEditor';
 import { plainLabel } from '../../core/label';
 import { dragKeys, selection } from '../selection';
 
-export type ProjectView = 'list' | 'board' | 'table' | 'timeline';
+export type ProjectView = 'list' | 'board' | 'table' | 'timeline' | 'profile';
 
-export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean; openSubs?: Set<string> }
+export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean; openSubs?: Set<string>; profileGroup?: string }
 
 const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', planned: 'Planned', 'on-hold': 'On hold', idea: 'Ideas', done: 'Done', cancelled: 'Cancelled', archived: 'Archived' };
 const FLAG_LABEL: Record<ProjectHealth['flags'][number], string> = { 'no-next-action': 'no next action', stale: 'stale', overdue: 'overdue tasks', 'due-soon': 'due soon', 'past-due': 'past due', blocked: 'blocked' };
@@ -34,9 +41,13 @@ const FLAG_LABEL: Record<ProjectHealth['flags'][number], string> = { 'no-next-ac
 const VIEWS: [ProjectView, string, string][] = [['list', 'List', 'list'], ['board', 'Board', 'columns-3'], ['table', 'Table', 'table'], ['timeline', 'Timeline', 'gantt-chart']];
 
 /** The List / Board / Table / Timeline switcher, shared by the project list and a single project. */
-function viewSwitcher(ctx: UiContext, state: ProjectsState, key: 'view' | 'listView'): HTMLElement {
-  const current = state[key] ?? 'list';
-  return h('span', { cls: 'helm-segmented helm-project-views' }, ...VIEWS.map(([id, label, ic]) => h('button', {
+function viewSwitcher(ctx: UiContext, state: ProjectsState, key: 'view' | 'listView', profile?: ProjectProfile): HTMLElement {
+  const current = state[key] ?? (profile && profile.id !== 'generic' ? 'profile' : 'list');
+  // A profiled project leads with its own view, named after the work: “Months”, “Parts”, “Topics”.
+  const views: [ProjectView, string, string][] = profile && profile.id !== 'generic'
+    ? [['profile', `${profile.groupNoun[0]!.toUpperCase()}${profile.groupNoun.slice(1)}s`, profile.icon], ...VIEWS]
+    : VIEWS;
+  return h('span', { cls: 'helm-segmented helm-project-views' }, ...views.map(([id, label, ic]) => h('button', {
     cls: ['helm-seg', current === id && 'is-active'], title: `${label} view`,
     onClick: () => { state[key] = id; ctx.refresh(); },
   }, icon(ic), h('span', { text: label }))));
@@ -200,6 +211,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       h('h2', { text: p.title }),
       h('span', { cls: 'helm-spacer' }),
       // The mirror of “New project” on the list: a project is where its own sub-projects begin.
+      ...(profileOf(p).id !== 'generic' ? [button(`Add a ${profileOf(p).itemNoun}`, { icon: 'plus', primary: true, title: `Add a ${profileOf(p).itemNoun} to this ${profileOf(p).groupNoun}`, onClick: () => openProfileItem(ctx, p, profileOf(p), { ...(state.profileGroup ? { group: state.profileGroup } : {}) }) })] : []),
       button('New sub-project', { icon: 'folder-plus', title: `A project under “${p.title}”`, onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) }),
       button('', { icon: 'file-down', title: `Export “${p.title}” as a PDF`, onClick: () => openExportReport(ctx, { scope: 'quarter', projectId: p.id }) }),
       button('Open note', { icon: 'file-text', onClick: () => void ctx.openFile(p.path) }),
@@ -253,10 +265,18 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
     });
   };
 
-  const view: ProjectView = state.view ?? 'list';
-  root.appendChild(h('div', { cls: 'helm-toolbar' }, viewSwitcher(ctx, state, 'view')));
+  const profile = profileFor(p.profile, { ...(p.profilePeople ? { people: p.profilePeople } : {}), ...(p.profileModes ? { modes: p.profileModes } : {}) });
+  const view: ProjectView = state.view ?? (profile.id !== 'generic' ? 'profile' : 'list');
+  root.appendChild(h('div', { cls: 'helm-toolbar' }, viewSwitcher(ctx, state, 'view', profile)));
 
   if (view !== 'list') {
+    if (view === 'profile') {
+      // A plain project has no board of its own to show; fall back to the list rather than an empty page.
+      if (profile.id === 'generic') { state.view = 'list'; ctx.refresh(); return; }
+      const boardState: ProfileBoardState = state.profileGroup !== undefined ? { group: state.profileGroup } : {};
+      renderProfileBoard(ctx, root, p, profile, { get group() { return boardState.group; }, set group(g) { boardState.group = g; state.profileGroup = g; } });
+      return;
+    }
     if (view === 'board') renderBoard(ctx, root, p, hh, state, today);
     if (view === 'table') renderTable(ctx, root, p, hh, today);
     if (view === 'timeline') renderTimeline(ctx, root, p, hh, today);

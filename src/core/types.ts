@@ -144,6 +144,11 @@ export interface Project {
   pinned?: boolean;
   /** Where you dragged it: lower comes first. Projects without one keep the usual order, after those with one. */
   order?: number;
+  /** The kind of work this is: `music`, `writing`, `exam`, `client` — anything but a plain project. */
+  profile?: string;
+  /** Who and how, when this project's profile is not enough on its own. */
+  profilePeople?: string[];
+  profileModes?: string[];
   phases: Phase[];
   looseTaskKeys: string[];
   /** Line index of the `## Tasks` heading if present. */
