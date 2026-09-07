@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.28.0 — 2026-09-07
 
 - **Moving a task to another day's Anytime works.** It landed in the right section but kept
   its time, and since a part of the day *is* a time of day, the day drew it straight back
