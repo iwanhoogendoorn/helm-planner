@@ -694,6 +694,17 @@ export class Mutations {
     delete rebased[0]!.cancelled;
     if (date !== undefined) {
       const target: DayPart = part ?? (t.section && t.section !== 'outside' && t.section !== 'habits' ? t.section : 'anytime');
+      // A part of the day is a time of day, on the day you are moving to as much as on the day you are
+      // leaving: asked for Anytime, the line gives up its time; asked for a part, it takes a free slot
+      // in that part of the new day. Without this a task moved to another day's Anytime kept 09:00 and
+      // was drawn straight back into that morning.
+      if (part === 'anytime') delete rebased[0]!.time;
+      else if (part && part !== t.part) {
+        // Only when the part actually changes: carrying yesterday's afternoon into today's afternoon is
+        // not a decision about when, and should not invent a time nobody asked for.
+        const slot = this.timeForPart(t, date, part);
+        if (slot) rebased[0]!.time = slot;
+      }
       await this.editRegion(date, (rc) => ({ ...rc, [target]: [...rc[target], ...rebased] }));
     } else {
       await this.appendToInbox(rebased);

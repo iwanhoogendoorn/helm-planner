@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Moving a task to another day's Anytime works.** It landed in the right section but kept
+  its time, and since a part of the day *is* a time of day, the day drew it straight back
+  into the morning it came from — so the move looked as though it had not happened. Asked
+  for Anytime, a task now gives up its time; asked for a part of another day, it takes a
+  free slot in that part of the **new** day rather than keeping yesterday's hour. Carrying
+  work into the *same* part it was already in — what a rollover does — invents nothing.
 - **A repeating task ticked outside Helm gets its next turn back.** Helm only ever spawned
   the next occurrence when *it* set the status, so a line ticked off in the note itself —
   or by another plugin — quietly stopped repeating. Three weekly lessons ticked in the
