@@ -2367,6 +2367,35 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('says each sub-project’s status on its card, “not started” included', async () => {
+    const { ctx, m, index } = await ctxFor();
+    const made = await m.createProject({ title: 'Architect exam', status: 'planned', priority: 'normal', parentId: 'prj-oracle' });
+    await m.setProjectFields(made.id, { status: 'not-started' });
+    expect(index.project(made.id)!.status).toBe('not-started');
+
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-oracle', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    const card = [...root.querySelectorAll<HTMLElement>('.helm-section .helm-project')].find((c) => c.textContent?.includes('Architect exam'))!;
+    expect(texts(card, '.helm-chip.status')).toEqual(['Not started']);
+    expect(card.querySelector('.helm-chip.status')!.classList.contains('status-not-started')).toBe(true);
+    // Every sub-project says its own; in the status-grouped list the heading says it instead.
+    expect(root.querySelectorAll('.helm-section .helm-project .helm-chip.status').length).toBe(root.querySelectorAll('.helm-section .helm-project').length);
+    const list = render((r) => renderProjects(ctx, r, { filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    expect(list.querySelector('.helm-project .helm-chip.status')).toBeNull();
+    expect(texts(list, '.helm-section-title')).toContain('Not started');
+  });
+
+  it('takes “not started” however it is written in the note', async () => {
+    const { index, vault, m } = await ctxFor();
+    const p = await m.createProject({ title: 'Fresh thing', status: 'planned', priority: 'normal' });
+    for (const written of ['Not Started', 'not started', 'notstarted', 'unstarted', 'new']) {
+      const note = await vault.read(p.path);
+      const next = note.replace(/^status: .*$/m, `status: ${written}`);
+      await vault.write(p.path, next);
+      index.update(p.path, next);                                   // as a change on disk would
+      expect(index.project(p.id)!.status, written).toBe('not-started');
+    }
+  });
+
   it('reorders sub-projects with the arrows, and by dragging one onto another', async () => {
     const { ctx, m, index } = await ctxFor();
     for (const t of ['Architect', 'Associate', 'Developer']) await m.createProject({ title: t, status: 'active', priority: 'normal', parentId: 'prj-oracle' });
@@ -2512,7 +2541,7 @@ describe('dragging a task between parts of the day', () => {
     click([...view().querySelectorAll('.helm-project-views .helm-seg')].find((b) => b.textContent === 'Board'));
     expect(state.listView).toBe('board');
     let root = view();
-    expect(texts(root, '.helm-board-title')).toEqual(['Active', 'Planned', 'On hold', 'Ideas']);
+    expect(texts(root, '.helm-board-title')).toEqual(['Active', 'Not started', 'Planned', 'On hold', 'Ideas']);
     expect(texts(root, '.helm-board-card-text')).toContain('Kitchen Remodel');
     // An umbrella stands for its family: OCI Certification lives under Oracle, so only Oracle gets a card,
     // carrying the sub-project's work in its count.

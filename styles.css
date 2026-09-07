@@ -1010,3 +1010,13 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-project-nudge { height: 13px; width: 16px; padding: 0; color: var(--text-faint); }
 .helm-project-nudge:hover { color: var(--text-normal); background: none; box-shadow: none; }
 .helm-project-nudge svg { width: 12px; height: 12px; }
+
+/* A project's status, said on the card where no heading says it for you. */
+.helm-chip.status { border: 1px solid var(--background-modifier-border); background: var(--background-primary); }
+.helm-chip.status.status-active { border-color: var(--color-green); color: var(--color-green); }
+.helm-chip.status.status-not-started { border-color: var(--text-muted); color: var(--text-muted); }
+.helm-chip.status.status-planned { border-color: var(--color-blue); color: var(--color-blue); }
+.helm-chip.status.status-on-hold { border-color: var(--color-orange); color: var(--color-orange); }
+.helm-chip.status.status-idea { border-color: var(--color-purple); color: var(--color-purple); }
+.helm-chip.status.status-done { border-color: var(--color-green); color: var(--text-muted); }
+.helm-chip.status.status-cancelled, .helm-chip.status.status-archived { color: var(--text-faint); text-decoration: line-through; }

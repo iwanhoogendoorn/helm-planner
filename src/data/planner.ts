@@ -282,7 +282,7 @@ export function projectHealth(snap: Snapshot, p: Project, today: IsoDate, settin
   return out;
 }
 
-export const PROJECT_STATUS_ORDER: ProjectStatus[] = ['active', 'planned', 'on-hold', 'idea', 'done', 'cancelled', 'archived'];
+export const PROJECT_STATUS_ORDER: ProjectStatus[] = ['active', 'not-started', 'planned', 'on-hold', 'idea', 'done', 'cancelled', 'archived'];
 
 export function compareProjects(a: ProjectHealth, b: ProjectHealth): number {
   // Pinned projects come first, then the order you dragged them into, then Helm's own reckoning.

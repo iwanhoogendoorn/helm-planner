@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **A project can be “not started”.** Between *Planned* (you have decided to do it) and
+  *Active* (you have begun) sits the one that was missing: planned, ready, untouched. It
+  is in the status menu, the header dropdown, the project board as its own column, and
+  the list as its own group. A note that already says `not started`, `notstarted`,
+  `unstarted` or `new` is read as this without being edited.
+- **A sub-project card says its status.** In the project list the heading above a card
+  says what its status is; in a project's **Sub-projects** section there is no heading, so
+  the status was nowhere to be seen. Each card now carries it as a chip, coloured by what
+  it is, with the same right-click menu to change it.
 - **Sub-projects can be put in the order you want them.** Hover a card in a project's
   **Sub-projects** list and two small arrows appear — up and down, missing at the ends
   where they would do nothing — or drag a card onto another to drop it there. The order

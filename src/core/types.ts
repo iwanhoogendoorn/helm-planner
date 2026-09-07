@@ -11,7 +11,7 @@ export type TaskStatus = 'todo' | 'doing' | 'done' | 'cancelled' | 'forwarded' |
 
 export type Priority = 'highest' | 'high' | 'medium' | 'normal' | 'low' | 'lowest';
 
-export type ProjectStatus = 'idea' | 'planned' | 'active' | 'on-hold' | 'done' | 'cancelled' | 'archived';
+export type ProjectStatus = 'idea' | 'planned' | 'not-started' | 'active' | 'on-hold' | 'done' | 'cancelled' | 'archived';
 export type ProjectPriority = 'low' | 'normal' | 'medium' | 'high' | 'urgent' | 'critical';
 
 export interface Recurrence {

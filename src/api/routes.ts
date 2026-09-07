@@ -41,7 +41,7 @@ const missing = (message: string): ApiResponse => ({ status: 404, body: { error:
 const STATUSES: TaskStatus[] = ['todo', 'doing', 'done', 'cancelled', 'waiting', 'forwarded'];
 const PARTS: DayPart[] = ['morning', 'afternoon', 'evening', 'anytime'];
 const PRIORITIES: Priority[] = ['highest', 'high', 'medium', 'normal', 'low', 'lowest'];
-const PROJECT_STATUSES: ProjectStatus[] = ['idea', 'planned', 'active', 'on-hold', 'done', 'cancelled', 'archived'];
+const PROJECT_STATUSES: ProjectStatus[] = ['idea', 'planned', 'not-started', 'active', 'on-hold', 'done', 'cancelled', 'archived'];
 const PROJECT_PRIORITIES: ProjectPriority[] = ['low', 'normal', 'medium', 'high', 'urgent', 'critical'];
 
 const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {});

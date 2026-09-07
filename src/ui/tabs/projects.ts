@@ -35,7 +35,7 @@ export type ProjectView = 'list' | 'board' | 'table' | 'timeline' | 'profile';
 
 export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean; openSubs?: Set<string>; profileGroup?: string }
 
-const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', planned: 'Planned', 'on-hold': 'On hold', idea: 'Ideas', done: 'Done', cancelled: 'Cancelled', archived: 'Archived' };
+const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', 'not-started': 'Not started', planned: 'Planned', 'on-hold': 'On hold', idea: 'Ideas', done: 'Done', cancelled: 'Cancelled', archived: 'Archived' };
 const FLAG_LABEL: Record<ProjectHealth['flags'][number], string> = { 'no-next-action': 'no next action', stale: 'stale', overdue: 'overdue tasks', 'due-soon': 'due soon', 'past-due': 'past due', blocked: 'blocked' };
 
 const VIEWS: [ProjectView, string, string][] = [['list', 'List', 'list'], ['board', 'Board', 'columns-3'], ['table', 'Table', 'table'], ['timeline', 'Timeline', 'gantt-chart']];
@@ -84,7 +84,7 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     return;
   }
   const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
-  const groups: ProjectStatus[] = ['active', 'planned', 'on-hold', 'idea', ...(state.showClosed ? (['done', 'cancelled', 'archived'] as ProjectStatus[]) : [])];
+  const groups: ProjectStatus[] = ['active', 'not-started', 'planned', 'on-hold', 'idea', ...(state.showClosed ? (['done', 'cancelled', 'archived'] as ProjectStatus[]) : [])];
   const listView: ProjectView = state.listView ?? 'list';
   if (listView !== 'list') {
     if (!state.openSubs) state.openSubs = new Set();
@@ -126,7 +126,7 @@ function makeProjectDraggable(ctx: UiContext, card: HTMLElement, id: string, sib
   });
 }
 
-function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: IsoDate, siblings: string[] = []): HTMLElement {
+function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: IsoDate, siblings: string[] = [], opts: { showStatus?: boolean } = {}): HTMLElement {
   const p = hh.project;
   const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, p.pinned && 'is-pinned', hh.flags.length > 0 && 'has-flags'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev, { siblings }); } });
   if (siblings.length > 1) makeProjectDraggable(ctx, card, p.id, siblings);
@@ -144,6 +144,8 @@ function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: Is
       icon(p.childIds.length > 0 ? 'folder-tree' : 'folder'),
       p.pinned ? icon('pin', 'helm-project-pin') : null,
       h('span', { cls: 'helm-project-title', text: p.title }),
+      // In the list the heading above says the status; anywhere else the card has to say it itself.
+      opts.showStatus ? chip(STATUS_LABEL[p.status], `status status-${p.status}`, `Status: ${STATUS_LABEL[p.status]} — right-click to change it`) : null,
       p.priority !== 'normal' ? chip(p.priority, `prio prio-${p.priority}`) : null,
       p.area ? chip(p.area, 'area') : null,
       p.period ? chip(projectPeriodLabel(p) ?? p.period, 'scheduled', 'Horizon') : null,
@@ -253,7 +255,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
     root.appendChild(section('Sub-projects', {
       count: p.childIds.length, store: state.collapsed, key: 'children',
       actions: [button('New sub-project', { icon: 'folder-plus', onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) })],
-    }, ...kids.map((hh) => projectCard(ctx, hh, 0, today, order))));
+    }, ...kids.map((hh) => projectCard(ctx, hh, 0, today, order, { showStatus: true }))));
   }
 
   const toolbar = h('div', { cls: 'helm-toolbar' },

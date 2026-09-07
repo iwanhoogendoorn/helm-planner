@@ -16,7 +16,7 @@ import { parsePeriod } from './periods';
 export const PHASE_HEADING_RE = /^(?:phase|fase|stage|milestone)\s*[:\-–—]\s*(.+?)\s*$/i;
 export const PHASE_DATE_RE = /\s*📅\s*(\d{4}-\d{2}-\d{2})\s*$/;
 
-export const PROJECT_STATUSES: ProjectStatus[] = ['idea', 'planned', 'active', 'on-hold', 'done', 'cancelled', 'archived'];
+export const PROJECT_STATUSES: ProjectStatus[] = ['idea', 'planned', 'not-started', 'active', 'on-hold', 'done', 'cancelled', 'archived'];
 export const PROJECT_PRIORITIES: ProjectPriority[] = ['low', 'normal', 'medium', 'high', 'urgent', 'critical'];
 
 export function normaliseProjectStatus(v: string | undefined): ProjectStatus | undefined {
@@ -24,6 +24,8 @@ export function normaliseProjectStatus(v: string | undefined): ProjectStatus | u
   const s = v.toLowerCase().trim();
   const map: Record<string, ProjectStatus> = {
     idea: 'idea', someday: 'idea', maybe: 'idea', backlog: 'planned', planned: 'planned', planning: 'planned', todo: 'planned',
+    // Planned and ready, but nobody has touched it yet — different from “planning it” and from “doing it”.
+    'not-started': 'not-started', 'not started': 'not-started', notstarted: 'not-started', 'not-yet-started': 'not-started', 'to-start': 'not-started', unstarted: 'not-started', new: 'not-started',
     active: 'active', 'in-progress': 'active', 'in progress': 'active', doing: 'active', ongoing: 'active',
     'on-hold': 'on-hold', 'on hold': 'on-hold', onhold: 'on-hold', paused: 'on-hold', waiting: 'on-hold', blocked: 'on-hold',
     done: 'done', completed: 'done', complete: 'done', finished: 'done',
