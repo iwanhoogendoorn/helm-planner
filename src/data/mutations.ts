@@ -61,6 +61,9 @@ export interface MutationDeps {
   rng?: () => number;
 }
 
+/** Where a link lives: a project's own list, one phase of it, or a task's line. */
+export interface LinkHolderRef { kind: 'project' | 'phase' | 'task'; id: string }
+
 export interface AddTaskSpec {
   text: string;
   fields?: Partial<TaskLine>;
@@ -967,6 +970,33 @@ export class Mutations {
       lines.splice(at, 1);
       return true;
     });
+  }
+
+  /**
+   * Take a link off one holder and put it on another — a phase's link onto the sub-project it really
+   * belongs to, a project's onto one of its phases, a task's onto a project. It is written at the
+   * destination first: if that fails the link is still where it was, which is the safer way round.
+   */
+  async moveLink(from: LinkHolderRef, to: LinkHolderRef, url: string, label?: string): Promise<void> {
+    if (from.kind === to.kind && from.id === to.id) return;
+    const text = label ?? this.linkLabelOf(from, url) ?? linkLabel(url);
+    if (to.kind === 'project') await this.addProjectLink(to.id, url, text);
+    else if (to.kind === 'phase') await this.addPhaseLink(to.id, url, text);
+    else await this.addLink(to.id, url, text);
+    if (from.kind === 'project') await this.removeProjectLink(from.id, url);
+    else if (from.kind === 'phase') await this.removePhaseLink(from.id, url);
+    else await this.removeLink(from.id, url);
+  }
+
+  /** What a link is called where it currently sits, so moving it does not lose its name. */
+  private linkLabelOf(from: LinkHolderRef, url: string): string | undefined {
+    if (from.kind === 'project') return this.index.project(from.id)?.links.find((l) => l.url === url)?.label;
+    if (from.kind === 'phase') {
+      const project = this.index.project(from.id.split('#')[0]!);
+      return project?.phases.find((x) => x.id === from.id)?.links.find((l) => l.url === url)?.label;
+    }
+    const t = this.index.task(from.id);
+    return t ? linksIn(t.text).find((l) => l.url === url)?.label : undefined;
   }
 
   /** List addresses under a `## Links` heading in a note, skipping any that are already there. */

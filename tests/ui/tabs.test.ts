@@ -2367,6 +2367,49 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('moves a link off a phase and onto a sub-project, keeping its name', async () => {
+    const { m, index, vault } = await ctxFor();
+    const parent = index.project('prj-oracle')!;
+    await m.addPhase(parent.id, 'Phase 1: Foundations');
+    const phase = index.project(parent.id)!.phases.find((x) => x.title === 'Phase 1: Foundations')!;
+    await m.addPhaseLink(phase.id, 'https://pass4sure.example/ccao', 'Pass4Sure');
+    expect(index.project(parent.id)!.phases.find((x) => x.id === phase.id)!.links.map((l) => l.label)).toEqual(['Pass4Sure']);
+
+    const child = index.project('prj-cert')!;                       // the sub-project it belongs to
+    await m.moveLink({ kind: 'phase', id: phase.id }, { kind: 'project', id: child.id }, 'https://pass4sure.example/ccao');
+
+    expect(index.project(parent.id)!.phases.find((x) => x.id === phase.id)!.links).toEqual([]);
+    expect(index.project(child.id)!.links.map((l) => l.label)).toEqual(['Pass4Sure']);   // name carried over
+    expect(await vault.read(child.path)).toContain('[Pass4Sure](https://pass4sure.example/ccao)');
+    expect(await vault.read(parent.path)).not.toContain('pass4sure.example');
+  });
+
+  it('offers the family first when moving a link, and does it from the row', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.addPhase('prj-oracle', 'Phase 1');
+    const phase = index.project('prj-oracle')!.phases.find((x) => x.title === 'Phase 1')!;
+    await m.addPhaseLink(phase.id, 'https://example.com/exam', 'Exam guide');
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-oracle', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+
+    // The link sits in the phase, with a button to send it elsewhere.
+    const row = [...root.querySelectorAll<HTMLElement>('.helm-attach-row')].find((x) => x.textContent?.includes('Exam guide'))!;
+    const moveBtn = row.querySelector<HTMLElement>('button[aria-label="Move this link somewhere else"]')!;
+    expect(moveBtn).toBeTruthy();
+    click(moveBtn);
+
+    // This project, its other phases, then its sub-projects — the places a link usually wants to go.
+    const titles = Menu.last!.items.map((i) => i.title);
+    expect(titles[0]).toBe('Oracle');
+    expect(titles).toContain('OCI Certification');            // the sub-project
+    expect(titles).toContain('Another project…');
+    expect(titles).not.toContain('Oracle › Phase 1');          // never back to where it already is
+
+    Menu.last!.items.find((i) => i.title === 'OCI Certification')!.click!();
+    await waitFor(() => (index.project('prj-cert')!.links.some((l) => l.url === 'https://example.com/exam') ? true : undefined), 'the link to move');
+    expect(index.project('prj-oracle')!.phases.find((x) => x.id === phase.id)!.links).toEqual([]);
+    expect(Notice.messages.at(-1)).toBe('“Exam guide” moved to OCI Certification.');
+  });
+
   it('has a links button in the project header that opens, adds and removes links', async () => {
     const { ctx, m, index } = await ctxFor();
     await m.addProjectLink('prj-kitchen', 'https://example.com/quote', 'The quote');
@@ -2375,7 +2418,7 @@ describe('dragging a task between parts of the day', () => {
     expect(btn).toBeTruthy();
     expect(btn.textContent).toBe('1'); // the count sits on the button
     click(btn);
-    expect(Menu.last!.items.map((i) => i.title)).toEqual(['The quote', 'Add link…', 'Remove link']);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['The quote', 'Add link…', 'Move link to…', 'Remove link']);
     Menu.last!.items.find((i) => i.title === 'Remove link')!.sub!.items[0]!.click!();
     await flush(); await flush();
     expect(index.project('prj-kitchen')!.links).toEqual([]);

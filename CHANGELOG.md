@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **A link can move to where it belongs.** Addresses collected under a phase — a study
+  site, an exam page — often turn out to belong to the sub-project that phase is about.
+  Every link row now has a **move** button (and “Move link to…” in the links menu) that
+  offers the family first: this project, its other phases, its sub-projects, the project
+  above it, then **Another project…** for anything further afield. The link keeps the name
+  it was given, is written at its destination before it is taken off the source, and never
+  offers to move to where it already is.
+
 ## 1.27.0 — 2026-09-06
 
 - **A profiled project says what it means, in words.** Chips are quick to read once you

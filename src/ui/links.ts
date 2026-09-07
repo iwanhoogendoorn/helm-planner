@@ -58,6 +58,11 @@ export interface LinkHolder {
   list: () => TaskLink[];
   add: (url: string, label?: string) => void;
   remove: (url: string) => void;
+  /**
+   * Offer to send a link somewhere else. Where “somewhere else” can be is the caller's business —
+   * a phase knows about its project and its siblings, a task does not — so it hands in the picker.
+   */
+  move?: (link: TaskLink, ev: MouseEvent) => void;
 }
 
 /** The links of anything, plus the ways to add and remove one. */
@@ -66,6 +71,11 @@ export function addLinkItemsFor(menu: Menu, ctx: UiContext, holder: LinkHolder):
   for (const l of links) menu.addItem((i) => i.setTitle(l.label).setIcon('external-link').onClick(() => openExternal(l.url)));
   if (links.length > 0) menu.addSeparator();
   menu.addItem((i) => i.setTitle('Add link…').setIcon('link').onClick(() => askLink(ctx, (r) => { if (r) holder.add(r.url, r.label); })));
+  if (links.length > 0 && holder.move) menu.addItem((i) => {
+    i.setTitle('Move link to…').setIcon('folder-input');
+    const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    for (const l of links) sub.addItem((j) => j.setTitle(l.label).setIcon('link').onClick((ev) => holder.move!(l, ev as MouseEvent)));
+  });
   if (links.length > 0) menu.addItem((i) => {
     i.setTitle('Remove link').setIcon('unlink');
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
@@ -115,7 +125,7 @@ export function linksIndicator(ctx: UiContext, t: Task): HTMLElement | null {
  * text (not the vault), redrawn at once, and land in the note when the editor saves — so a Save
  * can never overwrite a link added a moment earlier.
  */
-export function linksSection(ctx: UiContext, links: { list: () => TaskLink[]; add: (url: string, label?: string) => void; remove: (url: string) => void }): HTMLElement {
+export function linksSection(ctx: UiContext, links: LinkHolder): HTMLElement {
   const root = h('div', { cls: 'helm-attach-section' });
   const draw = (): void => {
     const list = links.list();
@@ -123,6 +133,7 @@ export function linksSection(ctx: UiContext, links: { list: () => TaskLink[]; ad
       ...list.map((l) => h('div', { cls: 'helm-attach-row' },
         h('a', { cls: 'external-link helm-link', text: l.label, attr: { href: l.url, target: '_blank', rel: 'noopener' }, title: l.url }),
         h('span', { cls: 'helm-spacer' }),
+        ...(links.move ? [iconButton('folder-input', 'Move this link somewhere else', (ev) => links.move!(l, ev))] : []),
         iconButton('x', 'Remove this link', () => { links.remove(l.url); draw(); }),
       )),
       ...(list.length === 0 ? [h('div', { cls: 'helm-hint', text: 'No links yet.' })] : []),

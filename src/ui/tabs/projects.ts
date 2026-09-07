@@ -26,7 +26,7 @@ import { crumbBar } from '../crumbs';
 import { drawingsButton, drawingsSection, targetForPhase, targetForProject } from '../drawings';
 import { notesButton, notesSection } from '../notes';
 import { linksSection, linksButton, type LinkHolder } from '../links';
-import { pickTask, taskMenu, STATUS_LABELS } from '../menus';
+import { pickTask, taskMenu, STATUS_LABELS, pickProject } from '../menus';
 import { openTaskEditor } from '../modals/taskEditor';
 import { plainLabel } from '../../core/label';
 import { dragKeys, selection } from '../selection';
@@ -335,13 +335,46 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   root.appendChild(section('Diagrams', { count: ctx.index.drawingsFor(drawTarget).length, store: state.collapsed, key: 'drawings', collapsed: ctx.index.drawingsFor(drawTarget).length === 0 }, drawingsSection(ctx, drawTarget)));
 }
 
-/** A project's links: the list in its note, and the ways to change it. */
+/** A phase's links: the list under its heading, and the ways to change it. */
 function phaseLinks(ctx: UiContext, ph: Phase): LinkHolder {
   return {
     list: () => ph.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addPhaseLink(ph.id, url, label)),
     remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removePhaseLink(ph.id, url)),
+    move: (l, ev) => moveLinkMenu(ctx, { kind: 'phase', id: ph.id }, l, ev),
   };
+}
+
+/**
+ * Where a link can go from here: the family first — this project, its phases, its sub-projects, the
+ * one above it — because that is where a link nearly always wants to be. Anything further afield goes
+ * through the ordinary project picker.
+ */
+export function moveLinkMenu(ctx: UiContext, from: import('../../data/mutations').LinkHolderRef, link: { url: string; label: string }, ev: MouseEvent): void {
+  const menu = new Menu();
+  const projectId = from.kind === 'phase' ? from.id.split('#')[0]! : from.kind === 'project' ? from.id : undefined;
+  const p = projectId ? ctx.index.project(projectId) : undefined;
+  const go = (to: import('../../data/mutations').LinkHolderRef, where: string): void =>
+    void ctx.run('Move link', async () => { await ctx.mutations.moveLink(from, to, link.url, link.label); ctx.notify(`“${link.label}” moved to ${where}.`); });
+
+  if (p) {
+    const here = from.kind === 'project';
+    if (!here) menu.addItem((i) => i.setTitle(p.title).setIcon('folder').onClick(() => go({ kind: 'project', id: p.id }, p.title)));
+    for (const ph of p.phases) {
+      if (from.kind === 'phase' && from.id === ph.id) continue;
+      menu.addItem((i) => i.setTitle(`${p.title} › ${ph.title}`).setIcon('milestone').onClick(() => go({ kind: 'phase', id: ph.id }, ph.title)));
+    }
+    const kids = p.childIds.map((id) => ctx.index.project(id)).filter((x): x is Project => x !== undefined);
+    if (kids.length > 0) menu.addSeparator();
+    for (const c of kids) menu.addItem((i) => i.setTitle(c.title).setIcon('folder-tree').onClick(() => go({ kind: 'project', id: c.id }, c.title)));
+    const up = p.parentId ? ctx.index.project(p.parentId) : undefined;
+    if (up) menu.addItem((i) => i.setTitle(`${up.title} (above)`).setIcon('folder-up').onClick(() => go({ kind: 'project', id: up.id }, up.title)));
+  }
+  menu.addSeparator();
+  menu.addItem((i) => i.setTitle('Another project…').setIcon('search').onClick(() => pickProject(ctx, (dest, phaseId) => {
+    go(phaseId ? { kind: 'phase', id: phaseId } : { kind: 'project', id: dest.id }, phaseId ? `${dest.title} › ${dest.phases.find((x) => x.id === phaseId)?.title ?? ''}` : dest.title);
+  }, { phases: true, includeInactive: true })));
+  menu.showAtMouseEvent(ev);
 }
 
 function projectLinks(ctx: UiContext, p: Project): LinkHolder {
@@ -349,6 +382,7 @@ function projectLinks(ctx: UiContext, p: Project): LinkHolder {
     list: () => p.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addProjectLink(p.id, url, label)),
     remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removeProjectLink(p.id, url)),
+    move: (l, ev) => moveLinkMenu(ctx, { kind: 'project', id: p.id }, l, ev),
   };
 }
 
