@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Sub-projects can be put in the order you want them.** Hover a card in a project's
+  **Sub-projects** list and two small arrows appear — up and down, missing at the ends
+  where they would do nothing — or drag a card onto another to drop it there. The order
+  is written into each project's note (`order:`), so it survives everything.
+  The section now lists them **in that order** rather than the order the vault happened
+  to be read in, which is also why it can look slightly different the first time: until
+  you move something, it falls back to the same reckoning the projects list uses.
 - **A link can move to where it belongs.** Addresses collected under a phase — a study
   site, an exam page — often turn out to belong to the sub-project that phase is about.
   Every link row now has a **move** button (and “Move link to…” in the links menu) that

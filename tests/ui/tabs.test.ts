@@ -2367,6 +2367,36 @@ describe('Capture for another day', () => {
 });
 
 describe('dragging a task between parts of the day', () => {
+  it('reorders sub-projects with the arrows, and by dragging one onto another', async () => {
+    const { ctx, m, index } = await ctxFor();
+    for (const t of ['Architect', 'Associate', 'Developer']) await m.createProject({ title: t, status: 'active', priority: 'normal', parentId: 'prj-oracle' });
+
+    const draw = (): HTMLElement => { document.body.innerHTML = ''; return render((r) => renderProjects(ctx, r, { projectId: 'prj-oracle', filter: '', showClosed: false, showDone: false, collapsed: new Map() })); };
+    const shown = (r: HTMLElement): string[] => [...r.querySelectorAll<HTMLElement>('.helm-section .helm-project .helm-project-title')].map((x) => x.textContent!);
+    let root = draw();
+    const start = shown(root);
+    expect(start.length).toBeGreaterThanOrEqual(3);
+
+    // The first card has a “down” arrow and no “up”; one press moves it a place.
+    const cards = (r: HTMLElement): HTMLElement[] => [...r.querySelectorAll<HTMLElement>('.helm-section .helm-project')];
+    expect(cards(root)[0]!.querySelector('button[aria-label="Move up"]')).toBeNull();
+    expect(cards(root)[0]!.querySelector('button[aria-label="Move down"]')).toBeTruthy();
+    click(cards(root)[0]!.querySelector('button[aria-label="Move down"]'));
+    await waitFor(() => (index.allProjects().find((x) => x.title === start[0])?.order !== undefined ? true : undefined), 'the order to be written');
+    root = draw();
+    expect(shown(root).slice(0, 2)).toEqual([start[1], start[0]]);      // they swapped places
+
+    // Dragging the last onto the first puts it at the front.
+    const nowShown = shown(root);
+    const moved = nowShown[nowShown.length - 1]!;
+    const movedId = index.allProjects().find((x) => x.title === moved)!.id;
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: { types: ['text/helm-project'], getData: () => movedId } });
+    cards(root)[0]!.dispatchEvent(ev);
+    await waitFor(() => (index.project(movedId)!.order === 1 ? true : undefined), 'the drop to reorder');
+    expect(shown(draw())[0]).toBe(moved);
+  });
+
   it('moves a link off a phase and onto a sub-project, keeping its name', async () => {
     const { m, index, vault } = await ctxFor();
     const parent = index.project('prj-oracle')!;

@@ -130,8 +130,17 @@ function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: Is
   const p = hh.project;
   const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, p.pinned && 'is-pinned', hh.flags.length > 0 && 'has-flags'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev, { siblings }); } });
   if (siblings.length > 1) makeProjectDraggable(ctx, card, p.id, siblings);
+  // Arrows as well as dragging: a list of four is quicker to nudge than to drag, and a trackpad drag
+  // over a scrolling page is nobody's idea of a good time.
+  const at = siblings.indexOf(p.id);
+  const nudge = (by: number, label: string, ic: string): HTMLElement | null => {
+    const to = at + by;
+    if (at === -1 || to < 0 || to >= siblings.length) return null;
+    return iconButton(ic, label, (ev) => { ev.stopPropagation(); void ctx.run('Reorder', () => ctx.mutations.moveProjectBy(p.id, by, siblings)); }, 'helm-project-nudge');
+  };
   card.append(
     h('div', { cls: 'helm-project-head' },
+      ...(siblings.length > 1 ? [h('span', { cls: 'helm-project-nudges' }, nudge(-1, 'Move up', 'chevron-up'), nudge(1, 'Move down', 'chevron-down'))] : []),
       icon(p.childIds.length > 0 ? 'folder-tree' : 'folder'),
       p.pinned ? icon('pin', 'helm-project-pin') : null,
       h('span', { cls: 'helm-project-title', text: p.title }),
@@ -233,11 +242,18 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
   ));
 
   if (p.childIds.length > 0) {
-    const kids = p.childIds.map((cid) => ctx.index.project(cid)).filter((c): c is Project => c !== undefined);
+    // Shown in the order you put them in — the same reckoning the project list uses — so nudging one
+    // with the arrows or dropping it on another actually moves it here.
+    const kids = p.childIds
+      .map((cid) => ctx.index.project(cid))
+      .filter((c): c is Project => c !== undefined)
+      .map((c) => projectHealth(snap, c, today, settings))
+      .sort(compareProjects);
+    const order = kids.map((k) => k.project.id);
     root.appendChild(section('Sub-projects', {
       count: p.childIds.length, store: state.collapsed, key: 'children',
       actions: [button('New sub-project', { icon: 'folder-plus', onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) })],
-    }, ...kids.map((c) => projectCard(ctx, projectHealth(snap, c, today, settings), 0, today, p.childIds))));
+    }, ...kids.map((hh) => projectCard(ctx, hh, 0, today, order))));
   }
 
   const toolbar = h('div', { cls: 'helm-toolbar' },
