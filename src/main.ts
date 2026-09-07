@@ -478,6 +478,7 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'drawing-today', name: 'New drawing for today', callback: () => newDrawing(ctx(), targetForDate(this.today())) });
     this.addCommand({ id: 'drawing-week', name: 'New drawing for this week', callback: () => newDrawing(ctx(), targetForPeriod(periodOf(this.today(), 'week'))) });
     this.addCommand({ id: 'rebuild-index', name: 'Rebuild index', callback: () => void this.run('Rebuild index', () => this.index.rebuild()) });
+    this.addCommand({ id: 'catch-up-recurring', name: 'Bring back missed recurring tasks', callback: () => void this.run('Catch up', async () => { const n = await this.mutations.catchUpRecurring(60); new Notice(n === 0 ? 'Every repeating task already has its next turn.' : `Brought back ${n} repeating task${n === 1 ? '' : 's'}.`); }) });
     this.addCommand({ id: 'move-recurring', name: 'Move recurring tasks to their next date', callback: () => void this.run('Move recurring', async () => { const n = await this.mutations.moveMisfiled(); new Notice(n === 0 ? 'Every dated task is already in the right note.' : `Moved ${n} task${n === 1 ? '' : 's'} to the note of its date.`); }) });
     this.addCommand({ id: 'sync-habits-today', name: 'Add today’s habits to the daily note', callback: () => void this.run('Habits', () => this.mutations.syncHabitsForDay(this.today())) });
     this.addCommand({

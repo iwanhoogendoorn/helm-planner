@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **A repeating task ticked outside Helm gets its next turn back.** Helm only ever spawned
+  the next occurrence when *it* set the status, so a line ticked off in the note itself —
+  or by another plugin — quietly stopped repeating. Three weekly lessons ticked in the
+  editor and only the one ticked in Helm came back the following Saturday.
+  Helm now catches up as it reconciles: a repeating line finished in the last fortnight
+  whose next turn is missing gets it. Deliberately timid — nothing lands in the past, and
+  a line already sitting on that day is never duplicated — so it fills in what was missed
+  without resurrecting old history. **Bring back missed recurring tasks** in the command
+  palette does the same over the last two months when you want a bigger sweep.
+
+## Unreleased
+
 - **A project can be “not started”.** Between *Planned* (you have decided to do it) and
   *Active* (you have begun) sits the one that was missing: planned, ready, untouched. It
   is in the status menu, the header dropdown, the project board as its own column, and

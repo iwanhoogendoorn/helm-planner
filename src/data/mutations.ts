@@ -367,6 +367,45 @@ export class Mutations {
     if (fresh) await this.refreshMirrors(fresh);
   }
 
+  /**
+   * Recurring lines ticked off outside Helm — in the note itself, or by another plugin — never got their
+   * next occurrence, because that only happened when Helm set the status. Three weekly lessons ticked in
+   * the editor and only the one ticked in Helm came back the following week.
+   *
+   * So the reconcile catches up: a recently finished repeating line whose next turn is missing gets it.
+   * Deliberately timid — a fortnight's look-back, nothing landing in the past, and never a second copy of
+   * a line that is already there — so it can fill in what was missed without resurrecting old history.
+   */
+  async catchUpRecurring(withinDays = 14): Promise<number> {
+    const today = this.today;
+    const from = addDays(today, -withinDays);
+    let made = 0;
+    for (const t0 of this.index.allTasks()) {
+      if (t0.origin !== 'daily' || !t0.recurrence?.parsed) continue;
+      if (t0.status !== 'done' && t0.status !== 'cancelled') continue;
+      const when = t0.done ?? t0.cancelled ?? t0.noteDate;
+      if (!when || when < from || when > today) continue;
+      const next = nextOccurrence(t0.recurrence, t0.due ?? t0.scheduled ?? t0.noteDate ?? when);
+      if (!next || next < today) continue;
+      if (this.hasOccurrenceOn(t0, next)) continue;
+      const fresh = this.index.task(t0.key);
+      if (!fresh) continue;
+      await this.spawnNextOccurrence(fresh);
+      made++;
+    }
+    return made;
+  }
+
+  /** Is this repeating line already sitting on that day, in whatever state? */
+  private hasOccurrenceOn(t: Task, date: IsoDate): boolean {
+    const text = t.text.trim();
+    for (const other of this.index.allTasks()) {
+      if (other.key === t.key || other.text.trim() !== text) continue;
+      if ((other.noteDate ?? other.scheduled) === date) return true;
+    }
+    return false;
+  }
+
   private async spawnNextOccurrence(t: Task): Promise<void> {
     const rec = t.recurrence!;
     const base = rec.whenDone ? this.today : (t.due ?? t.scheduled ?? t.noteDate ?? this.today);
@@ -1938,6 +1977,7 @@ export class Mutations {
     const today = this.today;
     let writes = 0;
     if (this.settings.autoMoveRecurring) writes += await this.moveMisfiled({ onlyFuture: true });
+    writes += await this.catchUpRecurring();
     const mirrors = this.index.allTasks().filter((t) => t.origin === 'daily-mirror' && t.mirrorOf);
     for (const m0 of mirrors) {
       const m = this.index.task(m0.key);
