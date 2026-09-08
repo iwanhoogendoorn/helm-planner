@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **A skipped occurrence still comes back next time.** Skipping one Tuesday of a weekly
+  meeting should leave the next Tuesday standing, and if that turn went missing — because
+  the skip was made in the note rather than in Helm, or by a build that did not yet know
+  how — the catch-up now finds it.
+  It also looks the right way: the window that matters is **the one in front**. Before, a
+  repeating task was only caught up if it had been finished in the last fortnight, which
+  quietly missed anything monthly or quarterly whose next turn was still ahead. It now
+  brings back any turn falling between today and about six weeks out, however long ago the
+  one before it was finished — while anything whose next turn is already behind us stays
+  history.
+
 ## 1.28.0 — 2026-09-07
 
 - **Moving a task to another day's Anytime works.** It landed in the right section but kept

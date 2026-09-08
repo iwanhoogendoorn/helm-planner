@@ -121,6 +121,10 @@ export function dailyPath(date: string): string {
     '2026-08-27': '2026/08 - August/35/27, Thursday, Aug, 2026',
     '2026-08-28': '2026/08 - August/35/28, Friday, Aug, 2026',
     '2026-09-02': '2026/09 - September/36/02, Wednesday, Sep, 2026',
+    '2026-09-01': '2026/09 - September/36/01, Tuesday, Sep, 2026',
+    '2026-09-08': '2026/09 - September/37/08, Tuesday, Sep, 2026',
+    '2026-08-05': '2026/08 - August/32/05, Wednesday, Aug, 2026',
+    '2026-09-05': '2026/09 - September/36/05, Saturday, Sep, 2026',
   };
   return `${DAILY_FOLDER}/${map[date]!}.md`;
 }

@@ -34,6 +34,27 @@ describe('recurring lines ticked outside Helm', () => {
     expect(await m.catchUpRecurring()).toBe(0);
   });
 
+  it('brings back a skipped occurrence, not just a finished one', async () => {
+    // Their case: a weekly meeting skipped on the Tuesday, its next Tuesday never written.
+    const { m, vault } = await setup({
+      [dailyPath('2026-08-25')]: `---\ntitle: 25\n---\n\n# Day planner\n\n### A. Morning\n\n- [-] 11:00 - 11:45: #meeting Team meeting 📅 2026-08-25 🔁 every week on tuesday ❌ 2026-08-25\n\n### Anytime\n`,
+    });
+    expect(await m.catchUpRecurring()).toBe(1);
+    const next = await vault.read(dailyPath('2026-09-01'));
+    expect(next).toContain('- [ ] 11:00 - 11:45: #meeting Team meeting 📅 2026-09-01 🔁 every week on tuesday');
+    expect(next).not.toContain('❌');                              // the skip stays behind, on its own day
+  });
+
+  it('reaches back further when the next turn is further off', async () => {
+    // A monthly task finished three weeks ago: its next turn is still ahead, so it is still wanted —
+    // a fortnight's look-back would have missed it entirely.
+    const { m, vault } = await setup({
+      [dailyPath('2026-08-05')]: `---\ntitle: 05\n---\n\n# Day planner\n\n### Anytime\n\n- [x] Pay the rent 🔁 every month ✅ 2026-08-05\n`,
+    });
+    expect(await m.catchUpRecurring()).toBe(1);
+    expect(await vault.read(dailyPath('2026-09-05'))).toContain('Pay the rent 🔁 every month');
+  });
+
   it('does not go digging through old history, or land anything in the past', async () => {
     const { m } = await setup({
       // Ticked two months ago: its next turn was due long before today, and is not Helm's to invent now.

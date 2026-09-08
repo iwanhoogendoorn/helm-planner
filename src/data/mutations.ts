@@ -372,21 +372,28 @@ export class Mutations {
    * next occurrence, because that only happened when Helm set the status. Three weekly lessons ticked in
    * the editor and only the one ticked in Helm came back the following week.
    *
-   * So the reconcile catches up: a recently finished repeating line whose next turn is missing gets it.
-   * Deliberately timid — a fortnight's look-back, nothing landing in the past, and never a second copy of
-   * a line that is already there — so it can fill in what was missed without resurrecting old history.
+   * The same hole swallowed a skipped meeting: skip one Tuesday and the next Tuesday should still be
+   * there, whichever way the skip was made.
+   *
+   * So the reconcile catches up on any repeating line whose **next turn is still to come** and missing.
+   * Deliberately timid — nothing lands in the past, nothing beyond the horizon, and never a second copy
+   * of a line already on that day — so it fills in what was missed without resurrecting old history.
    */
-  async catchUpRecurring(withinDays = 14): Promise<number> {
+  async catchUpRecurring(aheadDays = 45): Promise<number> {
     const today = this.today;
-    const from = addDays(today, -withinDays);
+    // The window that matters is the one in front: a turn still to come is worth having whether it was
+    // finished last Tuesday or, for something monthly, three weeks ago. Anything whose next turn is
+    // already behind us is history and stays there, which is what keeps an old weekly series quiet.
+    const horizon = addDays(today, aheadDays);
+    const ancient = addDays(today, -366);
     let made = 0;
     for (const t0 of this.index.allTasks()) {
       if (t0.origin !== 'daily' || !t0.recurrence?.parsed) continue;
       if (t0.status !== 'done' && t0.status !== 'cancelled') continue;
       const when = t0.done ?? t0.cancelled ?? t0.noteDate;
-      if (!when || when < from || when > today) continue;
+      if (!when || when < ancient || when > today) continue;
       const next = nextOccurrence(t0.recurrence, t0.due ?? t0.scheduled ?? t0.noteDate ?? when);
-      if (!next || next < today) continue;
+      if (!next || next < today || next > horizon) continue;
       if (this.hasOccurrenceOn(t0, next)) continue;
       const fresh = this.index.task(t0.key);
       if (!fresh) continue;
