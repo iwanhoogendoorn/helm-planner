@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.28.1 — 2026-09-08
 
 - **A skipped occurrence still comes back next time.** Skipping one Tuesday of a weekly
   meeting should leave the next Tuesday standing, and if that turn went missing — because
