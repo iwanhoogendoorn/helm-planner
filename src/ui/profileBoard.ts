@@ -170,10 +170,16 @@ export function renderProfileBoard(ctx: UiContext, root: HTMLElement, p: Project
   const list = h('div', { cls: 'helm-profile-items' });
   for (const it of items) {
     const total = it.work.length;
+    // A song that points at a Maestro note brings its own facts along: the key, the tempo, and what
+    // Maestro thinks of it — read from the note, never retyped.
+    const song = it.link ? ctx.index.song(it.link) : undefined;
     const card = h('div', { cls: ['helm-profile-item', total > 0 && it.done === total && 'is-done'] },
       h('div', { cls: 'helm-profile-item-head' },
         h('button', { cls: 'helm-profile-item-title', onClick: () => openTaskEditor(ctx, it.task) }, h('span', { text: it.title })),
         it.link ? iconButton('file-text', `Open ${it.link}`, () => ctx.openLink(it.link!, p.path)) : null,
+        song?.key ? chip(song.key, 'count', `Key of ${song.key}`) : null,
+        song?.tempo ? chip(`♩=${song.tempo}`, 'count', `${song.tempo} bpm${song.time ? ` · ${song.time}` : ''}`) : null,
+        song?.status ? chip(song.status, 'note', 'What the song note itself says') : null,
         h('span', { cls: 'helm-spacer' }),
         total > 0 ? h('span', { cls: 'helm-hint', text: `${it.done}/${total}` }) : null,
         iconButton('more-horizontal', 'More…', (ev) => taskMenu(ctx, it.task, ev)),

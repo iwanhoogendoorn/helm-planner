@@ -27,8 +27,6 @@ export function draftToLine(text: string, today: string, weekStartsOn: 1 | 7 = 1
   return serialiseTaskLine(line);
 }
 
-const splitList = (raw: string): string[] => raw.split(',').map((x) => x.trim()).filter(Boolean);
-
 export function openProjectForm(ctx: UiContext, opts: { parentId?: string; period?: string; goalKey?: string; title?: string; fromTask?: Task; onCreated?: (p: Project) => void } = {}): void {
   const today = ctx.today();
   const m = new Modal(ctx.app);
@@ -121,26 +119,64 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; perio
   const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
 
   // ── What kind of work this is. A profile changes the words the project is planned in, and gives it a
-  //    view of its own; the vocabulary it starts with is editable here and in the note afterwards.
+  //    view of its own; the vocabulary it starts with is set here with ticks and chips rather than by
+  //    typing a comma-separated list and hoping.
   let profileId = 'generic';
-  const people = h('input', { cls: 'helm-input', attr: { type: 'text', placeholder: 'Iwan, Zaara' } }) as HTMLInputElement;
-  const modes = h('input', { cls: 'helm-input', attr: { type: 'text' } }) as HTMLInputElement;
-  const vocab = h('div', { cls: 'helm-grid2' });
+  let people: string[] = [];
+  let modes: string[] = [];
+  const vocab = h('div', { cls: 'helm-profile-vocab' });
   const kinds = h('div', { cls: 'helm-segmented helm-profile-kinds' });
   const drawKinds = (): void => {
     kinds.replaceChildren(...BUILT_IN_PROFILES.map((pr) => h('button', {
-      cls: ['helm-seg', profileId === pr.id && 'is-active'], title: pr.hint,
-      onClick: () => { profileId = pr.id; drawKinds(); drawVocab(); },
+      cls: ['helm-seg', profileId === pr.id && 'is-active'], attr: { type: 'button', title: pr.hint },
+      onClick: () => { profileId = pr.id; const base = profileById(pr.id); people = [...base.people]; modes = [...base.modes]; drawKinds(); drawVocab(); },
     }, icon(pr.icon), h('span', { text: pr.label }))));
   };
+
+  /**
+   * A row of ticks: everything the profile knows, on or off, plus room for one of your own. It reads
+   * the current list through `get` on every draw — a captured copy goes stale the moment it changes.
+   */
+  const tickRow = (label: string, all: string[], get: () => string[], set: (next: string[]) => void, placeholder: string): HTMLElement => {
+    const row = h('div', { cls: 'helm-tickrow' });
+    const draw = (): void => {
+      const chosen = get();
+      const known = [...new Set([...all, ...chosen])];
+      row.replaceChildren(
+        ...known.map((x) => {
+          const on = chosen.includes(x);
+          const box = h('input', { attr: { type: 'checkbox', ...(on ? { checked: 'checked' } : {}) } }) as HTMLInputElement;
+          box.addEventListener('change', () => { const cur = get(); set(box.checked ? [...cur, x] : cur.filter((y) => y !== x)); draw(); });
+          return h('label', { cls: ['helm-tick', on && 'is-on'] }, box, h('span', { text: x }));
+        }),
+        (() => {
+          const add = h('input', { cls: 'helm-tick-add', attr: { type: 'text', placeholder } }) as HTMLInputElement;
+          add.addEventListener('keydown', (ev) => {
+            if (ev.key !== 'Enter') return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            const v = add.value.trim();
+            if (v === '' || get().includes(v)) return;
+            add.value = '';
+            set([...get(), v]);
+            draw();
+          });
+          return add;
+        })(),
+      );
+    };
+    draw();
+    return h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), row);
+  };
+
   const drawVocab = (): void => {
     const pr = profileById(profileId);
     if (pr.id === 'generic') { vocab.replaceChildren(); return; }
-    people.value = pr.people.join(', ');
-    modes.value = pr.modes.join(', ');
     vocab.replaceChildren(
-      ...(pr.people.length > 0 ? [h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'People' }), people)] : []),
-      h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: `Ways of working on a ${pr.itemNoun}` }), modes),
+      ...(pr.people.length > 0 || people.length > 0
+        ? [tickRow('People', pr.people, () => people, (next) => { people = next; }, 'add someone…')]
+        : []),
+      tickRow(`Ways of working on a ${pr.itemNoun}`, pr.modes, () => modes, (next) => { modes = next; }, 'add another way…'),
     );
   };
   drawKinds();
@@ -173,8 +209,8 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; perio
         ...(period.value ? { period: period.value } : {}), ...(goal.value ? { goal: ctx.index.goal(goal.value)?.id ?? goal.value } : {}),
         ...(profileId !== 'generic' ? {
           profile: profileId,
-          ...(splitList(people.value).length > 0 ? { people: splitList(people.value) } : {}),
-          ...(splitList(modes.value).length > 0 ? { modes: splitList(modes.value) } : {}),
+          ...(people.length > 0 ? { people } : {}),
+          ...(modes.length > 0 ? { modes } : {}),
         } : {}),
         phases: phases.map((ph) => ({ title: ph.title.trim(), ...(isIsoDate(ph.due) ? { due: ph.due } : {}), tasks: ph.tasks.map((t) => draftToLine(t.text, today, wk)) })),
         tasks: loose.map((t) => draftToLine(t.text, today, wk)),

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **The music board reads the Maestro songbook.** Any note with `type: song` — wherever it
+  lives in the vault — is now known to Helm, and **Add a song** starts with a *From the
+  songbook* dropdown: pick one and the name, the artist and the `[[link]]` fill themselves,
+  with the song's own facts shown as you pick — *key G · 3/4 · ♩=80 · Maestro says:
+  learning*. A song already on the board is marked in the list so it is not added twice.
+  Song cards on the board carry the same facts as chips, read live from the note.
+- **The project form's vocabulary is ticks, not typing.** People and ways-of-working were a
+  comma-separated text box; they are now checkboxes with the profile's defaults pre-ticked
+  and a small box to add one of your own (type a name, press Enter). What you untick stays
+  visible but off.
+
 ## 1.28.1 — 2026-09-08
 
 - **A skipped occurrence still comes back next time.** Skipping one Tuesday of a weekly

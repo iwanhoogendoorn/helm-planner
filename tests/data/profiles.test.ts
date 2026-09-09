@@ -107,3 +107,32 @@ describe('a profiled note explains its own shape', () => {
     expect(await vault.read(plain.path)).not.toContain('## How this works');
   });
 });
+
+describe('the songbook feeds the music board', () => {
+  const SONG = `---\ntitle: Amazing Grace\ntype: song\nkey: G\ntempo: 80\ntime: 3/4\ncomposer: Traditional\nstatus: learning\n---\n# Amazing Grace\n`;
+
+  it('indexes a Maestro song note and reads its facts', async () => {
+    const { index } = await setup({ '80 MUSIC/Songbook/Amazing Grace.md': SONG });
+    const songs = index.songs();
+    expect(songs.map((s) => s.title)).toContain('Amazing Grace');
+    const g = index.song('Amazing Grace')!;
+    expect(g).toMatchObject({ key: 'G', tempo: 80, time: '3/4', artist: 'Traditional', status: 'learning' });
+    // Findable by the basename a [[link]] uses, and by path.
+    expect(index.song('80 MUSIC/Songbook/Amazing Grace.md')?.title).toBe('Amazing Grace');
+    // An ordinary note is not a song.
+    expect(index.songs().some((s) => s.title.includes('Oracle'))).toBe(false);
+  });
+
+  it('a song added from the songbook carries its link, and the board shows its facts', async () => {
+    const { index, m } = await setup({ '80 MUSIC/Songbook/Amazing Grace.md': SONG });
+    const proj = await m.createProject({ title: 'Songs', status: 'active', priority: 'normal', profile: 'music', people: ['Iwan', 'Zaara'] });
+    await m.addProfileItem(proj.id, {
+      title: 'Amazing Grace - Traditional', group: 'September 2026', note: 'Amazing Grace',
+      assignments: [{ person: 'Zaara', mode: 'Singing' }],
+    });
+    const phase = index.project(proj.id)!.phases[0]!;
+    const t = index.task(phase.taskKeys[0]!)!;
+    const link = /\[\[([^\]|#]+)/.exec(t.text)![1]!;
+    expect(index.song(link)?.key).toBe('G');                     // the card can say “G · ♩=80 · learning”
+  });
+});

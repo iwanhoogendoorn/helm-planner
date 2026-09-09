@@ -21,6 +21,21 @@ export const DAILY_FALLBACK = { folder: 'Daily Notes', format: 'YYYY-MM-DD' };
 
 export type FileKind = 'project' | 'habit' | 'daily' | 'inbox' | 'note' | 'periodic' | 'drawing';
 
+/**
+ * A song note, as the Maestro plugin writes them: `type: song` in the frontmatter, with the key, the
+ * tempo, the time signature and who wrote it. Helm does not parse the music — it just knows which notes
+ * are songs, so a music project can offer them instead of asking you to type a name twice.
+ */
+export interface SongNote {
+  path: string;
+  title: string;
+  artist?: string;
+  key?: string;
+  tempo?: number;
+  time?: string;
+  status?: string;
+}
+
 export type PeriodicConfig = Record<PeriodKind, { folder: string; format: string }>;
 export const PERIODIC_FALLBACK: PeriodicConfig = { year: { folder: 'Yearly Notes', format: 'YYYY' }, quarter: { folder: 'Quarterly Notes', format: 'YYYY-[Q]Q' }, month: { folder: 'Monthly Notes', format: 'YYYY-MM' }, week: { folder: 'Weekly Notes', format: 'gggg-[W]ww' } };
 
@@ -37,6 +52,8 @@ interface FileEntry {
   noteRef?: NoteRef;
   /** A daily note's diary entries. */
   daybook?: DaybookEntry[];
+  /** A song, when the note says it is one — Maestro's `type: song` and what it carries. */
+  song?: SongNote;
   /** Basenames linked under this note's Notes heading. */
   noteLinks?: string[];
   /** Basenames of drawings this note embeds or links (`![[X.excalidraw]]`). */
@@ -132,6 +149,8 @@ export class HelmIndex {
     if (isUnder(path, s.notesFolder)) return true;
     // A note anywhere in the vault that carries helm-* keys is attached to something and belongs in the index.
     if (content !== undefined ? contentHasHelmKeys(content) : hasHelmKeys(this.vault.frontmatter?.(path))) return true;
+    // So does a song: Maestro's songbook can live anywhere, and the music board wants to offer it.
+    if (content !== undefined ? /^type:\s*song\s*$/im.test(content.slice(0, 2000)) : isSongFm(this.vault.frontmatter?.(path))) return true;
     if (path === s.inboxNote) return true;
     if (isUnder(path, s.projectsFolder) || isUnder(path, s.habitsFolder)) return true;
     if (this.dateOfPath(path) !== undefined) return true;
@@ -211,6 +230,7 @@ export class HelmIndex {
     const mtime = this.vault.mtime(path);
     if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
     if (contentHasHelmKeys(content)) { const fm = parseDocument(content).frontmatter.values as Record<string, unknown>; entry.noteRef = parseNoteRef(path, fm, mtime); }
+    if (/^type:\s*song\s*$/im.test(content)) entry.song = parseSongNote(path, content);
     const date = this.dateOfPath(path);
     const dl = [...content.matchAll(/!?\[\[([^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]/g)].map((m) => m[1]!.trim()).filter((t) => /\.(excalidraw|canvas)$/i.test(t)).map((t) => t.slice(t.lastIndexOf('/') + 1).replace(/\.(excalidraw|canvas)$/i, ''));
     if (dl.length > 0) entry.drawingLinks = [...new Set(dl)];
@@ -624,10 +644,58 @@ export class HelmIndex {
   tasksInFile(path: string): Task[] { return (this.snapshot.tasksByPath.get(path) ?? []).map((k) => this.snapshot.tasks.get(k)!).filter(Boolean); }
   mirrorsOf(sourceKey: string): Task[] { return this.allTasks().filter((t) => t.origin === 'daily-mirror' && t.mirrorOf === sourceKey); }
   fileKind(path: string): FileKind | undefined { return this.files.get(path)?.kind; }
+
+  /** Every song note in the vault, by title. */
+  songs(): SongNote[] {
+    const out: SongNote[] = [];
+    for (const f of this.files.values()) if (f.song) out.push(f.song);
+    return out.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  /** The song a link points at, when it points at one. */
+  song(titleOrPath: string): SongNote | undefined {
+    const want = titleOrPath.replace(/\.md$/, '').trim().toLowerCase();
+    for (const f of this.files.values()) {
+      if (!f.song) continue;
+      const base = f.path.slice(f.path.lastIndexOf('/') + 1).replace(/\.md$/, '').toLowerCase();
+      if (base === want || f.song.title.toLowerCase() === want || f.path.toLowerCase().replace(/\.md$/, '') === want) return f.song;
+    }
+    return undefined;
+  }
   projectFolderOf(p: Project): string { return p.folder || folderOf(p.path); }
   hasFile(path: string): boolean { return this.files.has(path); }
 }
 
 export function emptySnapshot(): Snapshot {
   return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map(), drawings: new Map(), notes: new Map() };
+}
+
+/** Is this frontmatter a song's? Maestro writes `type: song`, sometimes as a list. */
+function isSongFm(fm: Record<string, unknown> | undefined): boolean {
+  if (!fm) return false;
+  const t = fm['type'];
+  const v = Array.isArray(t) ? t[0] : t;
+  return typeof v === 'string' && v.trim().toLowerCase() === 'song';
+}
+
+/** Read what a song note says about itself. Anything missing is simply not shown. */
+function parseSongNote(path: string, content: string): SongNote {
+  const fm = parseDocument(content).frontmatter.values as Record<string, unknown>;
+  const one = (k: string): string | undefined => {
+    const v = fm[k];
+    const raw = Array.isArray(v) ? v[0] : v;
+    const s = typeof raw === 'string' ? raw.trim() : typeof raw === 'number' ? String(raw) : '';
+    return s === '' ? undefined : s;
+  };
+  const base = path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
+  const tempo = Number(one('tempo'));
+  return {
+    path,
+    title: one('title') ?? base,
+    ...(one('artist') ?? one('composer') ? { artist: (one('artist') ?? one('composer'))! } : {}),
+    ...(one('key') ? { key: one('key')! } : {}),
+    ...(Number.isFinite(tempo) && tempo > 0 ? { tempo } : {}),
+    ...(one('time') ? { time: one('time')! } : {}),
+    ...(one('status') ? { status: one('status')! } : {}),
+  };
 }

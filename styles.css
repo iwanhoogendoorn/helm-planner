@@ -1020,3 +1020,14 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-chip.status.status-idea { border-color: var(--color-purple); color: var(--color-purple); }
 .helm-chip.status.status-done { border-color: var(--color-green); color: var(--text-muted); }
 .helm-chip.status.status-cancelled, .helm-chip.status.status-archived { color: var(--text-faint); text-decoration: line-through; }
+
+/* Tick rows in the project form: the vocabulary as checkboxes, with room to add one of your own. */
+.helm-tickrow { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.helm-tick { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 12px; border: 1px solid var(--background-modifier-border); cursor: pointer; font-size: var(--font-ui-small); }
+.helm-tick.is-on { border-color: var(--interactive-accent); background: var(--interactive-accent); color: var(--text-on-accent); }
+.helm-tick input { margin: 0; }
+.helm-tick.is-on input { accent-color: var(--text-on-accent); }
+.helm-tick-add { width: 130px; border: 1px dashed var(--background-modifier-border); background: transparent; border-radius: 12px; padding: 3px 9px; font-size: var(--font-ui-small); }
+.helm-profile-vocab { display: flex; flex-direction: column; gap: 6px; }
+.helm-song-pick { max-width: 100%; }
+.helm-song-facts { margin-top: 3px; font-variant-numeric: tabular-nums; }

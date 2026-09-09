@@ -39,6 +39,34 @@ export function openProfileItem(ctx: UiContext, p: Project, profile: ProjectProf
   // Typing a note name and leaving the title empty is the common case: the note *is* the name.
   note.addEventListener('change', () => { if (title.value.trim() === '') title.value = plain(note.value); });
 
+  // ── The songbook, when there is one. Maestro song notes carry their own name, artist, key and tempo,
+  //    so picking one from the list fills everything: no name typed twice, no link pasted by hand.
+  const songs = profile.id === 'music' ? ctx.index.songs() : [];
+  const already = new Set<string>();
+  for (const ph of p.phases) for (const k of ph.taskKeys) { const t = ctx.index.task(k); if (t) { const l = /\[\[([^\]|#]+)/.exec(t.text)?.[1]?.trim().toLowerCase(); if (l) already.add(l); } }
+  const songFacts = h('div', { cls: 'helm-hint helm-song-facts' });
+  const songSel = h('select', { cls: 'helm-select-inline helm-song-pick' }) as HTMLSelectElement;
+  if (songs.length > 0) {
+    songSel.appendChild(h('option', { text: `— pick from the songbook (${songs.length}) —`, attr: { value: '' } }));
+    for (const sn of songs) {
+      const base = sn.path.slice(sn.path.lastIndexOf('/') + 1).replace(/\.md$/, '');
+      const inUse = already.has(base.toLowerCase()) || already.has(sn.title.toLowerCase());
+      songSel.appendChild(h('option', {
+        text: `${sn.title}${sn.artist ? ` — ${sn.artist}` : ''}${inUse ? ' ✓ already on the board' : ''}`,
+        attr: { value: sn.path },
+      }));
+    }
+    songSel.addEventListener('change', () => {
+      const sn = songs.find((x) => x.path === songSel.value);
+      if (!sn) { songFacts.setText(''); return; }
+      const base = sn.path.slice(sn.path.lastIndexOf('/') + 1).replace(/\.md$/, '');
+      title.value = sn.artist ? `${sn.title} - ${sn.artist}` : sn.title;
+      note.value = `[[${base}]]`;
+      title.dispatchEvent(new Event('input'));
+      songFacts.setText([sn.key ? `key ${sn.key}` : '', sn.time ?? '', sn.tempo ? `♩=${sn.tempo}` : '', sn.status ? `Maestro says: ${sn.status}` : ''].filter(Boolean).join(' · '));
+    });
+  }
+
   const groupSel = h('select', { cls: 'helm-select-inline' }) as HTMLSelectElement;
   if (profile.groupBy === 'month') {
     const seen = new Set<string>();
@@ -99,6 +127,7 @@ export function openProfileItem(ctx: UiContext, p: Project, profile: ProjectProf
 
   const field = (label: string, el: HTMLElement): HTMLElement => h('div', { cls: 'helm-field' }, h('label', { text: label }), el);
   root.append(
+    ...(songs.length > 0 ? [field('From the songbook', h('div', {}, songSel, songFacts))] : []),
     field('Name', title),
     ...(profile.linksNote ? [field('Note', note)] : []),
     field(profile.groupNoun[0]!.toUpperCase() + profile.groupNoun.slice(1), h('div', {}, groupSel, newGroup)),
