@@ -76,7 +76,7 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     h('label', { cls: 'helm-toggle' }, h('input', { attr: { type: 'checkbox', checked: state.showClosed }, onChange: (ev) => { state.showClosed = (ev.target as HTMLInputElement).checked; ctx.refresh(); } }), h('span', { text: 'Show closed' })),
     h('span', { cls: 'helm-spacer' }),
     viewSwitcher(ctx, state, 'listView'),
-    button('', { icon: 'file-down', title: 'Export the projects as a PDF', onClick: () => openExportReport(ctx, { scope: 'quarter' }) }),
+    button('Export PDF', { icon: 'file-down', title: 'Print the projects: families nested, tasks under each', onClick: () => openExportReport(ctx, { scope: 'quarter' }) }),
     button('New project', { icon: 'folder-plus', primary: true, onClick: () => openProjectForm(ctx, { onCreated: (p) => ctx.navigate('projects', { projectId: p.id }) }) }),
   ));
   if (all.length === 0) {
@@ -226,7 +226,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       // The mirror of “New project” on the list: a project is where its own sub-projects begin.
       ...(profileOf(p).id !== 'generic' ? [button(`Add a ${profileOf(p).itemNoun}`, { icon: 'plus', primary: true, title: `Add a ${profileOf(p).itemNoun} to this ${profileOf(p).groupNoun}`, onClick: () => openProfileItem(ctx, p, profileOf(p), { ...(state.profileGroup ? { group: state.profileGroup } : {}) }) })] : []),
       button('New sub-project', { icon: 'folder-plus', title: `A project under “${p.title}”`, onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) }),
-      button('', { icon: 'file-down', title: `Export “${p.title}” as a PDF`, onClick: () => openExportReport(ctx, { scope: 'quarter', projectId: p.id }) }),
+      button('Export PDF', { icon: 'file-down', title: `Print “${p.title}”: its phases, tasks and sub-projects — nothing is written until you confirm`, onClick: () => openExportReport(ctx, { scope: 'quarter', projectId: p.id }) }),
       button('Open note', { icon: 'file-text', onClick: () => void ctx.openFile(p.path) }),
       notesButton(ctx, targetForProject(p.id, p.title)),
       drawingsButton(ctx, targetForProject(p.id, p.title)),

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **The export button on a project says what it is.** It was a bare icon lost among the
+  header's other icons; it now reads **Export PDF**, on every project and sub-project page
+  and on the projects list.
+
 ## 1.33.0 — 2026-09-09
 
 - **Projects print whole.** The exported PDF's Projects section was a summary table —
