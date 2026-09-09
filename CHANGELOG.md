@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.32.1 — 2026-09-09
+
+- **Every practice step gets its own 🆔, written one line at a time.** Creating a song
+  project stamped ids in a way that could mis-parent steps when lines shifted mid-write;
+  each step is now added and identified before the next is written.
+
 ## 1.32.0 — 2026-09-09
 
 - **A song is a project of its own.** On the music board, **Add a song** now makes a
