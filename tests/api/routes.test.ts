@@ -164,6 +164,7 @@ describe('profiled projects over the API', () => {
     expect(item.body.item.work[0].kind).toBe('phase');
     expect(item.body.item.work[0].steps.map((s: any) => s.text)).toEqual(['Right hand', 'Left hand']);
     expect(item.body.item.work[0].steps[0].effortMinutes).toBe(20);
+    expect(item.body.item.work[0].steps.every((s: any) => typeof s.id === 'string' && s.id.startsWith('tsk-'))).toBe(true);
     const songId = item.body.item.id as string;
     expect((await call('GET', `projects/${songId}`)).body.parentId).toBe(id);
 

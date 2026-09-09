@@ -1354,7 +1354,13 @@ export class Mutations {
       ...(spec.note ? { notes: [spec.note] } : {}),
     });
     // The steps need ids from the start: they are planned, ticked and addressed by id right away.
-    for (const key of this.index.tasksInFile(made.path).filter((t) => !t.id).map((t) => t.key)) await this.ensureId(key);
+    // One line at a time, re-reading the file between writes: a key computed before a write can
+    // point at a line that write has since moved.
+    for (let i = 0; i < 200; i++) {
+      const next = this.index.tasksInFile(made.path).find((t) => !t.id);
+      if (!next) break;
+      await this.ensureId(next.key);
+    }
     return this.index.project(made.id) ?? made;
   }
 
