@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.33.0 — 2026-09-09
 
 - **Projects print whole.** The exported PDF's Projects section was a summary table —
   no sub-projects, no tasks. Now the table nests each family (`↳` under its parent), and
@@ -8,6 +8,10 @@
   task line with its box, subtasks indented, finished work struck through, open work
   first. A sub-project always comes along with its parent. A runaway project is cut at
   40 lines with an honest “and N more, not printed”, so a year's export stays liftable.
+
+- **An archived or trashed note never wins a title from a live one.** Two notes sharing a
+  name could resolve links and attachments to the copy sitting in the archive; the live
+  note takes precedence now.
 
 ## 1.32.1 — 2026-09-09
 
