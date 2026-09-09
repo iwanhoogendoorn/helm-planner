@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Families of projects fold, and start folded.** An umbrella on the projects list now
+  stands for the lot: a twisty on the card opens its sub-projects, a `N sub` chip says how
+  many are folded away, and what you open stays open while you work. Filtering shows
+  everything it matched — searching through closed doors would be no search at all.
+- **The up/down arrows on project cards are gone.** Reordering is what it was before they
+  arrived: drag a card onto another, or use Move up / Move down in the card's right-click
+  menu.
+
 ## 1.29.0 — 2026-09-09
 
 - **The music board reads the Maestro songbook.** Any note with `type: song` — wherever it

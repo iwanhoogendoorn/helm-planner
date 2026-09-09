@@ -623,8 +623,15 @@ describe('Projects tab', () => {
   it('lists projects by status with umbrella nesting and flags', async () => {
     const { ctx, nav } = await ctxFor();
     const state = { filter: '', showClosed: false, collapsed: new Map(), showDone: false };
-    const root = render((r) => renderProjects(ctx, r, state));
+    let root = render((r) => renderProjects(ctx, r, state));
     expect(texts(root, '.helm-section-title')).toEqual(['Active', 'Planned']);
+    // A family starts folded: the umbrella stands for the lot, saying how many it holds.
+    expect(texts(root, '.helm-section:nth-of-type(1) .helm-project-title')).toEqual(['Oracle Book Writing', 'Oracle']);
+    const oracle = [...root.querySelectorAll<HTMLElement>('.helm-project')].find((c) => c.querySelector('.helm-project-title')?.textContent === 'Oracle')!;
+    expect(texts(oracle, '.helm-chip.count')).toContain('1 sub');
+    click(oracle.querySelector('.helm-project-fold'));
+    document.body.innerHTML = '';
+    root = render((r) => renderProjects(ctx, r, state));
     expect(texts(root, '.helm-section:nth-of-type(1) .helm-project-title')).toEqual(['Oracle Book Writing', 'Oracle', 'OCI Certification']);
     expect(root.querySelector('.helm-project.depth-1 .helm-project-title')!.textContent).toBe('OCI Certification');
     expect(texts(root, '.helm-chip.flag')).toContain('overdue tasks');
@@ -2396,7 +2403,7 @@ describe('dragging a task between parts of the day', () => {
     }
   });
 
-  it('reorders sub-projects with the arrows, and by dragging one onto another', async () => {
+  it('reorders sub-projects through the menu, and by dragging one onto another', async () => {
     const { ctx, m, index } = await ctxFor();
     for (const t of ['Architect', 'Associate', 'Developer']) await m.createProject({ title: t, status: 'active', priority: 'normal', parentId: 'prj-oracle' });
 
@@ -2406,11 +2413,11 @@ describe('dragging a task between parts of the day', () => {
     const start = shown(root);
     expect(start.length).toBeGreaterThanOrEqual(3);
 
-    // The first card has a “down” arrow and no “up”; one press moves it a place.
+    // No arrows on the card — reordering is dragging, or the card's own menu.
     const cards = (r: HTMLElement): HTMLElement[] => [...r.querySelectorAll<HTMLElement>('.helm-section .helm-project')];
-    expect(cards(root)[0]!.querySelector('button[aria-label="Move up"]')).toBeNull();
-    expect(cards(root)[0]!.querySelector('button[aria-label="Move down"]')).toBeTruthy();
-    click(cards(root)[0]!.querySelector('button[aria-label="Move down"]'));
+    expect(cards(root)[0]!.querySelector('.helm-project-nudge')).toBeNull();
+    cards(root)[0]!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    Menu.last!.items.find((i) => i.title === 'Move down')!.click!();
     await waitFor(() => (index.allProjects().find((x) => x.title === start[0])?.order !== undefined ? true : undefined), 'the order to be written');
     root = draw();
     expect(shown(root).slice(0, 2)).toEqual([start[1], start[0]]);      // they swapped places

@@ -33,7 +33,7 @@ import { dragKeys, selection } from '../selection';
 
 export type ProjectView = 'list' | 'board' | 'table' | 'timeline' | 'profile';
 
-export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean; openSubs?: Set<string>; profileGroup?: string }
+export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean; openSubs?: Set<string>; profileGroup?: string; openFamilies?: Set<string> }
 
 const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', 'not-started': 'Not started', planned: 'Planned', 'on-hold': 'On hold', idea: 'Ideas', done: 'Done', cancelled: 'Cancelled', archived: 'Archived' };
 const FLAG_LABEL: Record<ProjectHealth['flags'][number], string> = { 'no-next-action': 'no next action', stale: 'stale', overdue: 'overdue tasks', 'due-soon': 'due soon', 'past-due': 'past due', blocked: 'blocked' };
@@ -99,9 +99,17 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     const rows: HTMLElement[] = [];
     // Reordering happens among the top-level projects of a group; a sub-project sits with its parent.
     const siblings = roots.map((r) => r.project.id);
+    // A family starts folded: the umbrella stands for the lot, and a twisty opens it when you want the
+    // detail. Filtering is looking for something, so a filtered list shows everything it matched.
+    const open = state.openFamilies ?? (state.openFamilies = new Set<string>());
+    const searching = state.filter.trim() !== '';
     const walk = (hh: ProjectHealth, depth: number): void => {
-      rows.push(projectCard(ctx, hh, depth, today, depth === 0 ? siblings : []));
-      for (const cid of hh.project.childIds) { const c = byId.get(cid); if (c && c.project.status === st) walk(c, depth + 1); }
+      const kids = hh.project.childIds.map((cid) => byId.get(cid)).filter((c): c is ProjectHealth => c !== undefined && c.project.status === st);
+      const unfolded = searching || open.has(hh.project.id);
+      rows.push(projectCard(ctx, hh, depth, today, depth === 0 ? siblings : [], kids.length > 0 && !searching ? {
+        fold: { open: unfolded, count: kids.length, onToggle: () => { if (unfolded) open.delete(hh.project.id); else open.add(hh.project.id); ctx.refresh(); } },
+      } : {}));
+      if (unfolded) for (const c of kids) walk(c, depth + 1);
     };
     for (const r of roots) walk(r, 0);
     root.appendChild(section(STATUS_LABEL[st], { count: rows.length, store: state.collapsed, key: `status:${st}`, collapsed: st === 'idea' || st === 'done' || st === 'cancelled' || st === 'archived' }, ...rows));
@@ -126,24 +134,18 @@ function makeProjectDraggable(ctx: UiContext, card: HTMLElement, id: string, sib
   });
 }
 
-function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: IsoDate, siblings: string[] = [], opts: { showStatus?: boolean } = {}): HTMLElement {
+function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: IsoDate, siblings: string[] = [], opts: { showStatus?: boolean; fold?: { open: boolean; count: number; onToggle: () => void } } = {}): HTMLElement {
   const p = hh.project;
   const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, p.pinned && 'is-pinned', hh.flags.length > 0 && 'has-flags'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev, { siblings }); } });
   if (siblings.length > 1) makeProjectDraggable(ctx, card, p.id, siblings);
-  // Arrows as well as dragging: a list of four is quicker to nudge than to drag, and a trackpad drag
-  // over a scrolling page is nobody's idea of a good time.
-  const at = siblings.indexOf(p.id);
-  const nudge = (by: number, label: string, ic: string): HTMLElement | null => {
-    const to = at + by;
-    if (at === -1 || to < 0 || to >= siblings.length) return null;
-    return iconButton(ic, label, (ev) => { ev.stopPropagation(); void ctx.run('Reorder', () => ctx.mutations.moveProjectBy(p.id, by, siblings)); }, 'helm-project-nudge');
-  };
   card.append(
     h('div', { cls: 'helm-project-head' },
-      ...(siblings.length > 1 ? [h('span', { cls: 'helm-project-nudges' }, nudge(-1, 'Move up', 'chevron-up'), nudge(1, 'Move down', 'chevron-down'))] : []),
+      // The twisty opens the family; reordering is dragging, or the card's own menu.
+      opts.fold ? iconButton(opts.fold.open ? 'chevron-down' : 'chevron-right', opts.fold.open ? 'Fold the sub-projects away' : `Show ${opts.fold.count} sub-project${opts.fold.count === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); opts.fold!.onToggle(); }, 'helm-project-fold') : null,
       icon(p.childIds.length > 0 ? 'folder-tree' : 'folder'),
       p.pinned ? icon('pin', 'helm-project-pin') : null,
       h('span', { cls: 'helm-project-title', text: p.title }),
+      opts.fold && !opts.fold.open ? chip(`${opts.fold.count} sub`, 'count', `${opts.fold.count} sub-project${opts.fold.count === 1 ? '' : 's'} folded away`) : null,
       // In the list the heading above says the status; anywhere else the card has to say it itself.
       opts.showStatus ? chip(STATUS_LABEL[p.status], `status status-${p.status}`, `Status: ${STATUS_LABEL[p.status]} — right-click to change it`) : null,
       p.priority !== 'normal' ? chip(p.priority, `prio prio-${p.priority}`) : null,

@@ -1004,12 +1004,10 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-profile-chip.is-doing { border-color: var(--interactive-accent); }
 .helm-profile-chip.is-off { opacity: 0.5; text-decoration: line-through; }
 
-/* Nudge a project up or down without dragging: quiet until you are on the card. */
-.helm-project-nudges { display: inline-flex; flex-direction: column; gap: 0; margin-right: 2px; opacity: 0; transition: opacity 90ms ease-in; }
-.helm-project:hover .helm-project-nudges, .helm-project-nudges:focus-within { opacity: 1; }
-.helm-project-nudge { height: 13px; width: 16px; padding: 0; color: var(--text-faint); }
-.helm-project-nudge:hover { color: var(--text-normal); background: none; box-shadow: none; }
-.helm-project-nudge svg { width: 12px; height: 12px; }
+/* The twisty that opens a family of projects. */
+.helm-project-fold { width: 18px; height: 18px; padding: 0; color: var(--text-muted); flex: none; }
+.helm-project-fold:hover { color: var(--text-normal); background: none; box-shadow: none; }
+.helm-project-fold svg { width: 14px; height: 14px; }
 
 /* A project's status, said on the card where no heading says it for you. */
 .helm-chip.status { border: 1px solid var(--background-modifier-border); background: var(--background-primary); }
