@@ -162,7 +162,9 @@ export class HelmIndex {
     this.building = true;
     try {
       const all = await this.vault.list();
-      this.allNoteTitles = new Map(all.filter((p) => p.endsWith('.md') && !isDrawingPath(p)).map((p) => [noteTitle(p).toLowerCase(), p]));
+      // Titles resolve links; an archived or trashed note must never win a title from a live one.
+      this.allNoteTitles = new Map();
+      for (const p of all) if (p.endsWith('.md') && !isDrawingPath(p) && !this.excluded(p)) this.allNoteTitles.set(noteTitle(p).toLowerCase(), p);
       const paths = [...all, ...(this.vault.listOther ? await this.vault.listOther() : [])].filter((p) => this.inScope(p));
       const next = new Map<string, FileEntry>();
       const contents = await Promise.all(paths.map(async (p) => [p, p.endsWith('.md') ? await this.vault.read(p).catch(() => undefined) : ''] as const));
@@ -200,8 +202,16 @@ export class HelmIndex {
    * vault can be linked to a task, so this must not depend on the file being in Helm's scanned scope.
    */
   noteSeen(path: string): void {
-    if (!path.endsWith('.md') || isDrawingPath(path)) return;
+    if (!path.endsWith('.md') || isDrawingPath(path) || this.excluded(path)) return;
     this.allNoteTitles.set(noteTitle(path).toLowerCase(), path);
+  }
+
+  /** Under the archive, the trash, or any excluded folder: kept out of link resolution. */
+  private excluded(path: string): boolean {
+    if (path.startsWith('.trash/')) return true;
+    const a = this.settings.archiveFolder.trim();
+    if (a && isUnder(path, a)) return true;
+    return this.settings.excludePaths.some((x) => x.trim() !== '' && isUnder(path, x.trim()));
   }
 
   noteGone(path: string): void {
