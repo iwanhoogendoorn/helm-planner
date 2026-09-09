@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.30.0 — 2026-09-09
 
 - **Families of projects fold, and start folded.** An umbrella on the projects list now
   stands for the lot: a twisty on the card opens its sub-projects, a `N sub` chip says how
