@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.34.0 — 2026-09-10
+## 1.34.0 — 2026-09-09
 
 - **Everything that moves a task lives under one word.** The right-click menu scattered
   Tomorrow, Next week, Pick a date, Unschedule and “Part of Today” across its middle; they
