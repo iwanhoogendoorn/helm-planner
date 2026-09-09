@@ -1184,7 +1184,7 @@ export class Mutations {
 
   /* ── Projects ───────────────────────────────────────────────────────── */
 
-  async createProject(spec: { title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parentId?: string; period?: string; goal?: string; start?: IsoDate; due?: IsoDate; tags?: string[]; profile?: string; people?: string[]; modes?: string[]; phases?: { title: string; due?: IsoDate; tasks?: string[] }[]; tasks?: string[]; objective?: string }): Promise<Project> {
+  async createProject(spec: { title: string; status: ProjectStatus; priority: ProjectPriority; area?: string; parentId?: string; period?: string; goal?: string; start?: IsoDate; due?: IsoDate; tags?: string[]; profile?: string; people?: string[]; modes?: string[]; phases?: { title: string; due?: IsoDate; tasks?: string[] }[]; tasks?: string[]; objective?: string; notes?: string[] }): Promise<Project> {
     const title = spec.title.trim().replace(/[\\/:*?"<>|]/g, '-');
     if (title === '') throw new Error('A project needs a name');
     const parent = spec.parentId ? this.index.project(spec.parentId) : undefined;
@@ -1193,7 +1193,7 @@ export class Mutations {
     const path = `${folder}/${title}.md`;
     if (await this.d.vault.exists(path)) throw new Error(`A project note already exists at ${path}`);
     const id = uniqueId('prj', (x) => this.index.snapshot.projects.has(x), this.d.rng);
-    const content = renderProjectNote({ id, title: spec.title.trim(), status: spec.status, priority: spec.priority, today: this.today, ...(spec.area ? { area: spec.area } : {}), ...(parent ? { parent: parent.title } : {}), ...(spec.period ? { period: spec.period } : {}), ...(spec.goal ? { goal: spec.goal } : {}), ...(spec.start ? { start: spec.start } : {}), ...(spec.due ? { due: spec.due } : {}), ...(spec.tags ? { tags: spec.tags } : {}), ...(spec.profile ? { profile: spec.profile } : {}), ...(spec.people ? { people: spec.people } : {}), ...(spec.modes ? { modes: spec.modes } : {}), ...(spec.phases ? { phases: spec.phases } : {}), ...(spec.tasks ? { tasks: spec.tasks } : {}), ...(spec.objective ? { objective: spec.objective } : {}) });
+    const content = renderProjectNote({ id, title: spec.title.trim(), status: spec.status, priority: spec.priority, today: this.today, ...(spec.area ? { area: spec.area } : {}), ...(parent ? { parent: parent.title } : {}), ...(spec.period ? { period: spec.period } : {}), ...(spec.goal ? { goal: spec.goal } : {}), ...(spec.start ? { start: spec.start } : {}), ...(spec.due ? { due: spec.due } : {}), ...(spec.tags ? { tags: spec.tags } : {}), ...(spec.profile ? { profile: spec.profile } : {}), ...(spec.people ? { people: spec.people } : {}), ...(spec.modes ? { modes: spec.modes } : {}), ...(spec.phases ? { phases: spec.phases } : {}), ...(spec.tasks ? { tasks: spec.tasks } : {}), ...(spec.objective ? { objective: spec.objective } : {}), ...(spec.notes ? { notes: spec.notes } : {}) });
     await this.createFile(path, content);
     // Assign ids to the created tasks so they can be planned right away.
     const p = this.index.project(id);
@@ -1331,6 +1331,44 @@ export class Mutations {
       }
     }
     return relocate() ?? item;
+  }
+
+  /**
+   * A song as a project of its own under the board: the month as its `period`, one phase per
+   * assignment (`Iwan · Piano solo`), the practice steps as that phase's tasks, and the song note
+   * linked under `## Notes`. The board reads it back as an item like any other.
+   */
+  async addProfileSubproject(projectId: string, spec: { title: string; group: string; note?: string; assignments: (Assignment & { steps?: string[] })[]; stepEffortMinutes?: number; area?: string }): Promise<Project> {
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    const period = parsePeriod(spec.group);
+    const people = [...new Set(spec.assignments.map((a) => a.person).filter((x): x is string => !!x))];
+    const modes = [...new Set(spec.assignments.map((a) => a.mode))];
+    const eff = spec.stepEffortMinutes ? ` ⏱️ ${spec.stepEffortMinutes}m` : '';
+    const made = await this.createProject({
+      title: spec.title, status: 'active', priority: 'normal', parentId: p.id,
+      ...(period ? { period: period.key } : {}),
+      ...(spec.area ?? p.area ? { area: (spec.area ?? p.area)! } : {}),
+      ...(people.length ? { people } : {}), ...(modes.length ? { modes } : {}),
+      phases: spec.assignments.map((a) => ({ title: assignmentLine(a), tasks: (a.steps ?? []).map((s) => s.trim()).filter(Boolean).map((s) => `${s}${eff}`) })),
+      ...(spec.note ? { notes: [spec.note] } : {}),
+    });
+    // The steps need ids from the start: they are planned, ticked and addressed by id right away.
+    for (const key of this.index.tasksInFile(made.path).filter((t) => !t.id).map((t) => t.key)) await this.ensureId(key);
+    return this.index.project(made.id) ?? made;
+  }
+
+  /** A phase with its tasks in one go (an assignment with its steps on a song project). */
+  async addPhaseWithTasks(projectId: string, title: string, tasks: string[], effortMinutes?: number): Promise<{ phaseId: string; tasks: Task[] }> {
+    await this.addPhase(projectId, title);
+    const p = this.index.project(projectId);
+    const phase = p?.phases.find((ph) => ph.title.trim().toLowerCase() === title.trim().toLowerCase());
+    if (!p || !phase) throw new Error('The phase was written but could not be found again');
+    const out: Task[] = [];
+    for (const text of tasks.map((t) => t.trim()).filter(Boolean)) {
+      out.push(await this.addTaskReturning({ text, projectId: p.id, phaseId: phase.id, ...(effortMinutes ? { fields: { effortMinutes, effortRaw: `${effortMinutes}m` } } : {}) }));
+    }
+    return { phaseId: phase.id, tasks: out };
   }
 
   /** Steps under an existing assignment (or any task): the same lines the board and the day show. */

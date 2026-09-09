@@ -12,6 +12,7 @@ import type { Mutations } from '../data/mutations';
 import { isBlocked, isOpen, plannedDate } from '../data/planner';
 import { profileFor, parseAssignment, type Assignment } from '../core/profiles';
 import { plainLabel } from '../core/label';
+import { parsePeriod } from '../core/periods';
 
 export const API_BASE = '/helm/v1';
 
@@ -128,7 +129,23 @@ function itemsJson(p: Project, d: ApiDeps): Record<string, unknown>[] {
       if (a) work.push({ ...taskJson(c, d), ...(a.person ? { person: a.person } : {}), mode: a.mode, steps });
       else other.push({ ...taskJson(c, d), steps });
     }
-    out.push({ ...taskJson(t, d), title: plainLabel(t.text), note: link ?? null, group: g.title, work, other });
+    out.push({ ...taskJson(t, d), kind: 'task', title: plainLabel(t.text), note: link ?? null, group: g.title, work, other });
+  }
+  // Songs that are projects of their own under the board.
+  for (const cid of p.childIds) {
+    const c = snap.projects.get(cid);
+    if (!c || /archived|cancelled/.test(c.status)) continue;
+    const work: Record<string, unknown>[] = [];
+    for (const ph of c.phases) {
+      const a = parseAssignment(ph.title, profile);
+      const steps = ph.taskKeys.map((k) => snap.tasks.get(k)).filter((s): s is Task => s !== undefined && !s.parentKey).map((s) => taskJson(s, d));
+      const st = !steps.length ? 'todo' : steps.every((s) => s['status'] === 'done') ? 'done' : steps.some((s) => s['status'] === 'doing' || s['status'] === 'done') ? 'doing' : 'todo';
+      work.push({ id: ph.id, key: ph.id, kind: 'phase', text: ph.title, status: st, open: st !== 'done', ...(a?.person ? { person: a.person } : {}), mode: a?.mode ?? ph.title, steps });
+    }
+    const other = c.looseTaskKeys.map((k) => snap.tasks.get(k)).filter((s): s is Task => s !== undefined && !s.parentKey).map((s) => taskJson(s, d));
+    const notes = d.index.notesFor({ kind: 'project', id: c.id, title: c.title });
+    const note = (notes.find((n) => d.index.song(n.path)) ?? notes[0])?.path.replace(/\.md$/, '') ?? d.index.noteLinksOf(c.path)[0] ?? null;
+    out.push({ id: c.id, key: c.id, kind: 'project', text: c.title, title: c.title, status: c.status, open: !/done|archived|cancelled/.test(c.status), path: c.path, note, group: c.period ? parsePeriod(c.period)?.label ?? c.period : null, period: c.period ?? null, people: c.profilePeople ?? [], modes: c.profileModes ?? [], work, other });
   }
   return out;
 }
@@ -211,10 +228,25 @@ export async function handle(req: ApiRequest, d: ApiDeps): Promise<ApiResponse> 
         assignments.push({ ...(person ? { person } : {}), mode: profile.modes.find((m) => m.toLowerCase() === mode.toLowerCase()) ?? mode, ...(steps.length ? { steps } : {}) });
       }
       const eff = num(body['stepEffortMinutes']);
+      const asProject = body['asProject'] === undefined ? !!profile.itemsAreProjects : body['asProject'] === true;
+      if (asProject) {
+        const made2 = await d.mutations.addProfileSubproject(p.id, { title, group: str(body['group']) ?? '', ...(note ? { note } : {}), assignments, ...(eff ? { stepEffortMinutes: eff } : {}), ...(str(body['area']) ? { area: str(body['area'])! } : {}) });
+        const fresh = d.index.project(p.id) ?? p;
+        return made({ item: itemsJson(fresh, d).find((it) => it['id'] === made2.id) ?? projectJson(made2, d), written: d.written() });
+      }
       const item = await d.mutations.addProfileItem(p.id, { title, group: str(body['group']) ?? '', ...(note ? { note } : {}), assignments, ...(day(body['due']) ? { due: day(body['due'])! } : {}), ...(eff ? { stepEffortMinutes: eff } : {}) });
       const fresh = d.index.project(p.id) ?? p;
       const itemJson = itemsJson(fresh, d).find((it) => it['id'] === item.id) ?? taskJson(item, d);
       return made({ item: itemJson, written: d.written() });
+    }
+    if (method === 'POST' && ref !== undefined && sub === 'phases') {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const title = str(body['title']);
+      if (!title) return bad('A phase needs a title');
+      const tasks = Array.isArray(body['tasks']) ? (body['tasks'] as unknown[]).map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean) : [];
+      const r = await d.mutations.addPhaseWithTasks(p.id, title, tasks, num(body['effortMinutes']));
+      return made({ phase: { id: r.phaseId, title }, tasks: r.tasks.map((t) => taskJson(t, d)), written: d.written() });
     }
     if (method === 'POST' && ref !== undefined && sub === 'archive') {
       const p = d.index.project(ref);

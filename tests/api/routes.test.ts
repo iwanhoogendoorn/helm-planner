@@ -141,7 +141,7 @@ describe('moving a task into a project over the API', () => {
 });
 
 describe('profiled projects over the API', () => {
-  it('creates a music project, adds a song with assignments and steps, lists it, and archives it', async () => {
+  it('creates a music project, adds a song as a sub-project with assignments and steps, lists it, and archives it', async () => {
     const { call } = await api();
     const made = await call('POST', 'projects', { title: 'Music Studies', profile: 'music', people: ['Iwan', 'Zaara'], status: 'active' });
     expect(made.status).toBe(201);
@@ -155,11 +155,17 @@ describe('profiled projects over the API', () => {
       stepEffortMinutes: 20,
     });
     expect(item.status).toBe(201);
+    expect(item.body.item.kind).toBe('project');
     expect(item.body.item.note).toBe('Amazing Grace');
     expect(item.body.item.group).toBe('September 2026');
+    expect(item.body.item.period).toBe('2026-09');
+    expect(item.body.item.people).toEqual(['Iwan', 'Zaara']);
     expect(item.body.item.work.map((w: any) => w.mode)).toEqual(['Piano solo', 'Singing']);
+    expect(item.body.item.work[0].kind).toBe('phase');
     expect(item.body.item.work[0].steps.map((s: any) => s.text)).toEqual(['Right hand', 'Left hand']);
     expect(item.body.item.work[0].steps[0].effortMinutes).toBe(20);
+    const songId = item.body.item.id as string;
+    expect((await call('GET', `projects/${songId}`)).body.parentId).toBe(id);
 
     const items = await call('GET', `projects/${id}/items`);
     expect(items.status).toBe(200);
@@ -171,16 +177,24 @@ describe('profiled projects over the API', () => {
     expect(planned.status).toBe(200);
     expect(planned.body.task.scheduled).toBe('2026-09-10');
 
-    const more = await call('POST', `tasks/${item.body.item.work[1].id}/steps`, { steps: ['Warm up', 'Verse 1'] });
+    const more = await call('POST', `projects/${songId}/phases`, { title: 'Iwan · Piano chords', tasks: ['Chords per section', 'Play along'], effortMinutes: 15 });
     expect(more.status).toBe(201);
     expect(more.body.tasks).toHaveLength(2);
+    expect((await call('GET', `projects/${id}/items`)).body.items[0].work).toHaveLength(3);
+
+    // A line item is still possible when asked for.
+    const line = await call('POST', `projects/${id}/items`, { title: 'Sign of the Times', group: 'September 2026', assignments: [{ person: 'Zaara', mode: 'Singing', steps: ['Warm up'] }], asProject: false });
+    expect(line.status).toBe(201);
+    expect(line.body.item.kind).toBe('task');
+    expect(line.body.item.work[0].steps).toHaveLength(1);
+    const lineSteps = await call('POST', `tasks/${line.body.item.work[0].id}/steps`, { steps: ['Verse 1'] });
+    expect(lineSteps.status).toBe(201);
 
     const bad = await call('POST', `projects/${id}/items`, { title: 'X', assignments: [{ mode: 'Juggling' }] });
     expect(bad.status).toBe(400);
 
-    const archived = await call('POST', `projects/${id}/archive`);
+    const archived = await call('POST', `projects/${songId}/archive`);
     expect(archived.status).toBe(200);
-    expect(archived.body.archived).toBe(id);
-    expect((await call('GET', `projects/${id}`)).status).toBe(404);
+    expect((await call('GET', `projects/${id}/items`)).body.items.every((it: any) => it.id !== songId)).toBe(true);
   });
 });

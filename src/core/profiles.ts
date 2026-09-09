@@ -32,6 +32,11 @@ export interface ProjectProfile {
   modes: string[];
   /** Short forms for the modes, in order — what a chip says when there is no room for the words. */
   short: string[];
+  /**
+   * Items are sub-projects rather than task lines: a song is a project of its own under the
+   * board (its month as `period`, an assignment as a phase, the steps as that phase's tasks).
+   */
+  itemsAreProjects?: boolean;
 }
 
 export const GENERIC_PROFILE: ProjectProfile = {
@@ -49,6 +54,7 @@ export const BUILT_IN_PROFILES: ProjectProfile[] = [
     // the chords underneath somebody's singing.
     modes: ['Piano solo', 'Piano chords', 'Singing', 'Producing'],
     short: ['Piano', 'Chords', 'Sing', 'Prod'],
+    itemsAreProjects: true,
   },
   {
     id: 'writing', label: 'Writing', icon: 'pen-line', hint: 'Chapters or articles, and how far each draft has got.',

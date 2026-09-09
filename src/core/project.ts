@@ -180,6 +180,8 @@ export function renderProjectNote(p: {
   start?: string; due?: string; tags?: string[]; today: string;
   profile?: string; people?: string[]; modes?: string[];
   phases?: { title: string; due?: string; tasks?: string[] }[]; tasks?: string[]; objective?: string;
+  /** Notes this project owns from the start, as `[[links]]` under `## Notes` — a song's note, say. */
+  notes?: string[];
 }): string {
   const fm: string[] = ['---', `title: ${quote(p.title)}`, 'type: project', `id: ${p.id}`, `status: ${p.status}`, `priority: ${p.priority}`];
   if (p.area) fm.push(`area: ${quote(p.area)}`);
@@ -187,11 +189,10 @@ export function renderProjectNote(p: {
   fm.push(`period: ${p.period ?? ''}`, `goal: ${p.goal ? quote(p.goal) : ''}`);
   fm.push(`start_date: ${p.start ?? ''}`, `due_date: ${p.due ?? ''}`, `creation_date: ${p.today}`);
   // The profile and its vocabulary live in the note, so they can be edited without Helm.
-  if (p.profile && p.profile !== 'generic') {
-    fm.push(`profile: ${p.profile}`);
-    if (p.people?.length) fm.push('people:', ...p.people.map((x) => `  - ${quote(x)}`));
-    if (p.modes?.length) fm.push('modes:', ...p.modes.map((x) => `  - ${quote(x)}`));
-  }
+  if (p.profile && p.profile !== 'generic') fm.push(`profile: ${p.profile}`);
+  // Who and how also describe a plain project (a song under the music board: whose it is, and what kind).
+  if (p.people?.length) fm.push('people:', ...p.people.map((x) => `  - ${quote(x)}`));
+  if (p.modes?.length) fm.push('modes:', ...p.modes.map((x) => `  - ${quote(x)}`));
   fm.push('tags:', '  - project', ...(p.tags ?? []).map((t) => `  - ${t}`));
   fm.push('---', '');
   const body: string[] = [`# ${p.title}`, '', '## Objective', '', p.objective ?? 'This project is successful when…', ''];
@@ -205,6 +206,7 @@ export function renderProjectNote(p: {
   }
   body.push('## Tasks', '');
   for (const t of p.tasks ?? []) body.push(t.startsWith('- [') ? t : `- [ ] ${t}`);
+  if (p.notes?.length) body.push('', '## Notes', '', ...p.notes.map((n) => `- ${/^\[\[/.test(n) ? n : `[[${n}]]`}`));
   body.push('', '## Log', '');
   return [...fm, ...body].join('\n');
 }

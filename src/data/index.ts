@@ -581,6 +581,11 @@ export class HelmIndex {
     return out.sort((a, b) => a.title.localeCompare(b.title));
   }
 
+  /** The `[[links]]` under a note's own Notes heading (a project's song, say), whether or not they resolve yet. */
+  noteLinksOf(path: string): string[] {
+    return this.files.get(path)?.noteLinks ?? [];
+  }
+
   /** Paths of notes whose Notes heading links a note by title. */
   filesLinkingNote(title: string): string[] {
     const t = title.toLowerCase();

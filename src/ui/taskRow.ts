@@ -13,6 +13,7 @@ import { notesIndicator } from './notes';
 import { linksIndicator } from './links';
 import { linksIn, textWithoutLinks } from '../core/links';
 import { linkedNoteOf } from '../core/label';
+import { projectSongNote } from './songNote';
 import { plainLabel, shortLabel } from '../core/label';
 import { taskLabel } from './context';
 import { selection, selectionClick, selectionMenu, setDragKeys } from './selection';
@@ -166,9 +167,9 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   // Links live in the line but are shown as pills, like notes and drawings.
   for (const l of linksIn(t.text)) meta.appendChild(h('a', { cls: 'helm-chip link', title: l.url, attr: { href: l.url, target: '_blank', rel: 'noopener' }, onClick: (ev) => ev.stopPropagation() }, h('span', { cls: 'helm-chip-label', text: l.label })));
   // A step of a song (a task under an item that links a note): one chip to the note itself.
-  if (t.parentKey && !/\[\[/.test(t.text)) {
+  if ((t.parentKey || t.projectId) && !/\[\[/.test(t.text)) {
     const snap = ctx.index.snapshot;
-    const note = linkedNoteOf(t.text, (k) => snap.tasks.get(k)?.text, (k) => snap.tasks.get(k)?.parentKey, t.key);
+    const note = linkedNoteOf(t.text, (k) => snap.tasks.get(k)?.text, (k) => snap.tasks.get(k)?.parentKey, t.key) ?? projectSongNote(ctx, t);
     if (note) meta.appendChild(h('button', { cls: ['helm-chip', 'link', 'helm-chip-note'], title: `Open ${note}`, attr: { type: 'button' }, onClick: (ev) => { ev.stopPropagation(); ctx.openLink(note, t.path); } }, icon('music'), h('span', { cls: 'helm-chip-label', text: note.split('/').pop()! })));
   }
   if (opts.showParent && t.parentKey) {

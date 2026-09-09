@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.32.0 — 2026-09-09
+
+- **A song is a project of its own.** On the music board, **Add a song** now makes a
+  sub-project under the board — the month as its `period`, who and how in its `people` and
+  `modes`, one phase per assignment (*Iwan · Piano solo*), the practice steps as that phase's
+  tasks, and the song note linked under `## Notes`. The board reads those sub-projects as its
+  items, month by month, next to any song still written as a line; a chip on a phase ticks
+  every step under it. The projects list shows the same songs as a family that folds.
+- **Over the API**: `POST /projects/:id/items` makes the sub-project for such boards
+  (`asProject: false` keeps the line form), items of kind `project` carry `period`,
+  `people` and `modes` and their work is phases with `steps`; `POST /projects/:id/phases`
+  adds an assignment with its steps; `POST /projects` takes `notes`. Steps in a song
+  project get their 🆔 from the start, so they can be planned the moment they exist.
+- **Every step still knows its song**: a task in a song project offers *Open the song* and the
+  note chip through the project's attached or listed note.
+
 ## 1.31.0 — 2026-09-09
 
 - **The music board has practice steps, and other tools can add songs.** Under an

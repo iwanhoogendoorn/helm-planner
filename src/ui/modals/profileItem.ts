@@ -148,11 +148,9 @@ export function openProfileItem(ctx: UiContext, p: Project, profile: ProjectProf
     for (const person of rows) for (const mode of profile.modes) if (picked.has(`${person}|${mode}`)) assignments.push({ ...(person ? { person } : {}), mode });
     m.close();
     await ctx.run(`Add ${profile.itemNoun}`, async () => {
-      await ctx.mutations.addProfileItem(p.id, {
-        title: name, group,
-        ...(profile.linksNote && plain(note.value) ? { note: plain(note.value) } : {}),
-        assignments,
-      });
+      const spec = { title: name, group, ...(profile.linksNote && plain(note.value) ? { note: plain(note.value) } : {}), assignments };
+      if (profile.itemsAreProjects) await ctx.mutations.addProfileSubproject(p.id, spec);
+      else await ctx.mutations.addProfileItem(p.id, spec);
       ctx.notify(`${name} added${group ? ` to ${group}` : ''}${assignments.length ? ` — ${assignments.length} to do` : ''}.`);
     });
   }
