@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Projects print whole.** The exported PDF's Projects section was a summary table —
+  no sub-projects, no tasks. Now the table nests each family (`↳` under its parent), and
+  beneath it **The work itself** prints every project again in full: phase by phase, every
+  task line with its box, subtasks indented, finished work struck through, open work
+  first. A sub-project always comes along with its parent. A runaway project is cut at
+  40 lines with an honest “and N more, not printed”, so a year's export stays liftable.
+
 ## 1.32.1 — 2026-09-09
 
 - **Every practice step gets its own 🆔, written one line at a time.** Creating a song

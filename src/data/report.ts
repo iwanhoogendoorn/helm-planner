@@ -55,6 +55,11 @@ export interface ReportOptions {
 
 export interface AheadDay { date: IsoDate; tasks: Task[]; minutes: number }
 
+export interface PrintTask { task: Task; depth: number }
+export interface ProjectWork { groups: { title?: string; tasks: PrintTask[] }[]; more: number }
+/** Enough lines to print a real project, few enough that a year of them still fits in a hand. */
+export const WORK_CAP = 40;
+
 export interface Report {
   title: string;
   /** “Week 36 · 31 Aug – 6 Sep 2026”. */
@@ -80,6 +85,10 @@ export interface Report {
   /** Open work inside the period with no day of its own. */
   undated: Task[];
   projects: ProjectHealth[];
+  /** How deep each printed project sits under its family, by id. */
+  projectDepths: Map<string, number>;
+  /** Each project's phases and tasks, ready to print, by id. */
+  projectWork: Map<string, ProjectWork>;
   project?: Project;
   goals: HorizonGoal[];
   habits: { habit: Habit; rate: number; streak: number; scheduled: number; done: number }[];
@@ -167,22 +176,65 @@ export function buildReport(snap: Snapshot, opts: ReportOptions, today: IsoDate,
     }
   }
 
-  // ── Projects: the ones this period actually touched, plus anything due inside it ──
+  // ── Projects: the ones this period actually touched, plus anything due inside it — and then their
+  //    whole families, because a printed project with its sub-projects missing is half a project. ──
   const seen = new Set<string>();
-  const projects: ProjectHealth[] = [];
+  const byIdHealth = new Map<string, ProjectHealth>();
   const wanted = (p: Project): boolean => {
-    if (opts.projectId) return p.id === opts.projectId || p.parentId === opts.projectId;
+    if (opts.projectId) return p.id === opts.projectId;
     if (!opts.includeClosedProjects && (p.status === 'archived' || p.status === 'cancelled')) return false;
     if (p.due !== undefined && p.due >= from && p.due <= to) return true;
     if (period && p.period === period.key) return true;
     return stats.byProject.some((bp) => bp.project.id === p.id && bp.done + bp.open > 0);
   };
-  for (const p of snap.projects.values()) {
-    if (seen.has(p.id) || !wanted(p)) continue;
+  const include = (p: Project): void => {
+    if (seen.has(p.id)) return;
     seen.add(p.id);
-    projects.push(projectHealth(snap, p, today, settings));
-  }
-  projects.sort((a, b) => b.progress - a.progress || a.project.title.localeCompare(b.project.title));
+    byIdHealth.set(p.id, projectHealth(snap, p, today, settings));
+    for (const cid of p.childIds) {
+      const c = snap.projects.get(cid);
+      if (c && (opts.includeClosedProjects || (c.status !== 'archived' && c.status !== 'cancelled'))) include(c);
+    }
+  };
+  for (const p of snap.projects.values()) if (wanted(p)) include(p);
+  // As a tree: roots in their own order, each family beneath its parent, depths remembered for print.
+  const depths = new Map<string, number>();
+  const projects: ProjectHealth[] = [];
+  const byRank = (a: ProjectHealth, b: ProjectHealth): number => b.progress - a.progress || a.project.title.localeCompare(b.project.title);
+  const push = (hh: ProjectHealth, depth: number): void => {
+    depths.set(hh.project.id, depth);
+    projects.push(hh);
+    const kids = hh.project.childIds.map((cid) => byIdHealth.get(cid)).filter((x): x is ProjectHealth => x !== undefined).sort(byRank);
+    for (const k of kids) push(k, depth + 1);
+  };
+  const roots = [...byIdHealth.values()].filter((hh) => !hh.project.parentId || !byIdHealth.has(hh.project.parentId)).sort(byRank);
+  for (const r of roots) push(r, 0);
+
+  // ── The work itself, per project: phases with their tasks, subtasks indented, open before done. ──
+  const workOf = (hh: ProjectHealth): ProjectWork => {
+    const groups: ProjectWork['groups'] = [];
+    let lines = 0;
+    let more = 0;
+    const collect = (keys: string[], title?: string): void => {
+      const tasks: PrintTask[] = [];
+      const walk = (t: Task, depth: number): void => {
+        if (plainLabel(t.text).trim() === '') return;
+        if (lines >= WORK_CAP) { more++; return; }
+        lines++;
+        tasks.push({ task: t, depth });
+        for (const ck of t.childKeys) { const c = snap.tasks.get(ck); if (c) walk(c, depth + 1); }
+      };
+      const tops = keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined && !t.parentKey);
+      const openFirst = [...tops.filter(isOpen), ...tops.filter((t) => !isOpen(t))];
+      for (const t of openFirst) walk(t, 0);
+      if (tasks.length > 0) groups.push({ ...(title !== undefined ? { title } : {}), tasks });
+    };
+    for (const ph of hh.project.phases) collect(ph.taskKeys, ph.title);
+    collect(hh.project.looseTaskKeys);
+    return { groups, more };
+  };
+  const work = new Map<string, ProjectWork>();
+  for (const hh of projects) work.set(hh.project.id, workOf(hh));
 
   // ── Goals bound to this period, or to the periods inside it ──
   const goals: HorizonGoal[] = [];
@@ -230,6 +282,8 @@ export function buildReport(snap: Snapshot, opts: ReportOptions, today: IsoDate,
     leftBehind,
     undated: undated.sort(compareTasks),
     projects,
+    projectDepths: depths,
+    projectWork: work,
     ...(project ? { project } : {}),
     goals,
     habits: stats.habits,

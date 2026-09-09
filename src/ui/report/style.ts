@@ -93,6 +93,13 @@ tfoot td { font-weight: 700; border-top: 1.5px solid var(--ink); border-bottom: 
 .tag.due { border-color: var(--warn-edge); background: var(--warn-bg); }
 .tag.late { border-color: var(--neg); color: var(--neg); }
 
+/* ---- the work itself: projects with every task line ---- */
+.work-head { margin-top: 18px; }
+.work-project { break-inside: auto; margin-bottom: 10px; }
+.work-project > h3 { border-bottom: 1px solid var(--rule); padding-bottom: 3px; }
+.work-phase { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); margin: 8px 0 2px; }
+.work-project td { border-bottom: 1px solid var(--surface); padding: 2.5px 7px; }
+
 /* ---- day cards, for a week ---- */
 .days { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .day { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; break-inside: avoid; }

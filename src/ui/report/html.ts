@@ -130,16 +130,32 @@ function planSection(r: Report): string {
 function projectsSection(r: Report): string {
   if (r.projects.length === 0) return `<section><h2>Projects</h2>${emptyNote('No project moved in this period.')}</section>`;
   const rows = r.projects.map((h) => {
+    const depth = r.projectDepths.get(h.project.id) ?? 0;
     const flags = h.flags.length > 0 ? `<span class="tag">${esc(h.flags.join(', '))}</span>` : '';
     return `<tr>
-<td>${esc(h.project.title)}${h.project.area ? `<span class="tag">${esc(h.project.area)}</span>` : ''}${flags}
+<td style="padding-left:${7 + depth * 16}px">${depth > 0 ? '<span class="muted">↳ </span>' : ''}${esc(h.project.title)}${h.project.area ? `<span class="tag">${esc(h.project.area)}</span>` : ''}${flags}
 ${h.nextAction ? `<div class="step">next: ${esc(plainLabel(h.nextAction.text))}</div>` : ''}</td>
 <td class="date">${h.project.due ? esc(humanDate(h.project.due)) : '<span class="muted">—</span>'}</td>
 <td class="num">${h.done}/${h.total}</td>
 <td style="width:120px"><div class="bar-track"><div class="bar-fill" style="width:${Math.round(h.progress * 100)}%"></div></div></td>
 <td class="num">${Math.round(h.progress * 100)}%</td></tr>`;
   }).join('');
-  return `<section><h2>Projects</h2><table><thead><tr><th>Project</th><th>Due</th><th class="num">Done</th><th></th><th class="num">%</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  return `<section><h2>Projects</h2><table><thead><tr><th>Project</th><th>Due</th><th class="num">Done</th><th></th><th class="num">%</th></tr></thead><tbody>${rows}</tbody></table>${projectWork(r)}</section>`;
+}
+
+/** The work itself: every printed project again, this time with its phases and every task line. */
+function projectWork(r: Report): string {
+  const blocks: string[] = [];
+  for (const h of r.projects) {
+    const w = r.projectWork.get(h.project.id);
+    if (!w || w.groups.length === 0) continue;
+    const depth = r.projectDepths.get(h.project.id) ?? 0;
+    const body = w.groups.map((g) => `${g.title ? `<h4 class="work-phase">${esc(g.title)}</h4>` : ''}
+<table><tbody>${g.tasks.map(({ task, depth: d }) => `<tr><td style="padding-left:${7 + d * 18}px">${taskLine(task, r.today, { project: false })}</td></tr>`).join('')}</tbody></table>`).join('');
+    blocks.push(`<div class="work-project" style="margin-left:${depth * 16}px"><h3>${esc(h.project.title)} <span class="muted">${h.done}/${h.total}</span></h3>${body}${w.more > 0 ? `<p class="note">and ${w.more} more line${w.more === 1 ? '' : 's'}, not printed.</p>` : ''}</div>`);
+  }
+  if (blocks.length === 0) return '';
+  return `<h3 class="work-head">The work itself</h3>${blocks.join('')}`;
 }
 
 function phasesSection(r: Report): string {

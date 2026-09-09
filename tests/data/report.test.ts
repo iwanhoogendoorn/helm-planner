@@ -122,3 +122,47 @@ describe('the printed page', () => {
     expect(name).not.toMatch(/[\\/:*?"<>|]/);
   });
 });
+
+describe('projects print whole: families nested, tasks under each', () => {
+  it('brings a sub-project along with its parent, and marks its depth', async () => {
+    const { index, settings, m } = await setup();
+    await m.updateTask('tsk-0001', { due: TODAY });                 // touch the Oracle family this week
+    const r = buildReport(index.snapshot, opts({ scope: 'quarter', projectId: 'prj-oracle' }), TODAY, settings);
+    const titles = r.projects.map((h) => h.project.title);
+    expect(titles).toContain('Oracle');
+    expect(titles).toContain('OCI Certification');                  // the sub-project came along
+    expect(titles.indexOf('OCI Certification')).toBeGreaterThan(titles.indexOf('Oracle'));   // beneath its parent
+    expect(r.projectDepths.get('prj-oracle')).toBe(0);
+    expect(r.projectDepths.get('prj-cert')).toBe(1);
+  });
+
+  it('prints each project’s phases and task lines, subtasks indented, and says what it cut', async () => {
+    const { index, settings } = await setup();
+    const r = buildReport(index.snapshot, opts({ scope: 'quarter', projectId: 'prj-book' }), TODAY, settings);
+    const w = r.projectWork.get('prj-book')!;
+    expect(w.groups.length).toBeGreaterThan(0);
+    expect(w.groups[0]!.title).toBe('Outline');                     // the phase carries its name
+    const lines = w.groups.flatMap((g) => g.tasks);
+    expect(lines.some(({ task }) => task.text.includes('Draft chapter list'))).toBe(true);
+    const sub = lines.find(({ task }) => task.text.includes('Collect diagrams'))!;
+    expect(sub.depth).toBe(1);                                      // a subtask sits one step in
+
+    const html = renderReport(r, 'now');
+    expect(html).toContain('The work itself');
+    expect(html).toContain('Draft chapter list');
+    expect(html).toContain('Collect diagrams');
+    expect(html).toContain('class="work-phase"');
+  });
+
+  it('caps a runaway project rather than printing forty pages', async () => {
+    const files: Record<string, string> = {};
+    const tasks = Array.from({ length: 60 }, (_, i) => `- [ ] Task number ${i + 1}`).join('\n');
+    files['02 PROJECTS/Big/Big.md'] = `---\ntitle: Big\ntype: project\nid: prj-big\nstatus: active\npriority: normal\ndue_date: ${TODAY}\n---\n\n# Big\n\n## Tasks\n\n${tasks}\n`;
+    const { index, settings } = await setup(files);
+    const r = buildReport(index.snapshot, opts({ scope: 'week' }), TODAY, settings);
+    const w = r.projectWork.get('prj-big')!;
+    expect(w.groups.flatMap((g) => g.tasks)).toHaveLength(40);
+    expect(w.more).toBe(20);
+    expect(renderReport(r, 'now')).toContain('and 20 more lines, not printed');
+  });
+});
