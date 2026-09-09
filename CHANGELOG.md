@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.29.0 — 2026-09-09
 
 - **The music board reads the Maestro songbook.** Any note with `type: song` — wherever it
   lives in the vault — is now known to Helm, and **Add a song** starts with a *From the
