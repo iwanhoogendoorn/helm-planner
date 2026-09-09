@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Everything that moves a task lives under one word.** The right-click menu scattered
+  Tomorrow, Next week, Pick a date, Unschedule and “Part of Today” across its middle; they
+  are one **Move** submenu now, and its title states the fact before the offer — *Move —
+  on Today*, *Move — not planned*. Inside: the days (each opening onto morning, afternoon,
+  evening, anytime), the parts of the day it is already on, and Unschedule last.
 - **The export button on a project says what it is.** It was a bare icon lost among the
   header's other icons; it now reads **Export PDF**, on every project and sub-project page
   and on the projects list.

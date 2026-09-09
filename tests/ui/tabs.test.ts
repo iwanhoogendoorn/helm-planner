@@ -65,6 +65,11 @@ const waitFor = async <T>(get: () => T | null | undefined, what = 'condition', t
 
 beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; selection.clear(); clearFolds(); });
 
+const moveMenu = (): { title: string; items: { title: string; sub?: { items: { title: string; click?: () => void }[] }; click?: () => void }[] } => {
+  const mv = Menu.last!.items.find((i) => i.title.startsWith('Move — '))!;
+  return { title: mv.title, items: mv.sub!.items as never };
+};
+
 describe('Today tab', () => {
   it('renders yesterday: time blocks, tasks, mirrors, habits, done', async () => {
     const { ctx } = await ctxFor();
@@ -135,11 +140,13 @@ describe('Today tab', () => {
     await m.addTask({ text: 'On today already', date: TODAY });
     const onToday = [...index.snapshot.tasks.values()].find((t) => t.text === 'On today already')!;
     taskMenu(ctx, onToday, new MouseEvent('contextmenu'));
-    const titles = Menu.last!.items.map((i) => i.title);
+    const mv = moveMenu();
+    expect(mv.title).toBe('Move — on Today');                 // the menu says where it is
+    const titles = mv.items.map((i) => i.title);
     expect(titles).not.toContain('Today');                    // it is already there; moving it there is nothing
-    expect(titles).toContain('Part of Today');                // this is the one that means something
+    expect(titles).toContain('Morning of Today');             // its own day is the parts, inside Move
     expect(titles).toContain('Tomorrow');
-    expect(titles.filter((t) => /^(Today|Part of Today)$/.test(t))).toHaveLength(1);
+    expect(titles).toContain('Unschedule');
   });
 
   it('names the day in the part menu, and moving a part never changes the date', async () => {
@@ -150,11 +157,12 @@ describe('Today tab', () => {
     expect(moved.noteDate ?? moved.scheduled).toBe('2026-08-27');
 
     taskMenu(ctx, moved, new MouseEvent('contextmenu'));
-    const part = Menu.last!.items.find((i) => i.title.startsWith('Part of'))!;
-    expect(part.title).toBe('Part of Tomorrow');               // not “Part of the day”, which reads as today
-    expect(part.sub!.items.map((i) => i.title)).toEqual(['Morning of Tomorrow', 'Afternoon of Tomorrow', 'Evening of Tomorrow', 'Anytime of Tomorrow']);
+    const mv2 = moveMenu();
+    expect(mv2.title).toBe('Move — on Tomorrow');              // not “the day”, which reads as today
+    const parts = mv2.items.filter((i) => / of Tomorrow$/.test(i.title)).map((i) => i.title);
+    expect(parts).toEqual(['Morning of Tomorrow', 'Afternoon of Tomorrow', 'Evening of Tomorrow', 'Anytime of Tomorrow']);
 
-    part.sub!.items.find((i) => i.title.startsWith('Afternoon'))!.click!();
+    mv2.items.find((i) => i.title.startsWith('Afternoon'))!.click!();
     const after = await waitFor(() => { const x = [...index.snapshot.tasks.values()].find((y) => y.text === 'Start with OIB' && y.status === 'todo'); return x?.part === 'afternoon' ? x : undefined; }, 'the part to change');
     expect(after.noteDate ?? after.scheduled).toBe('2026-08-27');   // still Thursday, not today
   });
@@ -1509,7 +1517,8 @@ describe('Modals', () => {
     const row = taskRow(ctx, index.task('tsk-0001')!);
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
     const titles = Menu.last!.items.map((i) => i.title);
-    expect(titles).toContain('Today');
+    expect(titles.some((t) => t.startsWith('Move — '))).toBe(true);
+    expect(moveMenu().items.map((i) => i.title)).toContain('Today');
     expect(titles).toContain('Move to project…');
     expect(Menu.last!.items.find((i) => i.title === 'Status')!.sub!.items.map((i) => i.title)).toContain('Waiting on someone');
   });
@@ -2957,7 +2966,7 @@ describe('moving a task to another day', () => {
     const { ctx, index, vault } = await ctxFor();
     const t = index.task('tsk-0001')!;
     taskMenu(ctx, t, new MouseEvent('contextmenu'));
-    const tomorrow = Menu.last!.items.find((i) => i.title === 'Tomorrow')!;
+    const tomorrow = moveMenu().items.find((i) => i.title === 'Tomorrow')!;
     expect(tomorrow.sub!.items.map((i) => i.title)).toEqual(['Just move it', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
     tomorrow.sub!.items[1]!.click!(); // Morning
     await flush(); await flush();
@@ -2966,15 +2975,16 @@ describe('moving a task to another day', () => {
     // The day it now sits on is not offered as a move — “Part of Tomorrow” is the same thing, once.
     const moved = [...index.snapshot.tasks.values()].find((x) => x.id === 'tsk-0001' && x.origin === 'daily-mirror')!;
     taskMenu(ctx, moved, new MouseEvent('contextmenu'));
-    const titles = Menu.last!.items.map((i) => i.title);
+    const mv3 = moveMenu();
+    const titles = mv3.items.map((i) => i.title);
     expect(titles).not.toContain('Tomorrow');
-    expect(titles).toContain('Part of Tomorrow');
+    expect(titles).toContain('Morning of Tomorrow');         // its own day is the parts, inside Move
     expect(titles).toContain('Today');                       // other days still move it
     // A task that already sits in a part offers to keep it when it does move.
-    expect(Menu.last!.items.find((i) => i.title === 'Today')!.sub!.items[0]!.title).toBe('Keep the morning');
+    expect(mv3.items.find((i) => i.title === 'Today')!.sub!.items[0]!.title).toBe('Keep the morning');
     // Pick a date… opens the picker with a part row.
     taskMenu(ctx, t, new MouseEvent('contextmenu'));
-    Menu.last!.items.find((i) => i.title === 'Pick a date…')!.click!();
+    moveMenu().items.find((i) => i.title === 'Pick a date…')!.click!();
     const picker = Modal.last!;
     expect(texts(picker.contentEl, '.helm-datepicker-parts button')).toEqual(['Keep', 'Morning', 'Afternoon', 'Evening', 'Anytime']);
     click([...picker.contentEl.querySelectorAll('.helm-datepicker-parts button')].find((b) => b.textContent === 'Evening'));

@@ -35,7 +35,7 @@ export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): { label: s
  * Dates to move a task to. Each day opens onto the parts of the day, so “tomorrow morning” is one
  * hover away; the first entry keeps whatever part the task already has.
  */
-export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task): void {
+export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task, opts: { unschedule?: boolean } = {}): void {
   const today = ctx.today();
   const move = (date: IsoDate | undefined, part?: DayPart): void => void ctx.run(date ? 'Schedule' : 'Unschedule', () => ctx.mutations.schedule(task.key, date, part));
   const partIcon = (p: DayPart): string => (p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock');
@@ -48,7 +48,7 @@ export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task): void {
       menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => openDatePicker(ctx, { title: `Schedule “${task.text}”`, initial: task.scheduled ?? task.noteDate ?? today, parts: true }, (d, part) => move(d, part))));
       continue;
     }
-    if (o.date === undefined) { menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => move(undefined))); continue; }
+    if (o.date === undefined) { if (opts.unschedule !== false) menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => move(undefined))); continue; }
     const date = o.date;
     menu.addItem((i) => {
       i.setTitle(o.label).setIcon(o.icon);
@@ -115,19 +115,26 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     ? i.setTitle('Follow up… — move it instead (it has subtasks)').setIcon('corner-down-right').setDisabled(true)
     : i.setTitle('Follow up…').setIcon('corner-down-right').onClick(() => openFollowUp(ctx, task)));
   menu.addSeparator();
-  addScheduleItems(menu, ctx, task);
+  // Everything that moves the task lives under one word, and the word says where it is now — so the
+  // menu reads as a fact and an offer, not a scattering of dates.
   const onADay = task.noteDate !== undefined || task.scheduled !== undefined;
-  if (onADay && (!task.parentKey || task.scheduled)) {   // a subtask has a part only once it has a day of its own
-    // This moves the task *within the day it is already on* — it never changes the date. Say which day
-    // that is, or “Afternoon” reads as “this afternoon” and looks like it will drag the task back to today.
-    const its = task.scheduled ?? task.noteDate!;
-    const dayName = humanDate(its, today);
-    menu.addItem((i) => {
-      i.setTitle(`Part of ${dayName}`).setIcon('sun');
-      const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+  const its = task.scheduled ?? task.noteDate;
+  menu.addItem((i) => {
+    i.setTitle(its ? `Move — on ${humanDate(its, today)}` : 'Move — not planned').setIcon('calendar');
+    const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    addScheduleItems(sub, ctx, task, { unschedule: false });
+    if (onADay && (!task.parentKey || task.scheduled)) {
+      // Within the day it is already on — it never changes the date. Say which day that is, or
+      // “Afternoon” reads as “this afternoon” and looks like it will drag the task back to today.
+      const dayName = humanDate(its!, today);
+      sub.addSeparator();
       for (const p of DAY_PARTS) sub.addItem((j) => j.setTitle(`${PART_LABEL[p]} of ${dayName}`).setIcon(p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock').setChecked(task.part === p).onClick(() => void ctx.run('Part', () => ctx.mutations.setPart(task.key, p))));
-    });
-  }
+    }
+    if (onADay) {
+      sub.addSeparator();
+      sub.addItem((j) => j.setTitle('Unschedule').setIcon('calendar-x').onClick(() => void ctx.run('Unschedule', () => ctx.mutations.schedule(task.key, undefined))));
+    }
+  });
   menu.addSeparator();
   menu.addItem((i) => {
     i.setTitle('Status').setIcon('list-checks');
