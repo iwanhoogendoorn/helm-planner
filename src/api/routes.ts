@@ -10,6 +10,8 @@ import { linksIn } from '../core/links';
 import type { HelmIndex } from '../data/index';
 import type { Mutations } from '../data/mutations';
 import { isBlocked, isOpen, plannedDate } from '../data/planner';
+import { profileFor, parseAssignment, type Assignment } from '../core/profiles';
+import { plainLabel } from '../core/label';
 
 export const API_BASE = '/helm/v1';
 
@@ -83,7 +85,10 @@ function taskJson(t: Task, d: ApiDeps): Record<string, unknown> {
 
 function projectJson(p: Project, d: ApiDeps): Record<string, unknown> {
   const tasks = [...d.index.snapshot.tasks.values()].filter((t) => t.projectId === p.id && t.origin === 'project');
+  const profile = profileFor(p.profile, { ...(p.profilePeople ? { people: p.profilePeople } : {}), ...(p.profileModes ? { modes: p.profileModes } : {}) });
   return {
+    profile: profile.id,
+    ...(profile.id !== 'generic' ? { people: profile.people, modes: profile.modes, groupNoun: profile.groupNoun, itemNoun: profile.itemNoun } : {}),
     id: p.id,
     title: p.title,
     status: p.status,
@@ -98,6 +103,34 @@ function projectJson(p: Project, d: ApiDeps): Record<string, unknown> {
     phases: p.phases.map((ph) => ({ id: ph.id, title: ph.title, due: ph.due ?? null })),
     counts: { open: tasks.filter(isOpen).length, total: tasks.length },
   };
+}
+
+/**
+ * A profiled project's items the way its board sees them: the task in a group (phase), the note it
+ * links, the assignments (Person · Mode) under it, and the steps under each assignment.
+ */
+function itemsJson(p: Project, d: ApiDeps): Record<string, unknown>[] {
+  const snap = d.index.snapshot;
+  const profile = profileFor(p.profile, { ...(p.profilePeople ? { people: p.profilePeople } : {}), ...(p.profileModes ? { modes: p.profileModes } : {}) });
+  const groups: Array<{ title: string | null; keys: string[] }> = [...p.phases.map((ph) => ({ title: ph.title, keys: ph.taskKeys })), { title: null, keys: p.looseTaskKeys }];
+  const out: Record<string, unknown>[] = [];
+  for (const g of groups) for (const key of g.keys) {
+    const t = snap.tasks.get(key);
+    if (!t || t.parentKey) continue;
+    const link = /\[\[([^\]|#]+)/.exec(t.text)?.[1]?.trim();
+    const work: Record<string, unknown>[] = [];
+    const other: Record<string, unknown>[] = [];
+    for (const ck of t.childKeys) {
+      const c = snap.tasks.get(ck);
+      if (!c) continue;
+      const a = parseAssignment(plainLabel(c.text), profile);
+      const steps = c.childKeys.map((sk) => snap.tasks.get(sk)).filter((s): s is Task => s !== undefined).map((s) => taskJson(s, d));
+      if (a) work.push({ ...taskJson(c, d), ...(a.person ? { person: a.person } : {}), mode: a.mode, steps });
+      else other.push({ ...taskJson(c, d), steps });
+    }
+    out.push({ ...taskJson(t, d), title: plainLabel(t.text), note: link ?? null, group: g.title, work, other });
+  }
+  return out;
 }
 
 /** A task by its 🆔, or failing that by its index key. */
@@ -132,6 +165,14 @@ export async function handle(req: ApiRequest, d: ApiDeps): Promise<ApiResponse> 
       const t = await d.mutations.addTaskReturning({ text, parentKey: parent.key, ...fieldsFrom(body) });
       return made({ task: taskJson(t, d), written: d.written() });
     }
+    if (ref !== undefined && sub === 'steps' && method === 'POST') {
+      const parent = findTask(ref, d);
+      if (!parent) return missing(`No task ${ref}`);
+      const steps = Array.isArray(body['steps']) ? (body['steps'] as unknown[]).map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean) : [];
+      if (!steps.length) return bad('steps must be a list of texts');
+      const made2 = await d.mutations.addSteps(parent.key, steps, num(body['effortMinutes']));
+      return made({ tasks: made2.map((t) => taskJson(t, d)), written: d.written() });
+    }
     if (ref !== undefined && sub === undefined && (method === 'PATCH' || method === 'PUT')) return patchTask(ref, body, d);
     if (ref !== undefined && sub === undefined && method === 'DELETE') {
       const t = findTask(ref, d);
@@ -146,6 +187,40 @@ export async function handle(req: ApiRequest, d: ApiDeps): Promise<ApiResponse> 
     if (method === 'GET' && ref === undefined) {
       const all = d.index.allProjects().filter((p) => !req.query['status'] || p.status === req.query['status']);
       return ok({ projects: all.map((p) => projectJson(p, d)) });
+    }
+    if (method === 'GET' && ref !== undefined && sub === 'items') {
+      const p = d.index.project(ref);
+      return p ? ok({ items: itemsJson(p, d) }) : missing(`No project ${ref}`);
+    }
+    if (method === 'POST' && ref !== undefined && sub === 'items') {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const profile = profileFor(p.profile, { ...(p.profilePeople ? { people: p.profilePeople } : {}), ...(p.profileModes ? { modes: p.profileModes } : {}) });
+      const note = str(body['note']);
+      const title = str(body['title']) ?? note;
+      if (!title) return bad(`An ${profile.itemNoun} needs a title (or a note)`);
+      const rawA = Array.isArray(body['assignments']) ? body['assignments'] as unknown[] : [];
+      const assignments: (Assignment & { steps?: string[] })[] = [];
+      for (const raw of rawA) {
+        const a = asRecord(raw);
+        const mode = str(a['mode']);
+        if (!mode) return bad('Every assignment needs a mode');
+        if (profile.modes.length && !profile.modes.some((m) => m.toLowerCase() === mode.toLowerCase())) return bad(`mode must be one of ${profile.modes.join(', ')}`);
+        const person = str(a['person']);
+        const steps = Array.isArray(a['steps']) ? (a['steps'] as unknown[]).map((x) => (typeof x === 'string' ? x : '')).filter(Boolean) : [];
+        assignments.push({ ...(person ? { person } : {}), mode: profile.modes.find((m) => m.toLowerCase() === mode.toLowerCase()) ?? mode, ...(steps.length ? { steps } : {}) });
+      }
+      const eff = num(body['stepEffortMinutes']);
+      const item = await d.mutations.addProfileItem(p.id, { title, group: str(body['group']) ?? '', ...(note ? { note } : {}), assignments, ...(day(body['due']) ? { due: day(body['due'])! } : {}), ...(eff ? { stepEffortMinutes: eff } : {}) });
+      const fresh = d.index.project(p.id) ?? p;
+      const itemJson = itemsJson(fresh, d).find((it) => it['id'] === item.id) ?? taskJson(item, d);
+      return made({ item: itemJson, written: d.written() });
+    }
+    if (method === 'POST' && ref !== undefined && sub === 'archive') {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const path = await d.mutations.archiveProject(p.id);
+      return ok({ archived: p.id, path, written: d.written() });
     }
     if (method === 'GET' && ref !== undefined) {
       const p = d.index.project(ref);
@@ -164,6 +239,9 @@ export async function handle(req: ApiRequest, d: ApiDeps): Promise<ApiResponse> 
         priority: priority as ProjectPriority,
         ...(str(body['area']) ? { area: str(body['area'])! } : {}),
         ...(str(body['parentId']) ? { parentId: str(body['parentId'])! } : {}),
+        ...(str(body['profile']) ? { profile: str(body['profile'])! } : {}),
+        ...(Array.isArray(body['people']) ? { people: (body['people'] as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim() !== '') } : {}),
+        ...(Array.isArray(body['modes']) ? { modes: (body['modes'] as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim() !== '') } : {}),
         ...(str(body['period']) ? { period: str(body['period'])! } : {}),
         ...(day(body['start']) ? { start: day(body['start'])! } : {}),
         ...(day(body['due']) ? { due: day(body['due'])! } : {}),

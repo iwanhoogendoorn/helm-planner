@@ -17,6 +17,7 @@ import type { UiContext } from './context';
 import { openProfileItem } from './modals/profileItem';
 import { taskMenu } from './menus';
 import { openTaskEditor } from './modals/taskEditor';
+import { taskList } from './taskRow';
 
 export interface ProfileBoardState {
   /** The group being looked at; empty means the first one. */
@@ -190,6 +191,15 @@ export function renderProfileBoard(ctx: UiContext, root: HTMLElement, p: Project
         ...it.other.map((o) => chip(plainLabel(o.text), o.status === 'done' ? 'done' : 'count')),
         total === 0 && it.other.length === 0 ? h('span', { cls: 'helm-hint', text: 'nothing assigned yet' }) : null,
       ),
+      // The practice steps under each way of working — real task lines, planned and ticked like any other.
+      ...it.work.filter((w) => w.task.childKeys.length > 0).map((w) => {
+        const steps = w.task.childKeys.map((k) => ctx.index.snapshot.tasks.get(k)).filter((s): s is Task => s !== undefined);
+        const done = steps.filter((s) => s.status === 'done').length;
+        return h('div', { cls: ['helm-profile-steps', done === steps.length && 'is-done'] },
+          h('div', { cls: 'helm-profile-steps-head' }, icon('list-checks'), h('span', { text: `${w.person ? `${w.person} · ` : ''}${w.mode}` }), h('span', { cls: 'helm-spacer' }), h('span', { cls: 'helm-hint', text: `${done}/${steps.length}` })),
+          taskList(ctx, steps, { showDate: 'scheduled', depth: 1 }),
+        );
+      }),
     );
     list.appendChild(card);
   }

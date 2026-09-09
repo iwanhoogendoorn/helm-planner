@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.31.0 — 2026-09-09
+
+- **The music board has practice steps, and other tools can add songs.** Under an
+  assignment chip (*Iwan · Piano solo*) the board now lists that person's practice steps —
+  ordinary task lines, planned and ticked like any other — and Maestro writes them when it
+  puts a song on the board. The local API grew `GET/POST /projects/:id/items` (a song with
+  its assignments and their steps in one call), `POST /tasks/:id/steps`,
+  `POST /projects/:id/archive`, and every project now says its kind, people and modes.
+  `POST /projects` accepts `profile`, `people` and `modes`.
+- **Every step knows its song.** A task under an item that links a note gets an *Open …*
+  entry in its menu and a small note chip on its row, wherever the row is shown — the day,
+  the project, the board — so a practice step jumps straight to the song.
+
 ## 1.30.0 — 2026-09-09
 
 - **Families of projects fold, and start folded.** An umbrella on the projects list now

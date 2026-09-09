@@ -1,4 +1,5 @@
 /** Context menus and pickers built on Obsidian's Menu / SuggestModal. */
+import { linkedNoteOf } from '../core/label';
 import { FuzzySuggestModal, Menu } from 'obsidian';
 import type { IsoDate, Project, Task, TaskStatus } from '../core/types';
 import { addDays, humanDate, startOfWeek } from '../core/dates';
@@ -92,6 +93,10 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   const menu = new Menu();
   const today = ctx.today();
   menu.addItem((i) => i.setTitle('Edit…').setIcon('pencil').onClick(() => opts.onEdit ? opts.onEdit() : openTaskEditor(ctx, task)));
+  // A step under a song (or any task under a linked item): jump straight to the note it belongs to.
+  const snap = ctx.index.snapshot;
+  const note = linkedNoteOf(task.text, (k) => snap.tasks.get(k)?.text, (k) => snap.tasks.get(k)?.parentKey, task.key);
+  if (note) menu.addItem((i) => i.setTitle(`Open ${note}`).setIcon('file-text').onClick(() => ctx.openLink(note, task.path)));
   menu.addItem((i) => i.setTitle('Add subtask…').setIcon('list-plus').onClick(() => openSubtask(ctx, task)));
   menu.addItem((i) => { i.setTitle(task.progress !== undefined ? `Progress — ${task.progress}%` : 'Progress').setIcon('trending-up'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addProgressItems(sub, ctx, task); });
   // A repeating task: skipping one occurrence is not the same as ending the series, so say both plainly.

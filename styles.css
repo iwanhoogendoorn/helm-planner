@@ -1029,3 +1029,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-profile-vocab { display: flex; flex-direction: column; gap: 6px; }
 .helm-song-pick { max-width: 100%; }
 .helm-song-facts { margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+/* Practice steps under an assignment on the music board */
+.helm-profile-steps { margin-top: 6px; padding: 4px 6px 2px; border-top: 1px dashed var(--background-modifier-border); }
+.helm-profile-steps.is-done { opacity: 0.7; }
+.helm-profile-steps-head { display: flex; align-items: center; gap: 6px; font-size: 0.8em; color: var(--text-muted); margin-bottom: 2px; }
+.helm-chip-note svg { width: 11px; height: 11px; margin-right: 3px; }

@@ -1293,7 +1293,7 @@ export class Mutations {
    * each person-and-way it is being worked on. Everything it writes is an ordinary task line: the profile
    * is a way of reading them, so a song added here is still a task Obsidian Tasks understands.
    */
-  async addProfileItem(projectId: string, spec: { title: string; group: string; note?: string; assignments: Assignment[]; due?: IsoDate }): Promise<Task> {
+  async addProfileItem(projectId: string, spec: { title: string; group: string; note?: string; assignments: (Assignment & { steps?: string[] })[]; due?: IsoDate; stepEffortMinutes?: number }): Promise<Task> {
     const p = this.index.project(projectId);
     if (!p) throw new Error('Project not found');
     const group = spec.group.trim();
@@ -1320,9 +1320,32 @@ export class Mutations {
     for (const a of spec.assignments) {
       const parent = relocate();
       if (!parent) throw new Error(`The ${spec.title} line went missing while its steps were written`);
-      await this.addTaskReturning({ text: assignmentLine(a), parentKey: parent.key });
+      const made = await this.addTaskReturning({ text: assignmentLine(a), parentKey: parent.key });
+      // The practice steps for this way of working, under the assignment — each an ordinary task line.
+      for (const step of a.steps ?? []) {
+        const text = step.trim();
+        if (text === '') continue;
+        const holder = this.index.taskById(made.id!) ?? this.index.task(made.key);
+        if (!holder) throw new Error(`The ${assignmentLine(a)} line went missing while its steps were written`);
+        await this.addTaskReturning({ text, parentKey: holder.key, ...(spec.stepEffortMinutes ? { fields: { effortMinutes: spec.stepEffortMinutes, effortRaw: `${spec.stepEffortMinutes}m` } } : {}) });
+      }
     }
     return relocate() ?? item;
+  }
+
+  /** Steps under an existing assignment (or any task): the same lines the board and the day show. */
+  async addSteps(parentKey: string, steps: string[], effortMinutes?: number): Promise<Task[]> {
+    const out: Task[] = [];
+    let holderKey = await this.ensureId(parentKey);
+    for (const step of steps) {
+      const text = step.trim();
+      if (text === '') continue;
+      const holder = this.index.taskById(holderKey) ?? this.index.task(holderKey);
+      if (!holder) throw new Error('The line went missing while its steps were written');
+      out.push(await this.addTaskReturning({ text, parentKey: holder.key, ...(effortMinutes ? { fields: { effortMinutes, effortRaw: `${effortMinutes}m` } } : {}) }));
+      holderKey = holder.id ?? holder.key;
+    }
+    return out;
   }
 
   async addPhase(projectId: string, title: string, due?: IsoDate): Promise<void> {

@@ -139,3 +139,48 @@ describe('moving a task into a project over the API', () => {
     expect(bad.status).toBe(404);
   });
 });
+
+describe('profiled projects over the API', () => {
+  it('creates a music project, adds a song with assignments and steps, lists it, and archives it', async () => {
+    const { call } = await api();
+    const made = await call('POST', 'projects', { title: 'Music Studies', profile: 'music', people: ['Iwan', 'Zaara'], status: 'active' });
+    expect(made.status).toBe(201);
+    expect(made.body.project.profile).toBe('music');
+    expect(made.body.project.modes).toContain('Piano solo');
+    const id = made.body.project.id as string;
+
+    const item = await call('POST', `projects/${id}/items`, {
+      title: 'Amazing Grace', note: 'Amazing Grace', group: 'September 2026',
+      assignments: [{ person: 'Iwan', mode: 'Piano solo', steps: ['Right hand', 'Left hand'] }, { person: 'Zaara', mode: 'singing' }],
+      stepEffortMinutes: 20,
+    });
+    expect(item.status).toBe(201);
+    expect(item.body.item.note).toBe('Amazing Grace');
+    expect(item.body.item.group).toBe('September 2026');
+    expect(item.body.item.work.map((w: any) => w.mode)).toEqual(['Piano solo', 'Singing']);
+    expect(item.body.item.work[0].steps.map((s: any) => s.text)).toEqual(['Right hand', 'Left hand']);
+    expect(item.body.item.work[0].steps[0].effortMinutes).toBe(20);
+
+    const items = await call('GET', `projects/${id}/items`);
+    expect(items.status).toBe(200);
+    expect(items.body.items).toHaveLength(1);
+    expect(items.body.items[0].work[1].person).toBe('Zaara');
+
+    const stepId = item.body.item.work[0].steps[0].id as string;
+    const planned = await call('PATCH', `tasks/${stepId}`, { scheduled: '2026-09-10' });
+    expect(planned.status).toBe(200);
+    expect(planned.body.task.scheduled).toBe('2026-09-10');
+
+    const more = await call('POST', `tasks/${item.body.item.work[1].id}/steps`, { steps: ['Warm up', 'Verse 1'] });
+    expect(more.status).toBe(201);
+    expect(more.body.tasks).toHaveLength(2);
+
+    const bad = await call('POST', `projects/${id}/items`, { title: 'X', assignments: [{ mode: 'Juggling' }] });
+    expect(bad.status).toBe(400);
+
+    const archived = await call('POST', `projects/${id}/archive`);
+    expect(archived.status).toBe(200);
+    expect(archived.body.archived).toBe(id);
+    expect((await call('GET', `projects/${id}`)).status).toBe(404);
+  });
+});
