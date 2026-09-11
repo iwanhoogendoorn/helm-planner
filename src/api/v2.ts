@@ -5,19 +5,22 @@
  * routes.ts turns that into a 404 or 405.
  */
 import type { ApiRequest, ApiResponse } from './routes';
-import { asRecord, bad, day, findTask, has, made, missing, notAllowed, num, ok, PARTS, str } from './routes';
-import { candidateJson, dayItemJson, daybookJson, layoutJson, taskJson, type Ctx } from './json';
-import { addDays, isIsoDate } from '../core/dates';
+import { asRecord, bad, day, findTask, has, made, missing, notAllowed, num, ok, PARTS, str, strList } from './routes';
+import { candidateJson, dayItemJson, daybookJson, goalJson, habitJson, horizonPeriodJson, layoutJson, periodJson, refOf, taskJson, type Ctx } from './json';
+import { addDays, diffDays, isIsoDate } from '../core/dates';
 import type { DayPart } from '../core/dailyNote';
-import type { IsoDate, Task } from '../core/types';
-import { candidates, dayPlan, wrapUpItems } from '../data/planner';
-import { habitsOnDay, habitStats } from '../data/habits';
+import { HABIT_COLORS, HABIT_PARTS, type Goal, type Habit, type HabitColor, type HabitPart, type IsoDate, type Task } from '../core/types';
+import { candidates, dayPlan, horizonPeriod, horizons, inboxItems, tasksByDay, weekView, wrapUpItems } from '../data/planner';
+import { ghostHabits, habitHistories, habitsOnDay, habitStats } from '../data/habits';
 import { layOutDay } from '../data/timegrid';
 import { layOutDayPlan } from '../core/pomodoro';
 import { bookingsOn } from '../data/conflicts';
+import { parsePeriod, periodOf, type PeriodKind } from '../core/periods';
+import { parseRecurrence } from '../core/recurrence';
+import { baseName } from '../data/vault';
 
 /** Heads v2 owns: an unmatched method on one of these is a 405, anything else a 404. */
-const HEADS = new Set(['settings', 'day', 'focus']);
+const HEADS = new Set(['settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals']);
 
 export async function handleV2(req: ApiRequest, d: Ctx): Promise<ApiResponse | undefined> {
   const parts = req.path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
@@ -66,6 +69,202 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
   }
 
   if (head === 'focus' && ref === 'layout' && method === 'POST') return focusLayout(body, d);
+
+  if (head === 'habits') return habitsRoute(ref, sub, method, req.query, body, d);
+
+  if (head === 'inbox' && method === 'GET' && parts.length === 1) {
+    const r = inboxItems(d.index.snapshot);
+    return ok({
+      inbox: r.inbox.map((t) => taskJson(t, d)),
+      loose: [...r.loose.entries()].map(([path, tasks]) => ({ path, title: baseName(path), tasks: tasks.map((t) => taskJson(t, d)) })),
+      unscheduledProject: r.unscheduledProject.map((t) => taskJson(t, d)),
+    });
+  }
+
+  if (head === 'week' && method === 'GET' && parts.length === 1) {
+    const anchor = req.query['anchor'] ?? req.query['date'] ?? d.today();
+    if (!isIsoDate(anchor)) return bad('anchor must be a date like 2026-09-11');
+    const w = weekView(d.index.snapshot, anchor, d.settings(), d.today());
+    return ok({
+      start: w.start, end: addDays(w.start, 6), capacityMinutes: d.settings().dailyCapacityMinutes,
+      days: w.days.map((x) => ({ date: x.date, open: x.open.map((t) => taskJson(t, d)), done: x.done.map((t) => taskJson(t, d)), minutes: x.minutes })),
+      overdue: w.overdue.map((t) => taskJson(t, d)),
+      unscheduledDue: w.unscheduledDue.map((t) => taskJson(t, d)),
+    });
+  }
+
+  if (head === 'calendar' && method === 'GET' && parts.length === 1) {
+    const from = req.query['from'];
+    const to = req.query['to'];
+    if (!from || !to || !isIsoDate(from) || !isIsoDate(to)) return bad('from and to must be dates like 2026-09-01');
+    if (to < from) return bad('to must not be before from');
+    if (diffDays(from, to) > 400) return bad('At most 400 days at a time');
+    const embed = req.query['tasks'] === 'true';
+    const days = tasksByDay(d.index.snapshot, from, to, d.settings());
+    const list = embed ? (ts: Task[]) => ts.map((t) => taskJson(t, d)) : (ts: Task[]) => ts.map(refOf);
+    return ok({
+      from, to,
+      days: [...days.values()].map((b) => ({ date: b.date, open: b.open.length, done: b.done.length, dueUnplanned: b.dueUnplanned.length, minutes: b.minutes, ...(embed ? { openTasks: list(b.open), doneTasks: list(b.done), dueUnplannedTasks: list(b.dueUnplanned) } : { openRefs: list(b.open), doneRefs: list(b.done), dueUnplannedRefs: list(b.dueUnplanned) }) })),
+    });
+  }
+
+  if (head === 'periods' && ref !== undefined) {
+    const period = parsePeriod(ref);
+    if (!period) return bad(`Not a period: ${ref} (try 2026, 2026-Q3, 2026-09 or 2026-W37)`);
+    if (sub === undefined && method === 'GET') return ok(horizonPeriodJson(horizonPeriod(d.index.snapshot, period, d.today(), d.settings(), d.health), d));
+    if (sub === 'note' && method === 'POST') { const path = await d.mutations.ensurePeriodicNote(period); return ok({ path, period: periodJson(period, d), written: d.written() }); }
+  }
+
+  if (head === 'horizons' && method === 'GET' && parts.length === 1) {
+    const year = Number(req.query['year'] ?? d.today().slice(0, 4));
+    if (!Number.isInteger(year) || year < 1970 || year > 2200) return bad('year must be a four-digit year');
+    const h = horizons(d.index.snapshot, year, d.today(), d.settings());
+    return ok({ year: horizonPeriodJson(h.year, d), quarters: h.quarters.map((q) => horizonPeriodJson(q, d)), months: h.months.map((m) => horizonPeriodJson(m, d)), current: { year: periodOf(d.today(), 'year').key, quarter: periodOf(d.today(), 'quarter').key, month: periodOf(d.today(), 'month').key, week: periodOf(d.today(), 'week').key } });
+  }
+
+  if (head === 'goals') {
+    if (method === 'GET' && ref === undefined) {
+      const key = req.query['period'];
+      const goals = d.index.allGoals().filter((g) => !key || g.periodKey === parsePeriod(key)?.key).sort((a, b) => a.periodKey.localeCompare(b.periodKey) || a.line - b.line);
+      return ok({ goals: goals.map((g) => goalJson(g, d)) });
+    }
+    if (method === 'POST' && ref === undefined) {
+      const periodKey = str(body['periodKey']) ?? str(body['period']);
+      const text = str(body['text']);
+      if (!periodKey || !parsePeriod(periodKey)) return bad('periodKey must be a period like 2026, 2026-Q3, 2026-09 or 2026-W37');
+      if (!text) return bad('A goal needs text');
+      const id = await d.mutations.addGoal(parsePeriod(periodKey)!.key, text);
+      const g = findGoal(id, d);
+      return made({ goal: g ? goalJson(g, d) : { id }, written: d.written() });
+    }
+    if (ref !== undefined && sub === undefined && (method === 'PATCH' || method === 'PUT')) {
+      const g = findGoal(ref, d);
+      if (!g) return missing(`No goal ${ref}`);
+      let touched = false;
+      if (has(body, 'status')) {
+        const st = str(body['status']);
+        if (!st || !['todo', 'done', 'cancelled'].includes(st)) return bad('status must be one of todo, done, cancelled');
+        await d.mutations.setStatus(g.key, st as 'todo' | 'done' | 'cancelled');
+        touched = true;
+      }
+      if (str(body['text'])) { await d.mutations.updateTask(g.key, { text: str(body['text'])! }); touched = true; }
+      if (!touched) return bad('Nothing to change');
+      const after = findGoal(g.id, d) ?? findGoal(g.key, d);
+      return ok({ goal: after ? goalJson(after, d) : null, written: d.written() });
+    }
+    if (ref !== undefined && sub === undefined && method === 'DELETE') {
+      const g = findGoal(ref, d);
+      if (!g) return missing(`No goal ${ref}`);
+      await d.mutations.deleteTask(g.key);
+      return ok({ deleted: g.id, written: d.written() });
+    }
+  }
+
+  return undefined;
+}
+
+export function findGoal(ref: string, d: Ctx): Goal | undefined {
+  return d.index.goal(ref) ?? d.index.allGoals().find((g) => g.id === ref);
+}
+
+/* ── Habits ────────────────────────────────────────────────────────────── */
+
+function findHabit(ref: string, d: Ctx): Habit | undefined {
+  return d.index.snapshot.habits.get(ref) ?? ghostHabits(d.index.snapshot.habits, d.index.snapshot.completions).find((h) => h.id === ref);
+}
+
+const HABIT_STATES = ['done', 'skipped', 'missed', 'pending'] as const;
+
+async function habitsRoute(ref: string | undefined, sub: string | undefined, method: string, query: Record<string, string>, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
+  const snap = d.index.snapshot;
+  if (ref === undefined && method === 'GET') {
+    const all = query['all'] === 'true';
+    const habits = [...d.index.allHabits().filter((h) => all || h.active), ...(all ? ghostHabits(snap.habits, snap.completions) : [])];
+    return ok({ habits: habits.map((h) => habitJson(h, d)) });
+  }
+  if (ref === undefined && method === 'POST') {
+    const title = str(body['title']);
+    const schedule = str(body['schedule']);
+    if (!title) return bad('A habit needs a title');
+    if (!schedule || !parseRecurrence(schedule).parsed) return bad('schedule must be a rule Helm understands, like "every weekday" or "every week on monday, thursday"');
+    const parts = strList(body['parts']);
+    if (parts.some((p) => !HABIT_PARTS.includes(p as HabitPart))) return bad(`parts must be from ${HABIT_PARTS.join(', ')}`);
+    const color = str(body['color']);
+    if (color && !HABIT_COLORS.includes(color as HabitColor)) return bad(`color must be one of ${HABIT_COLORS.join(', ')}`);
+    const id = await d.mutations.createHabit({ title, schedule, ...(num(body['targetPerWeek']) !== undefined ? { targetPerWeek: num(body['targetPerWeek'])! } : {}), ...(num(body['graceDays']) !== undefined ? { graceDays: num(body['graceDays'])! } : {}), ...(str(body['icon']) ? { icon: str(body['icon'])! } : {}), ...(parts.length ? { parts: parts as HabitPart[] } : {}), ...(color ? { color: color as HabitColor } : {}) });
+    const h = findHabit(id, d);
+    return made({ habit: h ? habitJson(h, d) : { id }, written: d.written() });
+  }
+  if (ref === undefined) return undefined;
+  const h = findHabit(ref, d);
+  if (!h) return missing(`No habit ${ref}`);
+  if (sub === undefined && method === 'GET') {
+    const kind = query['history'];
+    if (kind !== undefined && !['week', 'month', 'quarter', 'year'].includes(kind)) return bad('history must be week, month, quarter or year');
+    const out = habitJson(h, d);
+    if (kind) {
+      const hist = habitHistories([h], snap.completions, kind as PeriodKind, d.today());
+      const row = hist.rows[0]!;
+      out['history'] = { kind, periods: hist.periods.map((p) => periodJson(p, d)), cells: row.cells.map((c) => ({ period: c.period.key, due: c.due, done: c.done, rate: c.rate, state: c.state })), due: row.due, done: row.done, rate: row.rate, streak: row.streak, bestStreak: row.bestStreak, from: row.from };
+    }
+    return ok(out);
+  }
+  if (sub === undefined && (method === 'PATCH' || method === 'PUT')) {
+    if (h.removed) return bad('This habit has no note any more; recreate it first');
+    const fields: Parameters<typeof d.mutations.setHabitFields>[1] = {};
+    if (has(body, 'active')) { if (typeof body['active'] !== 'boolean') return bad('active must be true or false'); fields.active = body['active']; }
+    if (has(body, 'schedule')) { const sch = str(body['schedule']); if (!sch || !parseRecurrence(sch).parsed) return bad('schedule must be a rule Helm understands'); fields.schedule = sch; }
+    if (str(body['title'])) fields.title = str(body['title'])!;
+    if (has(body, 'targetPerWeek')) { const n = body['targetPerWeek'] === null ? null : num(body['targetPerWeek']); if (n === undefined) return bad('targetPerWeek must be a number or null'); fields.targetPerWeek = n; }
+    if (has(body, 'graceDays')) { const n = num(body['graceDays']); if (n === undefined || n < 0) return bad('graceDays must be a number'); fields.graceDays = n; }
+    if (has(body, 'icon')) fields.icon = str(body['icon']) ?? '';
+    if (has(body, 'iconImage')) fields.iconImage = body['iconImage'] === null ? null : str(body['iconImage']) ?? null;
+    if (has(body, 'parts')) { const parts = strList(body['parts']); if (parts.some((p) => !HABIT_PARTS.includes(p as HabitPart))) return bad(`parts must be from ${HABIT_PARTS.join(', ')}`); fields.parts = parts as HabitPart[]; }
+    if (has(body, 'color')) { const c = body['color'] === null ? null : str(body['color']); if (c && !HABIT_COLORS.includes(c as HabitColor)) return bad(`color must be one of ${HABIT_COLORS.join(', ')}`); fields.color = (c ?? null) as HabitColor | null; }
+    if (Object.keys(fields).length === 0) return bad('Nothing to change');
+    await d.mutations.setHabitFields(h.id, fields);
+    const after = findHabit(h.id, d);
+    return ok({ habit: after ? habitJson(after, d) : null, written: d.written() });
+  }
+  if (sub === undefined && method === 'DELETE') {
+    if (h.removed) return bad('This habit has no note any more');
+    await d.mutations.deleteHabit(h.id);
+    return ok({ deleted: h.id, written: d.written() });
+  }
+  if (sub === 'state' && method === 'POST') {
+    const date = day(body['date']) ?? d.today();
+    const state = str(body['state']);
+    if (!state || !HABIT_STATES.includes(state as typeof HABIT_STATES[number])) return bad(`state must be one of ${HABIT_STATES.join(', ')}`);
+    const part = str(body['part']);
+    if (part && !HABIT_PARTS.includes(part as HabitPart)) return bad(`part must be one of ${HABIT_PARTS.join(', ')}`);
+    if (h.parts?.length && !part) return bad(`This habit is done per part of the day; send part: ${h.parts.join(' | ')}`);
+    const placeIn = str(body['placeIn']);
+    if (placeIn && !HABIT_PARTS.includes(placeIn as HabitPart)) return bad(`placeIn must be one of ${HABIT_PARTS.join(', ')}`);
+    // "pending" undoes a tick the way the Today tab does: the line goes back to `[ ]`.
+    await d.mutations.setHabitState(h.id, date, state === 'pending' ? 'missed' : state as 'done' | 'skipped' | 'missed', part as HabitPart | undefined, placeIn ? { placeIn: placeIn as HabitPart } : {});
+    const row = habitsOnDay([findHabit(h.id, d) ?? h], d.index.snapshot.completions, date)[0];
+    return ok({ id: h.id, date, occurrences: (row?.occurrences ?? []).map((o) => ({ part: o.part ?? null, state: o.state, line: o.line ?? null })), written: d.written() });
+  }
+  if (sub === 'move' && method === 'POST') {
+    const date = day(body['date']) ?? d.today();
+    const part = body['part'] === null ? undefined : str(body['part']);
+    if (part && !HABIT_PARTS.includes(part as HabitPart)) return bad(`part must be one of ${HABIT_PARTS.join(', ')}, or null for the Habits list`);
+    if (h.parts?.length) return bad('A habit with fixed parts of the day cannot be moved for a day');
+    await d.mutations.moveHabitForDay(h.id, date, part as HabitPart | undefined);
+    return ok({ id: h.id, date, part: part ?? null, written: d.written() });
+  }
+  if (sub === 'pause' && method === 'POST') {
+    if (h.removed) return bad('This habit has no note any more');
+    if (!h.active) return bad('Already paused');
+    await d.mutations.setHabitFields(h.id, { active: false });
+    return ok({ habit: habitJson(findHabit(h.id, d) ?? h, d), written: d.written() });
+  }
+  if (sub === 'resume' && method === 'POST') {
+    if (h.removed) return bad('This habit has no note any more');
+    if (h.active) return bad('Not paused');
+    await d.mutations.setHabitFields(h.id, { active: true });
+    return ok({ habit: habitJson(findHabit(h.id, d) ?? h, d), written: d.written() });
+  }
   return undefined;
 }
 

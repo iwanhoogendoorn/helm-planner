@@ -12,7 +12,7 @@ import { profileFor, parseAssignment, type Assignment } from '../core/profiles';
 import { plainLabel } from '../core/label';
 import { parsePeriod } from '../core/periods';
 import { ctxOf, healthOf, projectJson, taskDetailJson, taskJson, type ApiDeps, type Ctx } from './json';
-import { handleV2 } from './v2';
+import { findGoal, handleV2 } from './v2';
 
 export type { ApiDeps } from './json';
 
@@ -200,6 +200,19 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       const tasks = Array.isArray(body['tasks']) ? (body['tasks'] as unknown[]).map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean) : [];
       const r = await d.mutations.addPhaseWithTasks(p.id, title, tasks, num(body['effortMinutes']));
       return made({ phase: { id: r.phaseId, title }, tasks: r.tasks.map((t) => taskJson(t, d)), written: d.written() });
+    }
+    if (method === 'POST' && ref !== undefined && sub === 'goal') {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      if (!has(body, 'goalKey') && !has(body, 'goal')) return bad('Send goalKey: "gol-…" to bind, or null to unbind');
+      const raw = has(body, 'goalKey') ? body['goalKey'] : body['goal'];
+      const key = raw === null ? null : str(raw);
+      if (key === undefined) return bad('goalKey must be a goal id or null');
+      const g = key === null ? null : findGoal(key, d);
+      if (key !== null && !g) return missing(`No goal ${key}`);
+      await d.mutations.linkProjectToGoal(p.id, g ? g.key : null);
+      const after = d.index.project(p.id);
+      return ok({ project: after ? projectJson(after, d, { health: true }) : null, written: d.written() });
     }
     if (method === 'POST' && ref !== undefined && sub === 'archive') {
       const p = d.index.project(ref);

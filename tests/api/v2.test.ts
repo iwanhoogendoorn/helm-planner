@@ -201,3 +201,165 @@ describe('v2 · the day', () => {
     expect((await call('POST', 'focus/layout', { tasks: [] })).status).toBe(400);
   });
 });
+
+const YEARLY = `---
+title: 2026
+---
+# 2026
+
+## Goals
+
+- [ ] Publish the OCI networking book 🆔 gol-book26
+- [x] Get OCI certified 🆔 gol-cert26 ✅ 2026-06-01
+`;
+const HORIZON_EXTRA = {
+  'Yearly Notes/2026.md': YEARLY,
+  'Quarterly Notes/2026-Q3.md': '---\ntitle: 2026-Q3\n---\n# Q3 2026\n\n## Goals\n\n- [ ] Finish the kitchen design\n',
+  '02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md': `---\ntitle: Oracle Book Writing\ntype: project\nstatus: active\npriority: high\nid: prj-book\nperiod: 2026-Q3\ngoal: gol-book26\n---\n\n# Oracle Book Writing\n\n## Tasks\n\n- [ ] Draft chapter list 🆔 tsk-0001\n- [x] Kick-off call ✅ 2026-08-10\n`,
+};
+
+describe('v2 · habits', () => {
+  it('lists habits with their stats, all=true adds paused and ghost habits, and one habit can carry its history', async () => {
+    const { call, m } = await api();
+    const list = await call('GET', 'habits');
+    expect(list.status).toBe(200);
+    expect(list.body.habits.map((h: any) => h.id).sort()).toEqual(['hab-read', 'hab-workout']);
+    const workout = list.body.habits.find((h: any) => h.id === 'hab-workout');
+    expect(workout).toMatchObject({ title: 'Morning workout', icon: '🏃', active: true, schedule: { raw: 'every weekday', frequency: 'weekly' }, parts: [] });
+    expect(workout.stats).toMatchObject({ dueToday: true, streak: expect.any(Number), days: expect.any(Array) });
+    expect(workout.stats.days).toHaveLength(84);
+    await m.setHabitFields('hab-read', { active: false });
+    expect((await call('GET', 'habits')).body.habits.map((h: any) => h.id)).toEqual(['hab-workout']);
+    expect((await call('GET', 'habits', undefined, { all: 'true' })).body.habits.map((h: any) => h.id).sort()).toEqual(['hab-read', 'hab-workout']);
+    const one = await call('GET', 'habits/hab-workout', undefined, { history: 'week' });
+    expect(one.body.history).toMatchObject({ kind: 'week', due: expect.any(Number), done: expect.any(Number), rate: expect.any(Number), from: expect.any(String) });
+    expect(one.body.history.periods[0]).toMatchObject({ kind: 'week', key: expect.stringMatching(/^\d{4}-W\d{2}$/) });
+    expect(one.body.history.cells).toHaveLength(one.body.history.periods.length);
+    expect((await call('GET', 'habits/hab-workout', undefined, { history: 'fortnight' })).status).toBe(400);
+    expect((await call('GET', 'habits/hab-nope')).status).toBe(404);
+  });
+
+  it('creates, edits, pauses, resumes and deletes a habit', async () => {
+    const { call, vault } = await api();
+    const bad = await call('POST', 'habits', { title: 'Stretch', schedule: 'whenever' });
+    expect(bad.status).toBe(400);
+    const r = await call('POST', 'habits', { title: 'Stretch', schedule: 'every day', parts: ['morning', 'evening'], color: 'green', icon: '🧘' });
+    expect(r.status).toBe(201);
+    expect(r.body.habit).toMatchObject({ title: 'Stretch', parts: ['morning', 'evening'], color: 'green', icon: '🧘', active: true });
+    const id = r.body.habit.id;
+    expect(await vault.exists(r.body.habit.path)).toBe(true);
+    const ed = await call('PATCH', `habits/${id}`, { title: 'Stretch well', graceDays: 2, targetPerWeek: 5 });
+    expect(ed.body.habit).toMatchObject({ title: 'Stretch well', graceDays: 2, targetPerWeek: 5 });
+    expect((await call('PATCH', `habits/${id}`, { color: 'beige' })).status).toBe(400);
+    expect((await call('PATCH', `habits/${id}`, {})).status).toBe(400);
+    const paused = await call('POST', `habits/${id}/pause`);
+    expect(paused.body.habit.active).toBe(false);
+    expect(paused.body.habit.pauses).toEqual([{ from: TODAY }]);
+    expect((await call('POST', `habits/${id}/pause`)).status).toBe(400);
+    expect((await call('POST', `habits/${id}/resume`)).body.habit.active).toBe(true);
+    const del = await call('DELETE', `habits/${id}`);
+    expect(del.status).toBe(200);
+    expect((await call('GET', `habits/${id}`)).status).toBe(404);
+  });
+
+  it('ticks, skips and clears an occurrence the way the Today tab does, and moves a habit into a part for a day', async () => {
+    const { call, vault, index } = await api();
+    const done = await call('POST', 'habits/hab-workout/state', { date: TODAY, state: 'done' });
+    expect(done.status).toBe(200);
+    expect(done.body.occurrences).toEqual([{ part: null, state: 'done', line: expect.any(Number) }]);
+    const note = await vault.read(index.dailyPath(TODAY));
+    expect(note).toMatch(/- \[x\] 🏃 Morning workout 🆔 hab-workout ✅ 2026-08-26/);
+    const cleared = await call('POST', 'habits/hab-workout/state', { date: TODAY, state: 'pending' });
+    expect(cleared.body.occurrences[0].state).toBe('missed'); // the line is back to `[ ]`; a present, unticked line reads as missed (pending = no line at all)
+    expect(await vault.read(index.dailyPath(TODAY))).toMatch(/- \[ \] 🏃 Morning workout 🆔 hab-workout/);
+    const skipped = await call('POST', 'habits/hab-workout/state', { date: TODAY, state: 'skipped' });
+    expect(skipped.body.occurrences[0].state).toBe('skipped');
+    expect((await call('POST', 'habits/hab-workout/state', { date: TODAY, state: 'maybe' })).status).toBe(400);
+    const moved = await call('POST', 'habits/hab-read/move', { date: TODAY, part: 'evening' });
+    expect(moved.status).toBe(200);
+    const d = await call('GET', `day/${TODAY}`);
+    expect(d.body.habits.find((h: any) => h.id === 'hab-read').occurrences[0].part).toBe('evening');
+    expect((await call('POST', 'habits/hab-read/move', { date: TODAY, part: 'night' })).status).toBe(400);
+  });
+});
+
+describe('v2 · inbox, week, calendar, periods, horizons, goals', () => {
+  it('serves the inbox grouped like the Inbox tab', async () => {
+    const { call } = await api();
+    const r = await call('GET', 'inbox');
+    expect(r.status).toBe(200);
+    expect(r.body.inbox.map((t: any) => t.text)).toEqual(['Call the plumber', 'Renew passport']);
+    expect(r.body.loose).toEqual([{ path: '02 PROJECTS/Backlog Tasks.md', title: 'Backlog Tasks', tasks: [expect.objectContaining({ text: 'Learn Rust' })] }]);
+    expect(r.body.unscheduledProject.map((t: any) => t.text)).toContain('Get three quotes');
+  });
+
+  it('serves a week and a calendar range, with refs by default and tasks on request', async () => {
+    const { call } = await api();
+    const w = await call('GET', 'week', undefined, { anchor: TODAY });
+    expect(w.status).toBe(200);
+    expect(w.body).toMatchObject({ start: '2026-08-24', end: '2026-08-30', capacityMinutes: 360 });
+    expect(w.body.days).toHaveLength(7);
+    const tue = w.body.days.find((x: any) => x.date === '2026-08-25');
+    expect(tue.open.map((t: any) => t.text)).toContain('Fix router config');
+    expect(tue.done.map((t: any) => t.text)).toContain('Pay invoice');
+    expect(w.body.overdue.length).toBeGreaterThan(0);
+    expect((await call('GET', 'week', undefined, { anchor: 'monday' })).status).toBe(400);
+
+    const c = await call('GET', 'calendar', undefined, { from: '2026-08-24', to: '2026-08-30' });
+    expect(c.body.days).toHaveLength(7);
+    const cTue = c.body.days.find((x: any) => x.date === '2026-08-25');
+    expect(cTue).toMatchObject({ open: expect.any(Number), done: 1, openRefs: expect.any(Array), doneRefs: expect.any(Array) });
+    expect(cTue.openRefs.every((r: string) => typeof r === 'string')).toBe(true);
+    const cEmbed = await call('GET', 'calendar', undefined, { from: '2026-08-25', to: '2026-08-25', tasks: 'true' });
+    expect(cEmbed.body.days[0].doneTasks[0]).toMatchObject({ text: 'Pay invoice' });
+    expect((await call('GET', 'calendar', undefined, { from: '2026-01-01', to: '2027-12-31' })).status).toBe(400);
+    expect((await call('GET', 'calendar', undefined, { from: '2026-01-01' })).status).toBe(400);
+  });
+
+  it('serves a period, the horizons of a year, and creates a periodic note', async () => {
+    const { call, vault } = await api(HORIZON_EXTRA);
+    const q = await call('GET', 'periods/2026-Q3');
+    expect(q.status).toBe(200);
+    expect(q.body.period).toMatchObject({ key: '2026-Q3', kind: 'quarter', from: '2026-07-01', to: '2026-09-30', notePath: 'Quarterly Notes/2026-Q3.md' });
+    expect(q.body.projects.map((p: any) => p.id)).toEqual(['prj-book']);
+    expect(q.body.projects[0].health).toMatchObject({ total: 2, done: 1 });
+    expect(q.body.goals[0]).toMatchObject({ text: 'Finish the kitchen design', periodKey: '2026-Q3', progress: 0 });
+    expect(q.body.isCurrent).toBe(true);
+    const y = await call('GET', 'horizons', undefined, { year: '2026' });
+    expect(y.body.quarters).toHaveLength(4);
+    expect(y.body.months).toHaveLength(12);
+    expect(y.body.year.goals.map((g: any) => g.id)).toEqual(['gol-book26', 'gol-cert26']);
+    expect(y.body.year.goals[0]).toMatchObject({ projectIds: ['prj-book'], taskTotal: 2, taskDone: 1, progress: 0.5 });
+    expect(y.body.current).toMatchObject({ quarter: '2026-Q3', month: '2026-08' });
+    expect((await call('GET', 'periods/soon')).status).toBe(400);
+    const wk = await call('GET', 'periods/2026-W35');
+    expect(wk.body.period).toMatchObject({ kind: 'week', from: '2026-08-24', notePath: null });
+    const made = await call('POST', 'periods/2026-W35/note');
+    expect(made.status).toBe(200);
+    expect(made.body.path).toBe('Weekly Notes/2026-W35.md');
+    expect(await vault.exists('Weekly Notes/2026-W35.md')).toBe(true);
+  });
+
+  it('adds, edits, links and deletes goals', async () => {
+    const { call, vault } = await api(HORIZON_EXTRA);
+    const r = await call('POST', 'goals', { periodKey: '2026-09', text: 'Two practice tests' });
+    expect(r.status).toBe(201);
+    expect(r.body.goal).toMatchObject({ text: 'Two practice tests', periodKey: '2026-09', status: 'todo' });
+    expect(r.body.goal.id).toMatch(/^gol-/);
+    expect(await vault.read('Monthly Notes/2026-09.md')).toContain('Two practice tests');
+    const list = await call('GET', 'goals', undefined, { period: '2026-09' });
+    expect(list.body.goals.map((g: any) => g.id)).toEqual([r.body.goal.id]);
+    const ed = await call('PATCH', `goals/${r.body.goal.id}`, { status: 'done', text: 'Two practice tests passed' });
+    expect(ed.body.goal).toMatchObject({ status: 'done', text: 'Two practice tests passed', progress: 1 });
+    expect((await call('PATCH', 'goals/gol-book26', { status: 'later' })).status).toBe(400);
+    expect((await call('PATCH', 'goals/gol-nope', { status: 'done' })).status).toBe(404);
+    const link = await call('POST', 'projects/prj-kitchen/goal', { goalKey: r.body.goal.id });
+    expect(link.status).toBe(200);
+    expect(link.body.project).toMatchObject({ goalId: r.body.goal.id, period: '2026-09' });
+    const unlink = await call('POST', 'projects/prj-kitchen/goal', { goalKey: null });
+    expect(unlink.body.project.goalId).toBeNull();
+    expect((await call('POST', 'goals', { periodKey: 'someday', text: 'x' })).status).toBe(400);
+    expect((await call('DELETE', `goals/${r.body.goal.id}`)).status).toBe(200);
+    expect((await call('GET', 'goals', undefined, { period: '2026-09' })).body.goals).toEqual([]);
+  });
+});

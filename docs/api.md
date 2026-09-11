@@ -214,6 +214,57 @@ returns `{ from, to, busy, blocks: [ { taskKey, kind, start, end, index, of } ],
 focusMinutes, breakMinutes }` from the focus settings; with `date` the day's timed items are
 treated as booked.
 
+### Habits
+
+```
+GET    /habits?all=true          active habits (all=true adds paused ones and ghosts: ticks whose note is gone)
+GET    /habits/:id?history=week|month|quarter|year
+POST   /habits                   { title, schedule, targetPerWeek?, graceDays?, icon?, parts?, color? } → 201
+PATCH  /habits/:id               any of active, schedule, title, targetPerWeek (null clears), graceDays, icon, iconImage, parts, color
+DELETE /habits/:id
+POST   /habits/:id/state         { date?, state: done|skipped|missed|pending, part?, placeIn? }
+POST   /habits/:id/move          { date?, part: morning|afternoon|evening|null }
+POST   /habits/:id/pause         opens a pause span at today (the same as active: false)
+POST   /habits/:id/resume        closes it
+```
+
+A habit carries its fields (`id`, `title`, `path`, `schedule` parsed with `raw`, `active`,
+`targetPerWeek`, `graceDays`, `icon`, `iconImage`, `parts`, `color`, `created`, `pauses`,
+`removed`) and `stats`: `dueToday`, `doneToday`, `today: [ { part, state } ]`, `streak`,
+`bestStreak`, `rate7`, `rate30`, `doneThisWeek`, `scheduledThisWeek`, `days` (84 days of
+`{ date, state }`). With `?history=` one habit also carries `history: { kind, periods, cells:
+[ { period, due, done, rate, state } ], due, done, rate, streak, bestStreak, from }`.
+
+`state` writes one occurrence for a day: `done` ticks it, `skipped` marks it `[-]`, `missed` and
+`pending` both clear the tick (the line stays, as `[ ]`, and reads back as `missed`; `pending`
+is what a day without a line reports). A habit with `parts` needs `part`; `placeIn` files a
+day-level tick under a part of the day, as ticking on the Today tab does. `move` moves a
+day-level habit's line into a part of the day for that date only. Pause and resume are what
+`active: false` / `true` do; a pause with its own dates is not something Helm records.
+
+### Inbox, week, calendar
+
+`GET /inbox` → `{ inbox, loose: [ { path, title, tasks } ], unscheduledProject }` — the Inbox
+tab's three lists. `GET /week?anchor=2026-09-11` → `{ start, end, capacityMinutes, days:
+[ { date, open, done, minutes } ], overdue, unscheduledDue }`. `GET /calendar?from=&to=`
+(at most 400 days) → `{ days: [ { date, open, done, dueUnplanned, minutes, openRefs, doneRefs,
+dueUnplannedRefs } ] }`; add `&tasks=true` for `openTasks`, `doneTasks`, `dueUnplannedTasks`
+instead of refs.
+
+### Periods, horizons, goals
+
+`GET /periods/:key` (`2026`, `2026-Q3`, `2026-09`, `2026-W37`) → `{ period, goals, projects,
+projectsWithin, openTasks, doneTasks, isCurrent, isPast }`; a period is `{ key, kind, label,
+from, to, notePath }` and projects carry `health`. `GET /horizons?year=2026` → `{ year,
+quarters[4], months[12], current: { year, quarter, month, week } }`. `POST /periods/:key/note`
+creates the periodic note from the template → `{ path, period, written }`.
+
+`GET /goals?period=` lists goals `{ id, key, text, title, periodKey, status, path, line,
+projectIds, progress, taskTotal, taskDone }`. `POST /goals { periodKey, text }` → 201.
+`PATCH /goals/:id { status?: todo|done|cancelled, text? }`. `DELETE /goals/:id`.
+`POST /projects/:id/goal { goalKey: "gol-…" | null }` binds a project to a goal (and to the
+goal's period when the project has none) or unbinds it.
+
 ## Attachments
 
 Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`
