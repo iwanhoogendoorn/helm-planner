@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **The API can listen on Tailscale.** Settings → Local API → **Reachable from**: this machine
+  only (the default, unchanged), your Tailscale address (for the Helm iPhone app and other
+  devices on your tailnet — Helm finds the `100.x` address itself and falls back to loopback
+  with a notice when Tailscale is off), or every interface. The settings tab shows the URL
+  the phone should use next to the running status; docs/api.md has the Tailscale and
+  `tailscale serve` HTTPS recipes.
+- **`npm run serve:dev` serves the API over a folder, without Obsidian.** The same routes,
+  index and mutations over a filesystem vault (`src/data/fsVault.ts`), with edits on disk
+  picked up as they happen — for developing clients against a disposable seeded vault.
+
 ## 1.34.0 — 2026-09-09
 
 - **Everything that moves a task lives under one word.** The right-click menu scattered

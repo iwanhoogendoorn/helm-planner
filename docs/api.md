@@ -12,7 +12,9 @@ Settings → **Local API**:
 1. Turn on **Serve the API**. A token is generated the first time.
 2. Copy the token. Change the port if 27125 is taken.
 
-It listens on `127.0.0.1` only — never a network interface — and Obsidian has to be running.
+By default it listens on `127.0.0.1` only — no network interface — and Obsidian has to be running.
+**Reachable from** widens that to your Tailscale address or to every interface; see
+[From your phone (Tailscale)](#from-your-phone-tailscale).
 
 Base URL: `http://127.0.0.1:27125/helm/v1`
 Every request needs: `Authorization: Bearer <token>`
@@ -151,6 +153,49 @@ curl -s -X PATCH $HELM/tasks/tsk-zlecjp -H "Authorization: Bearer $TOKEN" \
 curl -s -X POST $HELM/tasks -H "Authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' -d '{"text":"Book the venue","scheduled":"2026-08-29"}'
 ```
+
+## From your phone (Tailscale)
+
+The Helm iPhone app (and anything else on another device) needs to reach Obsidian's API over a
+network. The intended way is [Tailscale](https://tailscale.com): a private WireGuard mesh between your
+own devices, so nothing is opened to the internet and nothing needs port forwarding.
+
+1. Install Tailscale on the Mac running Obsidian and on the phone; sign both into the same tailnet.
+2. Settings → **Local API** → **Reachable from** → *Tailscale (your tailnet)*. Helm finds the Mac's
+   Tailscale IPv4 (always in `100.64.0.0/10`, e.g. `100.67.202.68`) and binds to that address only —
+   your Wi-Fi or Ethernet interfaces stay closed. If Tailscale is not running, Helm says so and falls
+   back to `127.0.0.1`.
+3. The settings tab shows the URL to put in the app, e.g. `http://100.67.202.68:27125/helm/v1`, next to
+   the running status. Copy it and the token into the app.
+
+Traffic between the devices is encrypted by WireGuard, and every request still needs the token.
+*All interfaces (`0.0.0.0`)* also exists, for a LAN you control; it is plain HTTP on every network the
+Mac is on, so prefer Tailscale.
+
+**HTTPS with `tailscale serve`.** Some clients (App Transport Security on iOS, browsers) prefer TLS.
+Keep Helm on `127.0.0.1` and let Tailscale terminate HTTPS with a certificate for your machine's
+tailnet name:
+
+```bash
+tailscale serve --bg --https=443 http://127.0.0.1:27125
+# → https://<machine>.<tailnet>.ts.net/helm/v1   (Tailscale prints the exact name)
+tailscale serve status
+tailscale serve reset     # stop
+```
+
+`tailscale serve` is reachable from your tailnet only (unlike `tailscale funnel`, which is public —
+do not use that for Helm). MagicDNS and HTTPS certificates must be enabled in the tailnet's DNS
+settings.
+
+## Developing against the API without Obsidian
+
+`npm run serve:dev` serves the same API over a plain folder (`HELM_VAULT`, default
+`~/dev/helm-iphone-vault`; seed one with `HELM_VAULT=… npm run seed`). Same routes, same index and
+mutations, with a filesystem adapter standing in for Obsidian; edits made on disk are picked up. The
+token is read from, or created in, `<vault>/.helm-dev-token`. `HELM_PORT` (default 27127), `HELM_HOST`
+(default `127.0.0.1`; `0.0.0.0` or a Tailscale address to reach it from a phone) and `HELM_TODAY`
+(`YYYY-MM-DD`, to freeze the day) are the other knobs. The script refuses paths that look like a real
+vault.
 
 ## Why not the Local REST API plugin?
 

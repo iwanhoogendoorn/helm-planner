@@ -12,6 +12,7 @@ import type { TabId, UiContext } from './ui/context';
 import { HelmSettingTab } from './ui/settingsTab';
 import { openCapture } from './ui/modals/capture';
 import { randomToken, startApiServer } from './api/server';
+import { apiUrls, resolveBindHost } from './api/bind';
 import { openSearch } from './ui/modals/search';
 import { openPlanDay } from './ui/modals/planDay';
 import { openWrapUp } from './ui/modals/wrapUp';
@@ -103,11 +104,22 @@ export default class HelmPlugin extends Plugin {
 
   /* ── Local API ──────────────────────────────────────────────────────── */
 
-  private api?: { close: () => void; port: number };
+  private api?: { close: () => void; port: number; host: string };
   private apiError?: string;
 
-  apiStatus(): { running: boolean; port?: number; error?: string } {
-    return { running: this.api !== undefined, ...(this.api ? { port: this.api.port } : {}), ...(this.apiError ? { error: this.apiError } : {}) };
+  /** Running state plus the base URLs a client can use — the Tailscale one first when there is one. */
+  apiStatus(): { running: boolean; port?: number; host?: string; urls: string[]; error?: string } {
+    const urls = this.api ? apiUrls(this.api.host, this.api.port, this.interfaces()) : [];
+    return { running: this.api !== undefined, ...(this.api ? { port: this.api.port, host: this.api.host } : {}), urls, ...(this.apiError ? { error: this.apiError } : {}) };
+  }
+
+  /** What the phone would use if the API were on with the given bind — for the settings tab's preview. */
+  apiUrlsFor(bind: HelmSettings['apiBind'], port: number): string[] {
+    return apiUrls(resolveBindHost(bind, this.interfaces()).host, port, this.interfaces());
+  }
+
+  private interfaces(): ReturnType<typeof import('node:os')['networkInterfaces']> {
+    try { return (require('node:os') as typeof import('node:os')).networkInterfaces(); } catch { return {}; }
   }
 
   newApiToken(): string { return randomToken(); }
@@ -119,9 +131,15 @@ export default class HelmPlugin extends Plugin {
     this.apiError = undefined;
     if (!this.settings.apiEnabled) return;
     if (this.settings.apiToken === '') { this.apiError = 'no token'; return; }
+    const bind = resolveBindHost(this.settings.apiBind ?? 'loopback', this.interfaces());
+    if (bind.fallback) {
+      console.error(`[helm/api] ${bind.fallback}`);
+      new Notice(`Helm API: ${bind.fallback}.`);
+    }
     try {
       this.api = await startApiServer({
         port: this.settings.apiPort,
+        host: bind.host,
         token: this.settings.apiToken,
         log: (m) => console.log(`[helm/api] ${m}`),
         deps: {

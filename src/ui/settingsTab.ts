@@ -29,7 +29,8 @@ export interface SettingsHost extends Plugin {
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string };
   onSettingsChanged(): void;
   today(): string;
-  apiStatus(): { running: boolean; port?: number; error?: string };
+  apiStatus(): { running: boolean; port?: number; host?: string; urls: string[]; error?: string };
+  apiUrlsFor(bind: HelmSettings['apiBind'], port: number): string[];
   restartApi(): Promise<void>;
   newApiToken(): string;
   templateInfo(kind: PeriodKind): Promise<{ source: 'custom' | 'periodic-notes' | 'built-in'; path?: string; exists: boolean }>;
@@ -483,11 +484,14 @@ export class HelmSettingTab extends PluginSettingTab {
   private renderApi(body: HTMLElement): void {
     const s = this.host.settings;
     const state = this.host.apiStatus();
+    const bind = s.apiBind ?? 'loopback';
+    const urls = state.running ? state.urls : this.host.apiUrlsFor(bind, s.apiPort);
+    const where = state.host === '0.0.0.0' ? 'every interface' : state.host ?? (bind === 'loopback' ? '127.0.0.1' : bind);
     const g = this.group(body, {
-      icon: 'plug', title: 'Local API', subtitle: 'Let other tools on this machine read and change your tasks through Helm.',
-      chip: state.error ? { text: state.error, tone: 'warn' as const } : state.running ? { text: `on · port ${state.port ?? s.apiPort}`, tone: 'ok' as const } : { text: 'off', tone: 'pending' as const },
+      icon: 'plug', title: 'Local API', subtitle: 'Let other tools — scripts, an AI agent, the Helm iPhone app — read and change your tasks through Helm.',
+      chip: state.error ? { text: state.error, tone: 'warn' as const } : state.running ? { text: `on · ${where}:${state.port ?? s.apiPort}`, tone: 'ok' as const } : { text: 'off', tone: 'pending' as const },
     });
-    g.content.createEl('p', { cls: 'helm-hint', text: 'Helm serves JSON on 127.0.0.1 only — never a network interface — and every request must carry the token below. Calls go through the same code the buttons use, so ids, daily-note mirrors and subtasks stay consistent.' });
+    g.content.createEl('p', { cls: 'helm-hint', text: 'Helm serves JSON on this machine only unless you choose otherwise below, and every request must carry the token. Calls go through the same code the buttons use, so ids, daily-note mirrors and subtasks stay consistent.' });
     new Setting(g.content).setName('Serve the API').setDesc('Starts when you switch it on, and whenever Obsidian starts.')
       .addToggle((t) => t.setValue(s.apiEnabled).onChange((v) => void (async () => {
         if (v && s.apiToken === '') s.apiToken = this.host.newApiToken();
@@ -503,6 +507,15 @@ export class HelmSettingTab extends PluginSettingTab {
         s.apiPort = n;
         await this.host.saveSettings();
         await this.host.restartApi();
+        this.renderBody();
+      })()));
+    new Setting(g.content).setName('Reachable from')
+      .setDesc('This Mac only is the safe default. Tailscale: reachable from your other Tailscale devices, e.g. the Helm iPhone app. Traffic is encrypted by WireGuard; the token is still required. All interfaces: every network this machine is on — only behind a firewall you trust.')
+      .addDropdown((d) => d.addOptions({ loopback: 'This machine only (127.0.0.1)', tailscale: 'Tailscale (your tailnet)', all: 'All interfaces (0.0.0.0)' }).setValue(bind).onChange((v) => void (async () => {
+        s.apiBind = v as HelmSettings['apiBind'];
+        await this.host.saveSettings();
+        await this.host.restartApi();
+        this.renderBody();
       })()));
     new Setting(g.content).setName('Token').setDesc('Send it as “Authorization: Bearer <token>”. Treat it like a password.')
       .addText((t) => { t.setValue(s.apiToken).setDisabled(true); t.inputEl.addClass('helm-api-token'); })
@@ -514,8 +527,17 @@ export class HelmSettingTab extends PluginSettingTab {
         this.renderBody();
         new Notice('New token — anything using the old one has to be updated.');
       })()));
-    const base = `http://127.0.0.1:${state.port ?? s.apiPort}/helm/v1`;
+    const base = urls[0] ?? `http://127.0.0.1:${state.port ?? s.apiPort}/helm/v1`;
     const token = s.apiToken || '<token>';
+    const urlSetting = new Setting(g.content).setName(state.running ? 'Base URL' : 'Base URL (when on)').setDesc(bind === 'loopback' ? 'What a script on this Mac uses.' : 'What the phone (or another device) uses; the Tailscale address is listed first.');
+    const list = urlSetting.controlEl.createEl('div', { cls: 'helm-api-urls' });
+    for (const u of urls) {
+      const row = list.createEl('div', { cls: 'helm-api-url' });
+      row.createEl('code', { text: u });
+      const copy = row.createEl('button', { text: 'Copy' });
+      copy.addEventListener('click', () => { void navigator.clipboard.writeText(u); new Notice('URL copied.'); });
+    }
+    if (bind === 'tailscale' && !urls.some((u) => /\/\/100\./.test(u))) list.createEl('div', { cls: 'helm-hint', text: 'No Tailscale address found on this machine — is Tailscale running? Until it is, Helm listens on 127.0.0.1.' });
     g.content.createEl('p', { cls: 'helm-hint', text: 'Try it from a terminal:' });
     g.content.createEl('pre', { cls: 'helm-api-example', text: [
       `curl -s ${base}/health -H "Authorization: Bearer ${token}"`,
@@ -523,7 +545,7 @@ export class HelmSettingTab extends PluginSettingTab {
       `curl -s -X POST ${base}/tasks -H "Authorization: Bearer ${token}" -H 'content-type: application/json' \\`,
       `  -d '{"text":"Ring the plumber","scheduled":"${this.host.today()}","part":"afternoon"}'`,
     ].join('\n') });
-    g.content.createEl('p', { cls: 'helm-hint', text: 'Every route is listed in docs/api.md in the Helm repository.' });
+    g.content.createEl('p', { cls: 'helm-hint', text: 'Every route is listed in docs/api.md in the Helm repository; the “From your phone” section there covers Tailscale and HTTPS.' });
   }
 
   private renderAbout(body: HTMLElement): void {
