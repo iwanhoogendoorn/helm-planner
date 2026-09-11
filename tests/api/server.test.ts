@@ -8,7 +8,7 @@ afterEach(() => { stop?.(); stop = undefined; });
 
 async function serve(token = randomToken(), host?: string) {
   const s = await setup();
-  const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', written: () => [] };
+  const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', written: () => [], read: (p) => s.vault.read(p) };
   const server = await startApiServer({ port: 0, token, deps, ...(host ? { host } : {}) }); // port 0: let the OS pick a free one
   stop = server.close;
   return { ...s, token, server, base: `http://${server.host}:${server.port}/helm/v1` };

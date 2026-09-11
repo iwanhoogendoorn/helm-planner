@@ -11,7 +11,7 @@ export async function api(extra: Record<string, string> = {}, settings: Partial<
   const origWrite = s.vault.write.bind(s.vault);
   s.vault.write = async (p: string, c: string) => { written.push(p); await origWrite(p, c); };
   const deps: ApiDeps = {
-    index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', vaultName: 'Test vault',
+    index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', vaultName: 'Test vault', read: (p) => s.vault.read(p),
     written: () => { const w = [...new Set(written)]; written.length = 0; return w; },
   };
   const call = (method: string, path: string, body?: unknown, query: Record<string, string> = {}): Promise<{ status: number; body: any }> =>
@@ -361,5 +361,163 @@ describe('v2 · inbox, week, calendar, periods, horizons, goals', () => {
     expect((await call('POST', 'goals', { periodKey: 'someday', text: 'x' })).status).toBe(400);
     expect((await call('DELETE', `goals/${r.body.goal.id}`)).status).toBe(200);
     expect((await call('GET', 'goals', undefined, { period: '2026-09' })).body.goals).toEqual([]);
+  });
+});
+
+describe('v2 · task extras', () => {
+  it('patches time blocks, progress and recurrence, and refuses a parent change', async () => {
+    const { call, vault } = await api();
+    const t = (await call('POST', 'tasks', { text: 'Write the intro', scheduled: TODAY })).body.task;
+    const timed = await call('PATCH', `tasks/${t.id}`, { time: '10:00', timeEnd: '10:45' });
+    expect(timed.body.task).toMatchObject({ time: '10:00', timeEnd: '10:45' }); // the line keeps its section; a day view places it by time
+    expect((await call('PATCH', `tasks/${t.id}`, { time: null })).body.task.time).toBeNull();
+    expect((await call('PATCH', `tasks/${t.id}`, { time: 'ten' })).status).toBe(400);
+    const prog = await call('PATCH', `tasks/${t.id}`, { progress: 40 });
+    expect(prog.body.task).toMatchObject({ progress: 40, status: 'doing' });
+    expect((await call('PATCH', `tasks/${t.id}`, { progress: 100 })).body.task.status).toBe('done');
+    expect((await call('PATCH', `tasks/${t.id}`, { progress: 150 })).status).toBe(400);
+    const rec = await call('PATCH', `tasks/${t.id}`, { recurrence: 'every week on monday' });
+    expect(rec.body.task).toMatchObject({ recurrence: 'every week on monday', recurrenceParsed: { frequency: 'weekly', weekdays: [1] } });
+    expect(await vault.read(t.path)).toContain('🔁 every week on monday');
+    expect((await call('PATCH', `tasks/${t.id}`, { recurrence: 'whenever' })).status).toBe(400);
+    expect((await call('PATCH', `tasks/${t.id}`, { recurrence: null })).body.task.recurrence).toBeNull();
+    expect((await call('PATCH', `tasks/${t.id}`, { parentId: 'tsk-0001' })).status).toBe(400);
+  });
+
+  it('stops a task repeating', async () => {
+    const { call } = await api();
+    expect((await call('POST', 'tasks/tsk-0001/stop-repeating')).status).toBe(400); // does not repeat
+    const r = await call('POST', 'tasks/tsk-0002/stop-repeating');
+    expect(r.status).toBe(200);
+    expect(r.body.task.recurrence).toBeNull();
+  });
+
+  it('follows a task up on another day', async () => {
+    const { call, index } = await api();
+    const r = await call('POST', 'tasks/tsk-0002/followup', { date: '2026-08-28', part: 'morning', text: 'Chapter 2 — second pass', addTag: true, markOriginalDone: false });
+    expect(r.status).toBe(201);
+    expect(r.body.followUp).toMatchObject({ text: 'Chapter 2 — second pass #followup', blockedBy: ['tsk-0002'], scheduled: '2026-08-28' });
+    expect(r.body.followUp.project.id).toBe('prj-book');
+    expect(index.taskById('tsk-0002')!.status).toBe('todo');
+    expect((await call('POST', 'tasks/tsk-0002/followup', {})).status).toBe(400);
+    await expect(call('POST', 'tasks/tsk-0001/followup', { date: '2026-08-28' })).rejects.toThrow(/subtasks/); // Helm refuses; the server turns that into a 500
+  });
+
+  it('plans a task into a time slot on a day', async () => {
+    const { call } = await api();
+    const r = await call('POST', 'tasks/tsk-0002/plan-into', { date: '2026-08-27', time: { start: '14:00', end: '15:30' }, effortMinutes: 90 });
+    expect(r.status).toBe(200);
+    expect(r.body.task).toMatchObject({ scheduled: '2026-08-27', time: '14:00', timeEnd: '15:30', effortMinutes: 90 });
+    expect((await call('POST', 'tasks/tsk-0002/plan-into', { date: '2026-08-27' })).status).toBe(400);
+  });
+
+  it('turns a task into a project, carrying what was attached', async () => {
+    const { call, index } = await api({ '81 AI/Cert research.md': '---\nhelm-task: tsk-grow\n---\n# Cert research\n' });
+    const t = (await call('POST', 'tasks', { text: 'Build the cert lab [OCI docs](https://docs.example.com/oci)', scheduled: TODAY })).body.task;
+    await index.rebuild();
+    const grow = (await call('PATCH', `tasks/${t.id}`, { text: 'Build the cert lab [OCI docs](https://docs.example.com/oci)' })).body.task; // an id it can be attached by
+    void grow;
+    const r = await call('POST', `tasks/${t.id}/project`, { area: 'Oracle', status: 'active' });
+    expect(r.status).toBe(201);
+    expect(r.body.project).toMatchObject({ title: 'Build the cert lab', area: 'Oracle', status: 'active', links: [{ url: 'https://docs.example.com/oci', label: 'OCI docs' }] });
+    expect(r.body.carried).toMatchObject({ links: 1 });
+    expect((await call('POST', 'tasks/tsk-nope/project', {})).status).toBe(404);
+    expect((await call('POST', 'tasks/tsk-0002/project', { status: 'sideways' })).status).toBe(400);
+  });
+
+  it('adds and removes links on a task and reorders subtasks', async () => {
+    const { call } = await api();
+    const added = await call('POST', 'tasks/tsk-0002/links', { url: 'https://example.com/spec', label: 'Spec' });
+    expect(added.body.task.links).toEqual([{ url: 'https://example.com/spec', label: 'Spec' }]);
+    expect((await call('POST', 'tasks/tsk-0002/links', { url: 'not a url' })).status).toBe(400);
+    const removed = await call('DELETE', 'tasks/tsk-0002/links', { url: 'https://example.com/spec' });
+    expect(removed.body.task.links).toEqual([]);
+
+    const parent = (await call('POST', 'tasks', { text: 'Ship the draft', scheduled: TODAY })).body.task;
+    const a = (await call('POST', `tasks/${parent.id}/subtasks`, { text: 'A' })).body.task;
+    const b = (await call('POST', `tasks/${parent.id}/subtasks`, { text: 'B' })).body.task;
+    const r = await call('POST', `tasks/${b.ref}/subtasks/reorder`, { beforeRef: a.ref });
+    expect(r.status).toBe(200);
+    expect((await call('GET', `tasks/${parent.id}`)).body.children.map((c: any) => c.text)).toEqual(['B', 'A']);
+    expect((await call('POST', `tasks/${parent.id}/subtasks/reorder`, { beforeRef: null })).status).toBe(400); // not a subtask
+  });
+});
+
+describe('v2 · projects', () => {
+  it('serves the whole project page: phases with task trees, loose tasks, children, parent, goal, log, attachments', async () => {
+    const { call, m } = await api({
+      ...HORIZON_EXTRA,
+      '02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md': `---\ntitle: Oracle Book Writing\ntype: project\nstatus: active\npriority: high\nid: prj-book\nperiod: 2026-Q3\ngoal: gol-book26\n---\n\n# Oracle Book Writing\n\n## Phase: Outline 📅 2026-09-15\n\n- [ ] Draft chapter list 🆔 tsk-0001 ⏫\n\t- [x] Collect diagrams ✅ 2026-08-20\n- [x] Kick-off call ✅ 2026-08-10\n\n## Tasks\n\n- [ ] Buy reference books ⏱️ 45m\n\n## Log\n\n- 2026-08-20 — Outline approved.\n- 2026-08-22 — Editor booked.\n`,
+      '81 AI/Book plan.md': '---\nhelm-project: prj-book\n---\n# Book plan\n',
+    });
+    const r = await call('GET', 'projects/prj-book');
+    expect(r.status).toBe(200);
+    const p = r.body;
+    expect(p.phases).toHaveLength(1);
+    expect(p.phases[0]).toMatchObject({ slug: 'outline', title: 'Outline', due: '2026-09-15', taskCount: 3, doneCount: 2, state: 'active' }); // phase progress counts subtasks too
+    expect(p.phases[0].tasks.map((t: any) => t.text)).toEqual(['Draft chapter list', 'Kick-off call']);
+    expect(p.phases[0].tasks[0].children[0].text).toBe('Collect diagrams');
+    expect(p.looseTasks.map((t: any) => t.text)).toEqual(['Buy reference books']);
+    expect(p.parent).toBeNull();
+    expect(p.goal).toMatchObject({ id: 'gol-book26' });
+    expect(p.log).toEqual([{ date: '2026-08-20', text: 'Outline approved.', line: expect.any(Number) }, { date: '2026-08-22', text: 'Editor booked.', line: expect.any(Number) }]);
+    expect(p.attachments.notes.map((n: any) => n.path)).toEqual(['81 AI/Book plan.md']);
+    expect(p.nextAction.text).toBe('Draft chapter list');
+    expect(p.health).toMatchObject({ total: 4, done: 2, open: 2, flags: expect.any(Array) }); // health counts subtasks too
+    const child = await call('GET', 'projects/prj-oracle');
+    expect(child.body.children.map((c: any) => c.id)).toEqual(['prj-cert']);
+    expect(child.body.children[0].health).toBeDefined();
+    expect((await call('GET', 'projects/prj-cert')).body.parent).toEqual({ id: 'prj-oracle', title: 'Oracle' });
+    void m;
+    expect((await call('GET', 'projects/prj-nope')).status).toBe(404);
+  });
+
+  it('pins, orders, binds a goal and refuses a parent change on PATCH; reorders the list', async () => {
+    const { call } = await api(HORIZON_EXTRA);
+    const r = await call('PATCH', 'projects/prj-kitchen', { pinned: true, order: 3, goal: 'gol-cert26' });
+    expect(r.body.project).toMatchObject({ pinned: true, order: 3, goalId: 'gol-cert26' });
+    expect((await call('GET', 'projects')).body.projects[0].id).toBe('prj-kitchen'); // pinned first
+    expect((await call('PATCH', 'projects/prj-kitchen', { goal: null })).body.project.goalId).toBeNull();
+    expect((await call('PATCH', 'projects/prj-kitchen', { goal: 'gol-nope' })).status).toBe(404);
+    expect((await call('PATCH', 'projects/prj-kitchen', { pinned: 'yes' })).status).toBe(400);
+    expect((await call('PATCH', 'projects/prj-kitchen', { parentId: 'prj-oracle' })).status).toBe(400);
+    const order = await call('POST', 'projects/reorder', { ids: ['prj-cert', 'prj-book'] });
+    expect(order.status).toBe(200);
+    expect((await call('GET', 'projects/prj-cert')).body.order).toBe(1);
+    expect((await call('GET', 'projects/prj-book')).body.order).toBe(2);
+    expect((await call('POST', 'projects/reorder', { ids: ['prj-nope'] })).status).toBe(404);
+  });
+
+  it('renames and deletes phases, appends to the log, and manages links and related tasks', async () => {
+    const { call, vault } = await api();
+    const ren = await call('PATCH', 'projects/prj-book/phases/outline', { title: 'Outline v2', due: null });
+    expect(ren.status).toBe(200);
+    expect(ren.body.project.phases[0]).toMatchObject({ title: 'Outline v2', due: null });
+    expect((await call('PATCH', 'projects/prj-book/phases/outline-v2', {})).status).toBe(400); // the slug follows the title
+    expect((await call('PATCH', 'projects/prj-book/phases/nope', { title: 'x' })).status).toBe(404);
+    const del = await call('DELETE', 'projects/prj-book/phases/writing');
+    expect(del.status).toBe(200);
+    expect(del.body.carried).toBe(2);
+    expect((await call('GET', 'projects/prj-book')).body.phases.map((p: any) => p.title)).toEqual(['Outline v2']);
+
+    const log = await call('POST', 'projects/prj-book/log', { text: 'Reviewed the outline.' });
+    expect(log.status).toBe(201);
+    expect(log.body.log).toEqual([{ date: TODAY, text: 'Reviewed the outline.', line: expect.any(Number) }]);
+    expect(await vault.read('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')).toContain(`- ${TODAY} — Reviewed the outline.`);
+    expect((await call('POST', 'projects/prj-book/log', {})).status).toBe(400);
+
+    const link = await call('POST', 'projects/prj-book/links', { url: 'https://publisher.example.com', label: 'Publisher' });
+    expect(link.body.links).toEqual([{ url: 'https://publisher.example.com', label: 'Publisher' }]);
+    const unlink = await call('DELETE', 'projects/prj-book/links', { url: 'https://publisher.example.com' });
+    expect(unlink.body.links).toEqual([]);
+
+    const rel = await call('POST', 'projects/prj-kitchen/related', { ref: 'tsk-0001' });
+    expect(rel.status).toBe(200);
+    expect(rel.body).toMatchObject({ taskId: 'tsk-0001', relatedTaskIds: ['tsk-0001'] });
+    expect((await call('GET', 'projects/prj-kitchen')).body.relatedTaskIds).toEqual(['tsk-0001']);
+    expect((await call('DELETE', 'projects/prj-kitchen/related/tsk-nope')).status).toBe(404);
+    const unrel = await call('DELETE', 'projects/prj-kitchen/related/tsk-0001');
+    expect(unrel.body.relatedTaskIds).toEqual([]);
+    expect((await call('GET', 'projects/prj-book/attachments')).body).toEqual({ notes: [], drawings: [] });
   });
 });

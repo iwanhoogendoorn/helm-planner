@@ -150,6 +150,7 @@ export default class HelmPlugin extends Plugin {
           version: this.manifest.version,
           written: () => this.vault.takeWrites(),
           vaultName: this.app.vault.getName(),
+          read: (path) => this.vault.read(path),
         },
       });
     } catch (e) {

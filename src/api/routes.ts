@@ -11,8 +11,11 @@ import { compareProjects, isOpen, plannedDate } from '../data/planner';
 import { profileFor, parseAssignment, type Assignment } from '../core/profiles';
 import { plainLabel } from '../core/label';
 import { parsePeriod } from '../core/periods';
-import { ctxOf, healthOf, projectJson, taskDetailJson, taskJson, type ApiDeps, type Ctx } from './json';
+import { attachmentsJson, ctxOf, goalJson, healthJson, healthOf, projectJson, refOf, taskDetailJson, taskJson, taskTree, type ApiDeps, type Ctx } from './json';
 import { findGoal, handleV2 } from './v2';
+import { parseProjectLog } from '../core/project';
+import { formatRecurrence, parseRecurrence } from '../core/recurrence';
+import { normaliseLink } from '../core/links';
 
 export type { ApiDeps } from './json';
 
@@ -123,6 +126,17 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       return t ? ok(taskDetailJson(t, d)) : missing(`No task ${ref}`);
     }
     if (method === 'POST' && ref === undefined) return createTask(body, d);
+    if (ref !== undefined && sub === 'subtasks' && parts[3] === 'reorder' && method === 'POST') {
+      const t = findTask(ref, d);
+      if (!t) return missing(`No task ${ref}`);
+      if (!t.parentKey) return bad('Only a subtask can be reordered among its siblings');
+      const beforeRef = has(body, 'beforeRef') ? body['beforeRef'] : body['before'];
+      const before = beforeRef === null || beforeRef === undefined ? undefined : findTask(String(beforeRef), d);
+      if (beforeRef !== null && beforeRef !== undefined && !before) return missing(`No task ${String(beforeRef)}`);
+      await d.mutations.reorderSubtask(t.key, before?.key);
+      const parent = d.index.task(t.parentKey);
+      return ok({ task: taskJson(findTask(ref, d) ?? t, d), siblings: (parent?.childKeys ?? []).map((k) => d.index.task(k)).filter((x): x is Task => x !== undefined).map(refOf), written: d.written() });
+    }
     if (ref !== undefined && sub === 'subtasks' && method === 'POST') {
       const parent = findTask(ref, d);
       if (!parent) return missing(`No task ${ref}`);
@@ -138,6 +152,12 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       if (!steps.length) return bad('steps must be a list of texts');
       const made2 = await d.mutations.addSteps(parent.key, steps, num(body['effortMinutes']));
       return made({ tasks: made2.map((t) => taskJson(t, d)), written: d.written() });
+    }
+    if (ref !== undefined && sub !== undefined && parts.length === 3) {
+      const t = findTask(ref, d);
+      if (!t) return missing(`No task ${ref}`);
+      const r = await taskAction(t, sub, method, body, d);
+      if (r) return r;
     }
     if (ref !== undefined && sub === undefined && (method === 'PATCH' || method === 'PUT')) return patchTask(ref, body, d);
     if (ref !== undefined && sub === undefined && method === 'DELETE') {
@@ -201,6 +221,73 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       const r = await d.mutations.addPhaseWithTasks(p.id, title, tasks, num(body['effortMinutes']));
       return made({ phase: { id: r.phaseId, title }, tasks: r.tasks.map((t) => taskJson(t, d)), written: d.written() });
     }
+    if (method === 'POST' && ref === 'reorder' && sub === undefined) {
+      const ids = strList(body['ids']);
+      if (!ids.length) return bad('ids must be a list of project ids');
+      const unknown = ids.filter((id) => !d.index.project(id));
+      if (unknown.length) return missing(`No project ${unknown[0]}`);
+      await d.mutations.setProjectOrder(ids);
+      return ok({ order: ids, written: d.written() });
+    }
+    if (ref !== undefined && sub === 'phases' && parts[3] !== undefined && (method === 'PATCH' || method === 'PUT' || method === 'DELETE')) {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const slug = parts[3];
+      const ph = p.phases.find((x) => x.slug === slug || x.id === slug || x.id === `${p.id}#${slug}`);
+      if (!ph) return missing(`No phase ${slug} in ${p.id}`);
+      if (method === 'DELETE') {
+        const carried = await d.mutations.deletePhase(p.id, ph.id);
+        return ok({ deleted: ph.id, carried, written: d.written() });
+      }
+      const title = str(body['title']) ?? ph.title;
+      if (has(body, 'due') && body['due'] !== null && !day(body['due'])) return bad('due must be a date like 2026-09-30, or null to clear it');
+      if (!str(body['title']) && !has(body, 'due')) return bad('Nothing to change');
+      await d.mutations.renamePhase(p.id, ph.id, title, has(body, 'due') ? (body['due'] === null ? null : day(body['due'])) : undefined);
+      const after = d.index.project(p.id);
+      return ok({ project: after ? projectJson(after, d, { health: true }) : null, written: d.written() });
+    }
+    if (method === 'POST' && ref !== undefined && sub === 'log') {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const text = str(body['text']);
+      if (!text) return bad('A log entry needs text');
+      await d.mutations.appendLog(p.id, text);
+      return made({ log: parseProjectLog(await d.read(p.path)), written: d.written() });
+    }
+    if (ref !== undefined && sub === 'links' && (method === 'POST' || method === 'DELETE')) {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const url = str(body['url']) ?? req.query['url'];
+      if (!url) return bad('Send the url');
+      if (method === 'POST') {
+        const link = normaliseLink(url, str(body['label']) ?? '');
+        if (!link) return bad('url must be a web address');
+        await d.mutations.addProjectLink(p.id, link.url, link.label);
+      } else await d.mutations.removeProjectLink(p.id, url);
+      return ok({ links: d.index.project(p.id)?.links ?? [], written: d.written() });
+    }
+    if (method === 'POST' && ref !== undefined && sub === 'related') {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const tref = str(body['ref']) ?? str(body['taskId']);
+      if (!tref) return bad('Send the task ref');
+      const t = findTask(tref, d);
+      if (!t) return missing(`No task ${tref}`);
+      const id = await d.mutations.linkTaskToProject(p.id, t.key);
+      return ok({ taskId: id, relatedTaskIds: d.index.project(p.id)?.relatedTaskIds ?? [], written: d.written() });
+    }
+    if (method === 'DELETE' && ref !== undefined && sub === 'related' && parts[3] !== undefined) {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const taskId = parts[3];
+      if (!p.relatedTaskIds.includes(taskId)) return missing(`${taskId} is not a related task of ${p.id}`);
+      await d.mutations.unlinkTaskFromProject(p.id, taskId);
+      return ok({ relatedTaskIds: d.index.project(p.id)?.relatedTaskIds ?? [], written: d.written() });
+    }
+    if (method === 'GET' && ref !== undefined && sub === 'attachments') {
+      const p = d.index.project(ref);
+      return p ? ok(attachmentsJson({ kind: 'project', id: p.id, title: p.title }, d)) : missing(`No project ${ref}`);
+    }
     if (method === 'POST' && ref !== undefined && sub === 'goal') {
       const p = d.index.project(ref);
       if (!p) return missing(`No project ${ref}`);
@@ -222,7 +309,7 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
     }
     if (method === 'GET' && ref !== undefined && sub === undefined) {
       const p = d.index.project(ref);
-      return p ? ok(projectJson(p, d, { health: true })) : missing(`No project ${ref}`);
+      return p ? ok(await projectDetailJson(p, d)) : missing(`No project ${ref}`);
     }
     if (method === 'POST' && ref === undefined) {
       const title = str(body['title']);
@@ -265,6 +352,15 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       if (has(body, 'period')) fields.period = str(body['period']) ?? '';
       if (has(body, 'due')) fields.due = day(body['due']) ?? null;
       if (has(body, 'start')) fields.start = day(body['start']) ?? null;
+      if (has(body, 'pinned')) { if (typeof body['pinned'] !== 'boolean') return bad('pinned must be true or false'); fields.pinned = body['pinned']; }
+      if (has(body, 'order')) { const n = body['order'] === null ? null : num(body['order']); if (n === undefined) return bad('order must be a number or null'); fields.order = n; }
+      if (has(body, 'goal')) {
+        const g = body['goal'] === null ? null : str(body['goal']);
+        if (g === undefined) return bad('goal must be a goal id or null');
+        if (g !== null && !findGoal(g, d)) return missing(`No goal ${g}`);
+        fields.goal = g === null ? null : findGoal(g, d)!.id;
+      }
+      if (has(body, 'parentId')) return bad('parentId cannot be changed over the API: Helm derives a project\'s parent from its folder; move the folder instead');
       if (Object.keys(fields).length === 0) return bad('Nothing to change');
       await d.mutations.setProjectFields(p.id, fields);
       const after = d.index.project(p.id);
@@ -282,6 +378,87 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
 
   const v2 = await handleV2(req, d);
   return v2 ?? missing(`No route ${req.path}`);
+}
+
+/** `POST /tasks/:id/<action>` and the link routes. Undefined when `sub` is not one of them. */
+async function taskAction(t: Task, sub: string, method: string, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
+  if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'task', key: t.key, ...(t.id ? { id: t.id } : {}), title: t.text }, d));
+  if (sub === 'stop-repeating' && method === 'POST') {
+    if (!t.recurrence) return bad('This task does not repeat');
+    await d.mutations.stopRepeating(t.key);
+    return ok({ task: taskJson(findTask(refOf(t), d) ?? t, d), written: d.written() });
+  }
+  if (sub === 'followup' && method === 'POST') {
+    const date = day(body['date']);
+    if (!date) return bad('A follow-up needs a date like 2026-09-15');
+    const part = str(body['part']);
+    if (part && !PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
+    const r = await d.mutations.followUp(t.key, { date, ...(str(body['text']) ? { text: str(body['text'])! } : {}), ...(part ? { part: part as DayPart } : {}), markOriginalDone: body['markOriginalDone'] === true, addTag: body['addTag'] === true, ...fieldsFrom(body) });
+    const made2 = findTask(r.followUpId, d);
+    return made({ followUp: made2 ? taskJson(made2, d) : { id: r.followUpId }, original: taskJson(findTask(r.id, d) ?? t, d), written: d.written() });
+  }
+  if (sub === 'plan-into' && method === 'POST') {
+    const date = day(body['date']);
+    if (!date) return bad('plan-into needs a date like 2026-09-15');
+    const time = asRecord(body['time']);
+    const start = str(time['start']) ?? str(body['time']);
+    const end = str(time['end']) ?? str(body['timeEnd']);
+    if (!start || !end || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return bad('time must be { start: "HH:MM", end: "HH:MM" }');
+    const eff = num(body['effortMinutes']) ?? t.effortMinutes ?? d.settings().defaultEffortMinutes;
+    await d.mutations.planInto(t.key, date, { start, end }, eff);
+    return ok({ task: taskJson(findTask(refOf(t), d) ?? t, d), written: d.written() });
+  }
+  if (sub === 'project' && method === 'POST') {
+    const status = str(body['status']) ?? 'active';
+    if (!PROJECT_STATUSES.includes(status as ProjectStatus)) return bad(`status must be one of ${PROJECT_STATUSES.join(', ')}`);
+    const priority = str(body['priority']) ?? 'normal';
+    if (!PROJECT_PRIORITIES.includes(priority as ProjectPriority)) return bad(`priority must be one of ${PROJECT_PRIORITIES.join(', ')}`);
+    if (str(body['parentId']) && !d.index.project(str(body['parentId'])!)) return missing(`No project ${str(body['parentId'])}`);
+    const r = await d.mutations.projectFromTask(t.key, {
+      ...(str(body['title']) ? { title: str(body['title'])! } : {}),
+      status: status as ProjectStatus, priority: priority as ProjectPriority,
+      ...(str(body['area']) ? { area: str(body['area'])! } : {}),
+      ...(str(body['parentId']) ? { parentId: str(body['parentId'])! } : {}),
+      ...(str(body['period']) ? { period: str(body['period'])! } : {}),
+      ...(day(body['due']) ? { due: day(body['due'])! } : {}),
+    });
+    const fresh = d.index.project(r.project.id) ?? r.project;
+    return made({ project: projectJson(fresh, d, { health: true }), carried: r.carried, written: d.written() });
+  }
+  if (sub === 'links' && (method === 'POST' || method === 'DELETE')) {
+    const url = str(body['url']);
+    if (!url) return bad('Send the url');
+    if (method === 'POST') {
+      const link = normaliseLink(url, str(body['label']) ?? '');
+      if (!link) return bad('url must be a web address');
+      await d.mutations.addLink(t.key, link.url, link.label);
+    } else await d.mutations.removeLink(t.key, url);
+    return ok({ task: taskJson(findTask(refOf(t), d) ?? t, d), written: d.written() });
+  }
+  return undefined;
+}
+
+/** The whole project, as the project page reads it. */
+async function projectDetailJson(p: Project, d: Ctx): Promise<Record<string, unknown>> {
+  const snap = d.index.snapshot;
+  const h = healthOf(p, d);
+  const tops = (keys: string[]): Record<string, unknown>[] => keys.map((k) => snap.tasks.get(k)).filter((t): t is Task => t !== undefined && !t.parentKey).map((t) => taskTree(t, d));
+  const parent = p.parentId ? d.index.project(p.parentId) : undefined;
+  const goal = p.goalId ? findGoal(p.goalId, d) : undefined;
+  let log: ReturnType<typeof parseProjectLog> = [];
+  try { log = parseProjectLog(await d.read(p.path)); } catch { /* the note is gone; the index will catch up */ }
+  return {
+    ...projectJson(p, d, { health: true }),
+    phases: p.phases.map((ph) => { const pp = h.phaseProgress.find((x) => x.phase.id === ph.id); return { id: ph.id, slug: ph.slug, title: ph.title, due: ph.due ?? null, links: ph.links, taskCount: pp?.total ?? ph.taskKeys.length, doneCount: pp?.done ?? 0, state: pp?.state ?? 'planned', tasks: tops(ph.taskKeys) }; }),
+    looseTasks: tops(p.looseTaskKeys),
+    children: p.childIds.map((id) => d.index.project(id)).filter((c): c is Project => c !== undefined).map((c) => projectJson(c, d, { health: true })),
+    parent: parent ? { id: parent.id, title: parent.title } : null,
+    goal: goal ? goalJson(goal, d) : null,
+    attachments: attachmentsJson({ kind: 'project', id: p.id, title: p.title }, d),
+    log,
+    nextAction: h.nextAction ? taskJson(h.nextAction, d) : null,
+    health: healthJson(h, d),
+  };
 }
 
 export function listTasks(q: Record<string, string>, d: Ctx): Record<string, unknown>[] {
@@ -380,7 +557,40 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Pr
     await d.mutations.moveToProject(findTask(ref, d)!.key, projectId, str(body['phaseId']));
     touched = true;
   }
+  if (has(body, 'parentId')) return bad('parentId cannot be changed over the API; delete the task and add it under the other one, or move it with projectId');
+  if (has(body, 'progress')) {
+    const pr = body['progress'] === null ? undefined : num(body['progress']);
+    if (body['progress'] !== null && (pr === undefined || pr < 0 || pr > 100)) return bad('progress must be 0–100, or null to clear it');
+    await d.mutations.setProgress(findTask(ref, d)!.key, pr);
+    touched = true;
+  }
+  if (has(body, 'recurrence')) {
+    if (body['recurrence'] === null) { await d.mutations.stopRepeating(findTask(ref, d)!.key); touched = true; }
+    else {
+      const raw = str(body['recurrence']);
+      const r = raw ? parseRecurrence(raw) : undefined;
+      if (!r || !r.parsed) return bad('recurrence must be a rule like "every week on monday", or null to stop repeating');
+      await d.mutations.updateTask(findTask(ref, d)!.key, { recurrence: { ...r, raw: formatRecurrence(r) } });
+      touched = true;
+    }
+  }
   const patch: Record<string, unknown> = {};
+  if (has(body, 'time')) {
+    if (body['time'] === null) patch['time'] = undefined;
+    else {
+      const start = str(body['time']);
+      if (!start || !/^\d{2}:\d{2}$/.test(start)) return bad('time must be HH:MM, or null to clear the block');
+      const end = str(body['timeEnd']);
+      if (end && !/^\d{2}:\d{2}$/.test(end)) return bad('timeEnd must be HH:MM');
+      patch['time'] = { start, ...(end ? { end } : {}) };
+    }
+  } else if (str(body['timeEnd'])) {
+    const cur = findTask(ref, d)!.time;
+    if (!cur) return bad('timeEnd needs a time to go with it');
+    const end = str(body['timeEnd'])!;
+    if (!/^\d{2}:\d{2}$/.test(end)) return bad('timeEnd must be HH:MM');
+    patch['time'] = { start: cur.start, end };
+  }
   if (str(body['text'])) patch['text'] = str(body['text']);
   if (has(body, 'due')) patch['due'] = body['due'] === null ? undefined : day(body['due']);
   if (has(body, 'effortMinutes')) {

@@ -10,7 +10,7 @@ async function api() {
   const origWrite = s.vault.write.bind(s.vault);
   s.vault.write = async (p: string, c: string) => { written.push(p); await origWrite(p, c); };
   const deps: ApiDeps = {
-    index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9',
+    index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', read: (p) => s.vault.read(p),
     written: () => { const w = [...new Set(written)]; written.length = 0; return w; },
   };
   const call = (method: string, path: string, body?: unknown, query: Record<string, string> = {}): Promise<{ status: number; body: any }> =>
@@ -128,7 +128,7 @@ describe('moving a task into a project over the API', () => {
       '81 AI/Cert research.md': '---\nhelm-task: tsk-grow\n---\n# Cert research\n',
     });
     await s.m.addTask({ text: 'Build the cert lab [OCI docs](https://docs.example.com/oci)', date: TODAY, fields: { id: 'tsk-grow' } });
-    const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: 't', written: () => [] };
+    const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: 't', written: () => [], read: (p) => s.vault.read(p) };
     const r = await handle({ method: 'PATCH', path: 'tasks/tsk-grow', query: {}, body: { projectId: 'prj-kitchen' } }, deps) as { status: number; body: any };
     expect(r.status).toBe(200);
     expect(r.body.task.project.id).toBe('prj-kitchen');

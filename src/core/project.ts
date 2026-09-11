@@ -7,7 +7,7 @@
  */
 import { linksIn } from './links';
 import type { Diagnostic, Phase, Project, ProjectPriority, ProjectStatus } from './types';
-import { parseDocument, type DocHeading, type Document } from './document';
+import { parseDocument, sectionRange, type DocHeading, type Document } from './document';
 import { list, scalar } from './frontmatter';
 import { slugify } from './ids';
 import { isIsoDate } from './dates';
@@ -232,4 +232,24 @@ function howItWorks(profile: string, modes?: string[]): string[] {
 
 function quote(s: string): string {
   return /[:#\[\]{}&*!|>'"%@`,?]/.test(s) || s.trim() !== s ? `"${s.replace(/"/g, '\\"')}"` : s;
+}
+
+export interface LogEntry { date?: string; text: string; line: number }
+
+/**
+ * The lines under a project's `## Log` (or Journal / Notes) heading, oldest first as written:
+ * `- 2026-09-08 — Outline approved.` gives a date and a text; a bullet without a date is text only.
+ */
+export function parseProjectLog(content: string): LogEntry[] {
+  const doc = parseDocument(content);
+  const h = doc.headings.find((x) => /^(log|journal|notes)$/i.test(x.text.trim()));
+  if (!h) return [];
+  const { start, end } = sectionRange(doc, h);
+  const out: LogEntry[] = [];
+  for (let i = start; i < end; i++) {
+    const m = /^\s*[-*+]\s+(?:(\d{4}-\d{2}-\d{2})\s*(?:[—–-]|:)?\s*)?(.*)$/.exec(doc.lines[i] ?? '');
+    if (!m || (m[2] ?? '').trim() === '' && !m[1]) continue;
+    out.push({ ...(m[1] ? { date: m[1] } : {}), text: (m[2] ?? '').trim(), line: i });
+  }
+  return out;
 }

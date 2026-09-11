@@ -265,6 +265,47 @@ projectIds, progress, taskTotal, taskDone }`. `POST /goals { periodKey, text }` 
 `POST /projects/:id/goal { goalKey: "gol-…" | null }` binds a project to a goal (and to the
 goal's period when the project has none) or unbinds it.
 
+### Tasks — more writes
+
+`PATCH /tasks/:id` also takes `time` + `timeEnd` (`time: null` clears the block; the line keeps
+its section, a day view places it by its time), `progress` (0–100 puts it in progress, 100
+finishes it, `null` clears the percentage), and `recurrence` (a rule like `every week on
+monday`; `null` stops it repeating). `parentId` is refused with a 400: add the task under the
+other one instead.
+
+```
+POST   /tasks/:id/stop-repeating
+POST   /tasks/:id/followup          { date, text?, part?, markOriginalDone?, addTag?, effortMinutes?, due?, priority?, time?, timeEnd? } → 201 { followUp, original, written }
+POST   /tasks/:id/plan-into         { date, time: { start, end }, effortMinutes? }
+POST   /tasks/:id/project           { title?, status?, priority?, area?, parentId?, period?, due? } → 201 { project, carried, written }
+POST   /tasks/:id/links             { url, label? }        DELETE /tasks/:id/links { url }
+POST   /tasks/:id/subtasks/reorder  { beforeRef: "tsk-…" | null }   (null = to the end)
+GET    /tasks/:id/attachments
+```
+
+A follow-up is refused (500) for a task with subtasks, as in the app: move it instead.
+
+### Projects — more
+
+`GET /projects/:id` is the whole project page: the project with `health`, `phases[]` each with
+`tasks` (top-level tasks as trees with `children`), `looseTasks`, `children` (child projects
+with health), `parent`, `goal`, `attachments`, `log` (`[ { date, text, line } ]` from the
+`## Log` section) and `nextAction`. Project health and phase counts include subtasks.
+
+`PATCH /projects/:id` also takes `pinned` (boolean), `order` (number or null) and `goal` (a goal
+id or null). `parentId` is refused with a 400: Helm reads a project's parent from its folder.
+
+```
+POST   /projects/reorder                 { ids: [ … ] }    (numbers order 1..n)
+PATCH  /projects/:id/phases/:slug        { title?, due?: date | null }
+DELETE /projects/:id/phases/:slug        → { deleted, carried }   (its tasks move under ## Tasks; nothing is removed)
+POST   /projects/:id/log                 { text } → 201 { log }
+POST   /projects/:id/links               { url, label? }   DELETE /projects/:id/links { url }
+POST   /projects/:id/related             { ref }           DELETE /projects/:id/related/:taskId
+POST   /projects/:id/goal                { goalKey | null }
+GET    /projects/:id/attachments
+```
+
 ## Attachments
 
 Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`

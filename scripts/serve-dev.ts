@@ -158,6 +158,7 @@ async function main(): Promise<void> {
       version,
       written: () => vault.takeWrites(),
       vaultName: basename(vaultDir),
+      read: (path) => vault.read(path),
     },
   });
   const watcher = watchVault();

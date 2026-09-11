@@ -29,6 +29,8 @@ export interface ApiDeps {
   written: () => string[];
   /** The vault's folder name, for `GET /health`. */
   vaultName?: string;
+  /** Read a file's text — a project's log, a note the app wants to show. */
+  read: (path: string) => Promise<string>;
 }
 
 /** One request's view of the world: the deps plus a health cache that lives as long as the request. */
