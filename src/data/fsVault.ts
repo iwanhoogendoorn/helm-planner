@@ -75,6 +75,11 @@ export class FsVault implements VaultAdapter {
     await fs.promises.writeFile(full, Buffer.from(data));
   }
 
+  async readBinary(p: string): Promise<ArrayBuffer> {
+    const buf = await fs.promises.readFile(this.abs(p));
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  }
+
   async createFolder(p: string): Promise<void> { await fs.promises.mkdir(this.abs(p), { recursive: true }); }
 
   async exists(p: string): Promise<boolean> { return fs.existsSync(this.abs(p)); }

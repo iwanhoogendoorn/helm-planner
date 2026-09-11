@@ -59,6 +59,11 @@ export async function startApiServer(opts: { port: number; host?: string; token:
           url.searchParams.forEach((v, k) => { query[k] = v; });
           try {
             const r = await handle({ method: req.method ?? 'GET', path: url.pathname.slice(API_BASE.length), query, body }, opts.deps);
+            if (r.raw) {
+              res.writeHead(r.status, { 'content-type': r.raw.contentType, 'content-length': String(r.raw.bytes.byteLength), 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-helm-revision': String(opts.deps.index.revision) });
+              res.end(Buffer.from(r.raw.bytes));
+              return;
+            }
             send(r.status, r.body);
           } catch (e) {
             opts.log?.(`request failed: ${String(e)}`);

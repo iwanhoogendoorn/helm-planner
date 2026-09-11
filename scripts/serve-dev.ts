@@ -159,6 +159,7 @@ async function main(): Promise<void> {
       written: () => vault.takeWrites(),
       vaultName: basename(vaultDir),
       read: (path) => vault.read(path),
+      readBinary: (path) => vault.readBinary(path),
     },
   });
   const watcher = watchVault();

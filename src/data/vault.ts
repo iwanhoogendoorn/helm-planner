@@ -16,6 +16,8 @@ export interface VaultAdapter {
   trash?(path: string): Promise<void>;
   /** Write a binary file (icons). */
   writeBinary?(path: string, data: ArrayBuffer): Promise<void>;
+  /** Read a binary file (icons, drawings). */
+  readBinary?(path: string): Promise<ArrayBuffer>;
   /** Create a folder (and parents). */
   createFolder?(path: string): Promise<void>;
   /** Frontmatter of a markdown file without reading it in full (a metadata cache where there is one). */
@@ -63,6 +65,11 @@ export class MemoryVault implements VaultAdapter {
   }
   binaries = new Map<string, ArrayBuffer>();
   async writeBinary(path: string, data: ArrayBuffer): Promise<void> { this.binaries.set(path, data); }
+  async readBinary(path: string): Promise<ArrayBuffer> {
+    const b = this.binaries.get(path);
+    if (b === undefined) throw new Error(`ENOENT ${path}`);
+    return b;
+  }
   trashed: string[] = [];
   async trash(path: string): Promise<void> {
     for (const p of [...this.files.keys()]) if (p === path || p.startsWith(path + '/')) { this.files.delete(p); this.trashed.push(p); }

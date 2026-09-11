@@ -14,7 +14,8 @@ import { candidates, dayPlan, horizonPeriod, horizons, inboxItems, tasksByDay, w
 import { ghostHabits, habitHistories, habitsOnDay, habitStats } from '../data/habits';
 import { layOutDay } from '../data/timegrid';
 import { layOutDayPlan } from '../core/pomodoro';
-import { bookingsOn } from '../data/conflicts';
+import { bookingsOn, freeWindowsOn, preferredSlot } from '../data/conflicts';
+import { fallbackAnswer, planRequestFor, proposalChanges, proposalFrom } from '../data/ai';
 import { parsePeriod, periodOf, type PeriodKind } from '../core/periods';
 import { parseRecurrence } from '../core/recurrence';
 import { baseName } from '../data/vault';
@@ -29,7 +30,7 @@ import { PRIORITIES } from './routes';
 import { ALL_SECTIONS, buildReport, REPORT_SCOPES, type Report, type ReportScope, type ReportSections } from '../data/report';
 
 /** Heads v2 owns: an unmatched method on one of these is a 405, anything else a 404. */
-const HEADS = new Set(['settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files', 'report', 'report.pdf', 'maintenance']);
+const HEADS = new Set(['settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files', 'report', 'report.pdf', 'maintenance', 'diagnostics']);
 
 export async function handleV2(req: ApiRequest, d: Ctx): Promise<ApiResponse | undefined> {
   const parts = req.path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
@@ -75,6 +76,75 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
       return ok({ ...r, written: d.written() });
     }
     if (sub === 'daybook') return daybook(date, sub2, sub3, method, body, d);
+    if (sub === 'slots' && method === 'GET') {
+      const s = d.settings();
+      const minutes = req.query['minutes'] !== undefined ? Number(req.query['minutes']) : s.defaultEffortMinutes;
+      if (!Number.isFinite(minutes) || minutes <= 0) return bad('minutes must be a positive number');
+      const part = req.query['part'];
+      if (part && !PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
+      const notBefore = req.query['notBefore'];
+      if (notBefore && !/^\d{2}:\d{2}$/.test(notBefore)) return bad('notBefore must be HH:MM');
+      const opts = { ...(part ? { part: part as DayPart } : {}), effortMinutes: minutes, ...(notBefore ? { notBefore } : {}) };
+      const pref = preferredSlot(d.index.snapshot, date, s, opts);
+      const [ph, pm] = pref.split(':').map(Number);
+      const endMin = (ph ?? 0) * 60 + (pm ?? 0) + minutes;
+      return ok({
+        date, minutes, part: part ?? null,
+        free: freeWindowsOn(d.index.snapshot, date, s, { ...(part ? { part: part as DayPart } : {}), minutes, ...(notBefore ? { notBefore } : {}) }),
+        bookings: bookingsOn(d.index.snapshot, date, s).map((b) => ({ start: b.start, end: b.end, ref: refOf(b.task), label: b.label })),
+        preferred: { start: pref, end: `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}` },
+      });
+    }
+    if (sub === 'write-unmirrored' && method === 'POST') {
+      const plan = dayPlan(d.index.snapshot, date, d.settings());
+      let written = 0;
+      const failed: { ref: string; error: string }[] = [];
+      for (const t of plan.unmirrored) {
+        try { await d.mutations.schedule(t.key, date); written++; } catch (e) { failed.push({ ref: refOf(t), error: e instanceof Error ? e.message : String(e) }); }
+      }
+      return ok({ date, mirrored: written, failed, written: d.written() });
+    }
+    if (sub === 'fit' && sub2 === undefined && method === 'POST') {
+      const { req: preq, tasks } = planRequestFor(d.index.snapshot, date, d.settings());
+      const only = strList(body['refs']);
+      if (only.length) {
+        const keys = new Set<string>();
+        for (const r of only) { const t = findTask(r, d); if (!t) return missing(`No task ${r}`); keys.add(t.key); if (t.mirrorOf) keys.add(t.mirrorOf); }
+        preq.tasks = preq.tasks.filter((t) => keys.has(t.key));
+      }
+      if (preq.tasks.length === 0) return bad('Nothing without a time on this day to fit');
+      const proposal = proposalFrom(fallbackAnswer(preq), preq, 'helm');
+      const refFor = (key: string): string => { const t = tasks.get(key); return t ? refOf(t) : key; };
+      return ok({
+        date, source: proposal.source, from: preq.from, to: preq.to, busy: preq.busy,
+        blocks: proposal.blocks.map((b) => ({ ...b, ref: refFor(b.taskKey) })),
+        overflow: proposal.overflow.map((o) => ({ ref: refFor(o.key), minutes: o.minutes })),
+        focusMinutes: proposal.focusMinutes, breakMinutes: proposal.breakMinutes,
+        changes: proposalChanges(proposal.blocks, proposal.answer.minutes).map((c) => ({ ref: refFor(c.key), time: c.start, timeEnd: c.end, effortMinutes: c.effortMinutes })),
+      });
+    }
+    if (sub === 'fit' && sub2 === 'apply' && method === 'POST') {
+      const raw = Array.isArray(body['changes']) ? body['changes'] as unknown[] : [];
+      if (!raw.length) return bad('changes must be a list of { ref, time, timeEnd, effortMinutes }');
+      const todo: { key: string; ref: string; start: string; end: string; effortMinutes: number }[] = [];
+      for (const x of raw) {
+        const c = asRecord(x);
+        const ref = str(c['ref']);
+        const t = ref ? findTask(ref, d) : undefined;
+        if (!ref || !t) return missing(`No task ${ref ?? ''}`);
+        const start = str(c['time']) ?? str(c['start']);
+        const end = str(c['timeEnd']) ?? str(c['end']);
+        if (!start || !end || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return bad('Every change needs time and timeEnd as HH:MM');
+        todo.push({ key: t.mirrorOf ?? t.key, ref, start, end, effortMinutes: num(c['effortMinutes']) ?? t.effortMinutes ?? d.settings().defaultEffortMinutes });
+      }
+      let applied = 0;
+      const failed: { ref: string; error: string }[] = [];
+      for (const c of todo) {
+        try { await d.mutations.updateTask(c.key, { time: { start: c.start, end: c.end }, effortMinutes: c.effortMinutes }); applied++; }
+        catch (e) { failed.push({ ref: c.ref, error: e instanceof Error ? e.message : String(e) }); }
+      }
+      return ok({ date, applied, failed, written: d.written() });
+    }
     if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'date', date, title: date }, d));
     if (sub === 'notes' && method === 'POST') return createNote({ kind: 'date', date, title: date }, body, d);
   }
@@ -226,6 +296,11 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     if (ref === 'reconcile') { const fixed = await d.mutations.reconcile(); return ok({ fixed, written: d.written() }); }
     if (ref === 'move-recurring') { const moved = await d.mutations.moveMisfiled({ onlyFuture: body['onlyFuture'] !== false }); return ok({ moved, written: d.written() }); }
     if (ref === 'catch-up-recurring') { const ahead = num(body['aheadDays']); const spawned = await d.mutations.catchUpRecurring(ahead); return ok({ spawned, written: d.written() }); }
+  }
+
+  if (head === 'diagnostics' && method === 'GET' && parts.length === 1) {
+    const snap = d.index.snapshot;
+    return ok({ revision: d.index.revision, ready: d.index.ready, builtAt: snap.builtAt, diagnostics: snap.diagnostics, dailyNotes: [...snap.dailyNotes.values()].filter((n) => n.regionBroken).map((n) => ({ date: n.date, path: n.path, hasRegion: n.hasRegion, regionBroken: n.regionBroken })) });
   }
 
   if (head === 'files' && method === 'GET' && parts.length === 1) {
@@ -479,6 +554,16 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, met
     return ok({ id: h.id, date, part: part ?? null, written: d.written() });
   }
   if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'habit', id: h.id, title: h.title }, d));
+  if (sub === 'icon' && method === 'GET') {
+    if (!h.iconImage) return missing(`${h.id} has no image icon`);
+    if (!d.readBinary) return { status: 501, body: { error: 'This server cannot read images' } };
+    const ext = (h.iconImage.split('.').pop() ?? '').toLowerCase();
+    const type = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'svg' ? 'image/svg+xml' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'application/octet-stream';
+    try {
+      const bytes = new Uint8Array(await d.readBinary(h.iconImage));
+      return { status: 200, body: null, raw: { contentType: type, bytes } };
+    } catch { return missing(`${h.iconImage} could not be read`); }
+  }
   if (sub === 'notes' && method === 'POST') return createNote({ kind: 'habit', id: h.id, title: h.title }, body, d);
   if (sub === 'pause' && method === 'POST') {
     if (h.removed) return bad('This habit has no note any more');

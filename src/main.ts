@@ -151,6 +151,7 @@ export default class HelmPlugin extends Plugin {
           written: () => this.vault.takeWrites(),
           vaultName: this.app.vault.getName(),
           read: (path) => this.vault.read(path),
+          readBinary: (path) => this.vault.readBinary(path),
         },
       });
     } catch (e) {

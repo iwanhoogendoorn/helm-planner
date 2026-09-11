@@ -373,6 +373,51 @@ POST /maintenance/move-recurring       { onlyFuture?: true } → { moved, writte
 POST /maintenance/catch-up-recurring   { aheadDays?: 45 } → { spawned, written }
 ```
 
+### Amendments (§14): bulk, slots, fit, skip, icons, diagnostics
+
+**Tasks.** `PATCH /tasks/:id` also takes `start` (date or null, the `🛫` field) and `blockedBy`
+(a list of refs, resolved to ids — a target without an id gets one; `[]` clears). `GET /tasks/:id`
+adds `nextOccurrence` (the date “Skip this one” names, or null) and `misfiled` (a daily line dated
+later than its note).
+
+```
+POST /tasks/:id/skip          cancel this occurrence of a repeating task → { task, next, written }
+POST /tasks/:id/ensure-id     → { id, task, written }
+GET  /tasks/:id/conflicts?date=&time=&timeEnd=&effortMinutes=   → { conflicts: [ { start, end, ref, label } ] }
+POST /tasks/bulk              { refs, action: schedule|part|status|move|delete, date?, part?, status?, projectId?, phaseId? }
+                              → { action, applied, appliedIds, covered, failed: [ { ref, error } ], written }
+```
+
+Bulk runs the way the selection bar does: every task gets an id first, each is acted on once, a
+subtask whose parent is in the set is `covered` (it travels with the parent), and one failure does
+not stop the rest.
+
+**Day.** `POST /day/:date/write-unmirrored` is the Today tab's “Write them” button: every project
+task planned on the day without a mirror line gets one → `{ mirrored, failed, written }`.
+`GET /day/:date/slots?minutes=30&part=&notBefore=` → `{ free: [ { start, end } ], bookings:
+[ { start, end, ref, label } ], preferred: { start, end } }` — the free windows of a part (or the
+day), what is booked, and the slot Helm would offer.
+
+`POST /day/:date/fit { refs? }` is “Fit the day” **without the AI**: Helm's own sizing
+(`proposePlan`'s fallback) laid out with the focus settings around what is booked, returned as a
+proposal → `{ source: "helm", from, to, busy, blocks, overflow, focusMinutes, breakMinutes,
+changes: [ { ref, time, timeEnd, effortMinutes } ] }`; nothing is written. `POST /day/:date/fit/apply
+{ changes }` performs the modal's writes (one time block per task from its first focus block to its
+last, and its minutes) → `{ applied, failed, written }`. The `claude -p` sizing stays desktop-only:
+it runs a CLI on the Mac.
+
+**Projects.** `POST /projects` also forwards `goal`, `tags`, `objective`, `notes` (lines under
+`## Notes`), `phases: [ { title, due?, tasks? } ]` and `tasks` to `createProject`.
+`POST /projects/:id/phases { title, due? }` with no `tasks` adds a bare phase.
+`POST /projects/:id/phases/:slug/links { url, label? }` and `DELETE …/links { url }` manage the
+links under a phase heading.
+
+**Habits.** `GET /habits/:id/icon` → the `iconImage` file's bytes with its content type
+(png, jpeg, svg, gif, webp); 404 when the habit has none. Uploading an icon is not a route.
+
+**Diagnostics.** `GET /diagnostics` → `{ revision, ready, builtAt, diagnostics: [ { severity,
+code, message, path, line } ], dailyNotes }` (the latter lists days whose Helm region is broken).
+
 ## Attachments
 
 Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`

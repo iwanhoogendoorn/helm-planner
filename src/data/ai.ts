@@ -9,8 +9,12 @@
  * Nothing is written until you confirm. With no CLI installed, the estimates Helm already has are used
  * and the day is still laid out — the button works, it simply has less to go on.
  */
-import type { FocusSettings, LaidOut } from '../core/pomodoro';
-import { layOutDayPlan } from '../core/pomodoro';
+import type { FocusSettings, LaidOut, PlanBlock } from '../core/pomodoro';
+import { DEFAULT_FOCUS, layOutDayPlan } from '../core/pomodoro';
+import type { HelmSettings, IsoDate, Snapshot, Task } from '../core/types';
+import { plainLabel } from '../core/label';
+import { dayPlan, isOpen } from './planner';
+import { shortLabel } from '../core/label';
 
 export interface PlanTask {
   key: string;
@@ -31,6 +35,60 @@ export interface PlanRequest {
   focus: FocusSettings;
   /** Minutes of real work you want in a day, from the settings. */
   capacityMinutes: number;
+}
+
+/** The focus settings as the plugin uses them: a zero or missing value falls back to the default. */
+export function focusFrom(s: HelmSettings): FocusSettings {
+  return {
+    focusMaxMinutes: s.focusMaxMinutes || DEFAULT_FOCUS.focusMaxMinutes,
+    focusMinMinutes: s.focusMinMinutes || DEFAULT_FOCUS.focusMinMinutes,
+    breakMinutes: s.breakMinutes || DEFAULT_FOCUS.breakMinutes,
+    longBreakMinutes: s.longBreakMinutes || DEFAULT_FOCUS.longBreakMinutes,
+    blocksBeforeLongBreak: s.blocksBeforeLongBreak || DEFAULT_FOCUS.blocksBeforeLongBreak,
+  };
+}
+
+/** What Helm asks about: the day's open, untimed work, and what is already booked in it. */
+export function planRequestFor(snap: Snapshot, date: IsoDate, s: HelmSettings): { req: PlanRequest; tasks: Map<string, Task> } {
+  const plan = dayPlan(snap, date, s);
+  const tasks = new Map<string, Task>();
+  const busy: PlanRequest['busy'] = [];
+  for (const it of plan.items) {
+    const t = it.display;
+    if (!isOpen(t)) continue;
+    if (t.time) { busy.push({ start: t.time.start, end: t.time.end ?? t.time.start, label: shortLabel(t.text, 30) }); continue; }
+    if (tasks.has(t.key)) continue;
+    tasks.set(t.key, t);
+  }
+  const req: PlanRequest = {
+    date,
+    from: s.dayStarts || '09:00',
+    to: s.dayEnds || '18:00',
+    busy,
+    tasks: [...tasks.values()].map((t) => ({
+      key: t.key,
+      text: plainLabel(t.text),
+      ...(t.effortMinutes !== undefined ? { effortMinutes: t.effortMinutes } : {}),
+      priority: t.priority,
+      ...(t.due ? { due: t.due } : {}),
+      ...(t.projectTitle ? { project: t.projectTitle } : {}),
+    })),
+    focus: focusFrom(s),
+    capacityMinutes: s.dailyCapacityMinutes,
+  };
+  return { req, tasks };
+}
+
+/** What writing a proposal changes on each task: one time block from its first focus block to its last, and its minutes. */
+export function proposalChanges(blocks: PlanBlock[], minutes: Record<string, number>): { key: string; start: string; end: string; effortMinutes: number }[] {
+  const first = new Map<string, PlanBlock>();
+  const last = new Map<string, PlanBlock>();
+  for (const b of blocks) {
+    if (b.kind !== 'focus') continue;
+    if (!first.has(b.taskKey)) first.set(b.taskKey, b);
+    last.set(b.taskKey, b);
+  }
+  return [...first.entries()].map(([key, start]) => ({ key, start: start.start, end: last.get(key)!.end, effortMinutes: minutes[key] ?? 30 }));
 }
 
 /** What the model is asked for: minutes per task, an order, and a word on anything it moved out. */

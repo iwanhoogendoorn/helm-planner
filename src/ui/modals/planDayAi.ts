@@ -9,55 +9,18 @@
 import { Modal } from 'obsidian';
 import type { IsoDate, Task } from '../../core/types';
 import { humanDate, minutesToHuman } from '../../core/dates';
-import { DEFAULT_FOCUS, layOutDayPlan, type FocusSettings, type PlanBlock } from '../../core/pomodoro';
-import { proposePlan, type PlanRequest, type Proposal } from '../../data/ai';
-import { dayPlan, isOpen } from '../../data/planner';
+import { layOutDayPlan, type FocusSettings, type PlanBlock } from '../../core/pomodoro';
+import { focusFrom, planRequestFor, proposalChanges, proposePlan, type PlanRequest, type Proposal } from '../../data/ai';
 import { button, chip, h, icon } from '../dom';
 import type { UiContext } from '../context';
-import { plainLabel, shortLabel } from '../../core/label';
+import { plainLabel } from '../../core/label';
 
 /** The focus settings, as the user has them. */
-export function focusOf(ctx: UiContext): FocusSettings {
-  const s = ctx.settings();
-  return {
-    focusMaxMinutes: s.focusMaxMinutes || DEFAULT_FOCUS.focusMaxMinutes,
-    focusMinMinutes: s.focusMinMinutes || DEFAULT_FOCUS.focusMinMinutes,
-    breakMinutes: s.breakMinutes || DEFAULT_FOCUS.breakMinutes,
-    longBreakMinutes: s.longBreakMinutes || DEFAULT_FOCUS.longBreakMinutes,
-    blocksBeforeLongBreak: s.blocksBeforeLongBreak || DEFAULT_FOCUS.blocksBeforeLongBreak,
-  };
-}
+export function focusOf(ctx: UiContext): FocusSettings { return focusFrom(ctx.settings()); }
 
 /** What Helm asks about: the day's open work, and what is already booked in it. */
 export function requestFor(ctx: UiContext, date: IsoDate): { req: PlanRequest; tasks: Map<string, Task> } {
-  const s = ctx.settings();
-  const plan = dayPlan(ctx.index.snapshot, date, s);
-  const tasks = new Map<string, Task>();
-  const busy: PlanRequest['busy'] = [];
-  for (const it of plan.items) {
-    const t = it.display;
-    if (!isOpen(t)) continue;
-    if (t.time) { busy.push({ start: t.time.start, end: t.time.end ?? t.time.start, label: shortLabel(t.text, 30) }); continue; }
-    if (tasks.has(t.key)) continue;
-    tasks.set(t.key, t);
-  }
-  const req: PlanRequest = {
-    date,
-    from: s.dayStarts || '09:00',
-    to: s.dayEnds || '18:00',
-    busy,
-    tasks: [...tasks.values()].map((t) => ({
-      key: t.key,
-      text: plainLabel(t.text),
-      ...(t.effortMinutes !== undefined ? { effortMinutes: t.effortMinutes } : {}),
-      priority: t.priority,
-      ...(t.due ? { due: t.due } : {}),
-      ...(t.projectTitle ? { project: t.projectTitle } : {}),
-    })),
-    focus: focusOf(ctx),
-    capacityMinutes: s.dailyCapacityMinutes,
-  };
-  return { req, tasks };
+  return planRequestFor(ctx.index.snapshot, date, ctx.settings());
 }
 
 export function openPlanDayAi(ctx: UiContext, date: IsoDate): void {
@@ -143,19 +106,10 @@ export function openPlanDayAi(ctx: UiContext, date: IsoDate): void {
 
   /** Write the agreed times onto the tasks; what was dropped simply loses its time. */
   async function write(blocks: PlanBlock[]): Promise<void> {
-    const first = new Map<string, PlanBlock>();
-    const last = new Map<string, PlanBlock>();
-    for (const b of blocks) {
-      if (b.kind !== 'focus') continue;
-      if (!first.has(b.taskKey)) first.set(b.taskKey, b);
-      last.set(b.taskKey, b);
-    }
+    const changes = proposalChanges(blocks, minutes);
     await ctx.run('Plan the day', async () => {
-      for (const [key, start] of first) {
-        const end = last.get(key)!;
-        await ctx.mutations.updateTask(key, { time: { start: start.start, end: end.end }, effortMinutes: minutes[key] ?? 30 });
-      }
-      ctx.notify(`Planned ${first.size} task${first.size === 1 ? '' : 's'}${dropped.size ? `, ${dropped.size} left for another day` : ''}.`);
+      for (const c of changes) await ctx.mutations.updateTask(c.key, { time: { start: c.start, end: c.end }, effortMinutes: c.effortMinutes });
+      ctx.notify(`Planned ${changes.length} task${changes.length === 1 ? '' : 's'}${dropped.size ? `, ${dropped.size} left for another day` : ''}.`);
     });
   }
 }

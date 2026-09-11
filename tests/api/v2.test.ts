@@ -11,11 +11,11 @@ export async function api(extra: Record<string, string> = {}, settings: Partial<
   const origWrite = s.vault.write.bind(s.vault);
   s.vault.write = async (p: string, c: string) => { written.push(p); await origWrite(p, c); };
   const deps: ApiDeps = {
-    index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', vaultName: 'Test vault', read: (p) => s.vault.read(p),
+    index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', vaultName: 'Test vault', read: (p) => s.vault.read(p), readBinary: (p) => s.vault.readBinary(p),
     written: () => { const w = [...new Set(written)]; written.length = 0; return w; },
   };
-  const call = (method: string, path: string, body?: unknown, query: Record<string, string> = {}): Promise<{ status: number; body: any }> =>
-    handle({ method, path, query, body } as ApiRequest, deps) as Promise<{ status: number; body: any }>;
+  const call = (method: string, path: string, body?: unknown, query: Record<string, string> = {}): Promise<{ status: number; body: any; raw?: any }> =>
+    handle({ method, path, query, body } as ApiRequest, deps) as Promise<{ status: number; body: any; raw?: any }>;
   return { ...s, call };
 }
 
@@ -694,5 +694,168 @@ describe('v2 · report and maintenance', () => {
     expect(cu.body).toMatchObject({ spawned: expect.any(Number) });
     expect((await call('POST', 'maintenance/defrag')).status).toBe(405);
     expect((await call('GET', 'maintenance/rebuild')).status).toBe(405);
+  });
+});
+
+describe('v2 · §14 amendments', () => {
+  it('patches start and blockedBy, and the detail tells the next occurrence and whether a line is misfiled', async () => {
+    const { call, vault } = await api();
+    const t = (await call('POST', 'tasks', { text: 'Second pass', scheduled: TODAY })).body.task;
+    const r = await call('PATCH', `tasks/${t.id}`, { start: '2026-08-28', blockedBy: ['tsk-0001', 'Renew passport'] });
+    expect(r.status).toBe(404); // "Renew passport" is text, not a ref
+    const inbox = (await call('GET', 'inbox')).body.inbox.find((x: any) => x.text === 'Renew passport');
+    const ok = await call('PATCH', `tasks/${t.id}`, { start: '2026-08-28', blockedBy: ['tsk-0001', inbox.ref] });
+    expect(ok.body.task.start).toBe('2026-08-28');
+    expect(ok.body.task.blockedBy).toHaveLength(2);
+    expect(ok.body.task.blockedBy[0]).toBe('tsk-0001');
+    expect(ok.body.task.blockedBy[1]).toMatch(/^tsk-/); // the inbox line got an id stamped
+    expect(await vault.read('01 INBOX/Inbox.md')).toContain(`Renew passport 🆔 ${ok.body.task.blockedBy[1]}`);
+    expect(ok.body.task.blocked).toBe(true);
+    expect((await call('PATCH', `tasks/${t.id}`, { blockedBy: [] })).body.task.blockedBy).toEqual([]);
+    expect((await call('PATCH', `tasks/${t.id}`, { start: null })).body.task.start).toBeNull();
+    expect((await call('PATCH', `tasks/${t.id}`, { blockedBy: [t.id] })).status).toBe(400);
+    const detail = (await call('GET', 'tasks/tsk-0002')).body;
+    expect(detail).toMatchObject({ nextOccurrence: expect.stringMatching(/^2026-/), misfiled: false });
+    expect((await call('GET', 'tasks/tsk-0001')).body.nextOccurrence).toBeNull();
+  });
+
+  it('skips one occurrence, stamps an id on demand', async () => {
+    const { call, index } = await api();
+    expect((await call('POST', 'tasks/tsk-0001/skip')).status).toBe(400);
+    const r = await call('POST', 'tasks/tsk-0002/skip');
+    expect(r.status).toBe(200);
+    expect(r.body.task.status).toBe('cancelled');
+    expect(r.body.next).toMatch(/^2026-/);
+    const inbox = (await call('GET', 'inbox')).body.inbox[0];
+    expect(inbox.id).toBeNull();
+    const id = await call('POST', `tasks/${inbox.ref}/ensure-id`);
+    expect(id.body.id).toMatch(/^tsk-/);
+    expect(index.taskById(id.body.id)!.text).toBe(inbox.text);
+    expect((await call('POST', `tasks/${id.body.id}/ensure-id`)).body.id).toBe(id.body.id);
+  });
+
+  it('applies one action to many refs, ids first, a parent covering its subtasks, continuing past failures', async () => {
+    const { call, index } = await api();
+    const inbox = (await call('GET', 'inbox')).body.inbox.map((t: any) => t.ref);
+    const r = await call('POST', 'tasks/bulk', { refs: [...inbox, 'tsk-nope'], action: 'schedule', date: '2026-08-28', part: 'morning' });
+    expect(r.status).toBe(200);
+    expect(r.body.applied).toBe(2);
+    expect(r.body.failed).toEqual([{ ref: 'tsk-nope', error: 'No task tsk-nope' }]);
+    expect(r.body.appliedIds.every((id: string) => id.startsWith('tsk-'))).toBe(true);
+    expect([...index.snapshot.tasks.values()].filter((t) => t.noteDate === '2026-08-28' && t.depth === 0).map((t) => t.text).sort()).toEqual(['Call the plumber', 'Renew passport']);
+    // The subtask "Find photo" travelled with its parent; naming both only acts on the parent.
+    const passport = index.taskById(r.body.appliedIds[1])!;
+    const kid = index.task(passport.childKeys[0]!)!;
+    const both = await call('POST', 'tasks/bulk', { refs: [passport.id, kid.key], action: 'status', status: 'done' });
+    expect(both.body.applied).toBe(1);
+    expect(both.body.covered).toHaveLength(1);
+    expect((await call('POST', 'tasks/bulk', { refs: ['tsk-0001'], action: 'teleport' })).status).toBe(400);
+    expect((await call('POST', 'tasks/bulk', { refs: ['tsk-0001'], action: 'move', projectId: 'prj-nope' })).status).toBe(404);
+    const moved = await call('POST', 'tasks/bulk', { refs: ['tsk-0002'], action: 'move', projectId: 'prj-kitchen' });
+    expect(moved.body.applied).toBe(1);
+    expect(index.taskById('tsk-0002')!.projectId).toBe('prj-kitchen');
+    const gone = await call('POST', 'tasks/bulk', { refs: ['tsk-0002'], action: 'delete' });
+    expect(gone.body.applied).toBe(1);
+    expect(index.taskById('tsk-0002')).toBeUndefined();
+  });
+
+  it('writes the unmirrored project tasks into the day', async () => {
+    const { call, vault, index } = await api();
+    // A ⏳ written by hand in the project note: planned on a day whose note does not carry it yet.
+    const path = '02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md';
+    const content = (await vault.read(path)).replace('- [ ] Chapter 2 🆔 tsk-0002 🔁 every week', '- [ ] Chapter 2 🆔 tsk-0002 ⏳ 2026-08-27 🔁 every week');
+    await vault.write(path, content);
+    index.update(path, content);
+    const before = (await call('GET', 'day/2026-08-27')).body;
+    expect(before.byPart.anytime.some((it: any) => it.kind === 'unmirrored' && it.task.id === 'tsk-0002')).toBe(true);
+    const r = await call('POST', 'day/2026-08-27/write-unmirrored');
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ mirrored: 1, failed: [] });
+    expect(await vault.read(index.dailyPath('2026-08-27'))).toContain('tsk-0002');
+    const after = (await call('GET', 'day/2026-08-27')).body;
+    expect(after.byPart.anytime.some((it: any) => it.kind === 'mirror' && it.display?.id === 'tsk-0002')).toBe(true);
+    expect((await call('POST', 'day/2026-08-27/write-unmirrored')).body.mirrored).toBe(0);
+  });
+
+  it('lists free slots and bookings, prefers one, and finds a task\'s conflicts', async () => {
+    const { call } = await api();
+    await call('POST', 'tasks', { text: 'Stand-up', scheduled: TODAY, time: '09:00', timeEnd: '09:30' });
+    await call('POST', 'tasks', { text: 'Review', scheduled: TODAY, time: '11:00', timeEnd: '12:00' });
+    const r = await call('GET', `day/${TODAY}/slots`, undefined, { minutes: '30', part: 'morning' });
+    expect(r.status).toBe(200);
+    expect(r.body.bookings.map((b: any) => [b.start, b.end])).toEqual([['09:00', '09:30'], ['11:00', '12:00']]);
+    expect(r.body.free).toEqual([{ start: '08:00', end: '09:00' }, { start: '09:30', end: '11:00' }]);
+    expect(r.body.preferred).toEqual({ start: '08:00', end: '08:30' });
+    const later = await call('GET', `day/${TODAY}/slots`, undefined, { minutes: '60', part: 'morning', notBefore: '09:15' });
+    expect(later.body.free).toEqual([{ start: '09:30', end: '11:00' }]);
+    expect(later.body.preferred.start).toBe('09:30');
+    expect((await call('GET', `day/${TODAY}/slots`, undefined, { minutes: '-5' })).status).toBe(400);
+    const c = await call('GET', 'tasks/tsk-0001/conflicts', undefined, { date: TODAY, time: '09:15', effortMinutes: '30' });
+    expect(c.body.conflicts.map((b: any) => b.label)).toEqual(['Stand-up']);
+    expect((await call('GET', 'tasks/tsk-0001/conflicts')).status).toBe(400); // not on a day, no time
+  });
+
+  it('fits the day without AI and applies the proposal the way the modal writes it', async () => {
+    const { call, index } = await api();
+    await call('POST', 'tasks', { text: 'Stand-up', scheduled: TODAY, time: '09:00', timeEnd: '09:30' });
+    const a = (await call('POST', 'tasks', { text: 'Write chapter 3', scheduled: TODAY, effortMinutes: 90 })).body.task;
+    const b = (await call('POST', 'tasks', { text: 'Answer mail', scheduled: TODAY })).body.task;
+    const fit = await call('POST', `day/${TODAY}/fit`);
+    expect(fit.status).toBe(200);
+    expect(fit.body).toMatchObject({ source: 'helm', from: '08:00', to: '22:00' });
+    expect(fit.body.busy).toEqual([{ start: '09:00', end: '09:30', label: 'Stand-up' }]);
+    expect(fit.body.changes.map((c: any) => c.ref)).toEqual(expect.arrayContaining([a.ref, b.ref]));
+    const ca = fit.body.changes.find((c: any) => c.ref === a.ref);
+    expect(ca).toMatchObject({ time: expect.stringMatching(/^\d{2}:\d{2}$/), timeEnd: expect.stringMatching(/^\d{2}:\d{2}$/), effortMinutes: 90 });
+    expect(fit.body.blocks.some((x: any) => x.kind === 'break')).toBe(true);
+    const only = await call('POST', `day/${TODAY}/fit`, { refs: [b.ref] });
+    expect(only.body.changes.map((c: any) => c.ref)).toEqual([b.ref]);
+    const applied = await call('POST', `day/${TODAY}/fit/apply`, { changes: fit.body.changes });
+    expect(applied.body).toMatchObject({ applied: 2, failed: [] });
+    expect(index.taskById(a.id)!.time).toEqual({ start: ca.time, end: ca.timeEnd });
+    expect((await call('POST', `day/${TODAY}/fit/apply`, { changes: [{ ref: a.ref, time: 'noon' }] })).status).toBe(400);
+    expect((await call('POST', 'day/2026-08-05/fit')).status).toBe(400); // nothing there
+  });
+
+  it('creates a project with goal, tags, objective, notes, phases and tasks; adds a bare phase; manages phase links', async () => {
+    const { call, vault } = await api(HORIZON_EXTRA);
+    const r = await call('POST', 'projects', { title: 'Garden Rebuild', goal: 'gol-book26', tags: ['home', '#outdoor'], objective: 'A garden worth sitting in.', notes: ['Ask the neighbour first.'], phases: [{ title: 'Design', due: '2026-10-01', tasks: ['Sketch'] }, { title: 'Build' }], tasks: ['Order soil'] });
+    expect(r.status).toBe(201);
+    expect(r.body.project).toMatchObject({ title: 'Garden Rebuild', goalId: 'gol-book26', tags: expect.arrayContaining(['home', 'outdoor']) });
+    expect(r.body.project.phases.map((p: any) => [p.slug, p.due])).toEqual([['design', '2026-10-01'], ['build', null]]);
+    const note = await vault.read(r.body.project.path);
+    expect(note).toContain('A garden worth sitting in.');
+    expect(note).toContain('Ask the neighbour first.');
+    expect(note).toContain('- [ ] Sketch');
+    expect(note).toContain('- [ ] Order soil');
+    expect((await call('POST', 'projects', { title: 'x', goal: 'gol-nope' })).status).toBe(404);
+    expect((await call('POST', 'projects', { title: 'x', phases: [{ due: '2026-10-01' }] })).status).toBe(400);
+    const ph = await call('POST', `projects/${r.body.project.id}/phases`, { title: 'Plant', due: '2026-11-01' });
+    expect(ph.status).toBe(201);
+    expect(ph.body.phase).toMatchObject({ slug: 'plant', due: '2026-11-01' });
+    expect(ph.body.tasks).toEqual([]);
+    const link = await call('POST', `projects/${r.body.project.id}/phases/plant/links`, { url: 'https://plants.example.com', label: 'Nursery' });
+    expect(link.status).toBe(200);
+    expect(link.body.links).toEqual([{ url: 'https://plants.example.com', label: 'Nursery' }]);
+    expect((await call('GET', `projects/${r.body.project.id}`)).body.phases.find((p: any) => p.slug === 'plant').links).toHaveLength(1);
+    const unlink = await call('DELETE', `projects/${r.body.project.id}/phases/plant/links`, { url: 'https://plants.example.com' });
+    expect(unlink.body.links).toEqual([]);
+    expect((await call('POST', `projects/${r.body.project.id}/phases/nope/links`, { url: 'https://x.example.com' })).status).toBe(404);
+  });
+
+  it('serves a habit\'s icon image bytes with its content type, and the diagnostics', async () => {
+    const { call, vault, m } = await api();
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]);
+    const path = await m.saveHabitIcon('workout', png.buffer, 'png');
+    await m.setHabitFields('hab-workout', { iconImage: path });
+    void vault;
+    const r = await call('GET', 'habits/hab-workout/icon');
+    expect(r.status).toBe(200);
+    expect(r.raw.contentType).toBe('image/png');
+    expect([...r.raw.bytes]).toEqual([...png]);
+    expect((await call('GET', 'habits/hab-read/icon')).status).toBe(404);
+    const dg = await call('GET', 'diagnostics');
+    expect(dg.status).toBe(200);
+    expect(dg.body).toMatchObject({ ready: true, revision: expect.any(Number), diagnostics: expect.any(Array), dailyNotes: [] });
   });
 });

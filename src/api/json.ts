@@ -14,7 +14,7 @@ import type { DrawingTarget, Goal, Habit, HelmSettings, IsoDate, Project, Task }
 import type { HelmIndex } from '../data/index';
 import type { Mutations } from '../data/mutations';
 import { habitStats, type HabitStats } from '../data/habits';
-import { followsOf, followUpsOf, goalProgress, isBlocked, isOpen, plannedDate, projectHealth, type Candidate, type DayItem, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../data/planner';
+import { followsOf, followUpsOf, goalProgress, isBlocked, isOpen, misfiledDate, nextOccurrenceOf, plannedDate, projectHealth, type Candidate, type DayItem, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../data/planner';
 import { profileFor } from '../core/profiles';
 import type { SearchHit } from '../data/search';
 import type { DayLayout } from '../data/timegrid';
@@ -31,6 +31,8 @@ export interface ApiDeps {
   vaultName?: string;
   /** Read a file's text — a project's log, a note the app wants to show. */
   read: (path: string) => Promise<string>;
+  /** Read a file's bytes — a habit's icon image. */
+  readBinary?: (path: string) => Promise<ArrayBuffer>;
 }
 
 /** One request's view of the world: the deps plus a health cache that lives as long as the request. */
@@ -123,6 +125,8 @@ export function taskDetailJson(t: Task, c: Ctx): Record<string, unknown> {
     ...taskTree(t, c),
     followUps: followUpsOf(snap, t).map(refOf),
     follows: follows ? refOf(follows) : null,
+    nextOccurrence: nextOccurrenceOf(t, c.today()) ?? null,
+    misfiled: misfiledDate(t) !== undefined,
     attachments: attachmentsJson(targetOfTask(t), c),
   };
 }

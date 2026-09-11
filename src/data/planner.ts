@@ -6,6 +6,7 @@ import type { Goal, HelmSettings, IsoDate, Project, ProjectStatus, Snapshot, Tas
 import { parsePeriod, periodContains, periodsOfYear, periodWithin, type Period } from '../core/periods';
 import { addDays, diffDays, startOfWeek } from '../core/dates';
 import { isTerminal, priorityRank } from '../core/taskLine';
+import { nextOccurrence } from '../core/recurrence';
 import { PROJECT_PRIORITY_RANK } from '../core/project';
 
 /** Open = still to be done here. A forwarded `[>]` line is the record of a move, not work. */
@@ -501,6 +502,13 @@ export function horizons(snap: Snapshot, year: number, today: IsoDate, settings:
   const build = (period: Period): HorizonPeriod => horizonPeriod(snap, period, today, settings, cache);
   const py = periodsOfYear(year);
   return { year: build(py.year), quarters: py.quarters.map(build), months: py.months.map(build) };
+}
+
+/** When a repeating task comes round next — what “Skip this one” names: after its date, or after today when it repeats when done. */
+export function nextOccurrenceOf(t: Task, today: IsoDate): IsoDate | undefined {
+  if (!t.recurrence?.parsed) return undefined;
+  const from = t.due ?? t.scheduled ?? t.noteDate ?? today;
+  return nextOccurrence(t.recurrence, t.recurrence.whenDone ? today : from);
 }
 
 /** The follow-ups spawned from a task (tasks tagged as follow-ups that depend on its id), open first. */

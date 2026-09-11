@@ -68,6 +68,12 @@ export class ObsidianVault implements VaultAdapter {
     await this.app.vault.createBinary(p, data);
   }
 
+  async readBinary(path: string): Promise<ArrayBuffer> {
+    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    if (f instanceof TFile) return this.app.vault.readBinary(f);
+    return this.app.vault.adapter.readBinary(normalizePath(path));
+  }
+
   frontmatter(path: string): Record<string, unknown> | undefined {
     const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
     if (!(f instanceof TFile)) return undefined;
