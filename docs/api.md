@@ -306,6 +306,52 @@ POST   /projects/:id/goal                { goalKey | null }
 GET    /projects/:id/attachments
 ```
 
+### Review, dashboard
+
+`GET /review` → the Review tab: `{ weekStart, completedThisWeek, completedByProject, overdue,
+inbox, waiting, dueNext14, projects, attention, activeCount, staleCount, noNextActionCount,
+throughput: [ { weekStart, done } ], checklist: [ { id, label, done, count, auto } ],
+goalsInPlay }`. Projects carry `health`. The checklist's `auto` items are ticked from the
+numbers; `week` (“Next week planned”) is yours to tick in the app.
+
+`GET /stats?from=&to=&sources=daily,project&project=&area=&tag=&period=` → the Dashboard's
+numbers (`computeStats`): `totals`, `perDay`, `perWeek`, `cumulative`, `byPart`, `byWeekday`,
+`adherence`, `byProject`, `byArea`, `byTag`, `ageBuckets`, `habits`, `goals`, `streak`. Every
+task list is a list of **refs** (`taskRefs`, `doneTaskRefs`) — fetch them with
+`GET /tasks?ids=`. Without `from`/`to` it is the last 30 days; `sources` defaults to daily
+notes only, as on the tab. `GET /stats/options` → `{ areas, tags, sources, projects:
+[ { id, title, status } ], periods: { year, quarter, month, week } }` for the filter pickers.
+
+### Search
+
+`GET /search?q=&limit=50` → `{ query, hits: [ { kind, id, title, subtitle, path, line, score,
+task? | project? | goal? | habit? | note? | drawing? } ] }` with the search box's grammar
+(`#tag`, `@project`, `is:open|done|blocked|waiting|overdue`, `in:daily|project|inbox|note|goal`,
+`due:`, `on:`, `kind:`). `GET /search/starting-points` → `{ groups: [ { label, icon, hits } ] }`
+— what the box shows before anything is typed.
+
+### Capture
+
+`POST /capture/parse { text, scheduled?, part?, projectId?, phaseId?, tags?, due?, priority?,
+effortMinutes?, time?, timeEnd?, recurrence? }` parses the line the way the Capture dialog
+does and applies the overrides on top, without writing: `{ text, tags, priority, scheduled,
+due, part, partByTime, effortMinutes, time, timeEnd, recurrence, project, unknownProject,
+destination: { kind: inbox|day|project|project+day, date?, part?, projectId?, phaseId?,
+sentence } }`. `POST /capture` with the same body performs the dialog's write → 201
+`{ task, parsed, destination, written }`. An `@Name` that is not a project is a 400 on write
+(and `unknownProject` on parse).
+
+### Attachments and notes
+
+```
+GET  /tasks/:id/attachments · /projects/:id/attachments · /day/:date/attachments · /periods/:key/attachments · /habits/:id/attachments
+POST /tasks/:id/notes · /projects/:id/notes · /day/:date/notes · /periods/:key/notes · /habits/:id/notes   { name? } → 201 { path, attachments, written }
+DELETE /notes            { path }   (or ?path=)   — an attached note only; it goes to the trash
+GET  /files?path=…       { path, content, mtime, kind } for a markdown file the index knows (project, daily, periodic, inbox, attached note)
+```
+
+`GET /files` is read-only and refuses anything outside the vault or unknown to the index.
+
 ## Attachments
 
 Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`

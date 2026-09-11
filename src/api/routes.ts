@@ -288,6 +288,13 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       const p = d.index.project(ref);
       return p ? ok(attachmentsJson({ kind: 'project', id: p.id, title: p.title }, d)) : missing(`No project ${ref}`);
     }
+    if (method === 'POST' && ref !== undefined && sub === 'notes') {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const target = { kind: 'project' as const, id: p.id, title: p.title };
+      const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}) });
+      return made({ path, attachments: attachmentsJson(target, d), written: d.written() });
+    }
     if (method === 'POST' && ref !== undefined && sub === 'goal') {
       const p = d.index.project(ref);
       if (!p) return missing(`No project ${ref}`);
@@ -383,6 +390,11 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
 /** `POST /tasks/:id/<action>` and the link routes. Undefined when `sub` is not one of them. */
 async function taskAction(t: Task, sub: string, method: string, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
   if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'task', key: t.key, ...(t.id ? { id: t.id } : {}), title: t.text }, d));
+  if (sub === 'notes' && method === 'POST') {
+    const target = { kind: 'task' as const, key: t.mirrorOf ?? t.key, ...(t.id ? { id: t.id } : {}), title: t.text.trim() || 'task' };
+    const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}) });
+    return made({ path, attachments: attachmentsJson(target, d), written: d.written() });
+  }
   if (sub === 'stop-repeating' && method === 'POST') {
     if (!t.recurrence) return bad('This task does not repeat');
     await d.mutations.stopRepeating(t.key);

@@ -521,3 +521,128 @@ describe('v2 · projects', () => {
     expect((await call('GET', 'projects/prj-book/attachments')).body).toEqual({ notes: [], drawings: [] });
   });
 });
+
+describe('v2 · review, stats, search', () => {
+  it('serves the weekly review with its checklist', async () => {
+    const { call } = await api(HORIZON_EXTRA);
+    const r = await call('GET', 'review');
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ weekStart: '2026-08-24', activeCount: expect.any(Number), staleCount: expect.any(Number) });
+    expect(r.body.throughput).toHaveLength(8);
+    expect(r.body.projects[0].health).toBeDefined();
+    expect(r.body.checklist.map((c: any) => c.id)).toEqual(['inbox', 'overdue', 'next', 'stale', 'week']);
+    expect(r.body.checklist.find((c: any) => c.id === 'inbox')).toMatchObject({ done: false, count: 2, auto: true });
+    expect(r.body.checklist.find((c: any) => c.id === 'week')).toMatchObject({ done: false, auto: false });
+    expect(r.body.goalsInPlay.map((g: any) => g.id)).toContain('gol-book26');
+  });
+
+  it('serves dashboard stats with refs instead of tasks, and the filter options', async () => {
+    const { call } = await api();
+    const r = await call('GET', 'stats', undefined, { from: '2026-08-01', to: TODAY, sources: 'daily,project' });
+    expect(r.status).toBe(200);
+    expect(r.body.filter).toEqual({ from: '2026-08-01', to: TODAY, sources: ['daily', 'project'] });
+    expect(r.body.totals.done).toBeGreaterThan(0);
+    expect(r.body.perDay).toHaveLength(26);
+    expect(r.body.perDay.every((s: any) => Array.isArray(s.taskRefs) && s.tasks === undefined)).toBe(true);
+    expect(r.body.byProject[0]).toMatchObject({ project: { id: expect.any(String), title: expect.any(String) }, doneTaskRefs: expect.any(Array) });
+    expect(r.body.habits[0]).toMatchObject({ id: expect.any(String), rate: expect.any(Number), streak: expect.any(Number) });
+    const refs = r.body.perWeek.flatMap((w: any) => w.taskRefs);
+    const back = await call('GET', 'tasks', undefined, { ids: refs.join(',') });
+    expect(back.body.tasks.length).toBe(new Set(refs).size);
+    const dflt = await call('GET', 'stats');
+    expect(dflt.body.days).toBe(30);
+    expect((await call('GET', 'stats', undefined, { sources: 'email' })).status).toBe(400);
+    expect((await call('GET', 'stats', undefined, { project: 'prj-nope' })).status).toBe(404);
+    const o = await call('GET', 'stats/options');
+    expect(o.body).toMatchObject({ areas: ['Oracle'], sources: ['daily', 'project', 'note', 'inbox'], periods: { quarter: '2026-Q3', month: '2026-08' } });
+    expect(o.body.projects.map((p: any) => p.id)).toContain('prj-book');
+  });
+
+  it('searches everything with the query grammar and offers starting points', async () => {
+    const { call } = await api();
+    const r = await call('GET', 'search', undefined, { q: 'chapter is:open' });
+    expect(r.status).toBe(200);
+    expect(r.body.query).toMatchObject({ words: ['chapter'], status: 'open' });
+    expect(r.body.hits.every((h: any) => h.kind === 'task' && h.task.open)).toBe(true);
+    expect(r.body.hits.map((h: any) => h.title)).toContain('Chapter 1');
+    const mixed = await call('GET', 'search', undefined, { q: 'oracle', limit: '3' });
+    expect(mixed.body.hits).toHaveLength(3);
+    expect(mixed.body.hits.some((h: any) => h.kind === 'project' && h.project.id)).toBe(true);
+    expect((await call('GET', 'search', undefined, { q: '' })).body.hits).toEqual([]);
+    const sp = await call('GET', 'search/starting-points');
+    expect(sp.body.groups.map((g: any) => g.label)).toContain('Overdue');
+    expect(sp.body.groups[0].hits[0]).toMatchObject({ kind: 'task', task: expect.any(Object) });
+  });
+});
+
+describe('v2 · capture, attachments, notes, files', () => {
+  it('parses a capture line the way the dialog previews it, without writing', async () => {
+    const { call, index } = await api();
+    const before = index.revision;
+    const r = await call('POST', 'capture/parse', { text: 'Call the plumber tomorrow !high #home @Kitchen Remodel ~30m 14:00' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ text: 'Call the plumber #home', tags: ['home'], priority: 'high', scheduled: '2026-08-27', effortMinutes: 30, time: '14:00', part: 'afternoon', project: { id: 'prj-kitchen', title: 'Kitchen Remodel' } });
+    expect(r.body.destination).toMatchObject({ kind: 'project+day', projectId: 'prj-kitchen', date: '2026-08-27', part: 'afternoon' });
+    expect(r.body.destination.sentence).toContain('Kitchen Remodel');
+    expect(index.revision).toBe(before);
+    const unknown = await call('POST', 'capture/parse', { text: 'Fix it @Nowhere' });
+    expect(unknown.body).toMatchObject({ project: null, unknownProject: 'Nowhere', destination: { kind: 'inbox' } });
+    const dated = await call('POST', 'capture/parse', { text: 'Dentist', scheduled: TODAY, part: 'morning', tags: ['health'] });
+    expect(dated.body).toMatchObject({ text: 'Dentist #health', destination: { kind: 'day', date: TODAY, part: 'morning' } });
+    expect((await call('POST', 'capture/parse', { text: '   ' })).status).toBe(400);
+  });
+
+  it('captures the way Enter does: grammar, overrides, and the same write', async () => {
+    const { call, vault } = await api();
+    const r = await call('POST', 'capture', { text: 'Sketch the layout tomorrow ~45m @Kitchen Remodel', phaseId: undefined, tags: ['design'] });
+    expect(r.status).toBe(201);
+    expect(r.body.task).toMatchObject({ text: 'Sketch the layout #design', scheduled: '2026-08-27', effortMinutes: 45, effortRaw: '45m', project: { id: 'prj-kitchen' } });
+    expect(r.body.destination.kind).toBe('project+day');
+    expect(await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')).toContain('Sketch the layout #design');
+    expect(r.body.written.some((p: string) => p.includes('27, Thursday'))).toBe(true);
+    const inbox = await call('POST', 'capture', { text: 'Buy stamps' });
+    expect(inbox.body.task.source).toBe('inbox');
+    expect((await call('POST', 'capture', { text: 'Do it @Nowhere' })).status).toBe(400);
+    expect((await call('POST', 'capture', { text: 'x', projectId: 'prj-nope' })).status).toBe(404);
+    const rec = await call('POST', 'capture', { text: 'Water the plants', scheduled: TODAY, recurrence: 'every 3 days', time: '18:00', timeEnd: '18:10' });
+    expect(rec.body.task).toMatchObject({ recurrence: 'every 3 days', time: '18:00', timeEnd: '18:10' });
+  });
+
+  it('lists attachments per target and creates notes for each', async () => {
+    const { call, vault } = await api({ '81 AI/Week notes.md': '---\nhelm-period: 2026-W35\nhelm-date: 2026-08-25\nhelm-habit: hab-workout\n---\n# Week notes\n' });
+    expect((await call('GET', 'day/2026-08-25/attachments')).body.notes.map((n: any) => n.path)).toEqual(['81 AI/Week notes.md']);
+    expect((await call('GET', 'periods/2026-W35/attachments')).body.notes.map((n: any) => n.path)).toEqual(['81 AI/Week notes.md']);
+    expect((await call('GET', 'habits/hab-workout/attachments')).body.notes.map((n: any) => n.path)).toEqual(['81 AI/Week notes.md']);
+    expect((await call('GET', 'day/2026-08-24/attachments')).body).toEqual({ notes: [], drawings: [] });
+    const t = await call('POST', 'tasks/tsk-0002/notes', { name: 'Chapter 2 research' });
+    expect(t.status).toBe(201);
+    expect(t.body.path).toContain('Chapter 2 research');
+    expect(await vault.read(t.body.path)).toContain('helm-task: tsk-0002');
+    expect(t.body.attachments.notes.map((n: any) => n.path)).toEqual([t.body.path]);
+    const p = await call('POST', 'projects/prj-kitchen/notes', {});
+    expect(await vault.read(p.body.path)).toContain('helm-project: prj-kitchen');
+    const dn = await call('POST', `day/${TODAY}/notes`, { name: 'Standup' });
+    expect(await vault.read(dn.body.path)).toContain(`helm-date: ${TODAY}`);
+    const pn = await call('POST', 'periods/2026-Q3/notes', {});
+    expect(await vault.read(pn.body.path)).toContain('helm-period: 2026-Q3');
+    const hn = await call('POST', 'habits/hab-read/notes', {});
+    expect(await vault.read(hn.body.path)).toContain('helm-habit: hab-read');
+    const del = await call('DELETE', 'notes', { path: t.body.path });
+    expect(del.status).toBe(200);
+    expect(await vault.exists(t.body.path)).toBe(false);
+    expect((await call('DELETE', 'notes', { path: '01 INBOX/Inbox.md' })).status).toBe(404); // not an attached note
+  });
+
+  it('serves a markdown file the index knows, and nothing else', async () => {
+    const { call } = await api();
+    const r = await call('GET', 'files', undefined, { path: '02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ path: '02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md', kind: 'project' });
+    expect(r.body.content).toContain('# Kitchen Remodel');
+    expect((await call('GET', 'files', undefined, { path: '01 INBOX/Inbox.md' })).body.kind).toBe('inbox');
+    expect((await call('GET', 'files', undefined, { path: '../secrets.md' })).status).toBe(404);
+    expect((await call('GET', 'files', undefined, { path: '.obsidian/app.json' })).status).toBe(404);
+    expect((await call('GET', 'files', undefined, { path: 'Not indexed.md' })).status).toBe(404);
+    expect((await call('GET', 'files')).status).toBe(400);
+  });
+});

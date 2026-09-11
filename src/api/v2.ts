@@ -18,9 +18,17 @@ import { bookingsOn } from '../data/conflicts';
 import { parsePeriod, periodOf, type PeriodKind } from '../core/periods';
 import { parseRecurrence } from '../core/recurrence';
 import { baseName } from '../data/vault';
+import { review, reviewChecklist } from '../data/planner';
+import { computeStats, filterOptions, STATS_SOURCES, type DashboardStats, type StatsFilter, type StatsSource } from '../data/stats';
+import { parseQuery, search, startingPoints } from '../data/search';
+import { parseCapture } from '../core/nlp';
+import { captureDestination, captureFields } from '../data/capture';
+import { attachmentsJson, healthOf, hitJson, projectJson } from './json';
+import type { DrawingTarget, Priority } from '../core/types';
+import { PRIORITIES } from './routes';
 
 /** Heads v2 owns: an unmatched method on one of these is a 405, anything else a 404. */
-const HEADS = new Set(['settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals']);
+const HEADS = new Set(['settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files']);
 
 export async function handleV2(req: ApiRequest, d: Ctx): Promise<ApiResponse | undefined> {
   const parts = req.path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
@@ -66,6 +74,8 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
       return ok({ ...r, written: d.written() });
     }
     if (sub === 'daybook') return daybook(date, sub2, sub3, method, body, d);
+    if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'date', date, title: date }, d));
+    if (sub === 'notes' && method === 'POST') return createNote({ kind: 'date', date, title: date }, body, d);
   }
 
   if (head === 'focus' && ref === 'layout' && method === 'POST') return focusLayout(body, d);
@@ -113,6 +123,8 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     if (!period) return bad(`Not a period: ${ref} (try 2026, 2026-Q3, 2026-09 or 2026-W37)`);
     if (sub === undefined && method === 'GET') return ok(horizonPeriodJson(horizonPeriod(d.index.snapshot, period, d.today(), d.settings(), d.health), d));
     if (sub === 'note' && method === 'POST') { const path = await d.mutations.ensurePeriodicNote(period); return ok({ path, period: periodJson(period, d), written: d.written() }); }
+    if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'period', key: period.key, title: period.key }, d));
+    if (sub === 'notes' && method === 'POST') return createNote({ kind: 'period', key: period.key, title: period.key }, body, d);
   }
 
   if (head === 'horizons' && method === 'GET' && parts.length === 1) {
@@ -160,7 +172,161 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     }
   }
 
+  if (head === 'review' && method === 'GET' && parts.length === 1) {
+    const r = review(d.index.snapshot, d.today(), d.settings());
+    for (const h of r.projects) d.health.set(h.project.id, h);
+    const tasks = (ts: Task[]): Record<string, unknown>[] => ts.map((t) => taskJson(t, d));
+    return ok({
+      weekStart: r.weekStart, completedThisWeek: tasks(r.completedThisWeek), completedByProject: r.completedByProject,
+      overdue: tasks(r.overdue), inbox: tasks(r.inbox), waiting: tasks(r.waiting), dueNext14: tasks(r.dueNext14),
+      projects: r.projects.map((h) => projectJson(h.project, d, { health: true })),
+      attention: r.attention.map((h) => projectJson(h.project, d, { health: true })),
+      activeCount: r.activeCount, staleCount: r.staleCount, noNextActionCount: r.noNextActionCount, throughput: r.throughput,
+      checklist: reviewChecklist(r),
+      goalsInPlay: (['month', 'quarter', 'year'] as const).map((k) => periodOf(d.today(), k)).flatMap((per) => d.index.allGoals().filter((g) => g.periodKey === per.key).map((g) => goalJson(g, d))),
+    });
+  }
+
+  if (head === 'stats' && method === 'GET') {
+    if (ref === 'options' && parts.length === 2) {
+      const fo = filterOptions(d.index.snapshot);
+      return ok({ ...fo, sources: STATS_SOURCES, projects: d.index.allProjects().map((p) => healthOf(p, d)).sort((a, b) => a.project.title.localeCompare(b.project.title)).map((h) => ({ id: h.project.id, title: h.project.title, status: h.project.status })), periods: { year: periodOf(d.today(), 'year').key, quarter: periodOf(d.today(), 'quarter').key, month: periodOf(d.today(), 'month').key, week: periodOf(d.today(), 'week').key } });
+    }
+    if (parts.length === 1) return statsRoute(req.query, d);
+  }
+
+  if (head === 'search' && method === 'GET') {
+    if (ref === 'starting-points' && parts.length === 2) return ok({ groups: startingPoints(d.index.snapshot, d.today()).map((g) => ({ label: g.label, icon: g.icon, hits: g.hits.map((h) => hitJson(h, d)) })) });
+    if (parts.length === 1) {
+      const q = req.query['q'] ?? '';
+      const limit = Math.min(Math.max(1, Number(req.query['limit'] ?? 50) || 50), 500);
+      return ok({ query: parseQuery(q, d.today()), hits: search(d.index.snapshot, q, { today: d.today(), limit }).map((h) => hitJson(h, d)) });
+    }
+  }
+
+  if (head === 'capture' && method === 'POST') {
+    if (ref === 'parse' && parts.length === 2) return captureRoute(body, d, false);
+    if (parts.length === 1) return captureRoute(body, d, true);
+  }
+
+  if (head === 'notes' && method === 'DELETE' && parts.length === 1) {
+    const path = str(body['path']) ?? req.query['path'];
+    if (!path) return bad('Send the note path');
+    if (!d.index.snapshot.notes.has(path)) return missing(`${path} is not a note attached to anything Helm knows`);
+    await d.mutations.deleteNote(path);
+    return ok({ deleted: path, written: d.written() });
+  }
+
+  if (head === 'files' && method === 'GET' && parts.length === 1) {
+    const path = (req.query['path'] ?? '').replace(/^\/+/, '');
+    if (!path) return bad('Send the path of a markdown file the index knows');
+    if (path.split('/').some((seg) => seg === '..' || seg === '.') || !path.endsWith('.md')) return missing('Only markdown files inside the vault are served');
+    if (!d.index.hasFile(path)) return missing(`${path} is not a file the index knows`);
+    try {
+      const content = await d.read(path);
+      return ok({ path, content, mtime: d.index.snapshot.notes.get(path)?.mtime ?? null, kind: d.index.fileKind(path) ?? null });
+    } catch { return missing(`${path} could not be read`); }
+  }
+
   return undefined;
+}
+
+async function createNote(target: DrawingTarget, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse> {
+  const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(str(body['folder']) ? { folder: str(body['folder'])! } : {}) });
+  return made({ path, attachments: attachmentsJson(target, d), written: d.written() });
+}
+
+/* ── Stats ─────────────────────────────────────────────────────────────── */
+
+function statsRoute(q: Record<string, string>, d: Ctx): ApiResponse {
+  const today = d.today();
+  const to = q['to'] ?? today;
+  const from = q['from'] ?? addDays(to, -29);
+  if (!isIsoDate(from) || !isIsoDate(to)) return bad('from and to must be dates like 2026-09-01');
+  if (to < from) return bad('to must not be before from');
+  if (diffDays(from, to) > 400) return bad('At most 400 days at a time');
+  const sources = (q['sources'] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const unknown = sources.filter((x) => !STATS_SOURCES.includes(x as StatsSource));
+  if (unknown.length) return bad(`sources must be from ${STATS_SOURCES.join(', ')}`);
+  if (q['project'] && !d.index.project(q['project'])) return missing(`No project ${q['project']}`);
+  if (q['period'] && !parsePeriod(q['period'])) return bad(`Not a period: ${q['period']}`);
+  const filter: StatsFilter = { from, to, ...(sources.length ? { sources: sources as StatsSource[] } : {}), ...(q['project'] ? { projectId: q['project'] } : {}), ...(q['area'] ? { area: q['area'] } : {}), ...(q['tag'] ? { tag: q['tag'].replace(/^#/, '') } : {}), ...(q['period'] ? { periodKey: parsePeriod(q['period'])!.key } : {}) };
+  return ok(statsJson(computeStats(d.index.snapshot, filter, today, d.settings()), d));
+}
+
+/** DashboardStats on the wire: every task list becomes refs, projects/habits/goals become summaries. */
+export function statsJson(st: DashboardStats, d: Ctx): Record<string, unknown> {
+  const refs = (ts: Task[]): string[] => ts.map(refOf);
+  const series = (xs: { key: string; label: string; value: number; tasks: Task[] }[]): Record<string, unknown>[] => xs.map((x) => ({ key: x.key, label: x.label, value: x.value, taskRefs: refs(x.tasks) }));
+  return {
+    filter: st.filter, days: st.days, totals: st.totals,
+    perDay: series(st.perDay),
+    perWeek: st.perWeek.map((w) => ({ weekStart: w.weekStart, done: w.done, created: w.created, taskRefs: refs(w.tasks) })),
+    cumulative: st.cumulative,
+    byPart: Object.fromEntries(Object.entries(st.byPart).map(([k, v]) => [k, { done: v.done, planned: v.planned, taskRefs: refs(v.tasks) }])),
+    byWeekday: series(st.byWeekday),
+    adherence: { planned: st.adherence.planned, done: st.adherence.done, carried: st.adherence.carried, rate: st.adherence.rate, taskRefs: refs(st.adherence.tasks) },
+    byProject: st.byProject.map((p) => ({ project: { id: p.project.id, title: p.project.title, status: p.project.status, area: p.project.area ?? null }, done: p.done, open: p.open, total: p.total, velocity: p.velocity, etaWeeks: p.etaWeeks ?? null, progress: p.progress, doneTaskRefs: refs(p.doneTasks) })),
+    byArea: series(st.byArea), byTag: series(st.byTag), ageBuckets: series(st.ageBuckets),
+    habits: st.habits.map((h) => ({ id: h.habit.id, title: h.habit.title, icon: h.habit.icon ?? null, color: h.habit.color ?? null, rate: h.rate, streak: h.streak, scheduled: h.scheduled, done: h.done })),
+    goals: st.goals.map((g) => ({ id: g.goal.id, text: g.goal.text, periodKey: g.goal.periodKey, status: g.goal.status, progress: g.progress, projects: g.projects })),
+    streak: st.streak,
+    ...(d.index.ready ? {} : { partial: true }),
+  };
+}
+
+/* ── Capture ───────────────────────────────────────────────────────────── */
+
+/** Parse a line the way the Capture dialog does, apply explicit overrides, and (when `write`) add the task the way its Enter does. */
+async function captureRoute(body: Record<string, unknown>, d: Ctx, write: boolean): Promise<ApiResponse> {
+  const text = typeof body['text'] === 'string' ? body['text'] : '';
+  if (text.trim() === '') return bad('Send the text to capture');
+  const s = d.settings();
+  const c = parseCapture(text, d.today(), s.weekStartsOn);
+  // Overrides on top of the grammar, exactly the dialog's controls.
+  const scheduled = has(body, 'scheduled') || has(body, 'date') ? (body['scheduled'] ?? body['date']) : undefined;
+  if (scheduled !== undefined && scheduled !== null && !day(scheduled)) return bad('scheduled must be a date like 2026-09-11, or null');
+  const date = scheduled === null ? undefined : day(scheduled) ?? c.scheduled;
+  const partRaw = str(body['part']);
+  if (partRaw && !PARTS.includes(partRaw as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
+  const part = (partRaw as DayPart | undefined) ?? c.part;
+  const projectId = str(body['projectId']);
+  if (projectId && !d.index.project(projectId)) return missing(`No project ${projectId}`);
+  const project = projectId ? d.index.project(projectId) : c.project ? d.index.projectByTitle(c.project) : undefined;
+  const phaseId = str(body['phaseId']);
+  if (phaseId && !project?.phases.some((p) => p.id === phaseId)) return bad(`No phase ${phaseId} in that project`);
+  if (has(body, 'due') && body['due'] !== null && !day(body['due'])) return bad('due must be a date like 2026-09-20');
+  if (has(body, 'due')) c.due = body['due'] === null ? undefined : day(body['due']);
+  if (str(body['priority'])) { const p = str(body['priority'])!; if (!PRIORITIES.includes(p as Priority)) return bad(`priority must be one of ${PRIORITIES.join(', ')}`); c.priority = p as Priority; }
+  const effort = num(body['effortMinutes']);
+  let time = c.time;
+  if (has(body, 'time')) {
+    if (body['time'] === null) time = undefined;
+    else { const st = str(body['time']); if (!st || !/^\d{2}:\d{2}$/.test(st)) return bad('time must be HH:MM'); const en = str(body['timeEnd']); if (en && !/^\d{2}:\d{2}$/.test(en)) return bad('timeEnd must be HH:MM'); time = { start: st, ...(en ? { end: en } : {}) }; }
+  } else if (str(body['timeEnd']) && time) time = { ...time, end: str(body['timeEnd'])! };
+  if (has(body, 'recurrence')) {
+    if (body['recurrence'] === null) c.recurrence = undefined;
+    else { const r = parseRecurrence(str(body['recurrence']) ?? ''); if (!r.parsed) return bad('recurrence must be a rule like "every week on monday"'); c.recurrence = r; }
+  }
+  let finalText = c.text;
+  const tags = new Set(c.tags);
+  for (const tag of strList(body['tags']).map((x) => x.replace(/^#/, ''))) { if (!tags.has(tag)) { finalText = `${finalText} #${tag}`; tags.add(tag); } }
+  const fields = captureFields(c, effort, time);
+  const dest = captureDestination({ ...(project ? { project } : {}), ...(phaseId ? { phaseId } : {}), ...(date ? { date } : {}), ...(part ? { part } : {}), ...(time ? { time } : {}), settings: s });
+  const parsed = {
+    text: finalText, tags: [...tags], priority: c.priority, scheduled: date ?? null, due: c.due ?? null,
+    // The part shown is the chosen one, else the one the time implies (the dialog says “(by time)” for that).
+    part: part ?? dest.part ?? null, partByTime: !part && dest.part !== undefined,
+    effortMinutes: fields.effortMinutes ?? null, time: time?.start ?? null, timeEnd: time?.end ?? null,
+    recurrence: fields.recurrence?.raw ?? null,
+    project: project ? { id: project.id, title: project.title } : null,
+    unknownProject: !project && c.project ? c.project : null,
+    destination: dest,
+  };
+  if (!write) return ok(parsed);
+  if (c.project && !project && !projectId) return bad(`@${c.project} is not a project Helm knows; send projectId, or drop the @`);
+  const t = await d.mutations.addTaskReturning({ text: finalText, fields, ...(project ? { projectId: project.id } : {}), ...(phaseId ? { phaseId } : {}), ...(date ? { date } : {}), ...(date && part ? { part } : {}) });
+  return made({ task: taskJson(t, d), parsed, destination: dest, written: d.written() });
 }
 
 export function findGoal(ref: string, d: Ctx): Goal | undefined {
@@ -253,6 +419,8 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, met
     await d.mutations.moveHabitForDay(h.id, date, part as HabitPart | undefined);
     return ok({ id: h.id, date, part: part ?? null, written: d.written() });
   }
+  if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'habit', id: h.id, title: h.title }, d));
+  if (sub === 'notes' && method === 'POST') return createNote({ kind: 'habit', id: h.id, title: h.title }, body, d);
   if (sub === 'pause' && method === 'POST') {
     if (h.removed) return bad('This habit has no note any more');
     if (!h.active) return bad('Already paused');

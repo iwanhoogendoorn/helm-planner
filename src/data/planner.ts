@@ -401,6 +401,19 @@ export function review(snap: Snapshot, today: IsoDate, settings: HelmSettings): 
   };
 }
 
+export interface ReviewCheck { id: 'inbox' | 'overdue' | 'next' | 'stale' | 'week'; label: string; done: boolean; count: number; auto: boolean }
+
+/** The weekly review's checklist: four items Helm can tick itself from the numbers, and one only you can. */
+export function reviewChecklist(r: ReviewReport): ReviewCheck[] {
+  return [
+    { id: 'inbox', label: 'Inbox to zero', done: r.inbox.length === 0, count: r.inbox.length, auto: true },
+    { id: 'overdue', label: 'Every overdue task rescheduled or dropped', done: r.overdue.length === 0, count: r.overdue.length, auto: true },
+    { id: 'next', label: 'Every active project has a next action', done: r.noNextActionCount === 0, count: r.noNextActionCount, auto: true },
+    { id: 'stale', label: 'Stale projects put on hold or revived', done: r.staleCount === 0, count: r.staleCount, auto: true },
+    { id: 'week', label: 'Next week planned', done: false, count: 0, auto: false },
+  ];
+}
+
 /**
  * What Wrap-up puts in front of you: every still-open item on the day — the note's own lines (not the
  * planner slots outside the region), the mirror lines, project tasks planned there without a mirror
