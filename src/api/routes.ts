@@ -12,7 +12,7 @@ import { profileFor, parseAssignment, type Assignment } from '../core/profiles';
 import { plainLabel } from '../core/label';
 import { parsePeriod } from '../core/periods';
 import { attachmentsJson, ctxOf, goalJson, healthJson, healthOf, projectJson, refOf, taskDetailJson, taskJson, taskTree, type ApiDeps, type Ctx } from './json';
-import { findGoal, handleV2 } from './v2';
+import { findGoal, handleV2, reportRoute } from './v2';
 import { parseProjectLog } from '../core/project';
 import { formatRecurrence, parseRecurrence } from '../core/recurrence';
 import { normaliseLink } from '../core/links';
@@ -287,6 +287,10 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
     if (method === 'GET' && ref !== undefined && sub === 'attachments') {
       const p = d.index.project(ref);
       return p ? ok(attachmentsJson({ kind: 'project', id: p.id, title: p.title }, d)) : missing(`No project ${ref}`);
+    }
+    if (method === 'GET' && ref !== undefined && sub === 'report') {
+      const p = d.index.project(ref);
+      return p ? reportRoute(req.query, d, p.id) : missing(`No project ${ref}`);
     }
     if (method === 'POST' && ref !== undefined && sub === 'notes') {
       const p = d.index.project(ref);

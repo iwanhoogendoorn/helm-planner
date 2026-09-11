@@ -352,6 +352,27 @@ GET  /files?path=…       { path, content, mtime, kind } for a markdown file th
 
 `GET /files` is read-only and refuses anything outside the vault or unknown to the index.
 
+### Report
+
+`GET /report?scope=day|week|month|quarter|year&anchor=&sections=history,plan,ahead,projects,goals,habits,daybook&project=&includeClosed=true`
+→ the export's data (`buildReport`) as JSON: `{ title, subtitle, from, to, scope, standing,
+today, sections, headline, stats, plan, days, ahead, overdue, leftBehind, undated, projects,
+projectDepths, projectWork, project, goals, habits, daybook }`. Tasks are embedded (it is a
+print view); `stats` is the §Dashboard shape with refs; `projectDepths` and `projectWork` are
+objects keyed by project id. `scope` defaults to the setting, `anchor` to today, `sections` to
+all of them. `GET /projects/:id/report?scope=&anchor=` is the same report told from one
+project. `GET /report.pdf` answers 501: the PDF is rendered in Obsidian's own window and cannot
+be produced by the API.
+
+### Maintenance
+
+```
+POST /maintenance/rebuild              → { rebuilt, ms, revision, counts }
+POST /maintenance/reconcile            → { fixed, written }
+POST /maintenance/move-recurring       { onlyFuture?: true } → { moved, written }
+POST /maintenance/catch-up-recurring   { aheadDays?: 45 } → { spawned, written }
+```
+
 ## Attachments
 
 Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`

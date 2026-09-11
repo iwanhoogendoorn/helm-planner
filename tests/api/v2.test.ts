@@ -646,3 +646,53 @@ describe('v2 · capture, attachments, notes, files', () => {
     expect((await call('GET', 'files')).status).toBe(400);
   });
 });
+
+describe('v2 · report and maintenance', () => {
+  it('builds a report for a period and for one project, embedding tasks and keying the maps by project id', async () => {
+    const { call } = await api(HORIZON_EXTRA);
+    const r = await call('GET', 'report', undefined, { scope: 'week', anchor: TODAY, sections: 'history,plan,projects,goals' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ scope: 'week', from: '2026-08-24', to: '2026-08-30', standing: 'current', sections: { history: true, plan: true, ahead: false, projects: true, goals: true, habits: false, daybook: false } });
+    expect(r.body.title).toContain('35');
+    expect(r.body.headline).toHaveLength(4);
+    expect(r.body.stats.perDay.every((x: any) => Array.isArray(x.taskRefs))).toBe(true);
+    expect(r.body.days).toHaveLength(7);
+    expect(r.body.days[1].done[0]).toMatchObject({ text: 'Pay invoice' });
+    expect(typeof r.body.projectWork).toBe('object');
+    expect(r.body.projects.length).toBeGreaterThan(0);
+    const pid = r.body.projects[0].id;
+    expect(r.body.projectDepths[pid]).toBe(0);
+    expect(r.body.projectWork[pid].groups[0].tasks[0]).toMatchObject({ task: expect.any(Object), depth: 0 });
+    expect(r.body.goals).toEqual([]); // a week holds no goal of its own; the year's goals belong to the year's report
+    expect((await call('GET', 'report', undefined, { scope: 'year', anchor: TODAY })).body.goals.some((g: any) => g.id === 'gol-book26')).toBe(true);
+    const day = await call('GET', 'report', undefined, { scope: 'day', anchor: '2026-08-25' });
+    expect(day.body.plan).toMatchObject({ date: '2026-08-25', doneCount: 1 });
+    expect(day.body.plan.byPart.anytime.length + day.body.plan.byPart.morning.length + day.body.plan.byPart.afternoon.length).toBeGreaterThan(0);
+    const proj = await call('GET', 'projects/prj-book/report', undefined, { scope: 'quarter', anchor: TODAY });
+    expect(proj.body.project.id).toBe('prj-book');
+    expect(proj.body.title).toBe('Oracle Book Writing');
+    expect(proj.body.projects.map((p: any) => p.id)).toEqual(['prj-book']);
+    expect((await call('GET', 'report', undefined, { scope: 'fortnight' })).status).toBe(400);
+    expect((await call('GET', 'report', undefined, { sections: 'history,gossip' })).status).toBe(400);
+    expect((await call('GET', 'report', undefined, { project: 'prj-nope' })).status).toBe(404);
+    expect((await call('GET', 'report.pdf', undefined, { scope: 'week' })).status).toBe(501);
+  });
+
+  it('runs the maintenance commands', async () => {
+    const { call, index } = await api();
+    const before = index.revision;
+    const rb = await call('POST', 'maintenance/rebuild');
+    expect(rb.status).toBe(200);
+    expect(rb.body).toMatchObject({ rebuilt: true, counts: { projects: 4 } });
+    expect(rb.body.revision).toBeGreaterThan(before);
+    const rc = await call('POST', 'maintenance/reconcile');
+    expect(rc.status).toBe(200);
+    expect(typeof rc.body.fixed).toBe('number');
+    const mv = await call('POST', 'maintenance/move-recurring');
+    expect(mv.body).toMatchObject({ moved: expect.any(Number), written: expect.any(Array) });
+    const cu = await call('POST', 'maintenance/catch-up-recurring', { aheadDays: 30 });
+    expect(cu.body).toMatchObject({ spawned: expect.any(Number) });
+    expect((await call('POST', 'maintenance/defrag')).status).toBe(405);
+    expect((await call('GET', 'maintenance/rebuild')).status).toBe(405);
+  });
+});

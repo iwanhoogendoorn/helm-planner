@@ -26,9 +26,10 @@ import { captureDestination, captureFields } from '../data/capture';
 import { attachmentsJson, healthOf, hitJson, projectJson } from './json';
 import type { DrawingTarget, Priority } from '../core/types';
 import { PRIORITIES } from './routes';
+import { ALL_SECTIONS, buildReport, REPORT_SCOPES, type Report, type ReportScope, type ReportSections } from '../data/report';
 
 /** Heads v2 owns: an unmatched method on one of these is a 405, anything else a 404. */
-const HEADS = new Set(['settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files']);
+const HEADS = new Set(['settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files', 'report', 'report.pdf', 'maintenance']);
 
 export async function handleV2(req: ApiRequest, d: Ctx): Promise<ApiResponse | undefined> {
   const parts = req.path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
@@ -217,6 +218,16 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     return ok({ deleted: path, written: d.written() });
   }
 
+  if (head === 'report' && method === 'GET' && parts.length === 1) return reportRoute(req.query, d);
+  if (head === 'report.pdf' && method === 'GET' && parts.length === 1) return { status: 501, body: { error: "PDF export needs Obsidian's window: it renders the report in a hidden Electron webview. Use GET /report and lay it out on the phone, or export from Obsidian." } };
+
+  if (head === 'maintenance' && method === 'POST' && parts.length === 2) {
+    if (ref === 'rebuild') { const t0 = Date.now(); await d.index.rebuild(); const snap = d.index.snapshot; return ok({ rebuilt: true, ms: Date.now() - t0, revision: d.index.revision, counts: { tasks: snap.tasks.size, projects: snap.projects.size, habits: snap.habits.size } }); }
+    if (ref === 'reconcile') { const fixed = await d.mutations.reconcile(); return ok({ fixed, written: d.written() }); }
+    if (ref === 'move-recurring') { const moved = await d.mutations.moveMisfiled({ onlyFuture: body['onlyFuture'] !== false }); return ok({ moved, written: d.written() }); }
+    if (ref === 'catch-up-recurring') { const ahead = num(body['aheadDays']); const spawned = await d.mutations.catchUpRecurring(ahead); return ok({ spawned, written: d.written() }); }
+  }
+
   if (head === 'files' && method === 'GET' && parts.length === 1) {
     const path = (req.query['path'] ?? '').replace(/^\/+/, '');
     if (!path) return bad('Send the path of a markdown file the index knows');
@@ -234,6 +245,54 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
 async function createNote(target: DrawingTarget, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse> {
   const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(str(body['folder']) ? { folder: str(body['folder'])! } : {}) });
   return made({ path, attachments: attachmentsJson(target, d), written: d.written() });
+}
+
+/* ── Report ────────────────────────────────────────────────────────────── */
+
+export function reportRoute(q: Record<string, string>, d: Ctx, projectId?: string): ApiResponse {
+  const scope = (q['scope'] ?? d.settings().reportScope) as ReportScope;
+  if (!REPORT_SCOPES.some((x) => x.id === scope)) return bad(`scope must be one of ${REPORT_SCOPES.map((x) => x.id).join(', ')}`);
+  const anchor = q['anchor'] ?? d.today();
+  if (!isIsoDate(anchor)) return bad('anchor must be a date like 2026-09-11');
+  const names = Object.keys(ALL_SECTIONS) as (keyof ReportSections)[];
+  const wanted = (q['sections'] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const unknown = wanted.filter((x) => !names.includes(x as keyof ReportSections));
+  if (unknown.length) return bad(`sections must be from ${names.join(', ')}`);
+  const sections: ReportSections = wanted.length ? Object.fromEntries(names.map((n) => [n, wanted.includes(n)])) as unknown as ReportSections : { ...ALL_SECTIONS };
+  const pid = projectId ?? q['project'];
+  if (pid && !d.index.project(pid)) return missing(`No project ${pid}`);
+  const report = buildReport(d.index.snapshot, { scope, anchor, sections, ...(pid ? { projectId: pid } : {}), includeClosedProjects: q['includeClosed'] === 'true' }, d.today(), d.settings(), (date) => d.index.daybook(date));
+  return ok(reportJson(report, d));
+}
+
+/** A Report on the wire: Maps become objects keyed by project id, tasks are embedded (it is a print view). */
+export function reportJson(r: Report, d: Ctx): Record<string, unknown> {
+  for (const h of r.projects) d.health.set(h.project.id, h);
+  const tasks = (ts: Task[]): Record<string, unknown>[] => ts.map((t) => taskJson(t, d));
+  const plan = r.plan;
+  return {
+    title: r.title, subtitle: r.subtitle, from: r.from, to: r.to, scope: r.scope, standing: r.standing, today: r.today, sections: r.sections,
+    headline: r.headline,
+    stats: statsJson(r.stats, d),
+    plan: plan ? {
+      date: plan.date,
+      byPart: Object.fromEntries((Object.keys(plan.byPart) as (keyof typeof plan.byPart)[]).map((k) => [k, plan.byPart[k].map((it) => dayItemJson(it, d))])),
+      timeBlocks: tasks(plan.timeBlocks), done: tasks(plan.done),
+      openCount: plan.openCount, doneCount: plan.doneCount, plannedMinutes: plan.plannedMinutes, doneMinutes: plan.doneMinutes,
+    } : null,
+    days: r.days.map((x) => ({ date: x.date, done: tasks(x.done), open: tasks(x.open), minutes: x.minutes })),
+    ahead: r.ahead.map((a) => ({ date: a.date, tasks: tasks(a.tasks), minutes: a.minutes })),
+    overdue: tasks(r.overdue),
+    leftBehind: r.leftBehind,
+    undated: tasks(r.undated),
+    projects: r.projects.map((h) => projectJson(h.project, d, { health: true })),
+    projectDepths: Object.fromEntries(r.projectDepths),
+    projectWork: Object.fromEntries([...r.projectWork.entries()].map(([id, w]) => [id, { groups: w.groups.map((g) => ({ title: g.title ?? null, tasks: g.tasks.map((pt) => ({ task: taskJson(pt.task, d), depth: pt.depth })) })), more: w.more }])),
+    project: r.project ? projectJson(r.project, d, { health: true }) : null,
+    goals: r.goals.map((g) => goalJson(g.goal, d, g)),
+    habits: r.habits.map((h) => ({ id: h.habit.id, title: h.habit.title, icon: h.habit.icon ?? null, color: h.habit.color ?? null, rate: h.rate, streak: h.streak, scheduled: h.scheduled, done: h.done })),
+    daybook: r.daybook.map((x) => ({ date: x.date, entries: daybookJson(x.entries) })),
+  };
 }
 
 /* ── Stats ─────────────────────────────────────────────────────────────── */
