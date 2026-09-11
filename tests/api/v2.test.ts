@@ -75,3 +75,129 @@ describe('v2 · health, settings and task serialisation', () => {
     expect(mirror).toBeUndefined(); // mirrors stay out of the list; the source shows instead
   });
 });
+
+describe('v2 · the day', () => {
+  it('serves a day the way the Today tab reads it: parts, time blocks, done, habits, daybook, timeline', async () => {
+    const { call } = await api();
+    const r = await call('GET', 'day/2026-08-25');
+    expect(r.status).toBe(200);
+    const d = r.body;
+    expect(d).toMatchObject({ date: '2026-08-25', isToday: false, capacityMinutes: 360 });
+    expect(d.notePath).toContain('25, Tuesday');
+    const all = [...d.byPart.morning, ...d.byPart.afternoon, ...d.byPart.evening, ...d.byPart.anytime];
+    expect(all.some((it: any) => it.task.text === 'Fix router config' && it.kind === 'daily')).toBe(true);
+    expect(all.some((it: any) => it.kind === 'mirror' && it.task.text === 'Chapter 1' && it.display === null)).toBe(true);
+    expect(d.done.map((t: any) => t.text)).toContain('Pay invoice');
+    // A timed line inside a Helm section is a daily item in its part (only lines outside the region become time blocks).
+    expect(d.byPart.morning.some((it: any) => it.task.text === 'Start with OIB' && it.task.time === '08:00')).toBe(true);
+    expect(d.timeBlocks).toEqual([]);
+    expect(d.habits.map((h: any) => h.id).sort()).toEqual(['hab-read', 'hab-workout']);
+    const workout = d.habits.find((h: any) => h.id === 'hab-workout');
+    expect(workout.occurrences).toEqual([{ part: null, state: 'done', line: expect.any(Number) }]);
+    expect(d.daybook).toEqual({ heading: null, entries: [] });
+    expect(d.timeline.timed.some((e: any) => e.task.text === 'Start with OIB' && e.start === 8 * 60)).toBe(true);
+    expect((await call('GET', 'day/friday')).status).toBe(400);
+    expect((await call('PUT', 'day/2026-08-25')).status).toBe(405);
+  });
+
+  it('creates the note and syncs the habits on demand', async () => {
+    const { call, vault } = await api();
+    const note = await call('POST', 'day/2026-08-27/note');
+    expect(note.status).toBe(200);
+    expect(note.body.path).toContain('27, Thursday');
+    expect(await vault.exists(note.body.path)).toBe(true);
+    const habits = await call('POST', 'day/2026-08-27/habits');
+    expect(habits.body.added).toBe(true);
+    expect(await vault.read(note.body.path)).toContain('hab-workout');
+  });
+
+  it('ranks candidates and writes a plan the way the modal does, removing what was dropped', async () => {
+    const { call, vault } = await api();
+    const c = await call('GET', `day/${TODAY}/candidates`);
+    expect(c.status).toBe(200);
+    expect(c.body.capacityMinutes).toBe(360);
+    expect(c.body.candidates.length).toBeGreaterThan(0);
+    expect(c.body.candidates[0]).toMatchObject({ reason: expect.any(String), score: expect.any(Number), minutes: expect.any(Number) });
+    const overdue = c.body.candidates.find((x: any) => x.task.text === 'Renew passport');
+    expect(overdue.reason).toBe('overdue');
+    const plumber = c.body.candidates.find((x: any) => x.task.text === 'Call the plumber');
+    const r = await call('POST', `day/${TODAY}/plan`, { items: [{ ref: plumber.task.ref, part: 'afternoon' }, { ref: 'tsk-0001' }] });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ planned: 2, removed: 0 });
+    const note = await vault.read(r.body.written.find((p: string) => p.includes('26, Wednesday')));
+    expect(note).toContain('Call the plumber');
+    expect(note).toContain('tsk-0001');
+    expect(note).toContain('hab-workout'); // habits come along, as in the modal
+    const rem = await call('POST', `day/${TODAY}/plan`, { items: [], remove: ['tsk-0001'] });
+    expect(rem.body.removed).toBe(1);
+    expect(await vault.read(note ? r.body.written[0] : '')).not.toContain('tsk-0001');
+    expect((await call('POST', `day/${TODAY}/plan`, {})).status).toBe(400);
+    expect((await call('POST', `day/${TODAY}/plan`, { items: [{ ref: 'tsk-nope' }] })).status).toBe(404);
+  });
+
+  it('lists what wrap-up would ask about and applies the decisions in order, continuing past a failure', async () => {
+    const { call, index, vault } = await api();
+    const g = await call('GET', 'day/2026-08-25/wrapup');
+    expect(g.status).toBe(200);
+    expect(g.body).toMatchObject({ suggestedDate: '2026-08-26', rolloverTarget: 'tomorrow' });
+    const texts = g.body.open.map((it: any) => it.task.text);
+    expect(texts).toContain('Fix router config');
+    expect(texts).toContain('Chapter 1');
+    expect(texts).not.toContain('Pay invoice'); // done already
+    expect(g.body.projectsTouched).toEqual([]); // the fixture's mirror has no resolvable source, so no project is touched
+    const router = g.body.open.find((it: any) => it.task.text === 'Fix router config').task;
+    const chapter = g.body.open.find((it: any) => it.task.text === 'Chapter 1').task;
+    const r = await call('POST', 'day/2026-08-25/wrapup', {
+      decisions: [{ ref: router.ref, fate: 'date', date: '2026-08-28', part: 'morning' }, { ref: chapter.ref, fate: 'done' }, { ref: 'tsk-nope', fate: 'tomorrow' }],
+      log: [{ projectId: 'prj-book', text: 'Wrapped the day.' }],
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.applied).toBe(2);
+    expect(r.body.failed).toEqual([{ ref: 'tsk-nope', error: 'No task tsk-nope' }]);
+    expect(index.task('tsk-0003@2026-08-25')!.status).toBe('done');
+    expect([...index.snapshot.tasks.values()].some((t) => t.text === 'Fix router config' && t.noteDate === '2026-08-28')).toBe(true);
+    expect(await vault.read('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')).toContain('Wrapped the day.');
+    expect((await call('POST', 'day/2026-08-25/wrapup', { decisions: [{ ref: router.ref, fate: 'sideways' }] })).status).toBe(400);
+    expect((await call('POST', 'day/2026-08-25/wrapup', {})).status).toBe(400);
+  });
+
+  it('rolls a day over', async () => {
+    const { call } = await api();
+    const r = await call('POST', 'day/2026-08-25/rollover', { to: '2026-08-27' });
+    expect(r.status).toBe(200);
+    expect(r.body.moved).toBeGreaterThan(0);
+    expect(r.body.written.some((p: string) => p.includes('27, Thursday'))).toBe(true);
+    expect((await call('POST', 'day/2026-08-25/rollover', { to: 'never' })).status).toBe(400);
+  });
+
+  it('writes, edits, replies to and removes daybook entries', async () => {
+    const { call } = await api();
+    const a = await call('POST', `day/${TODAY}/daybook`, { text: 'Started on the outline', time: '09:15' });
+    expect(a.status).toBe(201);
+    expect(a.body.entries).toHaveLength(1);
+    const line = a.body.entries[0].line;
+    expect(a.body.entries[0]).toMatchObject({ time: '09:15', text: 'Started on the outline', replies: [] });
+    const rep = await call('POST', `day/${TODAY}/daybook/${line}/replies`, { text: 'Went well' });
+    expect(rep.status).toBe(201);
+    expect(rep.body.entries[0].replies).toEqual([{ text: 'Went well', icon: '💬', line: line + 1 }]);
+    const ed = await call('PATCH', `day/${TODAY}/daybook/${line}`, { text: 'Started on the outline, properly' });
+    expect(ed.body.entries[0].text).toBe('Started on the outline, properly');
+    const day = await call('GET', `day/${TODAY}`);
+    expect(day.body.daybook.heading).toEqual(expect.any(Number));
+    expect((await call('DELETE', `day/${TODAY}/daybook/999`)).status).toBe(404);
+    const del = await call('DELETE', `day/${TODAY}/daybook/${line}`);
+    expect(del.body.entries).toEqual([]);
+    expect((await call('POST', `day/${TODAY}/daybook`, {})).status).toBe(400);
+  });
+
+  it('lays a focus day out with the pomodoro settings around what is booked', async () => {
+    const { call } = await api();
+    const r = await call('POST', 'focus/layout', { start: '09:00', date: '2026-08-25', tasks: [{ ref: 'tsk-0001', minutes: 120 }, { ref: 'tsk-0002' }] });
+    expect(r.status).toBe(200);
+    expect(r.body.blocks[0]).toMatchObject({ taskKey: 'tsk-0001', kind: 'focus', start: '09:00', index: 1, of: 3 });
+    expect(r.body.blocks.some((b: any) => b.kind === 'break')).toBe(true);
+    expect(r.body.focusMinutes).toBe(120 + 30);
+    expect(r.body.busy).toEqual([{ start: '08:00', end: '09:00' }]);
+    expect((await call('POST', 'focus/layout', { tasks: [] })).status).toBe(400);
+  });
+});

@@ -150,6 +150,36 @@ export function dayPartOf(h: Habit, completions: HabitCompletion[], date: IsoDat
 
 export function daysSince(a: IsoDate, b: IsoDate): number { return diffDays(a, b); }
 
+export interface HabitDayOccurrence {
+  /** The part of the day this occurrence sits in: a parted habit's part, or where a day-level line was moved to for the day. */
+  part?: HabitPart;
+  state: 'done' | 'skipped' | 'missed' | 'pending';
+  /** The line in the daily note, when there is one. */
+  line?: number;
+  path?: string;
+}
+
+export interface HabitDayRow { habit: Habit; due: boolean; occurrences: HabitDayOccurrence[] }
+
+/**
+ * The habit rows a day shows — what the Today tab lists: every habit due on the date, plus any with a
+ * tick on it that day (a habit done on an off day still counts). One occurrence per part for a parted
+ * habit, else the single day-level one, ticked where its line sits (a day-level line moved into a part
+ * of the day is read from that part).
+ */
+export function habitsOnDay(habits: Habit[], completions: HabitCompletion[], date: IsoDate): HabitDayRow[] {
+  const rows = habits.filter((hb) => habitDue(hb, date) || completions.some((c) => c.habitId === hb.id && c.date === date));
+  return rows.map((hb) => {
+    const movedTo = dayPartOf(hb, completions, date);
+    const occurrences = habitOccurrences(hb).map((part): HabitDayOccurrence => {
+      const c = completions.find((x) => x.habitId === hb.id && x.date === date && (x.part === part || (part === undefined && movedTo !== undefined && x.part === movedTo)));
+      const at = part ?? movedTo;
+      return { ...(at ? { part: at } : {}), state: c?.state ?? 'pending', ...(c ? { line: c.line, path: c.path } : {}) };
+    });
+    return { habit: hb, due: habitDue(hb, date), occurrences };
+  });
+}
+
 export interface HabitPeriodCell {
   period: Period;
   /** Occurrences due and done inside the period, up to today. A tick on an unscheduled day counts as due and done. */

@@ -5,7 +5,7 @@
 import { Modal } from 'obsidian';
 import type { IsoDate, Task } from '../../core/types';
 import { addDays, humanDate, minutesToHuman } from '../../core/dates';
-import { dayPlan } from '../../data/planner';
+import { dayPlan, wrapUpItems } from '../../data/planner';
 import { button, chip, h, richText } from '../dom';
 import type { UiContext } from '../context';
 import { taskLabel } from '../context';
@@ -18,7 +18,8 @@ export function openWrapUp(ctx: UiContext, date: IsoDate): void {
   const settings = ctx.settings();
   const snap = ctx.index.snapshot;
   const plan = dayPlan(snap, date, settings);
-  const open: Task[] = [...plan.today.filter((t) => t.section !== 'outside'), ...plan.mirrors.map((x) => x.mirror), ...plan.unmirrored, ...plan.elsewhere].filter((t) => !['done', 'cancelled', 'forwarded'].includes(t.status));
+  const items = wrapUpItems(snap, plan);
+  const open: Task[] = items.open.map((it) => it.task);
   const tomorrow = addDays(date, 1);
   const fates = new Map<string, Fate>(open.map((t) => [t.key, settings.rolloverTarget === 'tomorrow' ? { kind: 'move', date: tomorrow } : { kind: 'unschedule' }]));
   let note = '';
@@ -62,11 +63,9 @@ export function openWrapUp(ctx: UiContext, date: IsoDate): void {
   async function apply(): Promise<void> {
     m.close();
     await ctx.run('Wrap up', async () => {
-      const touched = new Set<string>();
+      const touched = new Set<string>(items.projectsTouched);
       for (const t of open) {
         const f = fates.get(t.key)!;
-        if (t.projectId) touched.add(t.projectId);
-        else if (t.origin === 'daily-mirror' && t.mirrorOf) { const s = ctx.index.task(t.mirrorOf); if (s?.projectId) touched.add(s.projectId); }
         switch (f.kind) {
           case 'move': {
             if (t.origin === 'daily-mirror' && date < today) {
@@ -81,7 +80,6 @@ export function openWrapUp(ctx: UiContext, date: IsoDate): void {
           case 'keep': break;
         }
       }
-      for (const t of plan.done) { if (t.projectId) touched.add(t.projectId); }
       if (note.trim() !== '') for (const pid of touched) await ctx.mutations.appendLog(pid, note.trim());
       const moved = [...fates.values()].filter((f) => f.kind === 'move').length;
       ctx.notify(`Wrapped up: ${plan.doneCount} done, ${moved} carried forward.`);

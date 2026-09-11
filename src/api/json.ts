@@ -38,8 +38,11 @@ export interface Ctx extends ApiDeps {
 
 export const ctxOf = (d: ApiDeps): Ctx => ({ ...d, health: new Map() });
 
-/** A task's address on the wire: its 🆔, or its index key when it has none yet. */
-export const refOf = (t: Task): string => t.id ?? t.key;
+/**
+ * A task's address on the wire: its 🆔, or its index key when it has none yet. A mirror line on a day
+ * is addressed by its own key (`id@date`) — that is the line a day acts on, and the id belongs to the source.
+ */
+export const refOf = (t: Task): string => (t.origin === 'daily-mirror' ? t.key : t.id ?? t.key);
 
 export function healthOf(p: Project, c: Ctx): ProjectHealth {
   let h = c.health.get(p.id);

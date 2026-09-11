@@ -162,6 +162,58 @@ Health gains `api`, `revision`, `vault` (the vault's folder name) and `weekStart
 `defaultCaptureTime`, `foldStepsByDefault`, `defaultTab`, and the resolved daily-note folder and
 format.
 
+### The day (Today tab)
+
+```
+GET  /day/:date                 the day as the Today tab reads it
+POST /day/:date/note            create the daily note from the template → { path, written }
+POST /day/:date/habits          put the day's due habits into the note → { added, written }
+GET  /day/:date/candidates      Plan day: ranked candidates
+POST /day/:date/plan            Plan day: write the plan
+GET  /day/:date/wrapup          Wrap up: what is still open
+POST /day/:date/wrapup          Wrap up: apply the decisions
+POST /day/:date/rollover        carry every open line forward → { moved, unscheduled, written }
+GET  /day/:date/daybook         the diary
+POST /day/:date/daybook         { text, time?, icon? } → 201
+PATCH  /day/:date/daybook/:line { text }
+DELETE /day/:date/daybook/:line
+POST /day/:date/daybook/:line/replies  { text, icon? } → 201
+POST /focus/layout              lay tasks out as focus blocks and breaks
+```
+
+`GET /day/:date` returns `{ date, notePath, isToday, byPart: { morning, afternoon, evening,
+anytime }, timeBlocks, done, openCount, doneCount, plannedMinutes, doneMinutes, capacityMinutes,
+habits, daybook: { heading, entries }, timeline }`. Each entry of `byPart` is a **day item**:
+`{ task, display, part, kind }` where `task` is the line to act on (send its `ref`), `display`
+is the source task when the line is a mirror (else `null`: it is the same task), and `kind` is
+`daily | mirror | unmirrored | elsewhere | timeblock | subtask`. `habits` lists every habit due
+that day or ticked that day: `{ id, title, icon, iconImage, color, parts, dueToday, occurrences:
+[ { part, state, line } ], streak }` (one occurrence per part for a parted habit). `timeline` is
+the time grid: `{ timed: [ { task, start, end, column, columns } ], allDay }` in minutes from
+midnight.
+
+`GET /day/:date/candidates` → `{ capacityMinutes, plannedMinutes, candidates: [ { task, reason,
+score, minutes } ] }`; `reason` is `overdue | due-soon | scheduled-past | next-action | inbox |
+unblocked | in-progress`. `POST /day/:date/plan` takes `{ items: [ { ref, part? } ], remove?:
+[ref], habits?: true }` and does what the modal's button does: creates the note, syncs the day's
+habits, plans each item, then unschedules `remove` → `{ planned, removed, written }`. (The
+habits are always synced when anything is planned; `habits: true` alone syncs them without
+planning.)
+
+`GET /day/:date/wrapup` → `{ open: [day item], suggestedDate, rolloverTarget, projectsTouched:
+[ { id, title } ], doneCount, doneMinutes }`. `POST /day/:date/wrapup` takes
+`{ decisions: [ { ref, fate, date?, part? } ], log?: [ { projectId, text } ] }` with `fate` one
+of `tomorrow | date | unschedule | done | cancelled | keep`, applies them in order with the same
+mutations the modal uses, keeps going past a failing item, then appends each log line to its
+project → `{ applied, logged, failed: [ { ref, error } ], written }`.
+
+`POST /day/:date/rollover` takes `{ to: date | null }` (default: the next day).
+
+`POST /focus/layout` takes `{ start?: "09:00", end?, date?, tasks: [ { ref, minutes? } ] }` and
+returns `{ from, to, busy, blocks: [ { taskKey, kind, start, end, index, of } ], overflow,
+focusMinutes, breakMinutes }` from the focus settings; with `date` the day's timed items are
+treated as booked.
+
 ## Attachments
 
 Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`

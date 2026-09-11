@@ -52,6 +52,8 @@ interface FileEntry {
   noteRef?: NoteRef;
   /** A daily note's diary entries. */
   daybook?: DaybookEntry[];
+  /** The diary heading's line, when the note has one. */
+  daybookHeading?: number;
   /** A song, when the note says it is one — Maestro's `type: song` and what it carries. */
   song?: SongNote;
   /** Basenames linked under this note's Notes heading. */
@@ -305,7 +307,7 @@ export class HelmIndex {
     const scan = date !== undefined ? findRegion(doc.lines, s) : { broken: false };
     if (scan.broken) entry.diagnostics.push({ severity: 'error', code: 'HELM-D01', message: 'Helm region has a start marker without an end marker; the note is read-only until fixed.', path });
     entry.hasRegion = scan.region !== undefined;
-    if (date !== undefined) entry.daybook = parseDaybook(doc, s.daybookHeading).entries;
+    if (date !== undefined) { const db = parseDaybook(doc, s.daybookHeading); entry.daybook = db.entries; if (db.heading !== -1) entry.daybookHeading = db.heading; }
     const sectionOfLine = new Map<number, Section>();
     if (scan.region) for (const sec of ['habits', 'morning', 'afternoon', 'evening', 'anytime'] as Section[]) for (const l of scan.region.sections[sec].taskLines) sectionOfLine.set(l, sec);
 
@@ -638,6 +640,11 @@ export class HelmIndex {
   daybook(date: IsoDate): DaybookEntry[] {
     const path = this.dailyPath(date);
     return (path ? this.files.get(path)?.daybook : undefined) ?? [];
+  }
+
+  /** The line of the day's diary heading, or undefined when the note has none (or does not exist). */
+  daybookHeadingLine(date: IsoDate): number | undefined {
+    return this.files.get(this.dailyPath(date))?.daybookHeading;
   }
 
   taskById(id: string): Task | undefined {
