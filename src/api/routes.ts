@@ -12,7 +12,7 @@ import { profileFor, parseAssignment, type Assignment } from '../core/profiles';
 import { plainLabel } from '../core/label';
 import { parsePeriod } from '../core/periods';
 import { attachmentsJson, ctxOf, goalJson, healthJson, healthOf, projectJson, refOf, taskDetailJson, taskJson, taskTree, type ApiDeps, type Ctx } from './json';
-import { findGoal, handleV2, reportRoute } from './v2';
+import { attachmentRoutes, findGoal, handleV2, reportRoute } from './v2';
 import { parseProjectLog } from '../core/project';
 import { formatRecurrence, parseRecurrence } from '../core/recurrence';
 import { normaliseLink } from '../core/links';
@@ -161,6 +161,12 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       if (!steps.length) return bad('steps must be a list of texts');
       const made2 = await d.mutations.addSteps(parent.key, steps, num(body['effortMinutes']));
       return made({ tasks: made2.map((t) => taskJson(t, d)), written: d.written() });
+    }
+    if (ref !== undefined && (sub === 'attachments' || sub === 'notes' || sub === 'drawings') && sub !== undefined) {
+      const t = findTask(ref, d);
+      if (!t) return missing(`No task ${ref}`);
+      const r = await attachmentRoutes({ kind: 'task', key: t.mirrorOf ?? t.key, ...(t.id ? { id: t.id } : {}), title: t.text.trim() || 'task' }, sub, parts[3], method, body, req.query, d);
+      if (r) return r;
     }
     if (ref !== undefined && sub !== undefined && parts.length === 3) {
       const t = findTask(ref, d);
@@ -315,20 +321,15 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       await d.mutations.unlinkTaskFromProject(p.id, taskId);
       return ok({ relatedTaskIds: d.index.project(p.id)?.relatedTaskIds ?? [], written: d.written() });
     }
-    if (method === 'GET' && ref !== undefined && sub === 'attachments') {
+    if (ref !== undefined && (sub === 'attachments' || sub === 'notes' || sub === 'drawings')) {
       const p = d.index.project(ref);
-      return p ? ok(attachmentsJson({ kind: 'project', id: p.id, title: p.title }, d)) : missing(`No project ${ref}`);
+      if (!p) return missing(`No project ${ref}`);
+      const r = await attachmentRoutes({ kind: 'project', id: p.id, title: p.title }, sub, parts[3], method, body, req.query, d);
+      if (r) return r;
     }
     if (method === 'GET' && ref !== undefined && sub === 'report') {
       const p = d.index.project(ref);
       return p ? reportRoute(req.query, d, p.id) : missing(`No project ${ref}`);
-    }
-    if (method === 'POST' && ref !== undefined && sub === 'notes') {
-      const p = d.index.project(ref);
-      if (!p) return missing(`No project ${ref}`);
-      const target = { kind: 'project' as const, id: p.id, title: p.title };
-      const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}) });
-      return made({ path, attachments: attachmentsJson(target, d), written: d.written() });
     }
     if (method === 'POST' && ref !== undefined && sub === 'goal') {
       const p = d.index.project(ref);
@@ -439,12 +440,6 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
 
 /** `POST /tasks/:id/<action>` and the link routes. Undefined when `sub` is not one of them. */
 async function taskAction(t: Task, sub: string, method: string, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
-  if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'task', key: t.key, ...(t.id ? { id: t.id } : {}), title: t.text }, d));
-  if (sub === 'notes' && method === 'POST') {
-    const target = { kind: 'task' as const, key: t.mirrorOf ?? t.key, ...(t.id ? { id: t.id } : {}), title: t.text.trim() || 'task' };
-    const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}) });
-    return made({ path, attachments: attachmentsJson(target, d), written: d.written() });
-  }
   if (sub === 'skip' && method === 'POST') {
     if (!t.recurrence?.parsed) return bad('Only a repeating task can skip an occurrence; cancel it instead');
     const next = nextOccurrenceOf(t, d.today()) ?? null;

@@ -859,3 +859,87 @@ describe('v2 · §14 amendments', () => {
     expect(dg.body).toMatchObject({ ready: true, revision: expect.any(Number), diagnostics: expect.any(Array), dailyNotes: [] });
   });
 });
+
+const DRAW = (fm: string, text = ''): string => `---\n${fm}\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n---\n# Excalidraw Data\n\n## Text Elements\n${text}\n\n%%\n## Drawing\n\`\`\`json\n{"type":"excalidraw","elements":[]}\n\`\`\`\n%%\n`;
+
+describe('v2 · Phase C: drawings, linking notes, binary files, daily-note info', () => {
+  it('creates a drawing for a target, links and unlinks an existing one, and deletes one', async () => {
+    const { call, vault } = await api({ 'Excalidraw/random.excalidraw.md': DRAW('', 'a sketch ^a'), 'Excalidraw/board.canvas': '{}' });
+    const made = await call('POST', 'tasks/tsk-0002/drawings', { name: 'Chapter 2 flow' });
+    expect(made.status).toBe(201);
+    expect(made.body.path).toMatch(/Chapter 2 flow\.excalidraw\.md$/);
+    expect(await vault.read(made.body.path)).toContain('helm-task: tsk-0002');
+    expect(made.body.attachments.drawings.map((x: any) => x.path)).toEqual([made.body.path]);
+    expect(made.body.target).toEqual({ kind: 'task', ref: 'tsk-0002' });
+    const linked = await call('POST', 'projects/prj-kitchen/drawings/link', { path: 'Excalidraw/random.excalidraw.md' });
+    expect(linked.status).toBe(200);
+    expect(await vault.read('Excalidraw/random.excalidraw.md')).toContain('helm-project: prj-kitchen');
+    expect(linked.body.attachments.drawings.map((x: any) => x.path)).toContain('Excalidraw/random.excalidraw.md');
+    expect((await call('GET', 'projects/prj-kitchen/attachments')).body.drawings.map((x: any) => x.path)).toContain('Excalidraw/random.excalidraw.md');
+    const unlinked = await call('DELETE', 'projects/prj-kitchen/drawings/link', { path: 'Excalidraw/random.excalidraw.md' });
+    expect(unlinked.body.attachments.drawings.map((x: any) => x.path)).not.toContain('Excalidraw/random.excalidraw.md');
+    expect((await call('DELETE', 'projects/prj-kitchen/drawings/link', { path: 'Excalidraw/random.excalidraw.md' })).status).toBe(404);
+    expect((await call('POST', 'projects/prj-kitchen/drawings/link', { path: 'Excalidraw/nope.excalidraw.md' })).status).toBe(404);
+    await expect(call('POST', `day/${TODAY}/drawings/link`, { path: 'Excalidraw/board.canvas' })).rejects.toThrow(/canvas/); // Helm's own refusal → 500
+    const day = await call('POST', `day/${TODAY}/drawings`, {});
+    expect(await vault.read(day.body.path)).toContain(`helm-date: ${TODAY}`);
+    const per = await call('POST', 'periods/2026-W35/drawings', {});
+    expect(await vault.read(per.body.path)).toContain('helm-period: 2026-W35');
+    const hab = await call('POST', 'habits/hab-read/drawings', {});
+    expect(await vault.read(hab.body.path)).toContain('helm-habit: hab-read');
+    const del = await call('DELETE', 'drawings', { path: made.body.path });
+    expect(del.status).toBe(200);
+    expect(await vault.exists(made.body.path)).toBe(false);
+    expect((await call('DELETE', 'drawings', { path: 'Excalidraw/nope.excalidraw.md' })).status).toBe(404);
+  });
+
+  it('offers linkable notes and links or unlinks an existing note to a target', async () => {
+    const { call, vault } = await api({ '81 AI/Cert research.md': '# Cert research\n\nProse.\n', '81 AI/Other.md': '# Other\n' });
+    const pick = await call('GET', 'notes/linkable', undefined, { q: 'cert' });
+    expect(pick.status).toBe(200);
+    expect(pick.body.notes.map((n: any) => n.path)).toEqual(['81 AI/Cert research.md', '02 PROJECTS/⮕ Oracle/OCI Certification/OCI Certification.md']); // title-prefix matches first
+    const all = await call('GET', 'notes/linkable');
+    expect(all.body.total).toBeGreaterThan(2);
+    expect(all.body.notes.some((n: any) => n.kind === 'project')).toBe(true);
+    expect(all.body.notes.some((n: any) => n.path.includes('Daily Notes'))).toBe(false); // a day is attached as a day
+    const link = await call('POST', 'tasks/tsk-0002/notes/link', { path: '81 AI/Cert research.md' });
+    expect(link.status).toBe(200);
+    expect(await vault.read('81 AI/Cert research.md')).toContain('helm-task: tsk-0002');
+    expect(link.body.attachments.notes.map((n: any) => n.path)).toEqual(['81 AI/Cert research.md']);
+    expect((await call('GET', 'tasks/tsk-0002')).body.attachments.notes).toHaveLength(1);
+    const hab = await call('POST', 'habits/hab-read/notes/link', { path: '81 AI/Cert research.md' });
+    expect(hab.body.attachments.notes).toHaveLength(1);
+    const unlink = await call('DELETE', 'tasks/tsk-0002/notes/link', { path: '81 AI/Cert research.md' });
+    expect(unlink.body.attachments.notes).toEqual([]);
+    expect(await vault.read('81 AI/Cert research.md')).not.toContain('helm-task');
+    expect((await call('DELETE', 'tasks/tsk-0002/notes/link', { path: '81 AI/Cert research.md' })).status).toBe(404);
+    expect((await call('POST', 'tasks/tsk-0002/notes/link', { path: 'Nowhere.md' })).status).toBe(404);
+    expect((await call('POST', 'tasks/tsk-0002/notes/link', { path: '../x.md' })).status).toBe(400);
+    expect((await call('POST', 'tasks/tsk-0002/notes/link', {})).status).toBe(400);
+  });
+
+  it('serves drawings and habit icons as bytes, and nothing else', async () => {
+    const { call, m, vault } = await api({ 'Excalidraw/random.excalidraw.md': DRAW('', 'x ^a'), 'Excalidraw/board.canvas': '{"nodes":[]}' });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const icon = await m.saveHabitIcon('read', png.buffer, 'png');
+    await m.setHabitFields('hab-read', { iconImage: icon });
+    const r = await call('GET', 'files/binary', undefined, { path: icon });
+    expect(r.status).toBe(200);
+    expect(r.raw).toMatchObject({ contentType: 'image/png' });
+    expect([...r.raw.bytes]).toEqual([...png]);
+    await vault.writeBinary('Excalidraw/board.canvas', new TextEncoder().encode('{"nodes":[]}').buffer as ArrayBuffer);
+    const canvas = await call('GET', 'files/binary', undefined, { path: 'Excalidraw/board.canvas' });
+    expect(canvas.status).toBe(200);
+    expect(canvas.raw.contentType).toBe('application/json');
+    expect((await call('GET', 'files/binary', undefined, { path: '01 INBOX/Inbox.md' })).status).toBe(404);
+    expect((await call('GET', 'files/binary', undefined, { path: '../etc/passwd' })).status).toBe(404);
+    expect((await call('GET', 'files/binary', undefined, { path: 'Somewhere/photo.png' })).status).toBe(404); // an image the index does not know
+    expect((await call('GET', 'files/binary')).status).toBe(400);
+  });
+
+  it('says whether the daily note exists and whether its region is usable', async () => {
+    const { call } = await api();
+    expect((await call('GET', 'day/2026-08-25')).body.dailyNote).toEqual({ exists: true, hasRegion: true, regionBroken: false });
+    expect((await call('GET', 'day/2026-08-27')).body.dailyNote).toEqual({ exists: false, hasRegion: false, regionBroken: false });
+  });
+});

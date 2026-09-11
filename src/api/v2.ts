@@ -30,7 +30,9 @@ import { PRIORITIES } from './routes';
 import { ALL_SECTIONS, buildReport, REPORT_SCOPES, type Report, type ReportScope, type ReportSections } from '../data/report';
 
 /** Heads v2 owns: an unmatched method on one of these is a 405, anything else a 404. */
-const HEADS = new Set(['settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files', 'report', 'report.pdf', 'maintenance', 'diagnostics']);
+const BINARY_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', excalidraw: 'application/json', canvas: 'application/json' };
+
+const HEADS = new Set(['drawings', 'settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files', 'report', 'report.pdf', 'maintenance', 'diagnostics']);
 
 export async function handleV2(req: ApiRequest, d: Ctx): Promise<ApiResponse | undefined> {
   const parts = req.path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
@@ -145,13 +147,12 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
       }
       return ok({ date, applied, failed, written: d.written() });
     }
-    if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'date', date, title: date }, d));
-    if (sub === 'notes' && method === 'POST') return createNote({ kind: 'date', date, title: date }, body, d);
+    if (sub === 'attachments' || sub === 'notes' || sub === 'drawings') return attachmentRoutes({ kind: 'date', date, title: date }, sub, sub2, method, body, req.query, d);
   }
 
   if (head === 'focus' && ref === 'layout' && method === 'POST') return focusLayout(body, d);
 
-  if (head === 'habits') return habitsRoute(ref, sub, method, req.query, body, d);
+  if (head === 'habits') return habitsRoute(ref, sub, sub2, method, req.query, body, d);
 
   if (head === 'inbox' && method === 'GET' && parts.length === 1) {
     const r = inboxItems(d.index.snapshot);
@@ -194,8 +195,7 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     if (!period) return bad(`Not a period: ${ref} (try 2026, 2026-Q3, 2026-09 or 2026-W37)`);
     if (sub === undefined && method === 'GET') return ok(horizonPeriodJson(horizonPeriod(d.index.snapshot, period, d.today(), d.settings(), d.health), d));
     if (sub === 'note' && method === 'POST') { const path = await d.mutations.ensurePeriodicNote(period); return ok({ path, period: periodJson(period, d), written: d.written() }); }
-    if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'period', key: period.key, title: period.key }, d));
-    if (sub === 'notes' && method === 'POST') return createNote({ kind: 'period', key: period.key, title: period.key }, body, d);
+    if (sub === 'attachments' || sub === 'notes' || sub === 'drawings') return attachmentRoutes({ kind: 'period', key: period.key, title: period.key }, sub, sub2, method, body, req.query, d);
   }
 
   if (head === 'horizons' && method === 'GET' && parts.length === 1) {
@@ -280,6 +280,38 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     if (parts.length === 1) return captureRoute(body, d, true);
   }
 
+  if (head === 'notes' && ref === 'linkable' && method === 'GET' && parts.length === 2) {
+    const q = (req.query['q'] ?? '').trim().toLowerCase();
+    const limit = Math.min(Math.max(1, Number(req.query['limit'] ?? 50) || 50), 500);
+    const all = d.index.linkableNotes();
+    const hits = q ? all.filter((n) => n.title.toLowerCase().includes(q) || n.path.toLowerCase().includes(q)).sort((a, b) => Number(b.title.toLowerCase().startsWith(q)) - Number(a.title.toLowerCase().startsWith(q))) : all;
+    return ok({ total: hits.length, notes: hits.slice(0, limit).map((n) => ({ path: n.path, title: n.title, kind: n.kind ?? 'note' })) });
+  }
+
+  if (head === 'drawings' && method === 'DELETE' && parts.length === 1) {
+    const path = str(body['path']) ?? req.query['path'];
+    if (!path) return bad('Send the drawing path');
+    if (!d.index.snapshot.drawings.has(path)) return missing(`${path} is not a drawing Helm knows`);
+    await d.mutations.deleteDrawing(path);
+    return ok({ deleted: path, written: d.written() });
+  }
+
+  if (head === 'files' && ref === 'binary' && method === 'GET' && parts.length === 2) {
+    const path = (req.query['path'] ?? '').replace(/^\/+/, '');
+    if (!path) return bad('Send the path of an image or drawing the index knows');
+    if (path.split('/').some((seg) => seg === '..' || seg === '.')) return missing('Only files inside the vault are served');
+    const ext = (path.split('.').pop() ?? '').toLowerCase();
+    const type = BINARY_TYPES[ext];
+    if (!type) return missing('Only png, jpg, gif, webp, svg, .excalidraw and .canvas files are served');
+    const snap = d.index.snapshot;
+    const iconsFolder = `${d.settings().habitsFolder.replace(/\/+$/, '')}/icons/`;
+    const known = snap.drawings.has(path) || [...snap.habits.values()].some((h) => h.iconImage === path) || (path.startsWith(iconsFolder) && ext !== 'excalidraw' && ext !== 'canvas');
+    if (!known) return missing(`${path} is not a drawing or habit icon the index knows`);
+    if (!d.readBinary) return { status: 501, body: { error: 'This server cannot read binary files' } };
+    try { return { status: 200, body: null, raw: { contentType: type, bytes: new Uint8Array(await d.readBinary(path)) } }; }
+    catch { return missing(`${path} could not be read`); }
+  }
+
   if (head === 'notes' && method === 'DELETE' && parts.length === 1) {
     const path = str(body['path']) ?? req.query['path'];
     if (!path) return bad('Send the note path');
@@ -317,9 +349,47 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
   return undefined;
 }
 
-async function createNote(target: DrawingTarget, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse> {
-  const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(str(body['folder']) ? { folder: str(body['folder'])! } : {}) });
-  return made({ path, attachments: attachmentsJson(target, d), written: d.written() });
+/**
+ * What every attachable thing (task, project, day, period, habit) answers under `…/attachments`,
+ * `…/notes`, `…/notes/link`, `…/drawings` and `…/drawings/link`. Undefined when the path is none of those.
+ */
+export async function attachmentRoutes(target: DrawingTarget, sub: string | undefined, tail: string | undefined, method: string, body: Record<string, unknown>, query: Record<string, string>, d: Ctx): Promise<ApiResponse | undefined> {
+  const pathArg = (): string | undefined => str(body['path']) ?? query['path'];
+  const after = (status = 200): ApiResponse => ({ status, body: { target: { kind: target.kind, ...(target.kind === 'task' ? { ref: target.id ?? target.key } : target.kind === 'date' ? { date: target.date } : target.kind === 'period' ? { key: target.key } : { id: target.id }) }, attachments: attachmentsJson(target, d), written: d.written() } });
+  if (sub === 'attachments' && tail === undefined && method === 'GET') return ok(attachmentsJson(target, d));
+  if (sub === 'notes' && tail === undefined && method === 'POST') {
+    const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(str(body['folder']) ? { folder: str(body['folder'])! } : {}) });
+    return { status: 201, body: { path, ...(after().body as object) } };
+  }
+  if (sub === 'notes' && tail === 'link' && (method === 'POST' || method === 'DELETE')) {
+    const path = pathArg();
+    if (!path) return bad('Send the note path');
+    if (!path.endsWith('.md') || path.split('/').some((x) => x === '..')) return bad('The path must be a markdown note inside the vault');
+    if (method === 'POST') {
+      if (!d.index.linkableNotes().some((n) => n.path === path) && !d.index.snapshot.notes.has(path)) return missing(`${path} is not a note Helm can attach (see GET /notes/linkable)`);
+      await d.mutations.linkNote(target, path);
+    } else {
+      if (!d.index.notesFor(target).some((n) => n.path === path)) return missing(`${path} is not attached here`);
+      await d.mutations.unlinkNote(target, path);
+    }
+    return after();
+  }
+  if (sub === 'drawings' && tail === undefined && method === 'POST') {
+    const path = await d.mutations.createDrawing(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(str(body['folder']) ? { folder: str(body['folder'])! } : {}) });
+    return { status: 201, body: { path, ...(after().body as object) } };
+  }
+  if (sub === 'drawings' && tail === 'link' && (method === 'POST' || method === 'DELETE')) {
+    const path = pathArg();
+    if (!path) return bad('Send the drawing path');
+    if (!d.index.snapshot.drawings.has(path)) return missing(`${path} is not a drawing Helm knows`);
+    if (method === 'POST') await d.mutations.linkDrawing(target, path);
+    else {
+      if (!d.index.drawingsFor(target).some((x) => x.path === path)) return missing(`${path} is not attached here`);
+      await d.mutations.unlinkDrawing(target, path);
+    }
+    return after();
+  }
+  return undefined;
 }
 
 /* ── Report ────────────────────────────────────────────────────────────── */
@@ -475,7 +545,7 @@ function findHabit(ref: string, d: Ctx): Habit | undefined {
 
 const HABIT_STATES = ['done', 'skipped', 'missed', 'pending'] as const;
 
-async function habitsRoute(ref: string | undefined, sub: string | undefined, method: string, query: Record<string, string>, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
+async function habitsRoute(ref: string | undefined, sub: string | undefined, tail: string | undefined, method: string, query: Record<string, string>, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
   const snap = d.index.snapshot;
   if (ref === undefined && method === 'GET') {
     const all = query['all'] === 'true';
@@ -553,7 +623,7 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, met
     await d.mutations.moveHabitForDay(h.id, date, part as HabitPart | undefined);
     return ok({ id: h.id, date, part: part ?? null, written: d.written() });
   }
-  if (sub === 'attachments' && method === 'GET') return ok(attachmentsJson({ kind: 'habit', id: h.id, title: h.title }, d));
+  if (sub === 'attachments' || sub === 'notes' || sub === 'drawings') { const r = await attachmentRoutes({ kind: 'habit', id: h.id, title: h.title }, sub, tail, method, body, query, d); if (r) return r; }
   if (sub === 'icon' && method === 'GET') {
     if (!h.iconImage) return missing(`${h.id} has no image icon`);
     if (!d.readBinary) return { status: 501, body: { error: 'This server cannot read images' } };
@@ -564,7 +634,6 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, met
       return { status: 200, body: null, raw: { contentType: type, bytes } };
     } catch { return missing(`${h.iconImage} could not be read`); }
   }
-  if (sub === 'notes' && method === 'POST') return createNote({ kind: 'habit', id: h.id, title: h.title }, body, d);
   if (sub === 'pause' && method === 'POST') {
     if (h.removed) return bad('This habit has no note any more');
     if (!h.active) return bad('Already paused');
@@ -595,9 +664,11 @@ export function dayJson(date: IsoDate, d: Ctx): Record<string, unknown> {
     return { id: h.id, title: h.title, icon: h.icon ?? null, iconImage: h.iconImage ?? null, color: h.color ?? null, parts: h.parts ?? [], dueToday: row.due, occurrences: row.occurrences.map((o) => ({ part: o.part ?? null, state: o.state, line: o.line ?? null })), streak: st.streak };
   });
   const heading = d.index.daybookHeadingLine(date);
+  const info = snap.dailyNotes.get(date);
   return {
     date,
-    notePath: snap.dailyNotes.get(date)?.path ?? null,
+    notePath: info?.path ?? null,
+    dailyNote: { exists: info !== undefined, hasRegion: info?.hasRegion ?? false, regionBroken: info?.regionBroken ?? false },
     isToday: date === d.today(),
     byPart: { morning: plan.byPart.morning.map((it) => dayItemJson(it, d)), afternoon: plan.byPart.afternoon.map((it) => dayItemJson(it, d)), evening: plan.byPart.evening.map((it) => dayItemJson(it, d)), anytime: plan.byPart.anytime.map((it) => dayItemJson(it, d)) },
     timeBlocks: plan.timeBlocks.map((t) => taskJson(t, d)),

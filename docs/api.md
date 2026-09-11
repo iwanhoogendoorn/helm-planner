@@ -418,6 +418,32 @@ links under a phase heading.
 **Diagnostics.** `GET /diagnostics` → `{ revision, ready, builtAt, diagnostics: [ { severity,
 code, message, path, line } ], dailyNotes }` (the latter lists days whose Helm region is broken).
 
+### Drawings, linking notes, binary files (Phase C)
+
+Every attachable thing — `/tasks/:id`, `/projects/:id`, `/day/:date`, `/periods/:key`,
+`/habits/:id` — answers the same five sub-routes:
+
+```
+GET    …/attachments              { notes, drawings }
+POST   …/notes        { name?, folder? }   create a note attached here → 201 { path, target, attachments, written }
+POST   …/notes/link   { path }             attach an existing note (a helm-* key is written into its frontmatter)
+DELETE …/notes/link   { path }             detach it
+POST   …/drawings     { name?, folder? }   create an Excalidraw drawing attached here → 201
+POST   …/drawings/link   { path }          attach an existing drawing (Obsidian-format `.excalidraw.md` only; Helm refuses raw `.excalidraw` and `.canvas` files, as in the app)
+DELETE …/drawings/link   { path }          detach it
+```
+
+`GET /notes/linkable?q=&limit=50` → `{ total, notes: [ { path, title, kind } ] }` — the picker's
+list: every note that can be attached (daily notes are attached as days, drawings are not notes),
+title-prefix matches first. `DELETE /drawings { path }` trashes a drawing Helm knows and removes
+its embeds. `DELETE /notes { path }` (above) does the same for an attached note.
+
+`GET /files/binary?path=…` serves the bytes of an image (png, jpg, gif, webp, svg) or a
+`.excalidraw` / `.canvas` file with the right content type — only for drawings the index knows
+and habit icon images (under `<habits folder>/icons/`); anything else is a 404.
+
+`GET /day/:date` also carries `dailyNote: { exists, hasRegion, regionBroken }`.
+
 ## Attachments
 
 Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`
