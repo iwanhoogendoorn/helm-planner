@@ -243,6 +243,15 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       const r = await d.mutations.addPhaseWithTasks(p.id, title, tasks, num(body['effortMinutes']));
       return made({ phase: { id: r.phaseId, title }, tasks: r.tasks.map((t) => taskJson(t, d)), written: d.written() });
     }
+    if (ref !== undefined && sub === 'phases' && parts[3] !== undefined && (parts[4] === 'attachments' || parts[4] === 'notes' || parts[4] === 'drawings')) {
+      const p = d.index.project(ref);
+      if (!p) return missing(`No project ${ref}`);
+      const slug = parts[3];
+      const ph = p.phases.find((x) => x.slug === slug || x.id === slug || x.id === `${p.id}#${slug}`);
+      if (!ph) return missing(`No phase ${slug} in ${p.id}`);
+      const r = await attachmentRoutes({ kind: 'phase', id: ph.id, projectId: p.id, title: ph.title }, parts[4], parts[5], method, body, req.query, d);
+      if (r) return r;
+    }
     if (ref !== undefined && sub === 'phases' && parts[3] !== undefined && parts[4] === 'links' && (method === 'POST' || method === 'DELETE')) {
       const p = d.index.project(ref);
       if (!p) return missing(`No project ${ref}`);

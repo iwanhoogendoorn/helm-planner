@@ -155,12 +155,34 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
   if (head === 'habits') return habitsRoute(ref, sub, sub2, method, req.query, body, d);
 
   if (head === 'inbox' && method === 'GET' && parts.length === 1) {
+    // Capped the way the Inbox tab is: groups by count, a group shows its first 15, 200 rows over all groups, 100 undated project tasks.
     const r = inboxItems(d.index.snapshot);
+    const limit = Math.min(Math.max(1, Number(req.query['limit'] ?? 200) || 200), 5000);
+    const perGroup = Math.min(Math.max(1, Number(req.query['perGroup'] ?? 15) || 15), limit);
+    const groups = [...r.loose.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    let rows = 0;
+    const loose: Record<string, unknown>[] = [];
+    for (const [path, tasks] of groups) {
+      const room = Math.max(0, Math.min(perGroup, limit - rows));
+      const shown = tasks.slice(0, room);
+      rows += shown.length;
+      loose.push({ path, title: baseName(path), count: tasks.length, tasks: shown.map((t) => taskJson(t, d)) });
+    }
+    const projCap = Math.min(Math.max(1, Number(req.query['projectLimit'] ?? 100) || 100), 5000);
     return ok({
       inbox: r.inbox.map((t) => taskJson(t, d)),
-      loose: [...r.loose.entries()].map(([path, tasks]) => ({ path, title: baseName(path), tasks: tasks.map((t) => taskJson(t, d)) })),
-      unscheduledProject: r.unscheduledProject.map((t) => taskJson(t, d)),
+      loose, looseTotal: groups.reduce((n, [, ts]) => n + ts.length, 0), looseGroups: groups.length,
+      unscheduledProject: r.unscheduledProject.slice(0, projCap).map((t) => taskJson(t, d)), unscheduledProjectTotal: r.unscheduledProject.length,
     });
+  }
+  if (head === 'inbox' && ref === 'notes' && method === 'GET' && parts.length === 2) {
+    const path = req.query['path'];
+    if (!path) return bad('Send the note path');
+    const tasks = inboxItems(d.index.snapshot).loose.get(path);
+    if (!tasks) return missing(`${path} holds no open tasks outside a project`);
+    const limit = Math.min(Math.max(1, Number(req.query['limit'] ?? 100) || 100), 1000);
+    const offset = Math.max(0, Number(req.query['offset'] ?? 0) || 0);
+    return ok({ path, title: baseName(path), count: tasks.length, offset, limit, tasks: tasks.slice(offset, offset + limit).map((t) => taskJson(t, d)) });
   }
 
   if (head === 'week' && method === 'GET' && parts.length === 1) {
@@ -292,6 +314,7 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     const path = str(body['path']) ?? req.query['path'];
     if (!path) return bad('Send the drawing path');
     if (!d.index.snapshot.drawings.has(path)) return missing(`${path} is not a drawing Helm knows`);
+    if (!d.index.isAttachedDrawing(path)) return missing(`${path} is not attached to anything; delete it in Obsidian`);
     await d.mutations.deleteDrawing(path);
     return ok({ deleted: path, written: d.written() });
   }
@@ -338,8 +361,10 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
   if (head === 'files' && method === 'GET' && parts.length === 1) {
     const path = (req.query['path'] ?? '').replace(/^\/+/, '');
     if (!path) return bad('Send the path of a markdown file the index knows');
-    if (path.split('/').some((seg) => seg === '..' || seg === '.') || !path.endsWith('.md')) return missing('Only markdown files inside the vault are served');
-    if (!d.index.hasFile(path)) return missing(`${path} is not a file the index knows`);
+    if (path.split('/').some((seg) => seg === '..' || seg === '.')) return missing('Only files inside the vault are served');
+    const drawing = d.index.snapshot.drawings.has(path) && /\.(excalidraw|canvas)$/i.test(path);
+    if (!path.endsWith('.md') && !drawing) return missing('Only markdown files, and the drawings the index knows, are served');
+    if (!d.index.hasFile(path) && !drawing) return missing(`${path} is not a file the index knows`);
     try {
       const content = await d.read(path);
       return ok({ path, content, mtime: d.index.snapshot.notes.get(path)?.mtime ?? null, kind: d.index.fileKind(path) ?? null });
@@ -355,7 +380,7 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
  */
 export async function attachmentRoutes(target: DrawingTarget, sub: string | undefined, tail: string | undefined, method: string, body: Record<string, unknown>, query: Record<string, string>, d: Ctx): Promise<ApiResponse | undefined> {
   const pathArg = (): string | undefined => str(body['path']) ?? query['path'];
-  const after = (status = 200): ApiResponse => ({ status, body: { target: { kind: target.kind, ...(target.kind === 'task' ? { ref: target.id ?? target.key } : target.kind === 'date' ? { date: target.date } : target.kind === 'period' ? { key: target.key } : { id: target.id }) }, attachments: attachmentsJson(target, d), written: d.written() } });
+  const after = (status = 200): ApiResponse => ({ status, body: { target: { kind: target.kind, ...(target.kind === 'task' ? { ref: target.id ?? target.key } : target.kind === 'date' ? { date: target.date } : target.kind === 'period' ? { key: target.key } : target.kind === 'phase' ? { id: target.id, projectId: target.projectId } : { id: target.id }) }, attachments: attachmentsJson(target, d), written: d.written() } });
   if (sub === 'attachments' && tail === undefined && method === 'GET') return ok(attachmentsJson(target, d));
   if (sub === 'notes' && tail === undefined && method === 'POST') {
     const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(str(body['folder']) ? { folder: str(body['folder'])! } : {}) });

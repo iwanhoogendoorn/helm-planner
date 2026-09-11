@@ -610,6 +610,12 @@ export class HelmIndex {
 
   allDrawings(): Drawing[] { return [...this.snapshot.drawings.values()].sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0)); }
 
+  /** Whether a drawing is attached to anything at all (by frontmatter, folder, name or link). */
+  isAttachedDrawing(path: string): boolean {
+    const a = this.attachments.get(path);
+    return a !== undefined && (a.taskKeys.size + a.projectIds.size + a.dates.size + a.periodKeys.size + a.habitIds.size + a.phaseIds.size) > 0;
+  }
+
   /** Drawings attached to a task (by key), project (by id), day or period. Newest first. */
   drawingsFor(target: DrawingTarget): Drawing[] {
     const out: Drawing[] = [];

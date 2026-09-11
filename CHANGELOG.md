@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **API v2: everything the Helm iPhone app uses.** `GET /health` says `api: 2` and carries a
+  `revision` that moves on every change (every response has `x-helm-revision`), so a client
+  polls once and refreshes only when something happened. New routes cover the whole plugin:
+  the day as the Today tab reads it (parts, time blocks, habits, daybook, timeline, free
+  slots), Plan day (candidates, write the plan, fit the day without AI), Wrap up, rollover,
+  the daybook, habits (list, history, create, edit, tick, move, pause), inbox, week, calendar,
+  periods, horizons, goals, the whole project page (phases with task trees, log, links,
+  related tasks, health), task actions (follow-up, plan-into, project-from-task, skip,
+  links, bulk, reorder), review with its checklist, dashboard stats, search, capture (parse
+  and write, the dialog's exact rules), attachments (notes and drawings: list, create, link,
+  unlink, delete) on tasks, projects, phases, days, periods and habits, the report, files,
+  diagnostics and maintenance. Task and project JSON carry every field the app draws. The
+  rules that only lived in the UI — the Today tab's habit rows, the wrap-up selection, the
+  review checklist, capture's destination, the selection bar's bulk walk, Fit-the-day's
+  request — moved into `src/data` so the app and the API run the same code. Full reference:
+  docs/api.md.
 - **The API can listen on Tailscale.** Settings → Local API → **Reachable from**: this machine
   only (the default, unchanged), your Tailscale address (for the Helm iPhone app and other
   devices on your tailnet — Helm finds the `100.x` address itself and falls back to loopback

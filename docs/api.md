@@ -244,8 +244,11 @@ day-level habit's line into a part of the day for that date only. Pause and resu
 
 ### Inbox, week, calendar
 
-`GET /inbox` → `{ inbox, loose: [ { path, title, tasks } ], unscheduledProject }` — the Inbox
-tab's three lists. `GET /week?anchor=2026-09-11` → `{ start, end, capacityMinutes, days:
+`GET /inbox` → `{ inbox, loose: [ { path, title, count, tasks } ], looseTotal, looseGroups,
+unscheduledProject, unscheduledProjectTotal }` — the Inbox tab's three lists, capped the way the
+tab caps them: groups by count, each showing its first 15 tasks (`?perGroup=`), 200 rows over all
+groups (`?limit=`), 100 undated project tasks (`?projectLimit=`). `GET /inbox/notes?path=&limit=100&offset=0`
+pages one note's tasks for an expanded group. `GET /week?anchor=2026-09-11` → `{ start, end, capacityMinutes, days:
 [ { date, open, done, minutes } ], overdue, unscheduledDue }`. `GET /calendar?from=&to=`
 (at most 400 days) → `{ days: [ { date, open, done, dueUnplanned, minutes, openRefs, doneRefs,
 dueUnplannedRefs } ] }`; add `&tasks=true` for `openTasks`, `doneTasks`, `dueUnplannedTasks`
@@ -441,6 +444,10 @@ its embeds. `DELETE /notes { path }` (above) does the same for an attached note.
 `GET /files/binary?path=…` serves the bytes of an image (png, jpg, gif, webp, svg) or a
 `.excalidraw` / `.canvas` file with the right content type — only for drawings the index knows
 and habit icon images (under `<habits folder>/icons/`); anything else is a 404.
+
+A phase has the same five under `/projects/:id/phases/:slug/…`. `DELETE /drawings` only removes a
+drawing that is attached to something. `GET /files` also serves the text of a `.excalidraw` /
+`.canvas` drawing the index knows (`kind: "drawing"`).
 
 `GET /day/:date` also carries `dailyNote: { exists, hasRegion, regionBroken }`.
 

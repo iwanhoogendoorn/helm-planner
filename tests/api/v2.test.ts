@@ -289,7 +289,7 @@ describe('v2 · inbox, week, calendar, periods, horizons, goals', () => {
     const r = await call('GET', 'inbox');
     expect(r.status).toBe(200);
     expect(r.body.inbox.map((t: any) => t.text)).toEqual(['Call the plumber', 'Renew passport']);
-    expect(r.body.loose).toEqual([{ path: '02 PROJECTS/Backlog Tasks.md', title: 'Backlog Tasks', tasks: [expect.objectContaining({ text: 'Learn Rust' })] }]);
+    expect(r.body.loose).toEqual([{ path: '02 PROJECTS/Backlog Tasks.md', title: 'Backlog Tasks', count: 1, tasks: [expect.objectContaining({ text: 'Learn Rust' })] }]);
     expect(r.body.unscheduledProject.map((t: any) => t.text)).toContain('Get three quotes');
   });
 
@@ -941,5 +941,54 @@ describe('v2 · Phase C: drawings, linking notes, binary files, daily-note info'
     const { call } = await api();
     expect((await call('GET', 'day/2026-08-25')).body.dailyNote).toEqual({ exists: true, hasRegion: true, regionBroken: false });
     expect((await call('GET', 'day/2026-08-27')).body.dailyNote).toEqual({ exists: false, hasRegion: false, regionBroken: false });
+  });
+});
+
+describe('v2 · Phase C part 2: phases, drawings on /files, inbox cap, attached-only delete', () => {
+  it('attaches notes and drawings to a phase', async () => {
+    const { call, vault } = await api();
+    const note = await call('POST', 'projects/prj-book/phases/outline/notes', { name: 'Outline notes' });
+    expect(note.status).toBe(201);
+    expect(await vault.read(note.body.path)).toContain('helm-phase: prj-book#outline');
+    expect(note.body.target).toEqual({ kind: 'phase', id: 'prj-book#outline', projectId: 'prj-book' });
+    const dr = await call('POST', 'projects/prj-book/phases/outline/drawings', {});
+    expect(dr.status).toBe(201);
+    expect(await vault.read(dr.body.path)).toContain('helm-phase: prj-book#outline');
+    const att = await call('GET', 'projects/prj-book/phases/outline/attachments');
+    expect(att.body.notes.map((n: any) => n.path)).toEqual([note.body.path]);
+    expect(att.body.drawings.map((x: any) => x.path)).toEqual([dr.body.path]);
+    const un = await call('DELETE', 'projects/prj-book/phases/outline/notes/link', { path: note.body.path });
+    expect(un.body.attachments.notes).toEqual([]);
+    expect((await call('GET', 'projects/prj-book/phases/nope/attachments')).status).toBe(404);
+  });
+
+  it('serves a known drawing as text on /files and only deletes attached drawings', async () => {
+    const { call } = await api({ 'Excalidraw/board.canvas': '{"nodes":[]}', 'Excalidraw/loose.excalidraw.md': DRAW('', 'nothing links here ^a') });
+    const r = await call('GET', 'files', undefined, { path: 'Excalidraw/board.canvas' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ path: 'Excalidraw/board.canvas', content: '{"nodes":[]}', kind: 'drawing' });
+    expect((await call('GET', 'files', undefined, { path: 'Excalidraw/nope.canvas' })).status).toBe(404);
+    expect((await call('DELETE', 'drawings', { path: 'Excalidraw/loose.excalidraw.md' })).status).toBe(404); // not attached to anything
+    const made = await call('POST', 'tasks/tsk-0002/drawings', {});
+    expect((await call('DELETE', 'drawings', { path: made.body.path })).status).toBe(200);
+  });
+
+  it('caps the inbox the way the tab does and pages one note', async () => {
+    const lines = Array.from({ length: 40 }, (_, i) => `- [ ] Note task ${String(i + 1).padStart(2, '0')}`).join('\n');
+    const { call } = await api({ '02 PROJECTS/Reading list.md': `# Reading\n\n${lines}\n` });
+    const r = await call('GET', 'inbox');
+    expect(r.status).toBe(200);
+    expect(r.body.loose.map((g: any) => [g.title, g.count, g.tasks.length])).toEqual([['Reading list', 40, 15], ['Backlog Tasks', 1, 1]]);
+    expect(r.body).toMatchObject({ looseTotal: 41, looseGroups: 2, unscheduledProjectTotal: expect.any(Number) });
+    expect(r.body.unscheduledProject.length).toBeLessThanOrEqual(100);
+    const small = await call('GET', 'inbox', undefined, { limit: '10' });
+    expect(small.body.loose.map((g: any) => g.tasks.length)).toEqual([10, 0]);
+    const wide = await call('GET', 'inbox', undefined, { perGroup: '40' });
+    expect(wide.body.loose[0].tasks).toHaveLength(40);
+    const page = await call('GET', 'inbox/notes', undefined, { path: '02 PROJECTS/Reading list.md', limit: '10', offset: '30' });
+    expect(page.body).toMatchObject({ count: 40, offset: 30, limit: 10 });
+    expect(page.body.tasks.map((t: any) => t.text)).toEqual(Array.from({ length: 10 }, (_, i) => `Note task ${31 + i}`));
+    expect((await call('GET', 'inbox/notes', undefined, { path: '01 INBOX/Inbox.md' })).status).toBe(404);
+    expect((await call('GET', 'inbox/notes')).status).toBe(400);
   });
 });
