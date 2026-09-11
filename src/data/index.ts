@@ -88,7 +88,11 @@ export class HelmIndex {
     return () => { this.listeners.delete(fn); };
   }
 
+  /** Goes up on every change to the snapshot (rebuild, re-parse, mutation) — a client polls it to know when to refresh. */
+  revision = 0;
+
   private emit(): void {
+    this.revision++;
     for (const fn of this.listeners) fn();
   }
 

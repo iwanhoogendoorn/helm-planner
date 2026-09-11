@@ -11,7 +11,7 @@
  */
 import { existsSync, readFileSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { homedir, networkInterfaces } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { randomToken, startApiServer } from '../src/api/server';
 import { API_BASE } from '../src/api/routes';
 import { apiUrls } from '../src/api/bind';
@@ -157,6 +157,7 @@ async function main(): Promise<void> {
       today,
       version,
       written: () => vault.takeWrites(),
+      vaultName: basename(vaultDir),
     },
   });
   const watcher = watchVault();

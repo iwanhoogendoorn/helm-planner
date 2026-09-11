@@ -31,7 +31,7 @@ export async function startApiServer(opts: { port: number; host?: string; token:
   const server = http.createServer((req, res) => {
     const send = (status: number, body: unknown): void => {
       const text = JSON.stringify(body ?? null);
-      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-helm-revision': String(opts.deps.index.revision) });
       res.end(text);
     };
     try {

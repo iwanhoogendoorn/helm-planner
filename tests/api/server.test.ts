@@ -36,7 +36,9 @@ describe('the API server', () => {
     const good = await fetch(`${base}/health`, { headers: { authorization: `Bearer ${token}` } });
     expect(good.status).toBe(200);
     expect(good.headers.get('content-type')).toContain('application/json');
-    expect(await good.json()).toMatchObject({ ok: true, version: '9.9.9' });
+    expect(good.headers.get('cache-control')).toBe('no-store');
+    expect(good.headers.get('x-helm-revision')).toMatch(/^\d+$/);
+    expect(await good.json()).toMatchObject({ ok: true, version: '9.9.9', api: 2 });
   });
 
   it('writes to the vault through a POST and refuses a body that is not JSON', async () => {

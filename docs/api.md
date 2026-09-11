@@ -123,6 +123,45 @@ DELETE /projects/:id
 `status` is one of `idea`, `planned`, `active`, `on-hold`, `done`, `cancelled`, `archived`;
 `priority` one of `low`, `normal`, `medium`, `high`, `urgent`, `critical`.
 
+## API v2 — everything the Helm iPhone app uses
+
+`GET /health` answers `"api": 2` on a plugin that serves these routes. The v1 routes above are
+unchanged; v2 adds fields and routes. A **ref** is a task's `id`, or its `key` when it has no id
+yet — every route that takes `:id` accepts either. Every response carries `x-helm-revision`, and
+`GET /health` carries the same `revision`: an integer that goes up on every change to the index
+(rebuild, file re-parse, mutation), so a client can poll it and refresh only when it moves.
+
+### Task JSON, extended
+
+Beyond the v1 fields: `ref`, `title` (the text without tags and link noise), `projectTitle`,
+`phaseId`, `created`, `start`, `done`, `cancelled`, `noteDate`, `section`, `timeEnd`,
+`timeBlock: {start, end}|null`, `effortRaw`, `progress`, `recurrenceParsed`, `mirrorOf` (the
+source task's ref, on a daily mirror line), `mirrorLink`, `parentRef`, `periodKey`; `subtasks[]`
+gains `ref`. `GET /tasks/:id` also returns `children` (the subtask tree, up to five levels, in
+note order), `followUps` (refs of tasks blocked on this one), `follows` (the task this one
+continues) and `attachments: { notes, drawings }`.
+
+`GET /tasks?ids=a,b,c` (up to 500 refs) returns those tasks in the order asked, unknown ones skipped.
+
+### Project JSON, extended
+
+`childIds`, `goalId`, `goalRef`, `pinned`, `order`, `folderNote`, `folder`, `links`,
+`relatedTaskIds`; each phase carries `slug`, `taskCount`, `doneCount`, `state`
+(`planned|active|done`) and `links`. `GET /projects/:id` and `GET /projects?health=true` add
+`health`: `{ total, done, open, overdue, progress, nextAction, lastTouched, staleDays, flags,
+phaseProgress }`. The list is sorted the way the Projects tab sorts (pinned first, then order,
+status, priority, due); `?area=` filters on the project's area.
+
+### `GET /health` and `GET /settings`
+
+Health gains `api`, `revision`, `vault` (the vault's folder name) and `weekStartsOn`.
+`GET /settings` is the client-relevant subset: the day's window (`dayStarts`, `dayEnds`,
+`morningEnds`, `afternoonEnds`), `dailyCapacityMinutes`, `defaultEffortMinutes`, `weekStartsOn`,
+`captureTags` (an array), `followupTag`, `staleProjectDays`, `rolloverTarget`, `showTimeBlocks`,
+`focus` (the pomodoro settings), `daybookHeading`, the folders, `goalsHeading`,
+`defaultCaptureTime`, `foldStepsByDefault`, `defaultTab`, and the resolved daily-note folder and
+format.
+
 ## Attachments
 
 Notes and drawings attach by a frontmatter key: `helm-task`, `helm-project`, `helm-phase`

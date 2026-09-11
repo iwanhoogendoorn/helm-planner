@@ -149,6 +149,7 @@ export default class HelmPlugin extends Plugin {
           today: () => this.today(),
           version: this.manifest.version,
           written: () => this.vault.takeWrites(),
+          vaultName: this.app.vault.getName(),
         },
       });
     } catch (e) {
