@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "seed": "node scripts/run.mjs scripts/seed-vault.ts",
+    "serve:dev": "node scripts/run.mjs scripts/serve-dev.ts",
     "install:vault": "node scripts/install.mjs"
   },
   "keywords": ["obsidian", "tasks", "projects", "habits", "daily-notes"],
