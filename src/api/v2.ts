@@ -114,7 +114,7 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
       return ok({ date, mirrored: written, failed, written: d.written() });
     }
     if (sub === 'fit' && sub2 === undefined && method === 'POST') {
-      const { req: preq, tasks } = planRequestFor(d.index.snapshot, date, d.settings());
+      const { req: preq, tasks, items } = planRequestFor(d.index.snapshot, date, d.settings());
       const only = strList(body['refs']);
       if (only.length) {
         const keys = new Set<string>();
@@ -123,13 +123,15 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
       }
       if (preq.tasks.length === 0) return bad('Nothing without a time on this day to fit');
       const proposal = proposalFrom(fallbackAnswer(preq), preq, 'helm');
-      const refFor = (key: string): string => { const t = tasks.get(key); return t ? refOf(t) : key; };
+      // `ref` is the day row's ref (the mirror line for a project task), the same key the day payload uses; `sourceRef` is the task itself.
+      const refFor = (key: string): string => { const it = items.get(key); return it ? refOf(it.task) : key; };
+      const sourceFor = (key: string): string => { const t = tasks.get(key); return t ? refOf(t) : key; };
       return ok({
         date, source: proposal.source, from: preq.from, to: preq.to, busy: preq.busy,
-        blocks: proposal.blocks.map((b) => ({ ...b, ref: refFor(b.taskKey) })),
-        overflow: proposal.overflow.map((o) => ({ ref: refFor(o.key), minutes: o.minutes })),
+        blocks: proposal.blocks.map((b) => ({ ...b, ref: refFor(b.taskKey), sourceRef: sourceFor(b.taskKey) })),
+        overflow: proposal.overflow.map((o) => ({ ref: refFor(o.key), sourceRef: sourceFor(o.key), minutes: o.minutes })),
         focusMinutes: proposal.focusMinutes, breakMinutes: proposal.breakMinutes,
-        changes: proposalChanges(proposal.blocks, proposal.answer.minutes).map((c) => ({ ref: refFor(c.key), time: c.start, timeEnd: c.end, effortMinutes: c.effortMinutes })),
+        changes: proposalChanges(proposal.blocks, proposal.answer.minutes).map((c) => ({ ref: refFor(c.key), sourceRef: sourceFor(c.key), time: c.start, timeEnd: c.end, effortMinutes: c.effortMinutes })),
       });
     }
     if (sub === 'fit' && sub2 === 'apply' && method === 'POST') {

@@ -13,7 +13,7 @@ import type { FocusSettings, LaidOut, PlanBlock } from '../core/pomodoro';
 import { DEFAULT_FOCUS, layOutDayPlan } from '../core/pomodoro';
 import type { HelmSettings, IsoDate, Snapshot, Task } from '../core/types';
 import { plainLabel } from '../core/label';
-import { dayPlan, isOpen } from './planner';
+import { dayPlan, isOpen, type DayItem } from './planner';
 import { shortLabel } from '../core/label';
 
 export interface PlanTask {
@@ -49,9 +49,11 @@ export function focusFrom(s: HelmSettings): FocusSettings {
 }
 
 /** What Helm asks about: the day's open, untimed work, and what is already booked in it. */
-export function planRequestFor(snap: Snapshot, date: IsoDate, s: HelmSettings): { req: PlanRequest; tasks: Map<string, Task> } {
+export function planRequestFor(snap: Snapshot, date: IsoDate, s: HelmSettings): { req: PlanRequest; tasks: Map<string, Task>; items: Map<string, DayItem> } {
   const plan = dayPlan(snap, date, s);
   const tasks = new Map<string, Task>();
+  /** The day row each sized task came from, by the source's key — a mirror line's row is what the day is keyed by. */
+  const items = new Map<string, DayItem>();
   const busy: PlanRequest['busy'] = [];
   for (const it of plan.items) {
     const t = it.display;
@@ -59,6 +61,7 @@ export function planRequestFor(snap: Snapshot, date: IsoDate, s: HelmSettings): 
     if (t.time) { busy.push({ start: t.time.start, end: t.time.end ?? t.time.start, label: shortLabel(t.text, 30) }); continue; }
     if (tasks.has(t.key)) continue;
     tasks.set(t.key, t);
+    items.set(t.key, it);
   }
   const req: PlanRequest = {
     date,
@@ -76,7 +79,7 @@ export function planRequestFor(snap: Snapshot, date: IsoDate, s: HelmSettings): 
     focus: focusFrom(s),
     capacityMinutes: s.dailyCapacityMinutes,
   };
-  return { req, tasks };
+  return { req, tasks, items };
 }
 
 /** What writing a proposal changes on each task: one time block from its first focus block to its last, and its minutes. */

@@ -810,6 +810,15 @@ describe('v2 · §14 amendments', () => {
     expect(fit.body.blocks.some((x: any) => x.kind === 'break')).toBe(true);
     const only = await call('POST', `day/${TODAY}/fit`, { refs: [b.ref] });
     expect(only.body.changes.map((c: any) => c.ref)).toEqual([b.ref]);
+    // A project task planned on the day is a mirror row: fit speaks the row's ref (the day's key) and names the source beside it.
+    const pt = (await call('POST', 'tasks', { text: 'Project work today', projectId: 'prj-kitchen', scheduled: TODAY, effortMinutes: 30 })).body.task;
+    const row = (await call('GET', `day/${TODAY}`)).body.byPart.anytime.find((it: any) => it.kind === 'mirror' && it.display.id === pt.id);
+    expect(row.task.ref).toBe(`${pt.id}@${TODAY}`);
+    const withMirror = await call('POST', `day/${TODAY}/fit`, { refs: [pt.id] });
+    expect(withMirror.body.changes).toEqual([expect.objectContaining({ ref: row.task.ref, sourceRef: pt.id, effortMinutes: 30 })]);
+    const applyMirror = await call('POST', `day/${TODAY}/fit/apply`, { changes: withMirror.body.changes });
+    expect(applyMirror.body).toMatchObject({ applied: 1, failed: [] });
+    expect(index.taskById(pt.id)!.time?.start).toBe(withMirror.body.changes[0].time);
     const applied = await call('POST', `day/${TODAY}/fit/apply`, { changes: fit.body.changes });
     expect(applied.body).toMatchObject({ applied: 2, failed: [] });
     expect(index.taskById(a.id)!.time).toEqual({ start: ca.time, end: ca.timeEnd });

@@ -404,7 +404,10 @@ day), what is booked, and the slot Helm would offer.
 `POST /day/:date/fit { refs? }` is “Fit the day” **without the AI**: Helm's own sizing
 (`proposePlan`'s fallback) laid out with the focus settings around what is booked, returned as a
 proposal → `{ source: "helm", from, to, busy, blocks, overflow, focusMinutes, breakMinutes,
-changes: [ { ref, time, timeEnd, effortMinutes } ] }`; nothing is written. `POST /day/:date/fit/apply
+changes: [ { ref, sourceRef, time, timeEnd, effortMinutes } ] }`; nothing is written. `ref` is
+the **day row's** ref — for a project task planned on the day, its mirror line (`tsk-x@date`),
+the same key `GET /day/:date` uses — so blocks and changes match the day's rows directly;
+`sourceRef` is the task itself. Either may be sent back to `fit/apply`. `POST /day/:date/fit/apply
 { changes }` performs the modal's writes (one time block per task from its first focus block to its
 last, and its minutes) → `{ applied, failed, written }`. The `claude -p` sizing stays desktop-only:
 it runs a CLI on the Mac.
