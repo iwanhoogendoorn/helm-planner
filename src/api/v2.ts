@@ -503,6 +503,7 @@ export function statsJson(st: DashboardStats, d: Ctx): Record<string, unknown> {
   const series = (xs: { key: string; label: string; value: number; tasks: Task[] }[]): Record<string, unknown>[] => xs.map((x) => ({ key: x.key, label: x.label, value: x.value, taskRefs: refs(x.tasks) }));
   return {
     filter: st.filter, days: st.days, totals: st.totals,
+    openTaskRefs: refs(st.openTasks), overdueTaskRefs: refs(st.overdueTasks),
     perDay: series(st.perDay),
     perWeek: st.perWeek.map((w) => ({ weekStart: w.weekStart, done: w.done, created: w.created, taskRefs: refs(w.tasks) })),
     cumulative: st.cumulative,

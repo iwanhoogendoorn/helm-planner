@@ -319,9 +319,14 @@ numbers; `week` (“Next week planned”) is yours to tick in the app.
 
 `GET /stats?from=&to=&sources=daily,project&project=&area=&tag=&period=` → the Dashboard's
 numbers (`computeStats`): `totals`, `perDay`, `perWeek`, `cumulative`, `byPart`, `byWeekday`,
-`adherence`, `byProject`, `byArea`, `byTag`, `ageBuckets`, `habits`, `goals`, `streak`. Every
-task list is a list of **refs** (`taskRefs`, `doneTaskRefs`) — fetch them with
-`GET /tasks?ids=`. Without `from`/`to` it is the last 30 days; `sources` defaults to daily
+`adherence`, `byProject`, `byArea`, `byTag`, `ageBuckets`, `habits`, `goals`, `streak`, plus
+`openTaskRefs` and `overdueTaskRefs` — the tasks behind `totals.open` and `totals.overdue`, so
+those tiles drill down like the rest. Every task list is a list of **refs** (`taskRefs`,
+`doneTaskRefs`, `openTaskRefs`, `overdueTaskRefs`) — fetch them with `GET /tasks?ids=`. Two
+shapes to know: a series entry's `key` is an identifier and its `label` is the text the
+Dashboard shows (the age bucket for tasks without a date is `key: "unknown"`, `label: "no
+date"`; show `label`), and `goals[].projects` is a **count** of linked projects, not a list —
+`GET /goals` has the ids. Without `from`/`to` it is the last 30 days; `sources` defaults to daily
 notes only, as on the tab. `GET /stats/options` → `{ areas, tags, sources, projects:
 [ { id, title, status } ], periods: { year, quarter, month, week } }` for the filter pickers.
 

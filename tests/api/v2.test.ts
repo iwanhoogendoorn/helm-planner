@@ -544,6 +544,13 @@ describe('v2 · review, stats, search', () => {
     expect(r.body.totals.done).toBeGreaterThan(0);
     expect(r.body.perDay).toHaveLength(26);
     expect(r.body.perDay.every((s: any) => Array.isArray(s.taskRefs) && s.tasks === undefined)).toBe(true);
+    expect(r.body.openTaskRefs).toHaveLength(r.body.totals.open);
+    expect(r.body.overdueTaskRefs).toHaveLength(r.body.totals.overdue);
+    expect(r.body.overdueTaskRefs.length).toBeGreaterThan(0);
+    expect(r.body.openTaskRefs).toEqual(expect.arrayContaining(r.body.overdueTaskRefs));
+    expect(r.body.openTasks).toBeUndefined();
+    expect(r.body.ageBuckets.find((b: any) => b.key === 'unknown')).toMatchObject({ label: 'no date' });
+    expect(typeof r.body.goals[0]?.projects === 'number' || r.body.goals.length === 0).toBe(true);
     expect(r.body.byProject[0]).toMatchObject({ project: { id: expect.any(String), title: expect.any(String) }, doneTaskRefs: expect.any(Array) });
     expect(r.body.habits[0]).toMatchObject({ id: expect.any(String), rate: expect.any(Number), streak: expect.any(Number) });
     const refs = r.body.perWeek.flatMap((w: any) => w.taskRefs);

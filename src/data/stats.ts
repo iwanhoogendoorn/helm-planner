@@ -33,6 +33,9 @@ export interface DashboardStats {
   filter: StatsFilter;
   days: number;
   totals: { done: number; created: number; open: number; overdue: number; cancelled: number; doneMinutes: number; openMinutes: number; perDay: number };
+  /** The tasks behind `totals.open` and `totals.overdue`, so those tiles drill down like every other. */
+  openTasks: Task[];
+  overdueTasks: Task[];
   perDay: Series[];
   perWeek: { weekStart: IsoDate; done: number; created: number; tasks: Task[] }[];
   cumulative: { date: IsoDate; created: number; done: number }[];
@@ -195,6 +198,7 @@ export function computeStats(snap: Snapshot, f: StatsFilter, today: IsoDate, set
   return {
     filter: f, days,
     totals: { done: doneIn.length, created: createdIn.length, open: open.length, overdue: overdue.length, cancelled: cancelled.length, doneMinutes: doneIn.reduce((s, t) => s + eff(t), 0), openMinutes: open.reduce((s, t) => s + eff(t), 0), perDay: doneIn.length / Math.max(1, days) },
+    openTasks: open, overdueTasks: overdue,
     perDay, perWeek, cumulative, byPart, byWeekday,
     adherence: { planned: planned.length, done: plannedDone, carried, rate: planned.length ? plannedDone / planned.length : 0, tasks: planned },
     byProject, byArea, byTag, ageBuckets, habits, goals,
