@@ -38,6 +38,9 @@ export interface ApiDeps {
 /** One request's view of the world: the deps plus a health cache that lives as long as the request. */
 export interface Ctx extends ApiDeps {
   health: Map<string, ProjectHealth>;
+  /** Tasks by 🆔, built on first use and dropped when the index moves. */
+  byId?: Map<string, Task>;
+  byIdRevision?: number;
 }
 
 export const ctxOf = (d: ApiDeps): Ctx => ({ ...d, health: new Map() });

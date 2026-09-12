@@ -489,7 +489,7 @@ export class HelmSettingTab extends PluginSettingTab {
     const where = state.host === '0.0.0.0' ? 'every interface' : state.host ?? (bind === 'loopback' ? '127.0.0.1' : bind);
     const g = this.group(body, {
       icon: 'plug', title: 'Local API', subtitle: 'Let other tools — scripts, an AI agent, the Helm iPhone app — read and change your tasks through Helm.',
-      chip: state.error ? { text: state.error, tone: 'warn' as const } : state.running ? { text: `on · ${where}:${state.port ?? s.apiPort}`, tone: 'ok' as const } : { text: 'off', tone: 'pending' as const },
+      chip: state.error ? { text: state.error, tone: 'warn' as const } : state.running ? { text: `on · ${where}:${state.port ?? s.apiPort}`, tone: state.host === '0.0.0.0' ? 'warn' as const : 'ok' as const } : { text: 'off', tone: 'pending' as const },
     });
     g.content.createEl('p', { cls: 'helm-hint', text: 'Helm serves JSON on this machine only unless you choose otherwise below, and every request must carry the token. Calls go through the same code the buttons use, so ids, daily-note mirrors and subtasks stay consistent.' });
     new Setting(g.content).setName('Serve the API').setDesc('Starts when you switch it on, and whenever Obsidian starts.')
@@ -513,6 +513,7 @@ export class HelmSettingTab extends PluginSettingTab {
       .setDesc('This Mac only is the safe default. Tailscale: reachable from your other Tailscale devices, e.g. the Helm iPhone app. Traffic is encrypted by WireGuard; the token is still required. All interfaces: every network this machine is on — only behind a firewall you trust.')
       .addDropdown((d) => d.addOptions({ loopback: 'This machine only (127.0.0.1)', tailscale: 'Tailscale (your tailnet)', all: 'All interfaces (0.0.0.0)' }).setValue(bind).onChange((v) => void (async () => {
         s.apiBind = v as HelmSettings['apiBind'];
+        if (v === 'all') new Notice('All interfaces: the API answers on every network this Mac is on — Wi-Fi, Ethernet, hotspots — to anyone holding the token. Prefer Tailscale.', 8000);
         await this.host.saveSettings();
         await this.host.restartApi();
         this.renderBody();

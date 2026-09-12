@@ -54,10 +54,13 @@ export const PROJECT_STATUSES: ProjectStatus[] = ['idea', 'planned', 'not-starte
 export const PROJECT_PRIORITIES: ProjectPriority[] = ['low', 'normal', 'medium', 'high', 'urgent', 'critical'];
 
 export const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {});
-export const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
+/** A non-empty string without control characters (a newline in a field would break a task line or inject a frontmatter key). */
+export const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' && !/[\u0000-\u001f\u007f]/.test(v) ? v.trim() : undefined);
 export const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 export const day = (v: unknown): IsoDate | undefined => { const s = str(v); return s && isIsoDate(s) ? s : undefined; };
 export const has = (body: Record<string, unknown>, k: string): boolean => Object.prototype.hasOwnProperty.call(body, k);
+/** A real clock time, `HH:MM`. */
+export const isHhmm = (v: unknown): boolean => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 export const strList = (v: unknown): string[] => (Array.isArray(v) ? (v as unknown[]).map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean) : []);
 
 /**
@@ -104,9 +107,19 @@ function itemsJson(p: Project, d: Ctx): Record<string, unknown>[] {
   return out;
 }
 
-/** A task by its 🆔, or failing that by its index key — a live line wins over a forwarded record. */
+/** A task by its 🆔, or failing that by its index key — a live line wins over a forwarded record. Ids are looked up in one map built per request, not by scanning. */
 export function findTask(ref: string, d: Ctx): Task | undefined {
-  return d.index.taskById(ref) ?? d.index.task(ref);
+  if (!d.byId || d.byIdRevision !== d.index.revision) {
+    d.byId = new Map();
+    for (const t of d.index.snapshot.tasks.values()) {
+      if (!t.id || t.origin === 'daily-mirror') continue;
+      const cur = d.byId.get(t.id);
+      // The same rule as index.taskById: a live line beats a forwarded or cancelled record.
+      if (!cur || ((cur.status === 'forwarded' || cur.status === 'cancelled') && t.status !== 'forwarded' && t.status !== 'cancelled')) d.byId.set(t.id, t);
+    }
+    d.byIdRevision = d.index.revision;
+  }
+  return d.byId.get(ref) ?? d.index.task(ref);
 }
 
 export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiResponse> {
@@ -151,6 +164,8 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       if (!parent) return missing(`No task ${ref}`);
       const text = str(body['text']);
       if (!text) return bad('A subtask needs text');
+      const fe = fieldsError(body);
+      if (fe) return bad(fe);
       const t = await d.mutations.addTaskReturning({ text, parentKey: parent.key, ...fieldsFrom(body) });
       return made({ task: taskJson(t, d), written: d.written() });
     }
@@ -465,7 +480,7 @@ async function taskAction(t: Task, sub: string, method: string, body: Record<str
     if (!date) return bad('date is needed for a task that is not on a day');
     const start = str(q['time']) ?? t.time?.start;
     if (!start) return bad('time is needed for a task without a time block');
-    if (!/^\d{2}:\d{2}$/.test(start)) return bad('time must be HH:MM');
+    if (!isHhmm(start)) return bad('time must be HH:MM');
     const end = str(q['timeEnd']) ?? (str(q['time']) ? undefined : t.time?.end);
     const eff = q['effortMinutes'] !== undefined ? Number(q['effortMinutes']) : t.effortMinutes;
     const cs = conflictsFor(d.index.snapshot, date, { start, ...(end ? { end } : {}) }, d.settings(), { ...(eff ? { effortMinutes: eff } : {}), excludeKeys: [t.key, ...(t.mirrorOf ? [t.mirrorOf] : [])] });
@@ -481,6 +496,8 @@ async function taskAction(t: Task, sub: string, method: string, body: Record<str
     if (!date) return bad('A follow-up needs a date like 2026-09-15');
     const part = str(body['part']);
     if (part && !PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
+    const fe = fieldsError(body);
+    if (fe) return bad(fe);
     const r = await d.mutations.followUp(t.key, { date, ...(str(body['text']) ? { text: str(body['text'])! } : {}), ...(part ? { part: part as DayPart } : {}), markOriginalDone: body['markOriginalDone'] === true, addTag: body['addTag'] === true, ...fieldsFrom(body) });
     const made2 = findTask(r.followUpId, d);
     return made({ followUp: made2 ? taskJson(made2, d) : { id: r.followUpId }, original: taskJson(findTask(r.id, d) ?? t, d), written: d.written() });
@@ -491,7 +508,7 @@ async function taskAction(t: Task, sub: string, method: string, body: Record<str
     const time = asRecord(body['time']);
     const start = str(time['start']) ?? str(body['time']);
     const end = str(time['end']) ?? str(body['timeEnd']);
-    if (!start || !end || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return bad('time must be { start: "HH:MM", end: "HH:MM" }');
+    if (!start || !end || !isHhmm(start) || !isHhmm(end)) return bad('time must be { start: "HH:MM", end: "HH:MM" }');
     const eff = num(body['effortMinutes']) ?? t.effortMinutes ?? d.settings().defaultEffortMinutes;
     await d.mutations.planInto(t.key, date, { start, end }, eff);
     return ok({ task: taskJson(findTask(refOf(t), d) ?? t, d), written: d.written() });
@@ -596,7 +613,7 @@ async function projectDetailJson(p: Project, d: Ctx): Promise<Record<string, unk
 
 export function listTasks(q: Record<string, string>, d: Ctx): Record<string, unknown>[] {
   const today = d.today();
-  const limit = Math.min(Number(q['limit'] ?? 200) || 200, 1000);
+  const limit = Math.min(Math.max(1, Number(q['limit'] ?? 200) || 200), 1000);
   const wanted = (q['status'] ?? 'open').toLowerCase();
   const text = (q['q'] ?? '').toLowerCase();
   const out: Task[] = [];
@@ -622,6 +639,16 @@ export function listTasks(q: Record<string, string>, d: Ctx): Record<string, unk
 }
 
 /** The task-line fields an API caller may set when writing a task. */
+/** What is wrong with the task-line fields in a body, or undefined when they are fine. Checked before anything is written. */
+export function fieldsError(body: Record<string, unknown>): string | undefined {
+  if (has(body, 'effortMinutes') && body['effortMinutes'] !== null && (num(body['effortMinutes']) === undefined || num(body['effortMinutes'])! < 0)) return 'effortMinutes must be a number of minutes, or null to clear it';
+  if (has(body, 'due') && body['due'] !== null && !day(body['due'])) return 'due must be a date like 2026-09-20, or null to clear it';
+  if (has(body, 'priority') && (!str(body['priority']) || !PRIORITIES.includes(str(body['priority']) as Priority))) return `priority must be one of ${PRIORITIES.join(', ')}`;
+  if (has(body, 'time') && body['time'] !== null && (!str(body['time']) || !isHhmm(str(body['time'])!))) return 'time must be HH:MM';
+  if (has(body, 'timeEnd') && body['timeEnd'] !== null && (!str(body['timeEnd']) || !isHhmm(str(body['timeEnd'])!))) return 'timeEnd must be HH:MM';
+  return undefined;
+}
+
 export function fieldsFrom(body: Record<string, unknown>): { fields?: Record<string, unknown> } {
   const fields: Record<string, unknown> = {};
   const eff = num(body['effortMinutes']);
@@ -630,13 +657,16 @@ export function fieldsFrom(body: Record<string, unknown>): { fields?: Record<str
   const prio = str(body['priority']);
   if (prio && PRIORITIES.includes(prio as Priority)) fields['priority'] = prio;
   const start = str(body['time']);
-  if (start && /^\d{2}:\d{2}$/.test(start)) fields['time'] = { start, ...(str(body['timeEnd']) ? { end: str(body['timeEnd']) } : {}) };
+  const end = str(body['timeEnd']);
+  if (start && isHhmm(start)) fields['time'] = { start, ...(end && isHhmm(end) ? { end } : {}) };
   return Object.keys(fields).length ? { fields } : {};
 }
 
 async function createTask(body: Record<string, unknown>, d: Ctx): Promise<ApiResponse> {
   const text = str(body['text']);
   if (!text) return bad('A task needs text');
+  const fe = fieldsError(body);
+  if (fe) return bad(fe);
   const raw = body['scheduled'] ?? body['date'];
   const when = day(raw);
   if (raw !== undefined && raw !== null && !when) return bad('scheduled must be a date like 2026-09-01');
@@ -727,22 +757,26 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Pr
     if (body['time'] === null) patch['time'] = undefined;
     else {
       const start = str(body['time']);
-      if (!start || !/^\d{2}:\d{2}$/.test(start)) return bad('time must be HH:MM, or null to clear the block');
+      if (!start || !isHhmm(start)) return bad('time must be HH:MM, or null to clear the block');
       const end = str(body['timeEnd']);
-      if (end && !/^\d{2}:\d{2}$/.test(end)) return bad('timeEnd must be HH:MM');
+      if (end && !isHhmm(end)) return bad('timeEnd must be HH:MM');
       patch['time'] = { start, ...(end ? { end } : {}) };
     }
   } else if (str(body['timeEnd'])) {
     const cur = findTask(ref, d)!.time;
     if (!cur) return bad('timeEnd needs a time to go with it');
     const end = str(body['timeEnd'])!;
-    if (!/^\d{2}:\d{2}$/.test(end)) return bad('timeEnd must be HH:MM');
+    if (!isHhmm(end)) return bad('timeEnd must be HH:MM');
     patch['time'] = { start: cur.start, end };
   }
-  if (str(body['text'])) patch['text'] = str(body['text']);
-  if (has(body, 'due')) patch['due'] = body['due'] === null ? undefined : day(body['due']);
+  if (has(body, 'text')) { const tx = str(body['text']); if (!tx) return bad('text must be one non-empty line'); patch['text'] = tx; }
+  if (has(body, 'due')) {
+    if (body['due'] !== null && !day(body['due'])) return bad('due must be a date like 2026-09-20, or null to clear it');
+    patch['due'] = body['due'] === null ? undefined : day(body['due']);
+  }
   if (has(body, 'effortMinutes')) {
     const eff = body['effortMinutes'] === null ? undefined : num(body['effortMinutes']);
+    if (body['effortMinutes'] !== null && (eff === undefined || eff < 0)) return bad('effortMinutes must be a number of minutes, or null to clear it');
     patch['effortMinutes'] = eff;
     patch['effortRaw'] = eff === undefined ? undefined : `${eff}m`;
   }

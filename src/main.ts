@@ -136,6 +136,10 @@ export default class HelmPlugin extends Plugin {
       console.error(`[helm/api] ${bind.fallback}`);
       new Notice(`Helm API: ${bind.fallback}.`);
     }
+    if (bind.host === '0.0.0.0') {
+      console.warn('[helm/api] listening on every interface (apiBind: all) — anyone on any network this machine is on can reach the API with the token');
+      new Notice('Helm API is reachable from every network this machine is on. Prefer Tailscale unless you trust the LAN.', 8000);
+    }
     try {
       this.api = await startApiServer({
         port: this.settings.apiPort,

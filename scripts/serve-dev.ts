@@ -32,6 +32,12 @@ if (!existsSync(vaultDir)) {
   console.error(`${vaultDir} does not exist. Seed one first: HELM_VAULT=${vaultDir} npm run seed`);
   process.exit(2);
 }
+// Belt and braces: a disposable copy says so with a marker file; a vault without one is never served, whatever it is called.
+const MARKER = '.helm-dev-vault';
+if (!existsSync(join(vaultDir, MARKER))) {
+  console.error(`Refusing to serve ${vaultDir}: no ${MARKER} marker. The dev server only serves disposable copies — \`npm run seed\` writes the marker, or create it by hand in a copy you can afford to lose:\n  touch '${join(vaultDir, MARKER)}'`);
+  process.exit(2);
+}
 
 const port = Number(process.env['HELM_PORT'] ?? 27127);
 const host = process.env['HELM_HOST'] ?? '127.0.0.1';
@@ -108,16 +114,19 @@ const version = (() => { try { return (JSON.parse(readFileSync(resolve('manifest
 // ── disk → index, the way main.ts turns vault events into index updates ─────────────────────────
 const pending = new Set<string>();
 let timer: NodeJS.Timeout | undefined;
+let firstPending = 0; // a burst (a git checkout) keeps resetting the debounce; the flush still runs within a second of the first event
 const touch = (rel: string): void => {
   if (!FsVault.visible(rel)) return;
   index.noteSeen(rel);
   if (!index.inScope(rel) && !index.hasFile(rel)) return;
+  if (pending.size === 0) firstPending = Date.now();
   pending.add(rel);
   if (timer) clearTimeout(timer);
-  timer = setTimeout(() => void flush(), 250);
+  timer = setTimeout(() => void flush(), Math.max(0, Math.min(250, firstPending + 1000 - Date.now())));
 };
 async function flush(): Promise<void> {
   timer = undefined;
+  firstPending = 0;
   const paths = [...pending];
   pending.clear();
   const entries: { path: string; content?: string }[] = [];

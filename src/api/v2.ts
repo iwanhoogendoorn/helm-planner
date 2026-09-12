@@ -5,7 +5,7 @@
  * routes.ts turns that into a 404 or 405.
  */
 import type { ApiRequest, ApiResponse } from './routes';
-import { asRecord, bad, day, findTask, has, made, missing, notAllowed, num, ok, PARTS, str, strList } from './routes';
+import { asRecord, bad, day, findTask, has, isHhmm, made, missing, notAllowed, num, ok, PARTS, str, strList } from './routes';
 import { candidateJson, dayItemJson, daybookJson, goalJson, habitJson, horizonPeriodJson, layoutJson, periodJson, refOf, taskJson, type Ctx } from './json';
 import { addDays, diffDays, isIsoDate } from '../core/dates';
 import type { DayPart } from '../core/dailyNote';
@@ -27,9 +27,16 @@ import { captureDestination, captureFields } from '../data/capture';
 import { attachmentsJson, healthOf, hitJson, projectJson } from './json';
 import type { DrawingTarget, Priority } from '../core/types';
 import { PRIORITIES } from './routes';
+import { isSafeVaultPath, safeFolder } from '../core/paths';
 import { ALL_SECTIONS, buildReport, REPORT_SCOPES, type Report, type ReportScope, type ReportSections } from '../data/report';
 
 /** Heads v2 owns: an unmatched method on one of these is a 405, anything else a 404. */
+/** The content type of an image path by its extension, or undefined when it is not an image Helm serves. */
+function iconType(path: string): string | undefined {
+  const ext = (path.split('.').pop() ?? '').toLowerCase();
+  return ext === 'excalidraw' || ext === 'canvas' ? undefined : BINARY_TYPES[ext];
+}
+
 const BINARY_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', excalidraw: 'application/json', canvas: 'application/json' };
 
 const HEADS = new Set(['drawings', 'settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files', 'report', 'report.pdf', 'maintenance', 'diagnostics']);
@@ -85,7 +92,7 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
       const part = req.query['part'];
       if (part && !PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
       const notBefore = req.query['notBefore'];
-      if (notBefore && !/^\d{2}:\d{2}$/.test(notBefore)) return bad('notBefore must be HH:MM');
+      if (notBefore && !isHhmm(notBefore)) return bad('notBefore must be HH:MM');
       const opts = { ...(part ? { part: part as DayPart } : {}), effortMinutes: minutes, ...(notBefore ? { notBefore } : {}) };
       const pref = preferredSlot(d.index.snapshot, date, s, opts);
       const [ph, pm] = pref.split(':').map(Number);
@@ -136,7 +143,7 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
         if (!ref || !t) return missing(`No task ${ref ?? ''}`);
         const start = str(c['time']) ?? str(c['start']);
         const end = str(c['timeEnd']) ?? str(c['end']);
-        if (!start || !end || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return bad('Every change needs time and timeEnd as HH:MM');
+        if (!start || !end || !isHhmm(start) || !isHhmm(end)) return bad('Every change needs time and timeEnd as HH:MM');
         todo.push({ key: t.mirrorOf ?? t.key, ref, start, end, effortMinutes: num(c['effortMinutes']) ?? t.effortMinutes ?? d.settings().defaultEffortMinutes });
       }
       let applied = 0;
@@ -327,9 +334,8 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     const type = BINARY_TYPES[ext];
     if (!type) return missing('Only png, jpg, gif, webp, svg, .excalidraw and .canvas files are served');
     const snap = d.index.snapshot;
-    const iconsFolder = `${d.settings().habitsFolder.replace(/\/+$/, '')}/icons/`;
-    const known = snap.drawings.has(path) || [...snap.habits.values()].some((h) => h.iconImage === path) || (path.startsWith(iconsFolder) && ext !== 'excalidraw' && ext !== 'canvas');
-    if (!known) return missing(`${path} is not a drawing or habit icon the index knows`);
+    const known = snap.drawings.has(path) || [...snap.habits.values()].some((h) => h.iconImage === path && isSafeVaultPath(h.iconImage));
+    if (!known || !isSafeVaultPath(path)) return missing(`${path} is not a drawing or habit icon the index knows`);
     if (!d.readBinary) return { status: 501, body: { error: 'This server cannot read binary files' } };
     try { return { status: 200, body: null, raw: { contentType: type, bytes: new Uint8Array(await d.readBinary(path)) } }; }
     catch { return missing(`${path} could not be read`); }
@@ -383,13 +389,16 @@ export async function attachmentRoutes(target: DrawingTarget, sub: string | unde
   const after = (status = 200): ApiResponse => ({ status, body: { target: { kind: target.kind, ...(target.kind === 'task' ? { ref: target.id ?? target.key } : target.kind === 'date' ? { date: target.date } : target.kind === 'period' ? { key: target.key } : target.kind === 'phase' ? { id: target.id, projectId: target.projectId } : { id: target.id }) }, attachments: attachmentsJson(target, d), written: d.written() } });
   if (sub === 'attachments' && tail === undefined && method === 'GET') return ok(attachmentsJson(target, d));
   if (sub === 'notes' && tail === undefined && method === 'POST') {
-    const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(str(body['folder']) ? { folder: str(body['folder'])! } : {}) });
+    const f = safeFolder(str(body['folder']));
+    if (!f.ok) return bad(f.error);
+    if (has(body, 'name') && !str(body['name'])) return bad('name must be one non-empty line');
+    const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(f.folder ? { folder: f.folder } : {}) });
     return { status: 201, body: { path, ...(after().body as object) } };
   }
   if (sub === 'notes' && tail === 'link' && (method === 'POST' || method === 'DELETE')) {
     const path = pathArg();
     if (!path) return bad('Send the note path');
-    if (!path.endsWith('.md') || path.split('/').some((x) => x === '..')) return bad('The path must be a markdown note inside the vault');
+    if (!path.endsWith('.md') || !isSafeVaultPath(path)) return bad('The path must be a markdown note inside the vault');
     if (method === 'POST') {
       if (!d.index.linkableNotes().some((n) => n.path === path) && !d.index.snapshot.notes.has(path)) return missing(`${path} is not a note Helm can attach (see GET /notes/linkable)`);
       await d.mutations.linkNote(target, path);
@@ -400,7 +409,10 @@ export async function attachmentRoutes(target: DrawingTarget, sub: string | unde
     return after();
   }
   if (sub === 'drawings' && tail === undefined && method === 'POST') {
-    const path = await d.mutations.createDrawing(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(str(body['folder']) ? { folder: str(body['folder'])! } : {}) });
+    const f = safeFolder(str(body['folder']));
+    if (!f.ok) return bad(f.error);
+    if (has(body, 'name') && !str(body['name'])) return bad('name must be one non-empty line');
+    const path = await d.mutations.createDrawing(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(f.folder ? { folder: f.folder } : {}) });
     return { status: 201, body: { path, ...(after().body as object) } };
   }
   if (sub === 'drawings' && tail === 'link' && (method === 'POST' || method === 'DELETE')) {
@@ -531,7 +543,7 @@ async function captureRoute(body: Record<string, unknown>, d: Ctx, write: boolea
   let time = c.time;
   if (has(body, 'time')) {
     if (body['time'] === null) time = undefined;
-    else { const st = str(body['time']); if (!st || !/^\d{2}:\d{2}$/.test(st)) return bad('time must be HH:MM'); const en = str(body['timeEnd']); if (en && !/^\d{2}:\d{2}$/.test(en)) return bad('timeEnd must be HH:MM'); time = { start: st, ...(en ? { end: en } : {}) }; }
+    else { const st = str(body['time']); if (!st || !isHhmm(st)) return bad('time must be HH:MM'); const en = str(body['timeEnd']); if (en && !isHhmm(en)) return bad('timeEnd must be HH:MM'); time = { start: st, ...(en ? { end: en } : {}) }; }
   } else if (str(body['timeEnd']) && time) time = { ...time, end: str(body['timeEnd'])! };
   if (has(body, 'recurrence')) {
     if (body['recurrence'] === null) c.recurrence = undefined;
@@ -613,7 +625,14 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
     if (has(body, 'targetPerWeek')) { const n = body['targetPerWeek'] === null ? null : num(body['targetPerWeek']); if (n === undefined) return bad('targetPerWeek must be a number or null'); fields.targetPerWeek = n; }
     if (has(body, 'graceDays')) { const n = num(body['graceDays']); if (n === undefined || n < 0) return bad('graceDays must be a number'); fields.graceDays = n; }
     if (has(body, 'icon')) fields.icon = str(body['icon']) ?? '';
-    if (has(body, 'iconImage')) fields.iconImage = body['iconImage'] === null ? null : str(body['iconImage']) ?? null;
+    if (has(body, 'iconImage')) {
+      if (body['iconImage'] === null || str(body['iconImage']) === undefined && typeof body['iconImage'] === 'string' && body['iconImage'].trim() === '') fields.iconImage = null;
+      else {
+        const img = str(body['iconImage']);
+        if (!img || !isSafeVaultPath(img) || !/\.(png|jpe?g|gif|webp|svg)$/i.test(img)) return bad('iconImage must be an image path inside the vault (png, jpg, gif, webp, svg), or null');
+        fields.iconImage = img;
+      }
+    }
     if (has(body, 'parts')) { const parts = strList(body['parts']); if (parts.some((p) => !HABIT_PARTS.includes(p as HabitPart))) return bad(`parts must be from ${HABIT_PARTS.join(', ')}`); fields.parts = parts as HabitPart[]; }
     if (has(body, 'color')) { const c = body['color'] === null ? null : str(body['color']); if (c && !HABIT_COLORS.includes(c as HabitColor)) return bad(`color must be one of ${HABIT_COLORS.join(', ')}`); fields.color = (c ?? null) as HabitColor | null; }
     if (Object.keys(fields).length === 0) return bad('Nothing to change');
@@ -651,9 +670,10 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
   if (sub === 'attachments' || sub === 'notes' || sub === 'drawings') { const r = await attachmentRoutes({ kind: 'habit', id: h.id, title: h.title }, sub, tail, method, body, query, d); if (r) return r; }
   if (sub === 'icon' && method === 'GET') {
     if (!h.iconImage) return missing(`${h.id} has no image icon`);
+    // The value comes from the habit's own frontmatter, which anyone with vault access can edit: it is checked like any caller's path.
+    const type = iconType(h.iconImage);
+    if (!isSafeVaultPath(h.iconImage) || !type) return missing(`${h.id}'s iconImage is not an image path inside the vault`);
     if (!d.readBinary) return { status: 501, body: { error: 'This server cannot read images' } };
-    const ext = (h.iconImage.split('.').pop() ?? '').toLowerCase();
-    const type = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'svg' ? 'image/svg+xml' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'application/octet-stream';
     try {
       const bytes = new Uint8Array(await d.readBinary(h.iconImage));
       return { status: 200, body: null, raw: { contentType: type, bytes } };
@@ -784,10 +804,11 @@ async function wrapUp(date: IsoDate, body: Record<string, unknown>, d: Ctx): Pro
       failed.push({ ref: x.ref, error: e instanceof Error ? e.message : String(e) });
     }
   }
+  let logged = 0;
   for (const e of entries) {
-    try { await d.mutations.appendLog(e.projectId, e.text); } catch (err) { failed.push({ ref: e.projectId, error: err instanceof Error ? err.message : String(err) }); }
+    try { await d.mutations.appendLog(e.projectId, e.text); logged++; } catch (err) { failed.push({ ref: e.projectId, error: err instanceof Error ? err.message : String(err) }); }
   }
-  return ok({ applied, logged: entries.length - failed.filter((f) => entries.some((e) => e.projectId === f.ref)).length, failed, written: d.written() });
+  return ok({ applied, logged, failed, written: d.written() });
 }
 
 async function daybook(date: IsoDate, lineRef: string | undefined, tail: string | undefined, method: string, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
@@ -797,7 +818,7 @@ async function daybook(date: IsoDate, lineRef: string | undefined, tail: string 
       const text = str(body['text']);
       if (!text) return bad('An entry needs text');
       const time = str(body['time']);
-      if (time && !/^\d{2}:\d{2}$/.test(time)) return bad('time must be HH:MM');
+      if (time && !isHhmm(time)) return bad('time must be HH:MM');
       await d.mutations.addDaybookEntry(date, text, { ...(time ? { time } : {}), ...(str(body['icon']) ? { icon: str(body['icon'])! } : {}) });
       return made({ date, entries: daybookJson(d.index.daybook(date)), written: d.written() });
     }
@@ -830,9 +851,9 @@ async function daybook(date: IsoDate, lineRef: string | undefined, tail: string 
 async function focusLayout(body: Record<string, unknown>, d: Ctx): Promise<ApiResponse> {
   const s = d.settings();
   const start = str(body['start']) ?? (s.dayStarts || '09:00');
-  if (!/^\d{2}:\d{2}$/.test(start)) return bad('start must be HH:MM');
+  if (!isHhmm(start)) return bad('start must be HH:MM');
   const end = str(body['end']) ?? (s.dayEnds || '18:00');
-  if (!/^\d{2}:\d{2}$/.test(end)) return bad('end must be HH:MM');
+  if (!isHhmm(end)) return bad('end must be HH:MM');
   const rawTasks = Array.isArray(body['tasks']) ? body['tasks'] as unknown[] : [];
   if (rawTasks.length === 0) return bad('tasks must be a list of { ref, minutes }');
   const tasks: { key: string; minutes: number }[] = [];

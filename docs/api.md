@@ -443,7 +443,17 @@ its embeds. `DELETE /notes { path }` (above) does the same for an attached note.
 
 `GET /files/binary?path=…` serves the bytes of an image (png, jpg, gif, webp, svg) or a
 `.excalidraw` / `.canvas` file with the right content type — only for drawings the index knows
-and habit icon images (under `<habits folder>/icons/`); anything else is a 404.
+and the icon images of habits the index knows; anything else, an image merely dropped in the
+icons folder included, is a 404.
+
+Every path a caller names — a `folder` for a new note or drawing, a note or drawing to link, a
+file to read, a habit's `iconImage` — must be relative and inside the vault: no leading slash,
+no `..`, no empty segment, no control character. Such a value is refused with a 400 (or a 404
+on a read) before anything is touched, and the vault adapters refuse it again underneath.
+Text fields (`text`, `name`, `title`, `icon`, …) must be one line: a newline or control
+character is a 400, and a frontmatter value is always written as one escaped YAML scalar.
+An unparseable `due`, `start`, `effortMinutes`, `time` or `timeEnd` is a 400 on create and on
+PATCH; only an explicit `null` clears a field.
 
 A phase has the same five under `/projects/:id/phases/:slug/…`. `DELETE /drawings` only removes a
 drawing that is attached to something. `GET /files` also serves the text of a `.excalidraw` /

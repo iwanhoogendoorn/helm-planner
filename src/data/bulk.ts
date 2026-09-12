@@ -47,7 +47,7 @@ export async function runBulk(index: HelmIndex, mutations: Mutations, tasks: Tas
   const out: BulkResult = { applied: [], covered: [], failed: [] };
   const ids: string[] = [];
   for (const { path, line, ref } of at) {
-    const t = [...index.snapshot.tasks.values()].find((x) => x.path === path && x.line === line && x.origin !== 'daily-mirror') ?? index.task(ref);
+    const t = [...index.snapshot.tasks.values()].find((x) => x.path === path && x.line === line && x.origin !== 'daily-mirror') ?? taskByAnyId(index, ref) ?? index.task(ref);
     if (!t) { out.failed.push({ ref, error: 'No longer there' }); continue; }
     try { ids.push(await mutations.ensureId(t.key)); } catch (e) { if (opts.stopOnError) throw e; out.failed.push({ ref, error: e instanceof Error ? e.message : String(e) }); }
   }
