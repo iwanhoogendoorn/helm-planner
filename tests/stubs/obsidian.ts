@@ -62,6 +62,7 @@ export class Menu {
   showAtPosition(): void { Menu.last = this; }
 }
 class MenuItem { title = ''; disabled = false; clickFn?: () => void; sub?: Menu; setTitle(t: string): this { this.title = t; return this; } setIcon(): this { return this; } setChecked(): this { return this; } setDisabled(d = true): this { this.disabled = d; return this; } setWarning(): this { return this; } onClick(f: () => void): this { this.clickFn = f; return this; } setSubmenu(): Menu { this.sub = new Menu(); return this.sub; } }
+export const Platform = { isMobile: false, isDesktop: true, isDesktopApp: true, isMobileApp: false, isIosApp: false, isAndroidApp: false, isPhone: false, isTablet: false, isMacOS: true, isWin: false, isLinux: false, isSafari: false };
 export class TFile { path = ''; stat = { mtime: 0 }; }
 export class TFolder { path = ''; }
 export class MarkdownView {}

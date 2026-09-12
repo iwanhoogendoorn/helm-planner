@@ -29,7 +29,7 @@ export interface SettingsHost extends Plugin {
   periodicConfigFor(kind: 'year' | 'quarter' | 'month' | 'week'): { folder: string; format: string; template: string };
   onSettingsChanged(): void;
   today(): string;
-  apiStatus(): { running: boolean; port?: number; host?: string; urls: string[]; error?: string };
+  apiStatus(): { running: boolean; port?: number; host?: string; urls: string[]; error?: string; mobile?: boolean };
   apiUrlsFor(bind: HelmSettings['apiBind'], port: number): string[];
   restartApi(): Promise<void>;
   newApiToken(): string;
@@ -489,8 +489,9 @@ export class HelmSettingTab extends PluginSettingTab {
     const where = state.host === '0.0.0.0' ? 'every interface' : state.host ?? (bind === 'loopback' ? '127.0.0.1' : bind);
     const g = this.group(body, {
       icon: 'plug', title: 'Local API', subtitle: 'Let other tools — scripts, an AI agent, the Helm iPhone app — read and change your tasks through Helm.',
-      chip: state.error ? { text: state.error, tone: 'warn' as const } : state.running ? { text: `on · ${where}:${state.port ?? s.apiPort}`, tone: state.host === '0.0.0.0' ? 'warn' as const : 'ok' as const } : { text: 'off', tone: 'pending' as const },
+      chip: state.mobile ? { text: s.apiEnabled ? 'not available on mobile' : 'off', tone: 'pending' as const } : state.error ? { text: state.error, tone: 'warn' as const } : state.running ? { text: `on · ${where}:${state.port ?? s.apiPort}`, tone: state.host === '0.0.0.0' ? 'warn' as const : 'ok' as const } : { text: 'off', tone: 'pending' as const },
     });
+    if (state.mobile) g.content.createEl('p', { cls: 'helm-hint', text: 'The API runs in the desktop app only — it needs a network server the mobile app does not have. These settings sync to your desktop and apply there; nothing listens on this device.' });
     g.content.createEl('p', { cls: 'helm-hint', text: 'Helm serves JSON on this machine only unless you choose otherwise below, and every request must carry the token. Calls go through the same code the buttons use, so ids, daily-note mirrors and subtasks stay consistent.' });
     new Setting(g.content).setName('Serve the API').setDesc('Starts when you switch it on, and whenever Obsidian starts.')
       .addToggle((t) => t.setValue(s.apiEnabled).onChange((v) => void (async () => {

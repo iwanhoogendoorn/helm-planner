@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FakeApp, FakeTFile } from '../stubs/fakeApp';
 import HelmPlugin from '../../src/main';
+import { Notice, Platform } from 'obsidian';
 import { makeVault, dailyPath, TODAY, DAILY_FOLDER, DAILY_FORMAT } from '../data/fixture';
 import { VIEW_TYPE } from '../../src/ui/view';
 
@@ -167,5 +168,29 @@ describe('HelmPlugin', () => {
     expect(report).toContain('0 failed');
     expect(report).not.toContain('❌');
     expect(plugin.index.projectByTitle('Helm Self-Test')).toBeDefined();
+  });
+});
+
+describe('the API on mobile', () => {
+  it('never tries to start the server on a phone, says so in the status, and still starts on desktop', async () => {
+    const { plugin } = await boot();
+    plugin.settings.apiEnabled = true;
+    plugin.settings.apiToken = 'a'.repeat(48);
+    plugin.settings.apiPort = 0; // the OS picks a free port on desktop
+    const notices = (Notice as unknown as { messages: string[] }).messages; // the stub records every Notice
+    const before = notices.length;
+    Platform.isMobile = true;
+    try {
+      await plugin.restartApi();
+      expect(plugin.apiStatus()).toMatchObject({ running: false, mobile: true });
+      expect(plugin.apiStatus().error).toBeUndefined();
+      expect(notices.slice(before).some((m) => /API/.test(m))).toBe(false); // no "could not start" at launch
+    } finally { Platform.isMobile = false; }
+    await plugin.restartApi();
+    const st = plugin.apiStatus();
+    expect(st).toMatchObject({ running: true, mobile: false, host: '127.0.0.1' });
+    expect(st.port).toBeGreaterThan(0);
+    expect(st.urls).toEqual([`http://127.0.0.1:${st.port}/helm/v1`]);
+    plugin.onunload();
   });
 });

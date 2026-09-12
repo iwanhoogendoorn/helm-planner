@@ -1,5 +1,5 @@
 /** Helm — plugin entry point. Wires the index, mutations and views to Obsidian. */
-import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Notice, Platform, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
 import { openExportReport } from './ui/modals/exportReport';
 import { loadFolds } from './ui/fold';
 import { DEFAULT_SETTINGS, type HelmSettings, type IsoDate } from './core/types';
@@ -108,9 +108,9 @@ export default class HelmPlugin extends Plugin {
   private apiError?: string;
 
   /** Running state plus the base URLs a client can use — the Tailscale one first when there is one. */
-  apiStatus(): { running: boolean; port?: number; host?: string; urls: string[]; error?: string } {
+  apiStatus(): { running: boolean; port?: number; host?: string; urls: string[]; error?: string; mobile: boolean } {
     const urls = this.api ? apiUrls(this.api.host, this.api.port, this.interfaces()) : [];
-    return { running: this.api !== undefined, ...(this.api ? { port: this.api.port, host: this.api.host } : {}), urls, ...(this.apiError ? { error: this.apiError } : {}) };
+    return { running: this.api !== undefined, ...(this.api ? { port: this.api.port, host: this.api.host } : {}), urls, ...(this.apiError ? { error: this.apiError } : {}), mobile: Platform.isMobile };
   }
 
   /** What the phone would use if the API were on with the given bind — for the settings tab's preview. */
@@ -130,6 +130,9 @@ export default class HelmPlugin extends Plugin {
     this.api = undefined;
     this.apiError = undefined;
     if (!this.settings.apiEnabled) return;
+    // The server needs node's http, which the mobile app does not have. Settings sync between devices, so
+    // without this the phone would say "could not start" at every launch for something that cannot run there.
+    if (Platform.isMobile) return;
     if (this.settings.apiToken === '') { this.apiError = 'no token'; return; }
     const bind = resolveBindHost(this.settings.apiBind ?? 'loopback', this.interfaces());
     if (bind.fallback) {
