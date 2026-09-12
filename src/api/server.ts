@@ -1,11 +1,12 @@
 /**
- * A small HTTP server on the loopback interface so other tools on this machine can drive Helm.
- * Off unless you switch it on; bound to 127.0.0.1, never a public interface; every request needs the
- * token from Settings. The routing itself lives in routes.ts — this file is only plumbing.
+ * A small HTTP server so other tools can drive Helm. Off unless you switch it on; bound to 127.0.0.1
+ * unless the settings say otherwise (a Tailscale address, or every interface); every request needs
+ * the token from Settings. The routing itself lives in routes.ts — this file is only plumbing.
  */
+import { LOOPBACK } from './bind';
 import { API_BASE, handle, type ApiDeps } from './routes';
 
-type Server = { close: () => void; port: number };
+type Server = { close: () => void; port: number; host: string };
 
 const MAX_BODY = 1_000_000; // a task is a line of text; anything larger is a mistake or an attack
 
@@ -23,13 +24,14 @@ export function randomToken(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function startApiServer(opts: { port: number; token: string; deps: ApiDeps; log?: (m: string) => void }): Promise<Server> {
+export async function startApiServer(opts: { port: number; host?: string; token: string; deps: ApiDeps; log?: (m: string) => void }): Promise<Server> {
+  const host = opts.host?.trim() || LOOPBACK;
   // Required at run time so the bundle stays loadable where node's http is not available.
   const http = require('node:http') as typeof import('node:http');
   const server = http.createServer((req, res) => {
     const send = (status: number, body: unknown): void => {
       const text = JSON.stringify(body ?? null);
-      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-helm-revision': String(opts.deps.index.revision) });
       res.end(text);
     };
     try {
@@ -57,6 +59,11 @@ export async function startApiServer(opts: { port: number; token: string; deps: 
           url.searchParams.forEach((v, k) => { query[k] = v; });
           try {
             const r = await handle({ method: req.method ?? 'GET', path: url.pathname.slice(API_BASE.length), query, body }, opts.deps);
+            if (r.raw) {
+              res.writeHead(r.status, { 'content-type': r.raw.contentType, 'content-length': String(r.raw.bytes.byteLength), 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-helm-revision': String(opts.deps.index.revision) });
+              res.end(Buffer.from(r.raw.bytes));
+              return;
+            }
             send(r.status, r.body);
           } catch (e) {
             opts.log?.(`request failed: ${String(e)}`);
@@ -71,10 +78,10 @@ export async function startApiServer(opts: { port: number; token: string; deps: 
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(opts.port, '127.0.0.1', () => { server.removeListener('error', reject); resolve(); });
+    server.listen(opts.port, host, () => { server.removeListener('error', reject); resolve(); });
   });
   const addr = server.address();
   const port = typeof addr === 'object' && addr !== null ? addr.port : opts.port;
-  opts.log?.(`listening on http://127.0.0.1:${port}${API_BASE}`);
-  return { close: () => server.close(), port };
+  opts.log?.(`listening on http://${host}:${port}${API_BASE}`);
+  return { close: () => server.close(), port, host };
 }

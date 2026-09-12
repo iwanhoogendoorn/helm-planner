@@ -8,6 +8,7 @@
  *  - Past daily notes are a log: a line is marked `[>]` (forwarded) rather
  *    than removed; mirrors on past days are never rewritten.
  */
+import { safeFolder } from '../core/paths';
 import type { Habit, HabitColor, HabitPart, HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus } from '../core/types';
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
 import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
@@ -1576,7 +1577,14 @@ export class Mutations {
 
   /* ── Drawings ──────────────────────────────────────────────────────── */
 
-  private safeName(s: string): string { return s.replace(/[\\/:*?"<>|#^[\]]/g, '-').replace(/\s+/g, ' ').trim(); }
+  private safeName(s: string): string { return s.replace(/[\\/:*?"<>|#^[\]]/g, '-').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim(); }
+
+  /** A caller's folder for a new file, checked to be inside the vault; empty means the default for the target. */
+  private folderOrDefault(folder: string | undefined, target: DrawingTarget, kind: 'drawing' | 'note'): string {
+    const r = safeFolder(folder);
+    if (!r.ok) throw new Error(r.error);
+    return (r.folder ?? this.defaultFolderFor(target, kind)).replace(/\/+$/, '');
+  }
 
   /** Frontmatter that ties a drawing to its target. */
   private drawingFrontmatter(target: DrawingTarget, id?: string): Record<string, string | string[] | boolean> {
@@ -1659,7 +1667,7 @@ export class Mutations {
 
   /** Folder and file name for a new drawing attached to a target; `folder` overrides the default. */
   drawingPathFor(target: DrawingTarget, name?: string, folder?: string): string {
-    const dir = (folder?.trim() || this.defaultFolderFor(target, 'drawing')).replace(/\/+$/, '');
+    const dir = this.folderOrDefault(folder, target, 'drawing');
     return `${dir ? dir + '/' : ''}${this.defaultStemFor(target, name)}.excalidraw.md`;
   }
 
@@ -1824,7 +1832,7 @@ export class Mutations {
 
   /** Folder and file name for a new note attached to a target; `folder` overrides the default. */
   notePathFor(target: DrawingTarget, name?: string, folder?: string): string {
-    const dir = (folder?.trim() || this.defaultFolderFor(target, 'note')).replace(/\/+$/, '');
+    const dir = this.folderOrDefault(folder, target, 'note');
     return `${dir ? dir + '/' : ''}${this.defaultStemFor(target, name)}.md`;
   }
 

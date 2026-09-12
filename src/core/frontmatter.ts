@@ -104,11 +104,14 @@ export function list(v: string | string[] | null | undefined): string[] {
 }
 
 function needsQuotes(v: string): boolean {
-  return v === '' || /^[\s#&*!|>'"%@`{}[\],?:-]/.test(v) || /:\s/.test(v) || /\s$/.test(v) || v.startsWith('[[');
+  return v === '' || /^[\s#&*!|>'"%@`{}[\],?:-]/.test(v) || /:\s/.test(v) || /\s$/.test(v) || v.startsWith('[[') || /[\u0000-\u001f\u007f]/.test(v);
 }
 
+/** One YAML scalar on one line: a value that would break the line (a newline, a control character) is escaped inside quotes, never written raw. */
 export function yamlScalar(v: string): string {
-  return needsQuotes(v) ? `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : v;
+  if (!needsQuotes(v)) return v;
+  const esc = v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t').replace(/[\u0000-\u001f\u007f]/g, '');
+  return `"${esc}"`;
 }
 
 /**

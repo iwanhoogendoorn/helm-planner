@@ -3,9 +3,10 @@
  * understood and where it will land.
  */
 import { Modal } from 'obsidian';
-import type { IsoDate, Project, Recurrence, TaskLine } from '../../core/types';
+import type { IsoDate, Project, Recurrence } from '../../core/types';
 import { addDays, humanDate, minutesToHuman, startOfWeek } from '../../core/dates';
 import { parseCapture, REPEAT_PATTERN } from '../../core/nlp';
+import { captureDestination, captureFields } from '../../data/capture';
 import { formatRecurrence } from '../../core/recurrence';
 import { append, button, chip, h } from '../dom';
 import type { UiContext } from '../context';
@@ -169,7 +170,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     const free = conflictText && date ? freeSlotOn(ctx.index.snapshot, date, ctx.settings(), { ...(part ? { part } : {}), effortMinutes: effort.get() ?? ctx.settings().defaultEffortMinutes, notBefore: time?.start ?? (date === today ? ctx.now() : undefined) }) : undefined;
     conflictWarning(conflict, conflictText, free ? { time: free, onPick: () => setStart(free) } : undefined);
     dest.replaceChildren();
-    const where = project ? `→ project “${project.title}”${phaseId ? ` › ${project.phases.find((p) => p.id === phaseId)?.title ?? ''}` : ''}${date ? ` (and today's plan)` : ''}` : date ? `→ daily note for ${humanDate(date, today)}` : `→ inbox (${ctx.settings().inboxNote})`;
+    const where = captureDestination({ ...(project ? { project } : {}), ...(phaseId ? { phaseId } : {}), ...(date ? { date } : {}), ...(part ? { part } : {}), ...(time ? { time } : {}), settings: ctx.settings(), dateLabel: (d) => humanDate(d, today) }).sentence;
     append(dest, [
       h('span', { cls: 'helm-capture-where', text: where }),
       h('span', { cls: 'helm-spacer' }),
@@ -191,13 +192,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);
     if (c.text.trim() === '') return;
     if (conflictText && !window.confirm(`This overlaps ${conflictText}.\n\nAdd it anyway?`)) return;
-    const fields: Partial<TaskLine> = { priority: c.priority };
-    if (c.due) fields.due = c.due;
-    const eff = effort.get() ?? c.effortMinutes;
-    if (eff) { fields.effortMinutes = eff; fields.effortRaw = minutesToHuman(eff); }
-    const time = timeOf(c);
-    if (time) fields.time = time;
-    if (c.recurrence) fields.recurrence = { ...c.recurrence, raw: formatRecurrence(c.recurrence) };
+    const fields = captureFields(c, effort.get(), timeOf(c));
     const p = project ?? (c.project ? ctx.index.projectByTitle(c.project) : undefined);
     const d = date;
     const text = c.text;

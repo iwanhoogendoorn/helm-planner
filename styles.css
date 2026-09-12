@@ -796,6 +796,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-chip.subtask-of svg { width: 11px; height: 11px; }
 .helm-link-problem { color: var(--color-red); }
 .helm-api-token input, input.helm-api-token { font-family: var(--font-monospace); }
+.helm-api-urls { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.helm-api-url { display: flex; gap: 6px; align-items: center; }
+.helm-api-url code { user-select: text; font-size: var(--font-ui-smaller); }
 .helm-api-example { user-select: text; overflow-x: auto; padding: 8px 10px; border-radius: var(--radius-s); background: var(--background-secondary); font-size: var(--font-ui-smaller); }
 .helm-links-btn .helm-badge { position: static; min-width: 0; height: auto; padding: 0 0 0 4px; margin: 0; background: transparent; color: inherit; font-size: 11px; font-weight: 600; }
 .helm-project[draggable="true"] { cursor: grab; }

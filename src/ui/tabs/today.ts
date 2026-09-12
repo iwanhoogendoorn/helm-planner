@@ -2,7 +2,7 @@
 import type { Habit, HabitPart, HelmSettings, IsoDate, Task } from '../../core/types';
 import { addDays, humanDate, minutesToHuman } from '../../core/dates';
 import { candidates, dayPlan, DAY_PARTS, type Candidate, type DayItem, type DayPart } from '../../data/planner';
-import { habitDue, habitStats } from '../../data/habits';
+import { habitsOnDay, habitStats } from '../../data/habits';
 import { PART_LABEL } from '../../core/dailyNote';
 import { button, chip, empty, h, icon, iconButton, progressBar, section } from '../dom';
 import type { UiContext } from '../context';
@@ -102,7 +102,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   }
 
   // Habits.
-  const habits = ctx.index.allHabits().filter((hb) => habitDue(hb, date) || snap.completions.some((c) => c.habitId === hb.id && c.date === date));
+  const habits = habitsOnDay(ctx.index.allHabits(), snap.completions, date).map((r) => r.habit);
   if (habits.length > 0 || ctx.index.allHabits().length === 0) {
     /** A chip for one occurrence of a habit (day-level, or one part of the day). */
     const habitChip = (hb: Habit, part?: HabitPart): HTMLElement => {

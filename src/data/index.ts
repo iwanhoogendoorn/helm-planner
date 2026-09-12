@@ -52,6 +52,8 @@ interface FileEntry {
   noteRef?: NoteRef;
   /** A daily note's diary entries. */
   daybook?: DaybookEntry[];
+  /** The diary heading's line, when the note has one. */
+  daybookHeading?: number;
   /** A song, when the note says it is one — Maestro's `type: song` and what it carries. */
   song?: SongNote;
   /** Basenames linked under this note's Notes heading. */
@@ -88,7 +90,11 @@ export class HelmIndex {
     return () => { this.listeners.delete(fn); };
   }
 
+  /** Goes up on every change to the snapshot (rebuild, re-parse, mutation) — a client polls it to know when to refresh. */
+  revision = 0;
+
   private emit(): void {
+    this.revision++;
     for (const fn of this.listeners) fn();
   }
 
@@ -301,7 +307,7 @@ export class HelmIndex {
     const scan = date !== undefined ? findRegion(doc.lines, s) : { broken: false };
     if (scan.broken) entry.diagnostics.push({ severity: 'error', code: 'HELM-D01', message: 'Helm region has a start marker without an end marker; the note is read-only until fixed.', path });
     entry.hasRegion = scan.region !== undefined;
-    if (date !== undefined) entry.daybook = parseDaybook(doc, s.daybookHeading).entries;
+    if (date !== undefined) { const db = parseDaybook(doc, s.daybookHeading); entry.daybook = db.entries; if (db.heading !== -1) entry.daybookHeading = db.heading; }
     const sectionOfLine = new Map<number, Section>();
     if (scan.region) for (const sec of ['habits', 'morning', 'afternoon', 'evening', 'anytime'] as Section[]) for (const l of scan.region.sections[sec].taskLines) sectionOfLine.set(l, sec);
 
@@ -432,9 +438,26 @@ export class HelmIndex {
     const notes = new Map<string, NoteRef>();
     for (const e of this.files.values()) { if (e.drawing) drawings.set(e.path, e.drawing); if (e.noteRef) notes.set(e.path, e.noteRef); }
     this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath, drawings, notes };
+    // Every task's wikilinks, parsed once: both attachment passes look targets up here instead of
+    // re-parsing 8,000 task lines for each of 400 drawings.
+    this.tasksByLink = new Map();
+    for (const t of this.snapshot.tasks.values()) {
+      if (t.origin === 'daily-mirror') continue;
+      for (const l of wikilinksIn(t.text)) {
+        const k = l.toLowerCase();
+        const arr = this.tasksByLink.get(k);
+        if (arr) arr.push(t.key); else this.tasksByLink.set(k, [t.key]);
+      }
+    }
+    this.phaseIds = new Set([...this.snapshot.projects.values()].flatMap((p) => p.phases.map((ph) => ph.id)));
     this.attachDrawings();
     this.attachNotes();
   }
+
+  /** Lower-cased wikilink target → keys of the tasks whose text links it, in snapshot order. Rebuilt by link(). */
+  private tasksByLink = new Map<string, string[]>();
+  /** Every phase id in the snapshot. Rebuilt by link(). */
+  private phaseIds = new Set<string>();
 
   /* ── Drawings ↔ tasks / projects / days / periods ───────────────────── */
 
@@ -469,7 +492,7 @@ export class HelmIndex {
       for (const date of d.dates) a.dates.add(date);
       for (const k of d.periodKeys) { const pk = periodOfText(k); if (pk) a.periodKeys.add(pk); }
       for (const hid of d.habitIds) if (snap.habits.has(hid)) a.habitIds.add(hid);
-      for (const pid of d.phaseIds) if ([...snap.projects.values()].some((pr) => pr.phases.some((ph) => ph.id === pid))) a.phaseIds.add(pid);
+      for (const pid of d.phaseIds) if (this.phaseIds.has(pid)) a.phaseIds.add(pid);
       // Where it lives.
       const owner = projectsByFolder.find((p) => isUnder(d.path, p.folder));
       if (owner) a.projectIds.add(owner.id);
@@ -478,8 +501,10 @@ export class HelmIndex {
       if (byDate) a.dates.add(byDate);
       const byPeriod = periodOfText(d.title);
       if (byPeriod && !byDate) a.periodKeys.add(byPeriod);
-      // Tasks whose text links the drawing.
-      for (const t of snap.tasks.values()) if (t.origin !== 'daily-mirror' && wikilinksIn(t.text).some((l) => l.toLowerCase() === d.title.toLowerCase() || l.toLowerCase() === `${d.title.toLowerCase()}.excalidraw`)) a.taskKeys.add(t.key);
+      // Tasks whose text links the drawing, by its title or its title with the .excalidraw suffix.
+      const title = d.title.toLowerCase();
+      for (const k of this.tasksByLink.get(title) ?? []) a.taskKeys.add(k);
+      for (const k of this.tasksByLink.get(`${title}.excalidraw`) ?? []) a.taskKeys.add(k);
       // What it says.
       for (const l of d.links) {
         const p = projectsByTitle.get(l.toLowerCase()); if (p) a.projectIds.add(p.id);
@@ -525,16 +550,13 @@ export class HelmIndex {
       for (const d of n.dates) a.dates.add(d);
       for (const k of n.periodKeys) a.periodKeys.add(k.toUpperCase());
       for (const hid of n.habitIds) if (snap.habits.has(hid)) a.habitIds.add(hid);
-      for (const pid of n.phaseIds) if ([...snap.projects.values()].some((pr) => pr.phases.some((ph) => ph.id === pid))) a.phaseIds.add(pid);
+      for (const pid of n.phaseIds) if (this.phaseIds.has(pid)) a.phaseIds.add(pid);
     }
-    // Task text links a note.
-    for (const t of snap.tasks.values()) {
-      if (t.origin === 'daily-mirror') continue;
-      for (const l of wikilinksIn(t.text)) {
-        if (/\.(excalidraw|canvas)$/i.test(l)) continue;
-        const path = this.allNoteTitles.get(l.toLowerCase());
-        if (path && !isOwnNote(path)) att(path).taskKeys.add(t.key);
-      }
+    // Task text links a note (the same parse pass as the drawings use).
+    for (const [l, keys] of this.tasksByLink) {
+      if (/\.(excalidraw|canvas)$/i.test(l)) continue;
+      const path = this.allNoteTitles.get(l);
+      if (path && !isOwnNote(path)) for (const k of keys) att(path).taskKeys.add(k);
     }
     // Links under a Notes heading of a project / daily / periodic note.
     for (const e of this.files.values()) {
@@ -604,6 +626,12 @@ export class HelmIndex {
 
   allDrawings(): Drawing[] { return [...this.snapshot.drawings.values()].sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0)); }
 
+  /** Whether a drawing is attached to anything at all (by frontmatter, folder, name or link). */
+  isAttachedDrawing(path: string): boolean {
+    const a = this.attachments.get(path);
+    return a !== undefined && (a.taskKeys.size + a.projectIds.size + a.dates.size + a.periodKeys.size + a.habitIds.size + a.phaseIds.size) > 0;
+  }
+
   /** Drawings attached to a task (by key), project (by id), day or period. Newest first. */
   drawingsFor(target: DrawingTarget): Drawing[] {
     const out: Drawing[] = [];
@@ -634,6 +662,11 @@ export class HelmIndex {
   daybook(date: IsoDate): DaybookEntry[] {
     const path = this.dailyPath(date);
     return (path ? this.files.get(path)?.daybook : undefined) ?? [];
+  }
+
+  /** The line of the day's diary heading, or undefined when the note has none (or does not exist). */
+  daybookHeadingLine(date: IsoDate): number | undefined {
+    return this.files.get(this.dailyPath(date))?.daybookHeading;
   }
 
   taskById(id: string): Task | undefined {

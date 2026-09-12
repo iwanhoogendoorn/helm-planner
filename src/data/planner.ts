@@ -6,6 +6,7 @@ import type { Goal, HelmSettings, IsoDate, Project, ProjectStatus, Snapshot, Tas
 import { parsePeriod, periodContains, periodsOfYear, periodWithin, type Period } from '../core/periods';
 import { addDays, diffDays, startOfWeek } from '../core/dates';
 import { isTerminal, priorityRank } from '../core/taskLine';
+import { nextOccurrence } from '../core/recurrence';
 import { PROJECT_PRIORITY_RANK } from '../core/project';
 
 /** Open = still to be done here. A forwarded `[>]` line is the record of a move, not work. */
@@ -401,6 +402,38 @@ export function review(snap: Snapshot, today: IsoDate, settings: HelmSettings): 
   };
 }
 
+export interface ReviewCheck { id: 'inbox' | 'overdue' | 'next' | 'stale' | 'week'; label: string; done: boolean; count: number; auto: boolean }
+
+/** The weekly review's checklist: four items Helm can tick itself from the numbers, and one only you can. */
+export function reviewChecklist(r: ReviewReport): ReviewCheck[] {
+  return [
+    { id: 'inbox', label: 'Inbox to zero', done: r.inbox.length === 0, count: r.inbox.length, auto: true },
+    { id: 'overdue', label: 'Every overdue task rescheduled or dropped', done: r.overdue.length === 0, count: r.overdue.length, auto: true },
+    { id: 'next', label: 'Every active project has a next action', done: r.noNextActionCount === 0, count: r.noNextActionCount, auto: true },
+    { id: 'stale', label: 'Stale projects put on hold or revived', done: r.staleCount === 0, count: r.staleCount, auto: true },
+    { id: 'week', label: 'Next week planned', done: false, count: 0, auto: false },
+  ];
+}
+
+/**
+ * What Wrap-up puts in front of you: every still-open item on the day — the note's own lines (not the
+ * planner slots outside the region), the mirror lines, project tasks planned there without a mirror
+ * yet, and inbox/note tasks planned there — in that order; and the projects the day touched (open
+ * items' projects, and the projects of what got done), which is where a wrap-up note gets logged.
+ */
+export function wrapUpItems(snap: Snapshot, plan: DayPlan): { open: DayItem[]; projectsTouched: string[] } {
+  const openTasks: Task[] = [...plan.today.filter((t) => t.section !== 'outside'), ...plan.mirrors.map((x) => x.mirror), ...plan.unmirrored, ...plan.elsewhere].filter((t) => !['done', 'cancelled', 'forwarded'].includes(t.status));
+  const byKey = new Map(plan.items.map((it) => [it.task.key, it]));
+  const open = openTasks.map((t) => byKey.get(t.key) ?? { task: t, display: t, part: 'anytime' as DayPart, kind: 'daily' as const });
+  const touched = new Set<string>();
+  for (const t of openTasks) {
+    if (t.projectId) touched.add(t.projectId);
+    else if (t.origin === 'daily-mirror' && t.mirrorOf) { const src = snap.tasks.get(t.mirrorOf); if (src?.projectId) touched.add(src.projectId); }
+  }
+  for (const t of plan.done) if (t.projectId) touched.add(t.projectId);
+  return { open, projectsTouched: [...touched] };
+}
+
 /** Everything that is open and has no date and no project: needs triage. */
 export function inboxItems(snap: Snapshot): { inbox: Task[]; loose: Map<string, Task[]>; unscheduledProject: Task[] } {
   const inbox: Task[] = [];
@@ -469,6 +502,13 @@ export function horizons(snap: Snapshot, year: number, today: IsoDate, settings:
   const build = (period: Period): HorizonPeriod => horizonPeriod(snap, period, today, settings, cache);
   const py = periodsOfYear(year);
   return { year: build(py.year), quarters: py.quarters.map(build), months: py.months.map(build) };
+}
+
+/** When a repeating task comes round next — what “Skip this one” names: after its date, or after today when it repeats when done. */
+export function nextOccurrenceOf(t: Task, today: IsoDate): IsoDate | undefined {
+  if (!t.recurrence?.parsed) return undefined;
+  const from = t.due ?? t.scheduled ?? t.noteDate ?? today;
+  return nextOccurrence(t.recurrence, t.recurrence.whenDone ? today : from);
 }
 
 /** The follow-ups spawned from a task (tasks tagged as follow-ups that depend on its id), open first. */

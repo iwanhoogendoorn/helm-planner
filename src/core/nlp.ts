@@ -23,6 +23,17 @@ import { parseRecurrence } from './recurrence';
  */
 export const REPEAT_PATTERN = /\s(every\s+(?:\d+\s+)?(?:day|days|week|weeks|month|months|year|years|weekday|weekend)(?:\s+on\s+(?:the\s+)?[\w, ]+?)?(?:\s+when\s+done)?|(?:daily|weekly|monthly|yearly|annually)(?:\s+when\s+done)?)(?=\s)/i;
 
+/** Where an `@Project Name` stops: the next token the grammar reads as something else. */
+const STOP_WORDS = [
+  'due', 'by', 'deadline', 'on', 'at',
+  'today', 'tod', 'tomorrow', 'tom', 'yesterday', 'next', 'this', 'eom', 'eow',
+  'mon', 'monday', 'tue', 'tues', 'tuesday', 'wed', 'wednesday', 'thu', 'thur', 'thurs', 'thursday', 'fri', 'friday', 'sat', 'saturday', 'sun', 'sunday',
+  'morning', 'afternoon', 'evening', 'tonight',
+  'every', 'daily', 'weekly', 'monthly', 'yearly', 'annually',
+  'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
+];
+const PROJECT_PATTERN = new RegExp(`\\s@([^\\s!#~@][^!#~@]*?)(?=\\s(?:!|#|~|@|in\\s+(?:\\d|the\\b)|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}:\\d{2}|\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?(?=\\s)|\\d{1,2}\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\\w*|(?:${STOP_WORDS.join('|')})\\b)|\\s$)`, 'i');
+
 export interface Capture {
   text: string;
   part?: 'morning' | 'afternoon' | 'evening';
@@ -52,8 +63,10 @@ export function parseCapture(input: string, today: IsoDate, weekStartsOn: 1 | 7 
     return ` ${r}`;
   });
 
-  // Project: "@Name Words" until a token that starts with ! # ~ @ or looks like a date keyword.
-  s = s.replace(/\s@([^\s!#~@][^!#~@]*?)(?=\s(?:!|#|~|@|due\b|on\b|today\b|tomorrow\b|tod\b|tom\b|next\b|in\s+\d|\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}|eom\b|eow\b|mon\b|tue\b|wed\b|thu\b|fri\b|sat\b|sun\b|monday\b|tuesday\b|wednesday\b|thursday\b|friday\b|saturday\b|sunday\b)|\s$)/i, (_, p: string) => {
+  // Project: "@Name Words" until a token that starts with ! # ~ @, or is a word the rest of the grammar
+  // reads — a date keyword (due, by, deadline, on, at, today…, this/next, in N, a date in any spelling, eom, eow,
+  // a weekday), a part of the day, or a repeat word — or the end of the line.
+  s = s.replace(PROJECT_PATTERN, (_, p: string) => {
     out.project = p.trim();
     return ' ';
   });
@@ -126,7 +139,12 @@ export function resolveDate(word: string, today: IsoDate, weekStartsOn: 1 | 7 = 
   if (w === 'next week') return addDays(startOfWeek(today, weekStartsOn), 7);
   if (w === 'next month') return `${addMonths(today, 1).slice(0, 7)}-01`;
   if (w === 'eom') return endOfMonth(today);
-  if (w === 'eow') return addDays(startOfWeek(today, weekStartsOn), weekStartsOn === 1 ? 4 : 5);
+  if (w === 'eow') {
+    // Friday for either week start (the working week ends); once this week's has gone — a Saturday or Sunday
+    // capture — it is the coming Friday, the way a bare weekday rolls forward. Never a day in the past.
+    const friday = addDays(startOfWeek(today, weekStartsOn), weekStartsOn === 1 ? 4 : 5);
+    return friday < today ? addDays(friday, 7) : friday;
+  }
   if (isIsoDate(w)) return w;
   let m = /^in (\d+) (day|days|week|weeks|month|months)$/.exec(w);
   if (m) {
@@ -137,9 +155,10 @@ export function resolveDate(word: string, today: IsoDate, weekStartsOn: 1 | 7 = 
   if (m && WD[m[2]!] !== undefined) {
     const target = WD[m[2]!]!;
     const cur = isoWeekday(today);
+    // "next friday" is the Friday of next week — the same "next" as in "next week" — whichever day it is today.
+    if (m[1] === 'next') return addDays(addDays(startOfWeek(today, weekStartsOn), 7), weekStartsOn === 1 ? target - 1 : target % 7);
     let delta = (target - cur + 7) % 7;
-    if (m[1] === 'next') delta = delta === 0 ? 7 : delta + (target > cur ? 7 : 0);
-    else if (delta === 0 && !m[1]) delta = 7; // "friday" on a Friday means next Friday
+    if (delta === 0 && !m[1]) delta = 7; // "friday" on a Friday means next Friday; "this friday" is today
     return addDays(today, delta);
   }
   m = /^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?$/.exec(w);

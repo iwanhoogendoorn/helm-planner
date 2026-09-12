@@ -80,3 +80,26 @@ export function preferredSlot(snap: Snapshot, date: IsoDate, settings: HelmSetti
     ?? freeSlotOn(snap, date, settings, rest)
     ?? partWindow(opts.part, settings).from;
 }
+
+/**
+ * Every free stretch in a part's window (or the whole day) long enough for `minutes`, in clock order,
+ * after everything booked and never before `notBefore`. The whole picture where `freeSlotOn` gives the
+ * first answer.
+ */
+export function freeWindowsOn(snap: Snapshot, date: IsoDate, settings: HelmSettings, opts: { part?: DayPart; minutes?: number; notBefore?: string; excludeKeys?: string[] } = {}): { start: string; end: string }[] {
+  const win = partWindow(opts.part, settings);
+  const need = opts.minutes ?? settings.defaultEffortMinutes;
+  const skip = new Set(opts.excludeKeys ?? []);
+  const booked = bookingsOn(snap, date, settings).filter((b) => !skip.has(b.key) && !skip.has(b.task.mirrorOf ?? '')).map((b) => ({ start: toMin(b.start), end: toMin(b.end) })).sort((a, b) => a.start - b.start);
+  const end = toMin(win.to);
+  const out: { start: string; end: string }[] = [];
+  let at = Math.ceil(Math.max(toMin(win.from), opts.notBefore ? toMin(opts.notBefore) : 0) / 5) * 5;
+  for (const b of booked) {
+    if (b.end <= at) continue;
+    if (b.start - at >= need) out.push({ start: toHhmm(at), end: toHhmm(Math.min(b.start, end)) });
+    at = Math.max(at, Math.ceil(b.end / 5) * 5);
+    if (at >= end) break;
+  }
+  if (end - at >= need) out.push({ start: toHhmm(at), end: toHhmm(end) });
+  return out;
+}

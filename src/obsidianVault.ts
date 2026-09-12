@@ -1,6 +1,14 @@
 /** VaultAdapter over Obsidian's vault API. The only place the data layer meets Obsidian. */
 import { normalizePath, TFile, type App } from 'obsidian';
 import type { VaultAdapter } from './data/vault';
+import { isSafeVaultPath } from './core/paths';
+
+/** Obsidian's normalizePath keeps `..`; the adapter would then join it onto the vault root. Nothing here may leave the vault. */
+function inside(path: string): string {
+  const p = normalizePath(path);
+  if (!isSafeVaultPath(p)) throw new Error(`Not a path inside the vault: ${path}`);
+  return p;
+}
 
 export class ObsidianVault implements VaultAdapter {
   constructor(private app: App) {}
@@ -20,14 +28,15 @@ export class ObsidianVault implements VaultAdapter {
   }
 
   async read(path: string): Promise<string> {
-    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    const p = inside(path);
+    const f = this.app.vault.getAbstractFileByPath(p);
     if (f instanceof TFile) return this.app.vault.read(f);
     // Files outside the vault index (e.g. .obsidian/…) go through the adapter.
-    return this.app.vault.adapter.read(normalizePath(path));
+    return this.app.vault.adapter.read(p);
   }
 
   async write(path: string, content: string): Promise<void> {
-    const p = normalizePath(path);
+    const p = inside(path);
     this.noteWrite(p);
     const f = this.app.vault.getAbstractFileByPath(p);
     if (f instanceof TFile) { await this.app.vault.modify(f, content); return; }
@@ -36,7 +45,7 @@ export class ObsidianVault implements VaultAdapter {
     await this.app.vault.create(p, content);
   }
 
-  async createFolder(path: string): Promise<void> { await this.mkdirp(normalizePath(path)); }
+  async createFolder(path: string): Promise<void> { await this.mkdirp(inside(path)); }
 
   private async mkdirp(folder: string): Promise<void> {
     const parts = folder.split('/');
@@ -59,13 +68,20 @@ export class ObsidianVault implements VaultAdapter {
   }
 
   async writeBinary(path: string, data: ArrayBuffer): Promise<void> {
-    const p = normalizePath(path);
+    const p = inside(path);
     this.noteWrite(p);
     const f = this.app.vault.getAbstractFileByPath(p);
     if (f instanceof TFile) { await this.app.vault.modifyBinary(f, data); return; }
     const folder = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
     if (folder && !this.app.vault.getAbstractFileByPath(folder)) await this.mkdirp(folder);
     await this.app.vault.createBinary(p, data);
+  }
+
+  async readBinary(path: string): Promise<ArrayBuffer> {
+    const p = inside(path);
+    const f = this.app.vault.getAbstractFileByPath(p);
+    if (f instanceof TFile) return this.app.vault.readBinary(f);
+    return this.app.vault.adapter.readBinary(p);
   }
 
   frontmatter(path: string): Record<string, unknown> | undefined {
@@ -81,14 +97,14 @@ export class ObsidianVault implements VaultAdapter {
   }
 
   async trash(path: string): Promise<void> {
-    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    const f = this.app.vault.getAbstractFileByPath(inside(path));
     if (!f) throw new Error(`Not in the vault: ${path}`);
     await this.app.vault.trash(f, false);
   }
 
   async rename(from: string, to: string): Promise<void> {
-    const f = this.app.vault.getAbstractFileByPath(normalizePath(from));
+    const f = this.app.vault.getAbstractFileByPath(inside(from));
     if (!f) throw new Error(`Not in the vault: ${from}`);
-    await this.app.fileManager.renameFile(f, normalizePath(to));
+    await this.app.fileManager.renameFile(f, inside(to));
   }
 }

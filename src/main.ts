@@ -1,5 +1,5 @@
 /** Helm — plugin entry point. Wires the index, mutations and views to Obsidian. */
-import { MarkdownView, Notice, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Notice, Platform, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
 import { openExportReport } from './ui/modals/exportReport';
 import { loadFolds } from './ui/fold';
 import { DEFAULT_SETTINGS, type HelmSettings, type IsoDate } from './core/types';
@@ -12,6 +12,7 @@ import type { TabId, UiContext } from './ui/context';
 import { HelmSettingTab } from './ui/settingsTab';
 import { openCapture } from './ui/modals/capture';
 import { randomToken, startApiServer } from './api/server';
+import { apiUrls, resolveBindHost } from './api/bind';
 import { openSearch } from './ui/modals/search';
 import { openPlanDay } from './ui/modals/planDay';
 import { openWrapUp } from './ui/modals/wrapUp';
@@ -103,11 +104,22 @@ export default class HelmPlugin extends Plugin {
 
   /* ── Local API ──────────────────────────────────────────────────────── */
 
-  private api?: { close: () => void; port: number };
+  private api?: { close: () => void; port: number; host: string };
   private apiError?: string;
 
-  apiStatus(): { running: boolean; port?: number; error?: string } {
-    return { running: this.api !== undefined, ...(this.api ? { port: this.api.port } : {}), ...(this.apiError ? { error: this.apiError } : {}) };
+  /** Running state plus the base URLs a client can use — the Tailscale one first when there is one. */
+  apiStatus(): { running: boolean; port?: number; host?: string; urls: string[]; error?: string; mobile: boolean } {
+    const urls = this.api ? apiUrls(this.api.host, this.api.port, this.interfaces()) : [];
+    return { running: this.api !== undefined, ...(this.api ? { port: this.api.port, host: this.api.host } : {}), urls, ...(this.apiError ? { error: this.apiError } : {}), mobile: Platform.isMobile };
+  }
+
+  /** What the phone would use if the API were on with the given bind — for the settings tab's preview. */
+  apiUrlsFor(bind: HelmSettings['apiBind'], port: number): string[] {
+    return apiUrls(resolveBindHost(bind, this.interfaces()).host, port, this.interfaces());
+  }
+
+  private interfaces(): ReturnType<typeof import('node:os')['networkInterfaces']> {
+    try { return (require('node:os') as typeof import('node:os')).networkInterfaces(); } catch { return {}; }
   }
 
   newApiToken(): string { return randomToken(); }
@@ -118,10 +130,23 @@ export default class HelmPlugin extends Plugin {
     this.api = undefined;
     this.apiError = undefined;
     if (!this.settings.apiEnabled) return;
+    // The server needs node's http, which the mobile app does not have. Settings sync between devices, so
+    // without this the phone would say "could not start" at every launch for something that cannot run there.
+    if (Platform.isMobile) return;
     if (this.settings.apiToken === '') { this.apiError = 'no token'; return; }
+    const bind = resolveBindHost(this.settings.apiBind ?? 'loopback', this.interfaces());
+    if (bind.fallback) {
+      console.error(`[helm/api] ${bind.fallback}`);
+      new Notice(`Helm API: ${bind.fallback}.`);
+    }
+    if (bind.host === '0.0.0.0') {
+      console.warn('[helm/api] listening on every interface (apiBind: all) — anyone on any network this machine is on can reach the API with the token');
+      new Notice('Helm API is reachable from every network this machine is on. Prefer Tailscale unless you trust the LAN.', 8000);
+    }
     try {
       this.api = await startApiServer({
         port: this.settings.apiPort,
+        host: bind.host,
         token: this.settings.apiToken,
         log: (m) => console.log(`[helm/api] ${m}`),
         deps: {
@@ -131,6 +156,9 @@ export default class HelmPlugin extends Plugin {
           today: () => this.today(),
           version: this.manifest.version,
           written: () => this.vault.takeWrites(),
+          vaultName: this.app.vault.getName(),
+          read: (path) => this.vault.read(path),
+          readBinary: (path) => this.vault.readBinary(path),
         },
       });
     } catch (e) {

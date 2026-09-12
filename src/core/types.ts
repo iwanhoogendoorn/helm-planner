@@ -298,6 +298,8 @@ export interface HelmSettings {
   apiEnabled: boolean;
   apiPort: number;
   apiToken: string;
+  /** Where it listens: this machine only, your Tailscale address (for the phone), or every interface. */
+  apiBind: 'loopback' | 'tailscale' | 'all';
   followupTag: string;
   /** Tags offered as one-click toggles in Capture, comma separated, without the #. */
   captureTags: string;
@@ -377,6 +379,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   apiEnabled: false,
   apiPort: 27125,
   apiToken: '',
+  apiBind: 'loopback',
   followupTag: 'followup',
   captureTags: 'meeting, followup, task',
   notesFolder: 'Notes',

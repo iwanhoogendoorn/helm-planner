@@ -1,7 +1,7 @@
 /** Weekly review: numbers, what needs attention, habits, what got done. */
 import { humanDate, relativeDays, minutesToHuman } from '../../core/dates';
 import { openExportReport } from '../modals/exportReport';
-import { review, type ProjectHealth } from '../../data/planner';
+import { review, type ProjectHealth, reviewChecklist } from '../../data/planner';
 import { habitStats } from '../../data/habits';
 import { button, chip, empty, h, icon, section } from '../dom';
 import type { UiContext } from '../context';
@@ -49,13 +49,7 @@ export function renderReview(ctx: UiContext, root: HTMLElement, state: ReviewSta
   ));
 
   // Checklist.
-  const checks = [
-    ['inbox', 'Inbox to zero', r.inbox.length === 0],
-    ['overdue', 'Every overdue task rescheduled or dropped', r.overdue.length === 0],
-    ['next', 'Every active project has a next action', r.noNextActionCount === 0],
-    ['stale', 'Stale projects put on hold or revived', r.staleCount === 0],
-    ['week', 'Next week planned', false],
-  ] as const;
+  const checks = reviewChecklist(r).map((c) => [c.id, c.label, c.auto && c.done] as const);
   root.appendChild(section('Review checklist', { store, key: 'checklist' }, h('div', { cls: 'helm-checklist' }, ...checks.map(([k, label, auto]) => {
     const on = auto || state.checks.has(k);
     return h('label', { cls: ['helm-checkitem', on && 'is-done'] }, h('input', { attr: { type: 'checkbox', checked: on, disabled: auto }, onChange: (ev) => { if ((ev.target as HTMLInputElement).checked) state.checks.add(k); else state.checks.delete(k); ctx.refresh(); } }), h('span', { text: label }), auto ? chip('auto', 'auto') : null);

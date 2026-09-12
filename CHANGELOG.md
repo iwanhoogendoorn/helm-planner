@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased
+
+- **Saving a note no longer costs seconds on a large vault.** Every time a note changed, Helm
+  re-read every task's `[[links]]` once for every drawing in the vault to work out which tasks
+  a drawing belongs to — on a vault with 8,500 tasks and 450 drawings that was four million
+  parses per save, about two seconds of CPU on every edit, in Obsidian itself and not only
+  through the API. The links are now read once per change and looked up by name. Measured on
+  a copy of such a vault: re-indexing after a change went from 1,975 ms to 33 ms; adding a
+  task from 1,961 ms to 39 ms; ticking one from 2,436 ms to 33 ms; deleting one from 1,622 ms
+  to 31 ms. Which drawings and notes belong to what is unchanged — the same attachments come
+  out, now locked by tests. Archiving or deleting a project still rebuilds the whole index (a
+  few seconds on a big vault); that is deliberate for a rare, destructive operation and is
+  noted as a follow-up.
+- **The local API refuses paths and values that could do harm.** The API is off by default and,
+  when on, listens on this machine only unless you choose Tailscale or every interface; this
+  hardening applies to anyone who can reach it with the token. No path a caller names — a
+  folder for a new note or drawing, a note or drawing to link, a file to read, a habit's icon
+  image — can leave the vault any more (no `..`, no absolute path, no empty segment, no control
+  character), and the Obsidian adapter refuses such a path again underneath, for the plugin's
+  own writes too. A value that cannot be understood — a date that is not a date, a time like
+  25:99, a negative effort, a text with a newline — is refused with a clear 400 instead of
+  being ignored or, as an invalid due date used to, silently clearing the field; only an
+  explicit `null` clears. Frontmatter values are always written as one escaped line, so no
+  string can inject a key. Choosing “All interfaces” for the API now says plainly, when you
+  pick it and every time the server starts, that anyone on any network this machine is on can
+  reach it with the token.
+- **API v2: everything the Helm iPhone app uses.** `GET /health` says `api: 2` and carries a
+  `revision` that moves on every change (every response has `x-helm-revision`), so a client
+  polls once and refreshes only when something happened. New routes cover the whole plugin:
+  the day as the Today tab reads it (parts, time blocks, habits, daybook, timeline, free
+  slots), Plan day (candidates, write the plan, fit the day without AI), Wrap up, rollover,
+  the daybook, habits (list, history, create, edit, tick, move, pause), inbox, week, calendar,
+  periods, horizons, goals, the whole project page (phases with task trees, log, links,
+  related tasks, health), task actions (follow-up, plan-into, project-from-task, skip,
+  links, bulk, reorder), review with its checklist, dashboard stats, search, capture (parse
+  and write, the dialog's exact rules), attachments (notes and drawings: list, create, link,
+  unlink, delete) on tasks, projects, phases, days, periods and habits, the report, files,
+  diagnostics and maintenance. Task and project JSON carry every field the app draws. The
+  rules that only lived in the UI — the Today tab's habit rows, the wrap-up selection, the
+  review checklist, capture's destination, the selection bar's bulk walk, Fit-the-day's
+  request — moved into `src/data` so the app and the API run the same code. Full reference:
+  docs/api.md.
+- **The API can listen on Tailscale.** Settings → Local API → **Reachable from**: this machine
+  only (the default, unchanged), your Tailscale address (for the Helm iPhone app and other
+  devices on your tailnet — Helm finds the `100.x` address itself and falls back to loopback
+  with a notice when Tailscale is off), or every interface. The settings tab shows the URL
+  the phone should use next to the running status; docs/api.md has the Tailscale and
+  `tailscale serve` HTTPS recipes.
+- **`npm run serve:dev` serves the API over a folder, without Obsidian.** The same routes,
+  index and mutations over a filesystem vault (`src/data/fsVault.ts`), with edits on disk
+  picked up as they happen — for developing clients against a disposable seeded vault.
+
 ## 1.34.0 — 2026-09-09
 
 - **Everything that moves a task lives under one word.** The right-click menu scattered

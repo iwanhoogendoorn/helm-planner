@@ -6,15 +6,27 @@ import type { ApiDeps } from '../../src/api/routes';
 let stop: (() => void) | undefined;
 afterEach(() => { stop?.(); stop = undefined; });
 
-async function serve(token = randomToken()) {
+async function serve(token = randomToken(), host?: string) {
   const s = await setup();
-  const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', written: () => [] };
-  const server = await startApiServer({ port: 0, token, deps }); // port 0: let the OS pick a free one
+  const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', written: () => [], read: (p) => s.vault.read(p) };
+  const server = await startApiServer({ port: 0, token, deps, ...(host ? { host } : {}) }); // port 0: let the OS pick a free one
   stop = server.close;
-  return { ...s, token, base: `http://127.0.0.1:${server.port}/helm/v1` };
+  return { ...s, token, server, base: `http://${server.host}:${server.port}/helm/v1` };
 }
 
 describe('the API server', () => {
+  it('binds to loopback by default and to the host it is given', async () => {
+    const dflt = await serve();
+    expect(dflt.server.host).toBe('127.0.0.1');
+    stop?.(); stop = undefined;
+    // The other loopback address (IPv6): reachable there, and not on 127.0.0.1 at that port.
+    const { token, server } = await serve(undefined, '::1');
+    expect(server.host).toBe('::1');
+    const here = await fetch(`http://[::1]:${server.port}/helm/v1/health`, { headers: { authorization: `Bearer ${token}` } });
+    expect(here.status).toBe(200);
+    await expect(fetch(`http://127.0.0.1:${server.port}/helm/v1/health`, { headers: { authorization: `Bearer ${token}` } })).rejects.toThrow();
+  });
+
   it('serves JSON over loopback, and only with the token', async () => {
     const { base, token } = await serve();
     const noAuth = await fetch(`${base}/health`);
@@ -24,7 +36,9 @@ describe('the API server', () => {
     const good = await fetch(`${base}/health`, { headers: { authorization: `Bearer ${token}` } });
     expect(good.status).toBe(200);
     expect(good.headers.get('content-type')).toContain('application/json');
-    expect(await good.json()).toMatchObject({ ok: true, version: '9.9.9' });
+    expect(good.headers.get('cache-control')).toBe('no-store');
+    expect(good.headers.get('x-helm-revision')).toMatch(/^\d+$/);
+    expect(await good.json()).toMatchObject({ ok: true, version: '9.9.9', api: 2 });
   });
 
   it('writes to the vault through a POST and refuses a body that is not JSON', async () => {
