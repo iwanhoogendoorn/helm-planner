@@ -352,8 +352,9 @@ sentence } }`. `POST /capture` with the same body performs the dialog's write �
 The grammar's date words, for a client that mirrors them: a bare weekday is the coming one
 (today counts as next week); `this <weekday>` is this week's (today when equal); `next <weekday>`
 is that weekday **of next week**, the same "next" as `next week`, whatever today is, honouring
-the week start; `eow` is Friday for either week start (the working week ends); `eom` the last day
-of the month. An `@Project` name runs until the next token the grammar reads as something else:
+the week start; `eow` is the coming Friday for either week start (the working week ends): this week's while it
+has not passed, today on a Friday, next week's on a Saturday or Sunday — never a day already
+gone; `eom` the last day of the month (today on that day). An `@Project` name runs until the next token the grammar reads as something else:
 `!`, `#`, `~`, `@`, `due`, `by`, `deadline`, `on`, `at`, `today`, `tomorrow`, `yesterday`,
 `this`, `next`, `in N …`, `in the …`, a date in any spelling (ISO, `D/M`, `D mon`, `mon D`),
 `HH:MM`, `eom`, `eow`, a weekday, a part of the day (`morning`, `afternoon`, `evening`,

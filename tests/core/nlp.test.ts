@@ -26,11 +26,15 @@ describe('capture grammar · dates', () => {
     expect(resolveDate('this friday', SAT)).toBe('2026-09-04');
   });
 
-  it('"eow" is Friday, the end of the working week, for both week starts', () => {
+  it('"eow" is the coming Friday, the end of the working week, for both week starts — never a day already gone', () => {
     expect(resolveDate('eow', WED)).toBe('2026-08-28');
     expect(resolveDate('eow', WED, 7)).toBe('2026-08-28');
-    expect(resolveDate('eow', SUN, 7)).toBe('2026-09-04');  // Sunday starts the new week
-    expect(resolveDate('eow', SUN, 1)).toBe('2026-08-28');  // Sunday ends the old one
+    expect(resolveDate('eow', '2026-08-28')).toBe('2026-08-28'); // on a Friday, eow is today
+    expect(resolveDate('eow', SAT)).toBe('2026-09-04');     // Saturday: this week's Friday has gone → the coming one
+    expect(resolveDate('eow', SUN, 1)).toBe('2026-09-04');  // Sunday (Monday-start week): likewise
+    expect(resolveDate('eow', SAT, 7)).toBe('2026-09-04');  // Saturday (Sunday-start week): likewise
+    expect(resolveDate('eow', SUN, 7)).toBe('2026-09-04');  // Sunday starts the new week: its Friday
+    expect(resolveDate('eom', '2026-08-31')).toBe('2026-08-31'); // eom on the last day is today, never before
     expect(resolveDate('next week', WED)).toBe('2026-08-31');
     expect(resolveDate('next week', WED, 7)).toBe('2026-08-30');
   });
@@ -41,6 +45,7 @@ describe('capture grammar · dates', () => {
     expect(due.due).toBe('2026-09-04');
     expect(sched.scheduled).toBe('2026-09-04');
     expect(parseCapture('Send the draft by eow', MON).due).toBe('2026-08-28');
+    expect(parseCapture('Send the draft by eow', SAT).due).toBe('2026-09-04');
   });
 });
 

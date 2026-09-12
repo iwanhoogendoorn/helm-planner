@@ -139,7 +139,12 @@ export function resolveDate(word: string, today: IsoDate, weekStartsOn: 1 | 7 = 
   if (w === 'next week') return addDays(startOfWeek(today, weekStartsOn), 7);
   if (w === 'next month') return `${addMonths(today, 1).slice(0, 7)}-01`;
   if (w === 'eom') return endOfMonth(today);
-  if (w === 'eow') return addDays(startOfWeek(today, weekStartsOn), weekStartsOn === 1 ? 4 : 5); // Friday either way: the working week ends
+  if (w === 'eow') {
+    // Friday for either week start (the working week ends); once this week's has gone — a Saturday or Sunday
+    // capture — it is the coming Friday, the way a bare weekday rolls forward. Never a day in the past.
+    const friday = addDays(startOfWeek(today, weekStartsOn), weekStartsOn === 1 ? 4 : 5);
+    return friday < today ? addDays(friday, 7) : friday;
+  }
   if (isIsoDate(w)) return w;
   let m = /^in (\d+) (day|days|week|weeks|month|months)$/.exec(w);
   if (m) {
