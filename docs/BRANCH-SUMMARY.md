@@ -73,6 +73,18 @@ the default capture time and refuses an unknown `@Project`; `DELETE /notes` and
 `DELETE /drawings` only remove attached files; fit speaks the day row's ref with `sourceRef`
 beside it; `POST /report.pdf` is 501.
 
+## Known limitation, documented rather than fixed
+
+The vault-path guard is lexical: it refuses a path that names its way out of the vault, after
+Obsidian's normalisation, but it does not resolve symbolic links. A symlink already inside the
+vault that points outside it is followed for files the index knows (a habit icon that is a
+symlink would be served). Creating that link requires local filesystem access, which already
+implies the ability to read the target, so it does not widen what an API caller can do. It is
+Obsidian-only: the dev server's `FsVault` never indexes a symlink (it walks with `Dirent.isFile`
+and `isDirectory`). An independent adversarial review (percent-encoding, Unicode lookalike
+separators, absolute, UNC and drive-letter paths, Windows separators, a check-then-use gap, and
+a hand-edited frontmatter value) found no way round the guard; this is the residual it named.
+
 ## Consciously deferred
 
 - **Archive and delete of a project rebuild the whole index** (4.4 s and 1.3 s on the copy).

@@ -467,6 +467,14 @@ character is a 400, and a frontmatter value is always written as one escaped YAM
 An unparseable `due`, `start`, `effortMinutes`, `time` or `timeEnd` is a 400 on create and on
 PATCH; only an explicit `null` clears a field.
 
+One known limit: the path guard is lexical. It refuses a path that names its way out of the
+vault; it does not resolve symbolic links, so a symlink that already sits inside the vault and
+points outside it is followed by Obsidian like any other file — a habit icon `run.png` that is
+a symlink would be served. Creating such a link needs local filesystem access, which already
+means being able to read the target, so this is not something the API adds. It concerns
+Obsidian only: the dev server's `FsVault` walks with `Dirent.isFile` / `isDirectory` and
+never indexes a symlink.
+
 A phase has the same five under `/projects/:id/phases/:slug/…`. `DELETE /drawings` only removes a
 drawing that is attached to something. `GET /files` also serves the text of a `.excalidraw` /
 `.canvas` drawing the index knows (`kind: "drawing"`).
