@@ -1463,6 +1463,27 @@ describe('Modals', () => {
     expect(await vault.read(dailyPath('2026-08-27'))).toContain('Call the plumber');
   });
 
+  it('capture reads "@Project by friday" as the project and a due date, in the dialog as on the API', async () => {
+    const { ctx, vault } = await ctxFor();
+    openCapture(ctx);
+    const m = Modal.last!;
+    const input = m.contentEl.querySelector<HTMLInputElement>('input')!;
+    input.value = 'Fix the tap @Kitchen Remodel by friday';
+    input.dispatchEvent(new Event('input'));
+    // The name stops at "by": the destination is the project, no "(unknown project)" warning, and the due chip is there.
+    expect(m.contentEl.querySelector('.helm-capture-where')!.textContent).toContain('project “Kitchen Remodel”');
+    expect([...m.contentEl.querySelectorAll('.helm-capture-preview .helm-chip')].map((c) => c.textContent).some((t) => t?.includes('unknown project'))).toBe(false);
+    expect(texts(m.contentEl, '.helm-capture-preview .helm-chip.due')).toEqual(['due Fri 28 Aug']);
+    input.value = 'Send the draft @Kitchen Remodel next friday';
+    input.dispatchEvent(new Event('input'));
+    expect(m.contentEl.querySelector('.helm-capture-where')!.textContent).toContain('project “Kitchen Remodel”');
+    expect(texts(m.contentEl, '.helm-capture-preview .helm-chip.scheduled')[0]).toContain('4 Sep'); // Friday of next week, not this Friday
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await flush();
+    await flush();
+    expect(await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')).toMatch(/- \[ \] Send the draft 🆔 tsk-\w+ ⏳ 2026-09-04/);
+  });
+
   it('plan day picks candidates and writes the note', async () => {
     const { ctx, vault } = await ctxFor();
     openPlanDay(ctx, TODAY);

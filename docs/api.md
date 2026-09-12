@@ -349,6 +349,17 @@ sentence } }`. `POST /capture` with the same body performs the dialog's write �
 `{ task, parsed, destination, written }`. An `@Name` that is not a project is a 400 on write
 (and `unknownProject` on parse).
 
+The grammar's date words, for a client that mirrors them: a bare weekday is the coming one
+(today counts as next week); `this <weekday>` is this week's (today when equal); `next <weekday>`
+is that weekday **of next week**, the same "next" as `next week`, whatever today is, honouring
+the week start; `eow` is Friday for either week start (the working week ends); `eom` the last day
+of the month. An `@Project` name runs until the next token the grammar reads as something else:
+`!`, `#`, `~`, `@`, `due`, `by`, `deadline`, `on`, `at`, `today`, `tomorrow`, `yesterday`,
+`this`, `next`, `in N …`, `in the …`, a date in any spelling (ISO, `D/M`, `D mon`, `mon D`),
+`HH:MM`, `eom`, `eow`, a weekday, a part of the day (`morning`, `afternoon`, `evening`,
+`tonight`), or a repeat word (`every`, `daily`, `weekly`, `monthly`, `yearly`, `annually`) —
+whole words only, and never the first word of the name.
+
 ### Attachments and notes
 
 ```
