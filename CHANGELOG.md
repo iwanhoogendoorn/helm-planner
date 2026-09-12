@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **Saving a note no longer costs seconds on a large vault.** Every time a note changed, Helm
+  re-read every task's `[[links]]` once for every drawing in the vault to work out which tasks
+  a drawing belongs to — on a vault with 8,500 tasks and 450 drawings that was four million
+  parses per save, about two seconds of CPU on every edit, in Obsidian itself and not only
+  through the API. The links are now read once per change and looked up by name. Measured on
+  a copy of such a vault: re-indexing after a change went from 1,975 ms to 33 ms; adding a
+  task from 1,961 ms to 39 ms; ticking one from 2,436 ms to 33 ms; deleting one from 1,622 ms
+  to 31 ms. Which drawings and notes belong to what is unchanged — the same attachments come
+  out, now locked by tests. Archiving or deleting a project still rebuilds the whole index (a
+  few seconds on a big vault); that is deliberate for a rare, destructive operation and is
+  noted as a follow-up.
+- **The local API refuses paths and values that could do harm.** The API is off by default and,
+  when on, listens on this machine only unless you choose Tailscale or every interface; this
+  hardening applies to anyone who can reach it with the token. No path a caller names — a
+  folder for a new note or drawing, a note or drawing to link, a file to read, a habit's icon
+  image — can leave the vault any more (no `..`, no absolute path, no empty segment, no control
+  character), and the Obsidian adapter refuses such a path again underneath, for the plugin's
+  own writes too. A value that cannot be understood — a date that is not a date, a time like
+  25:99, a negative effort, a text with a newline — is refused with a clear 400 instead of
+  being ignored or, as an invalid due date used to, silently clearing the field; only an
+  explicit `null` clears. Frontmatter values are always written as one escaped line, so no
+  string can inject a key. Choosing “All interfaces” for the API now says plainly, when you
+  pick it and every time the server starts, that anyone on any network this machine is on can
+  reach it with the token.
 - **API v2: everything the Helm iPhone app uses.** `GET /health` says `api: 2` and carries a
   `revision` that moves on every change (every response has `x-helm-revision`), so a client
   polls once and refreshes only when something happened. New routes cover the whole plugin:

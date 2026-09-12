@@ -376,6 +376,10 @@ POST /maintenance/move-recurring       { onlyFuture?: true } → { moved, writte
 POST /maintenance/catch-up-recurring   { aheadDays?: 45 } → { spawned, written }
 ```
 
+Rebuild is the full parse of the vault (seconds on a large one). `POST /projects/:id/archive`
+and `DELETE /projects/:id` rebuild the index too after moving the folder — a deliberate choice
+for a rare, destructive operation, and a known follow-up should it ever matter.
+
 ### Amendments (§14): bulk, slots, fit, skip, icons, diagnostics
 
 **Tasks.** `PATCH /tasks/:id` also takes `start` (date or null, the `🛫` field) and `blockedBy`
