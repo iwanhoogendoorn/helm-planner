@@ -805,8 +805,12 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-api-url { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .helm-api-url code { user-select: text; font-size: var(--font-ui-smaller); word-break: break-all; text-align: left; flex: 1; min-width: 0; }
 .helm-api-url button { flex: none; }
-/* Wrapped, not clipped: a curl line you cannot see is a curl line you cannot copy. */
-.helm-api-example { user-select: text; white-space: pre-wrap; word-break: break-all; padding: 8px 10px; border-radius: var(--radius-s); background: var(--background-secondary); font-size: var(--font-ui-smaller); }
+/* One command per row: a label in words, the command on one line (scroll, never wrap), and Copy. */
+.helm-api-examples { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
+.helm-api-ex { display: grid; grid-template-columns: 108px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.helm-api-ex-label { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.helm-api-ex-code { user-select: text; white-space: pre; overflow-x: auto; display: block; padding: 5px 8px; border-radius: var(--radius-s); background: var(--background-secondary); font-size: var(--font-ui-smaller); }
+.helm-api-ex button { flex: none; }
 .helm-links-btn .helm-badge { position: static; min-width: 0; height: auto; padding: 0 0 0 4px; margin: 0; background: transparent; color: inherit; font-size: 11px; font-weight: 600; }
 .helm-project[draggable="true"] { cursor: grab; }
 .helm-project.is-dragging { opacity: 0.4; }

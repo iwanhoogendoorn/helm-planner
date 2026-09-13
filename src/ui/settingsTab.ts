@@ -543,13 +543,25 @@ export class HelmSettingTab extends PluginSettingTab {
       copy.addEventListener('click', () => { void navigator.clipboard.writeText(u); new Notice('URL copied.'); });
     }
     if (bind === 'tailscale' && !urls.some((u) => /\/\/100\./.test(u))) list.createEl('div', { cls: 'helm-hint', text: 'No Tailscale address found on this machine — is Tailscale running? Until it is, Helm listens on 127.0.0.1.' });
-    g.content.createEl('p', { cls: 'helm-hint', text: 'Try it from a terminal:' });
-    g.content.createEl('pre', { cls: 'helm-api-example', text: [
-      `curl -s ${base}/health -H "Authorization: Bearer ${token}"`,
-      `curl -s "${base}/tasks?status=open&limit=5" -H "Authorization: Bearer ${token}"`,
-      `curl -s -X POST ${base}/tasks -H "Authorization: Bearer ${token}" -H 'content-type: application/json' \\`,
-      `  -d '{"text":"Ring the plumber","scheduled":"${this.host.today()}","part":"afternoon"}'`,
-    ].join('\n') });
+    // Nobody reads a curl command — they copy it. One command per row with a label and a Copy button;
+    // the token stays out of the visible text (one export line carries it), so nothing wraps into soup
+    // and a screenshot of this page does not hand the token to whoever sees it.
+    g.content.createEl('p', { cls: 'helm-hint', text: 'Try it from a terminal — copy the token line once, then any command:' });
+    const shortTok = token.length > 12 ? `${token.slice(0, 4)}…${token.slice(-4)}` : token;
+    const examples: { label: string; shown: string; copy: string }[] = [
+      { label: 'Once per shell', shown: `export HELM_TOKEN=${shortTok}`, copy: `export HELM_TOKEN=${token}` },
+      { label: 'Is it alive?', shown: `curl -s ${base}/health -H "Authorization: Bearer $HELM_TOKEN"`, copy: `curl -s ${base}/health -H "Authorization: Bearer $HELM_TOKEN"` },
+      { label: 'Five open tasks', shown: `curl -s "${base}/tasks?status=open&limit=5" -H "Authorization: Bearer $HELM_TOKEN"`, copy: `curl -s "${base}/tasks?status=open&limit=5" -H "Authorization: Bearer $HELM_TOKEN"` },
+      { label: 'Add a task', shown: `curl -s -X POST ${base}/tasks -H "Authorization: Bearer $HELM_TOKEN" -H 'content-type: application/json' -d '{"text":"Ring the plumber","scheduled":"${this.host.today()}","part":"afternoon"}'`, copy: `curl -s -X POST ${base}/tasks -H "Authorization: Bearer $HELM_TOKEN" -H 'content-type: application/json' -d '{"text":"Ring the plumber","scheduled":"${this.host.today()}","part":"afternoon"}'` },
+    ];
+    const exList = g.content.createEl('div', { cls: 'helm-api-examples' });
+    for (const ex of examples) {
+      const row = exList.createEl('div', { cls: 'helm-api-ex' });
+      row.createEl('span', { cls: 'helm-api-ex-label', text: ex.label });
+      row.createEl('code', { cls: 'helm-api-ex-code', text: ex.shown });
+      const copy = row.createEl('button', { text: 'Copy' });
+      copy.addEventListener('click', () => { void navigator.clipboard.writeText(ex.copy); new Notice(`${ex.label} — copied.`); });
+    }
     g.content.createEl('p', { cls: 'helm-hint', text: 'Every route is listed in docs/api.md in the Helm repository; the “From your phone” section there covers Tailscale and HTTPS.' });
   }
 

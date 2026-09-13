@@ -4,8 +4,13 @@
 
 - **The Local API settings read cleanly.** The base URLs sat in the narrow control slot
   beside their description and overflowed straight across it; they now sit under the words
-  at full width, one per line with their Copy buttons. The curl examples wrap instead of
-  being cut off at the pane's edge — a line you cannot see is a line you cannot copy.
+  at full width, one per line with their Copy buttons. The curl examples became what they
+  really are — things you copy, not things you read: one row per command with a label in
+  words (*Is it alive? · Five open tasks · Add a task*) and its own Copy button, on a single
+  line that scrolls instead of wrapping into soup. The token no longer appears in the
+  examples at all: one `export HELM_TOKEN=…` line carries it (masked on screen, full on
+  copy), so the commands stay short and a screenshot of this page no longer hands your
+  token to whoever sees it.
 
 ## 1.35.0 — 2026-09-13
 
