@@ -532,6 +532,9 @@ export class HelmSettingTab extends PluginSettingTab {
     const base = urls[0] ?? `http://127.0.0.1:${state.port ?? s.apiPort}/helm/v1`;
     const token = s.apiToken || '<token>';
     const urlSetting = new Setting(g.content).setName(state.running ? 'Base URL' : 'Base URL (when on)').setDesc(bind === 'loopback' ? 'What a script on this Mac uses.' : 'What the phone (or another device) uses; the Tailscale address is listed first.');
+    // Addresses are long and the settings pane is not: the list goes under the words, full width,
+    // rather than into the control slot beside them where it overflows across the description.
+    urlSetting.settingEl.addClass('helm-api-baseurl');
     const list = urlSetting.controlEl.createEl('div', { cls: 'helm-api-urls' });
     for (const u of urls) {
       const row = list.createEl('div', { cls: 'helm-api-url' });

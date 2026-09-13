@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **The Local API settings read cleanly.** The base URLs sat in the narrow control slot
+  beside their description and overflowed straight across it; they now sit under the words
+  at full width, one per line with their Copy buttons. The curl examples wrap instead of
+  being cut off at the pane's edge — a line you cannot see is a line you cannot copy.
+
 ## 1.35.0 — 2026-09-13
 
 - **Saving a note no longer costs seconds on a large vault.** Every time a note changed, Helm
