@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.36.0 — 2026-09-13
 
 - **The Local API settings read cleanly.** The base URLs sat in the narrow control slot
   beside their description and overflowed straight across it; they now sit under the words
