@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.35.0 — 2026-09-13
 
 - **Saving a note no longer costs seconds on a large vault.** Every time a note changed, Helm
   re-read every task's `[[links]]` once for every drawing in the vault to work out which tasks
