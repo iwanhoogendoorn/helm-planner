@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.37.0 — 2026-09-20
 
 - Deleting a turn of a **repeating** task used to be impossible: the delete
   worked, and the catch-up — which fills in turns it thinks went missing —
@@ -189,7 +189,7 @@
   without resurrecting old history. **Bring back missed recurring tasks** in the command
   palette does the same over the last two months when you want a bigger sweep.
 
-## Unreleased
+## 1.37.0 — 2026-09-20
 
 - **A project can be “not started”.** Between *Planned* (you have decided to do it) and
   *Active* (you have begun) sits the one that was missing: planned, ready, untouched. It
