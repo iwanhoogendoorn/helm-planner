@@ -10,6 +10,7 @@ import { addNoteItems } from './notes';
 import { addLinkItems } from './links';
 import { openFollowUp } from './modals/followUp';
 import { openSubtask } from './modals/subtask';
+import { openRecurringDelete } from './modals/deleteRecurring';
 import { openProjectForm } from './modals/projectForm';
 import { plainLabel } from '../core/label';
 import { formatRecurrence } from '../core/recurrence';
@@ -172,6 +173,8 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
     if (src) menu.addItem((i) => i.setTitle('Open source task').setIcon('file-symlink').onClick(() => void ctx.openFile(src.path, src.line)));
   }
   menu.addItem((i) => i.setTitle('Delete').setIcon('trash').setWarning(true).onClick(() => {
+    // A repeating line is a series, not a line: ask which of the two things "delete" means.
+    if (task.recurrence?.parsed && (task.noteDate ?? task.scheduled)) { openRecurringDelete(ctx, task); return; }
     if (window.confirm(`Delete “${task.text}”${task.childKeys.length ? ` and ${task.childKeys.length} subtask(s)` : ''}?`)) void ctx.run('Delete', () => ctx.mutations.deleteTask(task.key));
   }));
   menu.showAtMouseEvent(ev);

@@ -199,3 +199,27 @@ describe('profiled projects over the API', () => {
     expect((await call('GET', `projects/${id}/items`)).body.items.every((it: any) => it.id !== songId)).toBe(true);
   });
 });
+
+describe('deleting a repeating task over the API', () => {
+  it('takes a mode, and without one behaves as it always did', async () => {
+    const s = await setup();
+    const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: 't', read: (p) => s.vault.read(p), written: () => [] };
+    const call = (method: string, path: string, query: Record<string, string> = {}): Promise<{ status: number; body: any }> =>
+      handle({ method, path, query } as ApiRequest, deps) as Promise<{ status: number; body: any }>;
+    const weekly = { recurrence: { raw: 'every week', parsed: true, frequency: 'weekly' as const, interval: 1 } };
+
+    await s.m.addTask({ text: 'Weekly one', date: '2026-08-19', fields: weekly });
+    const past = [...s.index.snapshot.tasks.values()].find((t) => t.text === 'Weekly one')!;
+    await s.m.setStatus(past.key, 'done');
+    await s.m.catchUpRecurring();
+    const open = [...s.index.snapshot.tasks.values()].find((t) => t.text === 'Weekly one' && (t.noteDate ?? t.scheduled) === TODAY)!;
+
+    expect(await call('DELETE', `tasks/${open.key}`, { mode: 'sideways' })).toMatchObject({ status: 400 });
+
+    const r = await call('DELETE', `tasks/${open.key}`, { mode: 'once' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ skipped: TODAY, stopped: 0 });
+    await s.m.catchUpRecurring();
+    expect([...s.index.snapshot.tasks.values()].some((t) => t.text === 'Weekly one' && (t.noteDate ?? t.scheduled) === TODAY)).toBe(false);
+  });
+});

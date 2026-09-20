@@ -59,6 +59,8 @@ export interface MutationDeps {
    * Helm's own placeholder rendering.
    */
   processTemplate?: (path: string) => Promise<boolean>;
+  /** Persist a change Helm made to its own settings — the list of skipped turns. */
+  saveSettings?: () => Promise<void>;
   rng?: () => number;
 }
 
@@ -396,6 +398,7 @@ export class Mutations {
       const next = nextOccurrence(t0.recurrence, t0.due ?? t0.scheduled ?? t0.noteDate ?? when);
       if (!next || next < today || next > horizon) continue;
       if (this.hasOccurrenceOn(t0, next)) continue;
+      if (this.isSkipped(t0.text, next)) continue; // you deleted that turn on purpose
       const fresh = this.index.task(t0.key);
       if (!fresh) continue;
       await this.spawnNextOccurrence(fresh);
@@ -405,6 +408,72 @@ export class Mutations {
   }
 
   /** Is this repeating line already sitting on that day, in whatever state? */
+  /**
+   * Deleting the next turn of a repeating task is not the same as losing it: without a record, the
+   * catch-up would hand it straight back, which is why a deleted occurrence used to be impossible to
+   * get rid of. So the day it would have fallen on is remembered, and the catch-up skips it.
+   */
+  private async rememberSkip(text: string, date: IsoDate): Promise<void> {
+    const s = this.settings;
+    const list = Array.isArray(s.skippedOccurrences) ? s.skippedOccurrences : [];
+    const sig = text.trim();
+    if (list.some((x) => x.text === sig && x.date === date)) return;
+    // Yesterday's skips can never matter again — the catch-up never looks backwards.
+    s.skippedOccurrences = [...list.filter((x) => x.date >= this.today), { text: sig, date }];
+    await this.d.saveSettings?.();
+  }
+
+  private isSkipped(text: string, date: IsoDate): boolean {
+    const sig = text.trim();
+    return (this.settings.skippedOccurrences ?? []).some((x) => x.text === sig && x.date === date);
+  }
+
+  /** Forget a skip, so the turn can come back — what putting the task back should mean. */
+  async unskipOccurrence(text: string, date: IsoDate): Promise<void> {
+    const s = this.settings;
+    const sig = text.trim();
+    const list = (s.skippedOccurrences ?? []).filter((x) => !(x.text === sig && x.date === date));
+    if (list.length === (s.skippedOccurrences ?? []).length) return;
+    s.skippedOccurrences = list;
+    await this.d.saveSettings?.();
+  }
+
+  /**
+   * Take the repeat off the copies of a series that would spawn another turn — the finished ones whose
+   * next turn is still ahead. Older records keep their 🔁: they are history, and history is not edited.
+   * Returns how many lines changed.
+   */
+  async stopRecurring(key: string): Promise<number> {
+    const t = this.fresh(key);
+    const text = t.text.trim();
+    let stopped = 0;
+    for (const other of this.index.allTasks()) {
+      if (other.origin !== 'daily' || other.key === t.key) continue;
+      if (other.text.trim() !== text || !other.recurrence?.parsed) continue;
+      const from = other.due ?? other.scheduled ?? other.noteDate;
+      const next = from ? nextOccurrence(other.recurrence, from) : undefined;
+      if (!next || next < this.today) continue; // its next turn is already behind us: nothing to spawn
+      await this.updateTask(other.key, { recurrence: undefined });
+      stopped++;
+    }
+    return stopped;
+  }
+
+  /**
+   * Delete one turn of a repeating task. `once` remembers the date so the catch-up does not put it
+   * back; `series` also ends the repeat, so no later turn appears either.
+   */
+  async deleteOccurrence(key: string, mode: 'once' | 'series'): Promise<{ stopped: number; skipped?: IsoDate }> {
+    const t = this.fresh(key);
+    const date = t.noteDate ?? t.scheduled;
+    const text = t.text;
+    const stopped = mode === 'series' ? await this.stopRecurring(t.key) : 0;
+    if (mode === 'once' && date) await this.rememberSkip(text, date);
+    const again = this.index.task(t.key) ?? this.index.taskById(t.id ?? '');
+    await this.deleteTask(again?.key ?? t.key);
+    return { stopped, ...(mode === 'once' && date ? { skipped: date } : {}) };
+  }
+
   private hasOccurrenceOn(t: Task, date: IsoDate): boolean {
     const text = t.text.trim();
     for (const other of this.index.allTasks()) {

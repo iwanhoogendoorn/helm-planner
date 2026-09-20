@@ -193,6 +193,13 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
     if (ref !== undefined && sub === undefined && method === 'DELETE') {
       const t = findTask(ref, d);
       if (!t) return missing(`No task ${ref}`);
+      // A repeating line needs to say which it means, or the catch-up hands the turn straight back.
+      const mode = (req.query['mode'] ?? '').toLowerCase();
+      if (mode !== '' && mode !== 'once' && mode !== 'series') return bad("mode must be 'once' or 'series'");
+      if (mode !== '') {
+        const r = await d.mutations.deleteOccurrence(t.key, mode as 'once' | 'series');
+        return ok({ deleted: ref, ...r, written: d.written() });
+      }
       await d.mutations.deleteTask(t.key);
       return ok({ deleted: ref, written: d.written() });
     }

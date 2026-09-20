@@ -1187,6 +1187,47 @@ describe('A project with a profile', () => {
 });
 
 describe('Modals', () => {
+  it('deleting a repeating task asks which one you mean, and both answers stick', async () => {
+    const { ctx, m, index, settings } = await ctxFor();
+    await m.addTask({ text: 'Piano lesson', date: TODAY, fields: { recurrence: { raw: 'every week', parsed: true, frequency: 'weekly', interval: 1 } } });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Piano lesson')!;
+
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    Menu.last!.items.find((i) => i.title === 'Delete')!.click!();
+    const ask = Modal.last!;
+    expect(ask.titleEl.textContent).toBe('Delete a repeating task'); // not the blunt confirm
+    expect(texts(ask.contentEl, '.helm-recurring-choices button')).toEqual(['Just Today', 'Stop repeating', 'Cancel']);
+
+    click([...ask.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Just Today'));
+    await flush(); await flush();
+    expect(settings.skippedOccurrences).toEqual([{ text: 'Piano lesson', date: TODAY }]);
+    await m.catchUpRecurring();
+    expect([...index.snapshot.tasks.values()].some((x) => x.text === 'Piano lesson' && (x.noteDate ?? x.scheduled) === TODAY)).toBe(false);
+
+    // And the other answer, on a fresh one.
+    await m.addTask({ text: 'Swim', date: TODAY, fields: { recurrence: { raw: 'every week', parsed: true, frequency: 'weekly', interval: 1 } } });
+    const swim = [...index.snapshot.tasks.values()].find((x) => x.text === 'Swim')!;
+    taskMenu(ctx, swim, new MouseEvent('contextmenu'));
+    Menu.last!.items.find((i) => i.title === 'Delete')!.click!();
+    click([...Modal.last!.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Stop repeating'));
+    await flush(); await flush();
+    expect([...index.snapshot.tasks.values()].some((x) => x.text === 'Swim')).toBe(false);
+  });
+
+  it('a task that does not repeat still deletes on a plain confirm', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.addTask({ text: 'One-off errand', date: TODAY });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'One-off errand')!;
+    const orig = window.confirm;
+    window.confirm = () => true;
+    try {
+      taskMenu(ctx, t, new MouseEvent('contextmenu'));
+      Menu.last!.items.find((i) => i.title === 'Delete')!.click!();
+      await flush(); await flush();
+    } finally { window.confirm = orig; }
+    expect([...index.snapshot.tasks.values()].some((x) => x.text === 'One-off errand')).toBe(false);
+  });
+
   it('search: starting points, grouped hits, keyboard, and acting on a result without leaving', async () => {
     const { ctx, nav, opened, vault } = await ctxFor();
     await ctx.mutations.schedule('tsk-0001', TODAY);

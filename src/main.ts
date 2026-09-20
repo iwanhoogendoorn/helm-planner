@@ -69,6 +69,7 @@ export default class HelmPlugin extends Plugin {
       periodicTemplate: (kind) => this.readTemplate(this.periodicTemplatePath(kind) ?? ''),
       processTemplate: (path) => this.runTemplater(path),
       excalidrawFolder: () => this.excalidrawFolder,
+      saveSettings: () => this.saveSettings(),
     });
     this.index.onChange(() => this.refreshViews());
 

@@ -109,6 +109,21 @@ Send only what changes:
 
 Deletes the task and everything nested under it. `{ "deleted": "tsk-…", "written": [ … ] }`.
 
+For a **repeating** task, say which turn you mean with `?mode=`, or the catch-up hands it straight
+back the next time anything changes:
+
+| mode | what it does |
+|---|---|
+| `once` | deletes this turn and remembers the day, so it is not refilled; later turns carry on |
+| `series` | deletes this turn and takes the repeat off what would spawn another, ending it |
+
+```bash
+curl -s -X DELETE "$HELM/tasks/tsk-abc?mode=once"   -H "Authorization: Bearer $TOKEN"
+curl -s -X DELETE "$HELM/tasks/tsk-abc?mode=series" -H "Authorization: Bearer $TOKEN"
+```
+
+`series` replies with `stopped`: how many finished lines had their repeat taken off.
+
 ### Projects
 
 ```

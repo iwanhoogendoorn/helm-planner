@@ -278,6 +278,11 @@ export interface HelmSettings {
   defaultCaptureTime: boolean;
   /** Move a daily task dated later than its note (a spawned recurrence) into that day's note automatically. */
   autoMoveRecurring: boolean;
+  /**
+   * Turns of a repeating task you deleted on purpose, so the catch-up leaves them alone. Kept by the
+   * line's text and the day it would have fallen on; entries in the past are dropped as they age out.
+   */
+  skippedOccurrences: { text: string; date: IsoDate }[];
   /** Weekly notes (Periodic Notes overrides). */
   weeklyFolder: string;
   weeklyFormat: string;
@@ -365,6 +370,7 @@ export const DEFAULT_SETTINGS: HelmSettings = {
   writeCreatedDate: false,
   defaultCaptureTime: true,
   autoMoveRecurring: true,
+  skippedOccurrences: [],
   weeklyFolder: '',
   weeklyFormat: '',
   yearlyTemplate: '',

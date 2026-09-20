@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Deleting a turn of a **repeating** task used to be impossible: the delete
+  worked, and the catch-up — which fills in turns it thinks went missing —
+  handed it straight back a moment later. Helm now asks which you mean.
+  *Just ‹day›* deletes that turn and remembers the day, so nothing refills it
+  while later turns carry on as usual. *Stop repeating* deletes it and takes
+  the repeat off the finished lines that would spawn another, ending the
+  series; older records keep their 🔁 because history is not edited. A task
+  that does not repeat deletes on the same plain confirm as before.
+- The API takes the same choice: `DELETE /tasks/:id?mode=once|series`.
+
 ## 1.36.0 — 2026-09-13
 
 - **The Local API settings read cleanly.** The base URLs sat in the narrow control slot
