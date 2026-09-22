@@ -2,7 +2,7 @@
 import { linkedNoteOf } from '../core/label';
 import { projectSongNote } from './songNote';
 import { FuzzySuggestModal, Menu } from 'obsidian';
-import type { IsoDate, Project, Task, TaskStatus } from '../core/types';
+import type { HelmSettings, IsoDate, Project, Task, TaskStatus } from '../core/types';
 import { addDays, humanDate, startOfWeek } from '../core/dates';
 import type { UiContext } from './context';
 import { addDrawingItems, targetForTask } from './drawings';
@@ -19,7 +19,7 @@ import { baseName } from '../data/vault';
 import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
-import { DAY_PARTS, PART_LABEL, type DayPart } from '../core/dailyNote';
+import { DAY_PARTS, PART_LABEL, partOfTime, type DayPart } from '../core/dailyNote';
 
 export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): { label: string; date: IsoDate | undefined; icon: string }[] {
   const nextWeek = addDays(startOfWeek(today, weekStartsOn), 7);
@@ -39,6 +39,8 @@ export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): { label: s
 export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task, opts: { unschedule?: boolean } = {}): void {
   const today = ctx.today();
   const move = (date: IsoDate | undefined, part?: DayPart): void => void ctx.run(date ? 'Schedule' : 'Unschedule', () => ctx.mutations.schedule(task.key, date, part));
+  // Where it belongs in a day: its time decides when it has one, whatever section its line sits in now.
+  const lands = partItLandsIn(task, ctx.settings());
   const partIcon = (p: DayPart): string => (p === 'morning' ? 'sunrise' : p === 'afternoon' ? 'sun' : p === 'evening' ? 'moon' : 'clock');
   // The day it already sits on is not a move: its submenu would be the parts of that day, which is
   // exactly what “Part of …” below already offers. Offer each day once.
@@ -54,11 +56,20 @@ export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task, opts: {
     menu.addItem((i) => {
       i.setTitle(o.label).setIcon(o.icon);
       const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
-      sub.addItem((j) => j.setTitle(task.part && task.part !== 'anytime' ? `Keep the ${task.part}` : 'Just move it').setIcon('check').onClick(() => move(date)));
+      sub.addItem((j) => j.setTitle(lands && lands !== 'anytime' ? `Keep the ${lands}` : 'Just move it').setIcon('check').onClick(() => move(date, lands)));
       sub.addSeparator();
-      for (const p of DAY_PARTS) sub.addItem((j) => j.setTitle(PART_LABEL[p]).setIcon(partIcon(p)).setChecked(task.part === p).onClick(() => move(date, p)));
+      for (const p of DAY_PARTS) sub.addItem((j) => j.setTitle(PART_LABEL[p]).setIcon(partIcon(p)).setChecked(lands === p).onClick(() => move(date, p)));
     });
   }
+}
+
+/**
+ * The part of the day a task belongs to: its time decides when it has one, else the section its line
+ * sits in. An 11:00 task is a morning task even if its line was left under Evening.
+ */
+export function partItLandsIn(task: Task, settings: HelmSettings): DayPart | undefined {
+  if (task.time) return partOfTime(task.time.start, settings);
+  return task.part;
 }
 
 export const STATUS_LABELS: Record<TaskStatus, { label: string; icon: string }> = {

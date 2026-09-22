@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Moving a timed task to another day puts it in the part its **time** falls in.
+  An 11:00 task whose line had been left under Evening kept landing in the
+  evening — and the menu said *Keep the evening* — because the move copied
+  the old section instead of reading the clock. The menu now names the part
+  the task will land in, and a move with no part chosen follows the time.
+  Tasks without a time still keep the section they sit in.
+- The calendar grid shows what a task belongs to: its project, the task it
+  follows up, the task it is a subtask of, and any project that points at it.
+  Every block carries a small colour-coded sign beside its time — narrow and
+  short blocks clip anything below the title — and a block with room names
+  each one underneath. Hover for the full names.
+- The Calendar tab opens on the calendar grid instead of the list for day,
+  3-day, week and work-week; the list is one click away.
+
 ## 1.37.0 — 2026-09-20
 
 - Deleting a turn of a **repeating** task used to be impossible: the delete

@@ -57,7 +57,7 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
   // A time grid is worth having for a run of days. A month, a quarter or a year is better read as the
   // list already draws it — months with their goals and projects — so those scopes have no switch.
   const griddable = state.scope === 'day' || state.scope === '3days' || state.scope === 'week' || state.scope === 'workweek';
-  const view: CalendarView = griddable ? state.view ?? 'list' : 'list';
+  const view: CalendarView = griddable ? state.view ?? 'calendar' : 'list'; // the grid first; the list is a click away
   const span = scopeDays(state.scope, state.anchor, settings);
   root.appendChild(h('div', { cls: 'helm-cal-bar' },
     h('div', { cls: 'helm-segmented' }, ...SCOPES.map((s) => h('button', { cls: ['helm-seg', state.scope === s.id && 'is-active'], text: s.label, onClick: () => go(s.id, state.anchor) }))),

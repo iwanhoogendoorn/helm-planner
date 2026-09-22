@@ -1049,3 +1049,20 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-profile-steps.is-done { opacity: 0.7; }
 .helm-profile-steps-head { display: flex; align-items: center; gap: 6px; font-size: 0.8em; color: var(--text-muted); margin-bottom: 2px; }
 .helm-chip-note svg { width: 11px; height: 11px; margin-right: 3px; }
+
+/* What a calendar block belongs to */
+.helm-cal-event-context { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.helm-cal-ctx { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; padding: 0 5px; border-radius: 8px; font-size: 10.5px; line-height: 1.6; background: rgba(var(--mono-rgb-100), 0.07); color: var(--text-muted); }
+.helm-cal-ctx svg { width: 10px; height: 10px; flex: none; }
+.helm-cal-ctx-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.helm-cal-ctx.is-project { background: rgba(var(--color-cyan-rgb), 0.18); color: var(--color-cyan); }
+.helm-cal-ctx.is-follows { background: rgba(var(--color-blue-rgb), 0.16); color: var(--color-blue); }
+.helm-cal-ctx.is-parent { background: rgba(var(--color-purple-rgb), 0.14); color: var(--color-purple); }
+.helm-cal-ctx.is-related { background: rgba(var(--color-green-rgb), 0.14); color: var(--color-green); }
+.helm-cal-ctx-icons { display: inline-flex; gap: 2px; flex: none; opacity: 0.75; }
+.helm-cal-ctx-icons svg { width: 10px; height: 10px; }
+.helm-cal-event:not(.is-compact) .helm-cal-ctx-icons { margin-right: 4px; vertical-align: -1px; }
+.helm-cal-ctx-icons .is-project { color: var(--color-cyan); }
+.helm-cal-ctx-icons .is-follows { color: var(--color-blue); }
+.helm-cal-ctx-icons .is-parent { color: var(--color-purple); }
+.helm-cal-ctx-icons .is-related { color: var(--color-green); }

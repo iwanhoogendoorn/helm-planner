@@ -9,14 +9,14 @@
  */
 import type { HelmSettings, IsoDate, Task } from '../core/types';
 import { MONTH_SHORT, WEEKDAY_SHORT, isoWeekday } from '../core/dates';
-import { isOpen, type DayBucket } from '../data/planner';
+import { followsOf, isOpen, type DayBucket } from '../data/planner';
 import { gridHours, layOutDay, snapToSlot, toHhmm, toMinutes, toneOf, type DayLayout } from '../data/timegrid';
-import { h } from './dom';
+import { h, icon } from './dom';
 import type { UiContext } from './context';
 import { openTaskEditor } from './modals/taskEditor';
 import { openCapture } from './modals/capture';
 import { taskMenu } from './menus';
-import { plainLabel } from '../core/label';
+import { plainLabel, shortLabel } from '../core/label';
 import { dragKeys, selection, setDragKeys } from './selection';
 import { onDayContext } from './dayMenu';
 
@@ -71,16 +71,41 @@ function dropOnDay(ctx: UiContext, el: HTMLElement, date: IsoDate, timeAt?: (ev:
 }
 
 /** One box on the grid, or one line in a month cell. */
+/**
+ * What a task belongs to, for a calendar block: its project (and phase), the task it follows up, the
+ * task it is a subtask of, and any project that points at it. Short, because a block is small; the
+ * tooltip spells each one out.
+ */
+export function contextOf(ctx: UiContext, t: Task): { icon: string; text: string; kind: string; title: string }[] {
+  const snap = ctx.index.snapshot;
+  const src = t.origin === 'daily-mirror' && t.mirrorOf ? ctx.index.task(t.mirrorOf) ?? t : t;
+  const out: { icon: string; text: string; kind: string; title: string }[] = [];
+  if (src.projectTitle) out.push({ icon: 'folder', text: src.projectTitle, kind: 'project', title: `Project: ${src.projectTitle}${src.phaseTitle ? ` › ${src.phaseTitle}` : ''}` });
+  const follows = followsOf(snap, src);
+  if (follows) out.push({ icon: 'corner-down-right', text: shortLabel(follows.text, 30), kind: 'follows', title: `Follow-up of: ${plainLabel(follows.text)}` });
+  const parent = src.parentKey ? ctx.index.task(src.parentKey) : undefined;
+  if (parent) out.push({ icon: 'list-tree', text: shortLabel(parent.text, 30), kind: 'parent', title: `Subtask of: ${plainLabel(parent.text)}` });
+  if (src.id) for (const p of snap.projects.values()) if (p.relatedTaskIds?.includes(src.id) && p.id !== src.projectId) out.push({ icon: 'link', text: p.title, kind: 'related', title: `Linked from project: ${p.title}` });
+  return out;
+}
+
 function eventBox(ctx: UiContext, t: Task, opts: { compact?: boolean } = {}): HTMLElement {
+  const context = contextOf(ctx, t);
   const box = h('div', {
     cls: ['helm-cal-event', `tone-${toneOf(t)}`, !isOpen(t) && 'is-done', selection.has(t.key) && 'is-selected', opts.compact && 'is-compact'],
     attr: { draggable: 'true', 'data-key': t.key },
-    title: `${plainLabel(t.text)}${t.time ? ` · ${t.time.start}${t.time.end ? `–${t.time.end}` : ''}` : ''}`,
+    title: [`${plainLabel(t.text)}${t.time ? ` · ${t.time.start}${t.time.end ? `–${t.time.end}` : ''}` : ''}`, ...context.map((c) => c.title)].join('\n'),
     onClick: (ev) => { ev.stopPropagation(); openTaskEditor(ctx, t); },
     onContextMenu: (ev) => { ev.preventDefault(); ev.stopPropagation(); taskMenu(ctx, t, ev); },
   },
     t.time ? h('span', { cls: 'helm-cal-event-time', text: t.time.start }) : null,
+    // Every block carries the signal beside its time — a narrow column or a short slot clips anything
+    // below the title — and a block with room for it also names each one underneath.
+    context.length ? h('span', { cls: 'helm-cal-ctx-icons' }, ...context.map((c) => icon(c.icon, `is-${c.kind}`))) : null,
     h('span', { cls: 'helm-cal-event-title', text: plainLabel(t.text) }),
+    !opts.compact && context.length
+      ? h('div', { cls: 'helm-cal-event-context' }, ...context.map((c) => h('span', { cls: ['helm-cal-ctx', `is-${c.kind}`], title: c.title }, icon(c.icon), h('span', { cls: 'helm-cal-ctx-text', text: c.text }))))
+      : null,
   );
   box.addEventListener('dragstart', (ev) => {
     ev.stopPropagation();

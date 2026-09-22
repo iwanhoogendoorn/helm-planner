@@ -1186,6 +1186,63 @@ describe('A project with a profile', () => {
   });
 });
 
+describe('the part of the day a timed task belongs to', () => {
+  it('an 11:00 task left under Evening moves as a morning task, and the menu says so', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    // Put an 11:00 task in the Evening section — the stale placement seen in a real note.
+    await m.addTask({ text: 'Process bank data', date: TODAY, part: 'evening', fields: { time: { start: '11:00', end: '12:00' } } });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Process bank data')!;
+    expect(t.part).toBe('evening'); // where its line sits …
+
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    const move = Menu.last!.items.find((i) => i.title.startsWith('Move'))!;
+    const tomorrow = move.sub!.items.find((i) => i.title === 'Tomorrow')!;
+    expect(tomorrow.sub!.items[0]!.title).toBe('Keep the morning'); // … but it is a morning task
+    tomorrow.sub!.items[0]!.click!();
+    await flush(); await flush();
+
+    const moved = [...index.snapshot.tasks.values()].find((x) => x.text === 'Process bank data' && (x.noteDate ?? x.scheduled) === '2026-08-27')!;
+    expect(moved.part).toBe('morning'); // landed where its time says
+    expect(await vault.read(dailyPath('2026-08-27'))).toMatch(/#+ Morning\n(?:.*\n)*?- \[ \] 11:00 - 12:00: Process bank data/);
+  });
+
+  it('an untimed task keeps the part its line sits in', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.addTask({ text: 'Water the plants', date: TODAY, part: 'evening' });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Water the plants')!;
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    const tomorrow = Menu.last!.items.find((i) => i.title.startsWith('Move'))!.sub!.items.find((i) => i.title === 'Tomorrow')!;
+    expect(tomorrow.sub!.items[0]!.title).toBe('Keep the evening');
+  });
+});
+
+describe('the calendar grid says what a task belongs to', () => {
+  it('shows its project, what it follows up, what it is a subtask of, and projects that point at it', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.addTask({ text: 'Plan the kitchen', date: TODAY, fields: { id: 'tsk-orig', time: { start: '09:00', end: '10:00' } } });
+    await m.followUp(index.taskById('tsk-orig')!.key, { text: 'Order the tiles', date: TODAY, fields: { time: { start: '10:00', end: '11:00' } } });
+    const fu = [...index.snapshot.tasks.values()].find((x) => x.text === 'Order the tiles')!;
+    await m.linkTaskToProject('prj-kitchen', fu.key);
+    await m.schedule('tsk-0001', TODAY, 'afternoon'); // a project task, on the day as a mirror
+
+    const root = render((r) => renderCalendar(ctx, r, { scope: 'day', anchor: TODAY, collapsed: new Map() }));
+    expect(root.querySelector('.helm-cal-views .is-active')!.textContent).toBe('Calendar'); // the grid by default
+    const block = (text: string) => [...root.querySelectorAll<HTMLElement>('.helm-cal-event')].find((b) => b.textContent?.includes(text))!;
+
+    const tiles = block('Order the tiles');
+    expect(texts(tiles, '.helm-cal-ctx.is-follows .helm-cal-ctx-text')).toEqual(['Plan the kitchen']);
+    expect(texts(tiles, '.helm-cal-ctx.is-related .helm-cal-ctx-text')).toEqual(['Kitchen Remodel']);
+    expect(tiles.getAttribute('title')).toContain('Follow-up of: Plan the kitchen');
+
+    // An untimed task is a one-line block: a project icon, and the name in the tooltip.
+    const draft = block('Draft chapter list');
+    expect(draft.classList.contains('is-compact')).toBe(true);
+    expect(draft.querySelector('.helm-cal-ctx-icons .is-project')).toBeTruthy();
+    expect(draft.getAttribute('title')).toContain('Project: Oracle Book Writing');
+    expect(block('Plan the kitchen').querySelector('.helm-cal-event-context')).toBeNull(); // nothing to say, nothing shown
+  });
+});
+
 describe('Modals', () => {
   it('deleting a repeating task asks which one you mean, and both answers stick', async () => {
     const { ctx, m, index, settings } = await ctxFor();
@@ -1764,7 +1821,7 @@ describe('Calendar tab', () => {
     click([...root.querySelectorAll('.helm-day-actions button')].find((b) => b.textContent?.includes('New task')));
     expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe(TODAY);
     // Week: + on a day column and right-click on the column.
-    root = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: TODAY, collapsed: new Map() }));
+    root = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: TODAY, collapsed: new Map(), view: 'list' }));
     const col = root.querySelector<HTMLElement>('.helm-week-day[data-date="2026-08-27"]')!;
     click(col.querySelector('button[aria-label^="New task on"]'));
     expect(Modal.last!.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe('2026-08-27');
@@ -1832,7 +1889,7 @@ describe('Calendar tab', () => {
   });
   it('week scope renders the grid split into parts of the day, with breadcrumbs', async () => {
     const { ctx, nav } = await cal();
-    const w = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: TODAY, collapsed: new Map() }));
+    const w = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: TODAY, collapsed: new Map(), view: 'list' }));
     expect(w.querySelectorAll('.helm-week-day')).toHaveLength(7);
     expect(texts(w, '.helm-crumb')).toEqual(['Calendar', '2026', 'Q3', 'Aug', 'W35']);
     const tue = w.querySelectorAll('.helm-week-day')[1]!;

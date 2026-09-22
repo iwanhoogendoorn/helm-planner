@@ -770,7 +770,10 @@ export class Mutations {
     delete rebased[0]!.done;
     delete rebased[0]!.cancelled;
     if (date !== undefined) {
-      const target: DayPart = part ?? (t.section && t.section !== 'outside' && t.section !== 'habits' ? t.section : 'anytime');
+      // With no part named, a timed task goes where its time falls — the old section can be stale (an
+      // 11:00 task left sitting under Evening), and carrying that forward only spreads the mistake.
+      const bySection: DayPart = t.section && t.section !== 'outside' && t.section !== 'habits' ? t.section : 'anytime';
+      const target: DayPart = part ?? (t.time ? this.partOfTime(t.time.start) : bySection);
       // A part of the day is a time of day, on the day you are moving to as much as on the day you are
       // leaving: asked for Anytime, the line gives up its time; asked for a part, it takes a free slot
       // in that part of the new day. Without this a task moved to another day's Anytime kept 09:00 and
