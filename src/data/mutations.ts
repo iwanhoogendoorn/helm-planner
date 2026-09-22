@@ -356,9 +356,26 @@ export class Mutations {
   }
 
   /** Take the repeat off a task: this one stays, no further occurrence follows it. */
-  async stopRepeating(key: string): Promise<void> {
+  /**
+   * End a series. The repeat comes off this line, and off every finished line of the same series whose
+   * next turn is still ahead — without that, deleting this line later would let the catch-up hand the
+   * series straight back. Older records keep their 🔁: history is not edited. Returns how many of those
+   * other lines changed.
+   */
+  async stopRepeating(key: string): Promise<number> {
     const t = this.fresh(key);
-    if (!t.recurrence) return;
+    if (!t.recurrence) return 0;
+    const text = t.text.trim();
+    let stopped = 0;
+    for (const other of this.index.allTasks()) {
+      if (other.origin !== 'daily' || other.key === t.key || other.path === t.path) continue;
+      if (other.text.trim() !== text || !other.recurrence?.parsed) continue;
+      const from = other.due ?? other.scheduled ?? other.noteDate;
+      const next = from ? nextOccurrence(other.recurrence, from) : undefined;
+      if (!next || next < this.today) continue; // its next turn is already behind us: nothing to spawn
+      await this.updateTask(other.key, { recurrence: undefined });
+      stopped++;
+    }
     await this.editFile(t.path, (lines) => {
       const tl = this.lineOf(lines, t);
       const next: TaskLine = { ...tl };
@@ -368,6 +385,7 @@ export class Mutations {
     });
     const fresh = this.index.task(t.key);
     if (fresh) await this.refreshMirrors(fresh);
+    return stopped;
   }
 
   /**
@@ -439,27 +457,6 @@ export class Mutations {
   }
 
   /**
-   * Take the repeat off the copies of a series that would spawn another turn — the finished ones whose
-   * next turn is still ahead. Older records keep their 🔁: they are history, and history is not edited.
-   * Returns how many lines changed.
-   */
-  async stopRecurring(key: string): Promise<number> {
-    const t = this.fresh(key);
-    const text = t.text.trim();
-    let stopped = 0;
-    for (const other of this.index.allTasks()) {
-      if (other.origin !== 'daily' || other.key === t.key) continue;
-      if (other.text.trim() !== text || !other.recurrence?.parsed) continue;
-      const from = other.due ?? other.scheduled ?? other.noteDate;
-      const next = from ? nextOccurrence(other.recurrence, from) : undefined;
-      if (!next || next < this.today) continue; // its next turn is already behind us: nothing to spawn
-      await this.updateTask(other.key, { recurrence: undefined });
-      stopped++;
-    }
-    return stopped;
-  }
-
-  /**
    * Delete one turn of a repeating task. `once` remembers the date so the catch-up does not put it
    * back; `series` also ends the repeat, so no later turn appears either.
    */
@@ -467,7 +464,7 @@ export class Mutations {
     const t = this.fresh(key);
     const date = t.noteDate ?? t.scheduled;
     const text = t.text;
-    const stopped = mode === 'series' ? await this.stopRecurring(t.key) : 0;
+    const stopped = mode === 'series' ? await this.stopRepeating(t.key) : 0;
     if (mode === 'once' && date) await this.rememberSkip(text, date);
     const again = this.index.task(t.key) ?? this.index.taskById(t.id ?? '');
     await this.deleteTask(again?.key ?? t.key);
@@ -562,11 +559,12 @@ export class Mutations {
    * that time falls in — unless a part is named. The task is given an id before it moves, because a
    * line without one gets a new key in its new note and could not be found again to set the time.
    */
-  async scheduleAt(key: string, date: IsoDate, time: { start: string; end?: string }, part?: DayPart): Promise<void> {
+  async scheduleAt(key: string, date: IsoDate, time: { start: string; end?: string }, part?: DayPart): Promise<string> {
     const id = await this.ensureId(key);
     const t = this.index.taskById(id) ?? this.fresh(key);
     await this.updateTask(t.key, { time });
     await this.schedule((this.index.taskById(id) ?? t).key, date, part ?? this.partOfTime(time.start));
+    return id; // the task can only be found by this afterwards, if it had none before
   }
 
   private partOfTime(hhmm: string): DayPart {

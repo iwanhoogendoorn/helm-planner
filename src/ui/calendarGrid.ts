@@ -9,14 +9,15 @@
  */
 import type { HelmSettings, IsoDate, Task } from '../core/types';
 import { MONTH_SHORT, WEEKDAY_SHORT, isoWeekday } from '../core/dates';
-import { followsOf, isOpen, type DayBucket } from '../data/planner';
+import { isOpen, type DayBucket } from '../data/planner';
+import { taskContext, type TaskContextKind } from '../data/taskContext';
 import { gridHours, layOutDay, snapToSlot, toHhmm, toMinutes, toneOf, type DayLayout } from '../data/timegrid';
 import { h, icon } from './dom';
 import type { UiContext } from './context';
 import { openTaskEditor } from './modals/taskEditor';
 import { openCapture } from './modals/capture';
 import { taskMenu } from './menus';
-import { plainLabel, shortLabel } from '../core/label';
+import { plainLabel } from '../core/label';
 import { dragKeys, selection, setDragKeys } from './selection';
 import { onDayContext } from './dayMenu';
 
@@ -69,22 +70,11 @@ function dropOnDay(ctx: UiContext, el: HTMLElement, date: IsoDate, timeAt?: (ev:
 }
 
 /** One box on the grid, or one line in a month cell. */
-/**
- * What a task belongs to, for a calendar block: its project (and phase), the task it follows up, the
- * task it is a subtask of, and any project that points at it. Short, because a block is small; the
- * tooltip spells each one out.
- */
+const ICON_OF: Record<TaskContextKind, string> = { project: 'folder', follows: 'corner-down-right', parent: 'list-tree', related: 'link' };
+
+/** What a task belongs to, as the grid draws it — the shared definition, plus the icon for each kind. */
 export function contextOf(ctx: UiContext, t: Task): { icon: string; text: string; kind: string; title: string }[] {
-  const snap = ctx.index.snapshot;
-  const src = t.origin === 'daily-mirror' && t.mirrorOf ? ctx.index.task(t.mirrorOf) ?? t : t;
-  const out: { icon: string; text: string; kind: string; title: string }[] = [];
-  if (src.projectTitle) out.push({ icon: 'folder', text: src.projectTitle, kind: 'project', title: `Project: ${src.projectTitle}${src.phaseTitle ? ` › ${src.phaseTitle}` : ''}` });
-  const follows = followsOf(snap, src);
-  if (follows) out.push({ icon: 'corner-down-right', text: shortLabel(follows.text, 30), kind: 'follows', title: `Follow-up of: ${plainLabel(follows.text)}` });
-  const parent = src.parentKey ? ctx.index.task(src.parentKey) : undefined;
-  if (parent) out.push({ icon: 'list-tree', text: shortLabel(parent.text, 30), kind: 'parent', title: `Subtask of: ${plainLabel(parent.text)}` });
-  if (src.id) for (const p of snap.projects.values()) if (p.relatedTaskIds?.includes(src.id) && p.id !== src.projectId) out.push({ icon: 'link', text: p.title, kind: 'related', title: `Linked from project: ${p.title}` });
-  return out;
+  return taskContext(ctx.index, t).map((c) => ({ icon: ICON_OF[c.kind], text: c.text, kind: c.kind, title: c.title }));
 }
 
 const ctxChip = (c: { icon: string; text: string; kind: string; title: string }): HTMLElement =>

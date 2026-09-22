@@ -223,3 +223,51 @@ describe('deleting a repeating task over the API', () => {
     expect([...s.index.snapshot.tasks.values()].some((t) => t.text === 'Weekly one' && (t.noteDate ?? t.scheduled) === TODAY)).toBe(false);
   });
 });
+
+describe('a new day and a new time in one PATCH', () => {
+  it('lands in the part the new time falls in, not the old one', async () => {
+    const s = await setup();
+    const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: 't', read: (p) => s.vault.read(p), written: () => [] };
+    await s.m.addTask({ text: 'Evening thing', date: TODAY, part: 'evening', fields: { time: { start: '19:00', end: '20:00' } } });
+    const t = [...s.index.snapshot.tasks.values()].find((x) => x.text === 'Evening thing')!;
+    const r = await handle({ method: 'PATCH', path: `tasks/${t.key}`, query: {}, body: { scheduled: '2026-08-28', time: '09:30', timeEnd: '10:15' } }, deps) as { status: number; body: any };
+    expect(r.status).toBe(200);
+    expect(r.body.task).toMatchObject({ scheduled: '2026-08-28', part: 'morning', time: '09:30', timeEnd: '10:15' });
+  });
+});
+
+describe('ending a series from the API', () => {
+  it('recurrence: null on the upcoming turn stops it for good, even if that line is deleted afterwards', async () => {
+    const s = await setup();
+    const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: 't', read: (p) => s.vault.read(p), written: () => [] };
+    const weekly = { recurrence: { raw: 'every week', parsed: true, frequency: 'weekly' as const, interval: 1 } };
+    await s.m.addTask({ text: 'Lesson', date: '2026-08-19', fields: weekly });
+    await s.m.setStatus([...s.index.snapshot.tasks.values()].find((x) => x.text === 'Lesson')!.key, 'done');
+    await s.m.catchUpRecurring();
+    const open = [...s.index.snapshot.tasks.values()].find((x) => x.text === 'Lesson' && (x.noteDate ?? x.scheduled) === TODAY)!;
+    await handle({ method: 'PATCH', path: `tasks/${open.key}`, query: {}, body: { recurrence: null } }, deps);
+    await s.m.deleteTask([...s.index.snapshot.tasks.values()].find((x) => x.text === 'Lesson' && (x.noteDate ?? x.scheduled) === TODAY)!.key);
+    await s.m.catchUpRecurring();
+    expect([...s.index.snapshot.tasks.values()].some((x) => x.text === 'Lesson' && (x.noteDate ?? x.scheduled) === TODAY)).toBe(false);
+  });
+});
+
+describe('what a task belongs to, in every task the API returns', () => {
+  it('carries project, follow-up and linking project as `context`', async () => {
+    const s = await setup();
+    const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: 't', read: (p) => s.vault.read(p), written: () => [] };
+    await s.m.addTask({ text: 'Plan the kitchen', date: TODAY, fields: { id: 'tsk-orig' } });
+    await s.m.followUp(s.index.taskById('tsk-orig')!.key, { text: 'Order the tiles', date: TODAY });
+    const fu = [...s.index.snapshot.tasks.values()].find((x) => x.text === 'Order the tiles')!;
+    await s.m.linkTaskToProject('prj-kitchen', fu.key);
+
+    const list = await handle({ method: 'GET', path: 'tasks', query: { q: 'Order the tiles' } }, deps) as { body: any };
+    const ctx = list.body.tasks[0].context;
+    expect(ctx).toEqual([
+      { kind: 'follows', text: 'Plan the kitchen', title: 'Follow-up of: Plan the kitchen', ref: 'tsk-orig' },
+      { kind: 'related', text: 'Kitchen Remodel', title: 'Linked from project: Kitchen Remodel', ref: 'prj-kitchen' },
+    ]);
+    const draft = await handle({ method: 'GET', path: 'tasks/tsk-0001', query: {} }, deps) as { body: any };
+    expect(draft.body.context[0]).toMatchObject({ kind: 'project', text: 'Oracle Book Writing', ref: 'prj-book' });
+  });
+});

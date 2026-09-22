@@ -14,6 +14,7 @@ import type { DrawingTarget, Goal, Habit, HelmSettings, IsoDate, Project, Task }
 import type { HelmIndex } from '../data/index';
 import type { Mutations } from '../data/mutations';
 import { habitStats, type HabitStats } from '../data/habits';
+import { taskContext } from '../data/taskContext';
 import { followsOf, followUpsOf, goalProgress, isBlocked, isOpen, misfiledDate, nextOccurrenceOf, plannedDate, projectHealth, type Candidate, type DayItem, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../data/planner';
 import { profileFor } from '../core/profiles';
 import type { SearchHit } from '../data/search';
@@ -105,6 +106,8 @@ export function taskJson(t: Task, c: Ctx): Record<string, unknown> {
     recurrence: t.recurrence?.raw ?? null,
     recurrenceParsed: t.recurrence ? recurrenceParsed : null,
     mirrorOf: mirrorSrc ? refOf(mirrorSrc) : t.mirrorOf ?? null,
+    // What it belongs to — project, the task it follows up, its parent, projects pointing at it.
+    context: taskContext(c.index, t),
     mirrorLink: t.mirrorLink ?? null,
     periodKey: t.periodKey ?? null,
   };

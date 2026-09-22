@@ -21,6 +21,11 @@
   in. Leave the start empty and the task stays untimed. The grid's
   drag-to-a-time goes through the same code, which also fixes a task without
   an 🆔 losing its new time when dragged to another day.
+- API, for the iPhone app: every task carries **`context`** (project,
+  follow-up, parent, linking projects — the grid's own definition, now shared);
+  `PATCH` with `scheduled` and `time` together lands the task in the part of
+  its **new** time (it used to place it by the old one); `recurrence: null`
+  ends a series for good, so deleting the line afterwards cannot bring it back.
 - The Calendar tab opens on the calendar grid instead of the list for day,
   3-day, week and work-week; the list is one click away.
 

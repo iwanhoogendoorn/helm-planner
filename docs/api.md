@@ -101,6 +101,12 @@ Send only what changes:
   taking its notes, drawings and links with it.
 - `"progress": 40` says you are 40% of the way and puts the task in progress; `100`
   finishes it, `null` takes the percentage off.
+- `"scheduled"` with `"time"` (and optionally `"timeEnd"`) in the same call moves the task to that day
+  at that time, in the part of the day **the new time** falls in — unless `part` is given.
+- `"scheduled"` without a `part` puts a **timed** task in the part its time falls in; an untimed one
+  keeps the part it had.
+- `"recurrence": null` ends a series: the repeat comes off this line and off the finished lines that
+  would spawn the next turn, so deleting this line afterwards does not bring the series back.
 - `"scheduled": null` unschedules.
 - `"due": null` and `"effortMinutes": null` clear those.
 - `part` on its own moves it within its day.
@@ -155,6 +161,22 @@ source task's ref, on a daily mirror line), `mirrorLink`, `parentRef`, `periodKe
 gains `ref`. `GET /tasks/:id` also returns `children` (the subtask tree, up to five levels, in
 note order), `followUps` (refs of tasks blocked on this one), `follows` (the task this one
 continues) and `attachments: { notes, drawings }`.
+
+Every task also carries **`context`** — what it belongs to, exactly as the plugin's calendar grid
+draws it, so a client can show it without chasing refs:
+
+```json
+"context": [
+  { "kind": "project", "text": "LifeSize Macaw", "title": "Project: LifeSize Macaw › Printing", "ref": "prj-…" },
+  { "kind": "follows", "text": "Start with OCI Infra Builder…", "title": "Follow-up of: Start with OCI Infra Builder (OIB)", "ref": "tsk-…" },
+  { "kind": "parent",  "text": "Process Bank account data", "title": "Subtask of: Process Bank account data", "ref": "tsk-…" },
+  { "kind": "related", "text": "Kitchen Remodel", "title": "Linked from project: Kitchen Remodel", "ref": "prj-…" }
+]
+```
+
+`text` is short enough for a calendar block, `title` is spelled out for a tooltip or long-press, and
+`ref` is the project's id or the task's ref. A mirror line reports its source's context. An empty
+array means it belongs to nothing.
 
 `GET /tasks?ids=a,b,c` (up to 500 refs) returns those tasks in the order asked, unknown ones skipped.
 

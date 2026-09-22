@@ -706,13 +706,24 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Pr
     await d.mutations.setStatus(findTask(ref, d)!.key, s as TaskStatus);
     touched = true;
   }
+  // A new day and a new time together: the time goes on first, so the task lands in the part the new
+  // time falls in — scheduling first would place it by the time it used to have.
+  let timeDone = false;
   if (has(body, 'scheduled') || has(body, 'date')) {
     const raw = has(body, 'scheduled') ? body['scheduled'] : body['date'];
     const when = raw === null ? undefined : day(raw);
     if (raw !== null && !when) return bad('scheduled must be a date like 2026-09-01, or null to unschedule');
     const part = str(body['part']);
     if (part && !PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
-    await d.mutations.schedule(findTask(ref, d)!.key, when, part as DayPart | undefined);
+    const start = has(body, 'time') && body['time'] !== null ? str(body['time']) : undefined;
+    const end = str(body['timeEnd']);
+    if (when && start) {
+      if (!isHhmm(start)) return bad('time must be HH:MM, or null to clear the block');
+      if (end && !isHhmm(end)) return bad('timeEnd must be HH:MM');
+      // It may have been given an id to move; everything after this finds it by that.
+      ref = await d.mutations.scheduleAt(findTask(ref, d)!.key, when, { start, ...(end ? { end } : {}) }, part as DayPart | undefined);
+      timeDone = true;
+    } else await d.mutations.schedule(findTask(ref, d)!.key, when, part as DayPart | undefined);
     touched = true;
   } else if (str(body['part'])) {
     const part = str(body['part'])!;
@@ -760,7 +771,7 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Pr
     }
     patch['blockedBy'] = [...new Set(ids)];
   }
-  if (has(body, 'time')) {
+  if (has(body, 'time') && !timeDone) {
     if (body['time'] === null) patch['time'] = undefined;
     else {
       const start = str(body['time']);
@@ -769,7 +780,7 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Pr
       if (end && !isHhmm(end)) return bad('timeEnd must be HH:MM');
       patch['time'] = { start, ...(end ? { end } : {}) };
     }
-  } else if (str(body['timeEnd'])) {
+  } else if (str(body['timeEnd']) && !timeDone) {
     const cur = findTask(ref, d)!.time;
     if (!cur) return bad('timeEnd needs a time to go with it');
     const end = str(body['timeEnd'])!;
