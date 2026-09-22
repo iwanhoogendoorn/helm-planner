@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.38.0 — 2026-09-22
 
 - Moving a timed task to another day puts it in the part its **time** falls in.
   An 11:00 task whose line had been left under Evening kept landing in the
