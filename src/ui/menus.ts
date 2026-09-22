@@ -48,7 +48,7 @@ export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task, opts: {
   for (const o of scheduleOptions(today, ctx.settings().weekStartsOn)) {
     if (o.date !== undefined && (o.date as unknown) !== 'pick' && o.date === its) continue;
     if ((o.date as unknown) === 'pick') {
-      menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => openDatePicker(ctx, { title: `Schedule “${task.text}”`, initial: task.scheduled ?? task.noteDate ?? today, parts: true }, (d, part) => move(d, part))));
+      menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => openDatePicker(ctx, { title: `Schedule “${plainLabel(task.text)}”`, initial: task.scheduled ?? task.noteDate ?? today, parts: true, times: { ...(task.time ? { start: task.time.start } : {}), ...(task.time?.end ? { end: task.time.end } : {}), ...(task.effortMinutes ? { effortMinutes: task.effortMinutes } : {}) } }, (d, part, time) => { if (d && time) void ctx.run('Schedule', () => ctx.mutations.scheduleAt(task.key, d, time, part)); else move(d, part ?? lands); })));
       continue;
     }
     if (o.date === undefined) { if (opts.unschedule !== false) menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => move(undefined))); continue; }

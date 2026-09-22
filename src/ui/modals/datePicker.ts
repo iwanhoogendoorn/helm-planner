@@ -5,8 +5,12 @@ import { addDays, humanDate, isIsoDate, startOfWeek, WEEKDAY_SHORT, isoWeekday }
 import { resolveDate } from '../../core/nlp';
 import { button, h } from '../dom';
 import type { UiContext } from '../context';
+import { effortField, linkTimes } from '../fields';
 
-export function openDatePicker(ctx: UiContext, opts: { title: string; initial?: IsoDate; allowClear?: boolean; parts?: boolean; part?: DayPart }, onPick: (d: IsoDate | undefined, part?: DayPart) => void): void {
+/** A start and an end for the day picked; either may be left empty. */
+export interface PickedTime { start: string; end?: string }
+
+export function openDatePicker(ctx: UiContext, opts: { title: string; initial?: IsoDate; allowClear?: boolean; parts?: boolean; part?: DayPart; times?: { start?: string; end?: string; effortMinutes?: number } }, onPick: (d: IsoDate | undefined, part?: DayPart, time?: PickedTime) => void): void {
   const today = ctx.today();
   const m = new Modal(ctx.app);
   m.titleEl.setText(opts.title);
@@ -25,7 +29,13 @@ export function openDatePicker(ctx: UiContext, opts: { title: string; initial?: 
     );
   };
   if (opts.parts) drawParts();
-  const commit = (d: IsoDate | undefined): void => { m.close(); onPick(d, part); };
+  // The time, when the caller wants one: start and end kept together, the length carried along.
+  const timeStart = h('input', { attr: { type: 'time', value: opts.times?.start ?? '' }, title: 'Start time' });
+  const timeEnd = h('input', { attr: { type: 'time', value: opts.times?.end ?? '' }, title: 'End time' });
+  const effort = effortField(opts.times?.effortMinutes);
+  if (opts.times) linkTimes(timeStart, timeEnd, effort);
+  const pickedTime = (): PickedTime | undefined => (opts.times && /^\d{2}:\d{2}$/.test(timeStart.value) ? { start: timeStart.value, ...(/^\d{2}:\d{2}$/.test(timeEnd.value) ? { end: timeEnd.value } : {}) } : undefined);
+  const commit = (d: IsoDate | undefined): void => { m.close(); onPick(d, part, pickedTime()); };
   free.addEventListener('input', () => {
     const d = resolveDate(free.value, today, ctx.settings().weekStartsOn);
     preview.textContent = d ? humanDate(d, today, { year: true }) : free.value ? 'Not a date I understand' : '';
@@ -48,6 +58,10 @@ export function openDatePicker(ctx: UiContext, opts: { title: string; initial?: 
     h('div', { cls: 'helm-presets' }, ...presets.map(([label, d]) => button(label, { onClick: () => commit(d), title: humanDate(d, today, { year: true }) }))),
     h('div', { cls: 'helm-row' }, input, free),
     preview,
+    ...(opts.times ? [h('div', { cls: 'helm-field' },
+      h('span', { cls: 'helm-field-label', text: 'Time' }),
+      h('div', { cls: 'helm-row helm-datepicker-time' }, timeStart, h('span', { cls: 'helm-hint', text: '–' }), timeEnd, h('span', { cls: 'helm-hint', text: 'effort' }), effort.el),
+      h('div', { cls: 'helm-hint', text: 'Leave the start empty to keep it untimed. With a time, “Keep” puts it in the part that time falls in.' }))] : []),
     ...(opts.parts ? [h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Part of the day' }), partRow)] : []),
     h('div', { cls: 'helm-modal-buttons' },
       opts.allowClear ? button('Clear', { onClick: () => commit(undefined) }) : null,

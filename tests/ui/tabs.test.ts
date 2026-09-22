@@ -1216,6 +1216,45 @@ describe('the part of the day a timed task belongs to', () => {
   });
 });
 
+describe('Pick a date… with a time', () => {
+  it('moves a task to the day picked at the time given, in the part that time falls in', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    await m.addTask({ text: 'Print plate one', date: TODAY, part: 'evening' });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Print plate one')!;
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    Menu.last!.items.find((i) => i.title.startsWith('Move'))!.sub!.items.find((i) => i.title === 'Pick a date…')!.click!();
+    const picker = Modal.last!;
+    expect(picker.titleEl.textContent).toBe('Schedule “Print plate one”');
+    const [start, end] = [...picker.contentEl.querySelectorAll<HTMLInputElement>('.helm-datepicker-time input[type="time"]')];
+    expect(start && end).toBeTruthy();
+    start!.value = '09:30'; start!.dispatchEvent(new Event('input'));
+    end!.value = '10:15'; end!.dispatchEvent(new Event('input'));
+    picker.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value = '2026-08-28';
+    click([...picker.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Pick'));
+    await flush(); await flush(); await flush();
+
+    const moved = [...index.snapshot.tasks.values()].find((x) => x.text === 'Print plate one' && (x.noteDate ?? x.scheduled) === '2026-08-28')!;
+    expect(moved.time).toEqual({ start: '09:30', end: '10:15' });
+    expect(moved.part).toBe('morning'); // “Keep” with a time: the time decides, not the old evening
+    expect(await vault.read(dailyPath('2026-08-28'))).toMatch(/#+ Morning\n(?:.*\n)*?- \[ \] 09:30 - 10:15: Print plate one/);
+  });
+
+  it('leaves the time alone when none is given', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.addTask({ text: 'Untimed errand', date: TODAY, part: 'afternoon' });
+    const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'Untimed errand')!;
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    Menu.last!.items.find((i) => i.title.startsWith('Move'))!.sub!.items.find((i) => i.title === 'Pick a date…')!.click!();
+    const picker = Modal.last!;
+    picker.contentEl.querySelector<HTMLInputElement>('input[type="date"]')!.value = '2026-08-28';
+    click([...picker.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Pick'));
+    await flush(); await flush(); await flush();
+    const moved = [...index.snapshot.tasks.values()].find((x) => x.text === 'Untimed errand' && (x.noteDate ?? x.scheduled) === '2026-08-28')!;
+    expect(moved.time).toBeUndefined();
+    expect(moved.part).toBe('afternoon');
+  });
+});
+
 describe('the calendar grid says what a task belongs to', () => {
   it('shows its project, what it follows up, what it is a subtask of, and projects that point at it', async () => {
     const { ctx, m, index } = await ctxFor();
@@ -1234,10 +1273,10 @@ describe('the calendar grid says what a task belongs to', () => {
     expect(texts(tiles, '.helm-cal-ctx.is-related .helm-cal-ctx-text')).toEqual(['Kitchen Remodel']);
     expect(tiles.getAttribute('title')).toContain('Follow-up of: Plan the kitchen');
 
-    // An untimed task is a one-line block: a project icon, and the name in the tooltip.
+    // An untimed task is a one-line block, and it names its project on that line.
     const draft = block('Draft chapter list');
     expect(draft.classList.contains('is-compact')).toBe(true);
-    expect(draft.querySelector('.helm-cal-ctx-icons .is-project')).toBeTruthy();
+    expect(texts(draft, '.helm-cal-event-context.is-inline .helm-cal-ctx.is-project .helm-cal-ctx-text')).toEqual(['Oracle Book Writing']);
     expect(draft.getAttribute('title')).toContain('Project: Oracle Book Writing');
     expect(block('Plan the kitchen').querySelector('.helm-cal-event-context')).toBeNull(); // nothing to say, nothing shown
   });

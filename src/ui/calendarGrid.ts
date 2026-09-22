@@ -58,12 +58,10 @@ function dropOnDay(ctx: UiContext, el: HTMLElement, date: IsoDate, timeAt?: (ev:
       for (const key of keys) {
         const t = ctx.index.task(key);
         if (!t) continue;
-        await ctx.mutations.schedule(key, date);
         if (at) {
-          const fresh = ctx.index.taskById(t.id ?? '') ?? ctx.index.task(key);
           const length = t.time?.end ? toMinutes(t.time.end) - toMinutes(t.time.start) : t.effortMinutes;
-          if (fresh) await ctx.mutations.updateTask(fresh.key, { time: { start: at, ...(length ? { end: toHhmm(toMinutes(at) + length) } : {}) } });
-        }
+          await ctx.mutations.scheduleAt(key, date, { start: at, ...(length ? { end: toHhmm(toMinutes(at) + length) } : {}) });
+        } else await ctx.mutations.schedule(key, date);
       }
       selection.clear();
     });
@@ -89,6 +87,9 @@ export function contextOf(ctx: UiContext, t: Task): { icon: string; text: string
   return out;
 }
 
+const ctxChip = (c: { icon: string; text: string; kind: string; title: string }): HTMLElement =>
+  h('span', { cls: ['helm-cal-ctx', `is-${c.kind}`], title: c.title }, icon(c.icon), h('span', { cls: 'helm-cal-ctx-text', text: c.text }));
+
 function eventBox(ctx: UiContext, t: Task, opts: { compact?: boolean } = {}): HTMLElement {
   const context = contextOf(ctx, t);
   const box = h('div', {
@@ -99,13 +100,13 @@ function eventBox(ctx: UiContext, t: Task, opts: { compact?: boolean } = {}): HT
     onContextMenu: (ev) => { ev.preventDefault(); ev.stopPropagation(); taskMenu(ctx, t, ev); },
   },
     t.time ? h('span', { cls: 'helm-cal-event-time', text: t.time.start }) : null,
-    // Every block carries the signal beside its time — a narrow column or a short slot clips anything
-    // below the title — and a block with room for it also names each one underneath.
-    context.length ? h('span', { cls: 'helm-cal-ctx-icons' }, ...context.map((c) => icon(c.icon, `is-${c.kind}`))) : null,
+    // A block on the time grid carries the signal beside its time — a short slot clips anything below
+    // the title — and names each one underneath when it has the height. A one-line block (the all-day
+    // row, a month cell) names them on its one line, each giving way to just its icon when space runs out.
+    !opts.compact && context.length ? h('span', { cls: 'helm-cal-ctx-icons' }, ...context.map((c) => icon(c.icon, `is-${c.kind}`))) : null,
     h('span', { cls: 'helm-cal-event-title', text: plainLabel(t.text) }),
-    !opts.compact && context.length
-      ? h('div', { cls: 'helm-cal-event-context' }, ...context.map((c) => h('span', { cls: ['helm-cal-ctx', `is-${c.kind}`], title: c.title }, icon(c.icon), h('span', { cls: 'helm-cal-ctx-text', text: c.text }))))
-      : null,
+    opts.compact && context.length ? h('span', { cls: 'helm-cal-event-context is-inline' }, ...context.map(ctxChip)) : null,
+    !opts.compact && context.length ? h('div', { cls: 'helm-cal-event-context' }, ...context.map(ctxChip)) : null,
   );
   box.addEventListener('dragstart', (ev) => {
     ev.stopPropagation();

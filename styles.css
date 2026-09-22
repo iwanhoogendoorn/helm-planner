@@ -1066,3 +1066,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-cal-ctx-icons .is-follows { color: var(--color-blue); }
 .helm-cal-ctx-icons .is-parent { color: var(--color-purple); }
 .helm-cal-ctx-icons .is-related { color: var(--color-green); }
+/* One-line blocks: the title keeps its room, the chips give way first and shrink to their icons */
+.helm-cal-event.is-compact .helm-cal-event-title { flex: 0 1 auto; min-width: 3em; }
+.helm-cal-event-context.is-inline { display: inline-flex; flex-wrap: nowrap; gap: 3px; margin: 0 0 0 4px; flex: 0 3 auto; min-width: 0; overflow: hidden; }
+.helm-cal-event-context.is-inline .helm-cal-ctx { flex: 0 1 auto; min-width: 18px; }

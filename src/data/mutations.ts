@@ -557,6 +557,18 @@ export class Mutations {
     }
   }
 
+  /**
+   * Plan a task for a day at a time. The time goes on first, so the move places the task in the part
+   * that time falls in — unless a part is named. The task is given an id before it moves, because a
+   * line without one gets a new key in its new note and could not be found again to set the time.
+   */
+  async scheduleAt(key: string, date: IsoDate, time: { start: string; end?: string }, part?: DayPart): Promise<void> {
+    const id = await this.ensureId(key);
+    const t = this.index.taskById(id) ?? this.fresh(key);
+    await this.updateTask(t.key, { time });
+    await this.schedule((this.index.taskById(id) ?? t).key, date, part ?? this.partOfTime(time.start));
+  }
+
   private partOfTime(hhmm: string): DayPart {
     const s = this.settings;
     return hhmm < s.morningEnds ? 'morning' : hhmm < s.afternoonEnds ? 'afternoon' : 'evening';

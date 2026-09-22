@@ -10,9 +10,17 @@
   Tasks without a time still keep the section they sit in.
 - The calendar grid shows what a task belongs to: its project, the task it
   follows up, the task it is a subtask of, and any project that points at it.
-  Every block carries a small colour-coded sign beside its time — narrow and
-  short blocks clip anything below the title — and a block with room names
-  each one underneath. Hover for the full names.
+  Every block on the time grid carries a small colour-coded sign beside its
+  time — short slots clip anything below the title — and names each one
+  underneath when it has the height. One-line blocks, like the all-day row,
+  name the project right on the line (*Order BOM Items · LEVITY: High
+  Performance RC Hovercraft*), each name giving way to just its icon when the
+  column is narrow. Hover for everything.
+- *Move ▸ Pick a date…* takes a time as well: start, end and effort, kept in
+  step, and with *Keep* the task lands in the part of the day that time falls
+  in. Leave the start empty and the task stays untimed. The grid's
+  drag-to-a-time goes through the same code, which also fixes a task without
+  an 🆔 losing its new time when dragged to another day.
 - The Calendar tab opens on the calendar grid instead of the list for day,
   3-day, week and work-week; the list is one click away.
 
