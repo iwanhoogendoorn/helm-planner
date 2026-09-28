@@ -19,6 +19,15 @@ import { taskLabel } from './context';
 import { selection, selectionClick, selectionMenu, setDragKeys } from './selection';
 import { foldAll, isFolded, toggleFold } from './fold';
 
+/** Boxes ticked a moment ago: the row is redrawn after the write, so the new box plays the pop. */
+const justToggled = new Map<string, number>();
+function justToggledClass(t: Task): string | false {
+  const at = justToggled.get(t.key);
+  if (at === undefined) return false;
+  if (Date.now() - at > 800) { justToggled.delete(t.key); return false; }   // every copy of the row drawn by then pops
+  return t.status === 'done' ? 'is-popping' : 'is-bouncing';
+}
+
 export interface RowOptions {
   showProject?: boolean;
   /** Name the task this row is a step of — context when a subtask is shown on a day of its own. */
@@ -114,12 +123,13 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   // Checkbox: click toggles done; shift-click cycles to in-progress.
   if (!opts.compact) {
     const cb = h('button', {
-      cls: ['helm-check', `mark-${markerClass(t.status)}`],
+      cls: ['helm-check', `mark-${markerClass(t.status)}`, justToggledClass(t)],
       title: open ? 'Mark done (shift-click: in progress)' : 'Reopen',
       attr: { 'aria-label': 'Toggle done', 'data-status': t.status },
       onClick: (ev) => {
         ev.stopPropagation();
         const next = ev.shiftKey ? (t.status === 'doing' ? 'todo' : 'doing') : open ? 'done' : 'todo';
+        justToggled.set(t.key, Date.now());
         void ctx.run('Status', () => ctx.mutations.setStatus(t.key, next));
       },
       onContextMenu: (ev) => { ev.preventDefault(); ev.stopPropagation(); progressMenu(ctx, t, ev); },
