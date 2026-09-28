@@ -3,7 +3,7 @@ import { linkedNoteOf } from '../core/label';
 import { projectSongNote } from './songNote';
 import { FuzzySuggestModal, Menu } from 'obsidian';
 import type { HelmSettings, IsoDate, Project, Task, TaskStatus } from '../core/types';
-import { addDays, humanDate, startOfWeek } from '../core/dates';
+import { addDays, humanDate, startOfWeek, WEEKDAY_NAMES, WEEKDAY_SHORT } from '../core/dates';
 import type { UiContext } from './context';
 import { addDrawingItems, targetForTask } from './drawings';
 import { addNoteItems } from './notes';
@@ -23,10 +23,19 @@ import { DAY_PARTS, PART_LABEL, partOfTime, type DayPart } from '../core/dailyNo
 
 export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): { label: string; date: IsoDate | undefined; icon: string }[] {
   const nextWeek = addDays(startOfWeek(today, weekStartsOn), 7);
+  // The rest of this week by name, so “Thursday afternoon” is two hovers instead of the date picker.
+  const restOfWeek: { label: string; date: IsoDate; icon: string }[] = [];
+  for (let d = addDays(today, 2); d < nextWeek; d = addDays(d, 1)) {
+    const [wd, ...rest] = humanDate(d).split(' ');
+    const name = WEEKDAY_NAMES[WEEKDAY_SHORT.indexOf(wd!)]!;
+    restOfWeek.push({ label: `${name[0]!.toUpperCase()}${name.slice(1)} ${rest.join(' ')}`, date: d, icon: 'calendar-range' });
+  }
   return [
     { label: 'Today', date: today, icon: 'sun' },
     { label: 'Tomorrow', date: addDays(today, 1), icon: 'sunrise' },
-    { label: `Next week (${humanDate(nextWeek)})`, date: nextWeek, icon: 'calendar' },
+    ...restOfWeek,
+    // On the last day of the week tomorrow already is next week: offer that day once.
+    ...(addDays(today, 1) === nextWeek ? [] : [{ label: `Next week (${humanDate(nextWeek)})`, date: nextWeek, icon: 'calendar' }]),
     { label: 'Pick a date…', date: 'pick' as unknown as IsoDate, icon: 'calendar-days' },
     { label: 'Unschedule', date: undefined, icon: 'calendar-x' },
   ];
