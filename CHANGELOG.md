@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.39.0 — 2026-09-28
+
+- Ticking a task feels like pressing a box. Every Helm checkbox sinks and
+  lights its accent ring while held; on a task row the redrawn box then pops
+  and the check spins in when the task is done, or gives a small bounce when
+  it is reopened or set in progress. Off under *Reduce motion*.
+
 ## 1.38.0 — 2026-09-22
 
 - Moving a timed task to another day puts it in the part its **time** falls in.
