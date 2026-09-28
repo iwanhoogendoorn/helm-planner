@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.40.0 — 2026-09-28
+
+- *Move* names the rest of this week: after *Tomorrow* come the days left
+  (*Wednesday 30 Sep* … *Sunday 4 Oct*), each opening onto Morning,
+  Afternoon, Evening and Anytime — no date picker for “Thursday afternoon”.
+  Past days are not offered, and on the last day of the week tomorrow is
+  next week and is listed once.
+
 ## 1.39.0 — 2026-09-28
 
 - Ticking a task feels like pressing a box. Every Helm checkbox sinks and
