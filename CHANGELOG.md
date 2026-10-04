@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.41.0 — 2026-10-04
+
+- A **Habits** tab (also *Open Habits* in the command palette, and a choice
+  for the tab Helm opens on). New habit up top with today's numbers — done
+  today, best running streak, active, paused — then the habits *Due today*,
+  those *Not due today* (each saying when it is), the *Paused* ones, and the
+  all-time habit tracker. Every card carries Edit, Pause / Resume and Delete,
+  so nothing hides behind a right-click.
+- Today keeps its Habits section, and its *New habit* button, on a day nothing
+  is due: it says why (*2 not due today · 1 paused*) and offers each paused
+  habit as a one-click *Resume*.
+
 ## 1.40.0 — 2026-09-28
 
 - *Move* names the rest of this week: after *Tomorrow* come the days left
