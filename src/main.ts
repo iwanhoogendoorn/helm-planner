@@ -492,6 +492,7 @@ export default class HelmPlugin extends Plugin {
     this.addCommand({ id: 'export-report', name: 'Export a report…', callback: () => openExportReport(this.uiContext(this.activeView())) });
     this.addCommand({ id: 'open-inbox', name: 'Open Inbox', callback: () => void this.openView().then((v) => v.navigate('inbox')) });
     this.addCommand({ id: 'open-review', name: 'Open Review', callback: () => void this.openView().then((v) => v.navigate('review')) });
+    this.addCommand({ id: 'open-habits', name: 'Open Habits', callback: () => void this.openView().then((v) => v.navigate('habits')) });
     this.addCommand({ id: 'open-dashboard', name: 'Open Dashboard', callback: () => void this.openView().then((v) => v.navigate('dashboard')) });
     this.addCommand({ id: 'open-horizons', name: 'Open Horizons (goals by year, quarter, month)', callback: () => void this.openView().then((v) => v.navigate('horizons')) });
     this.addCommand({ id: 'search', name: 'Search everything', callback: () => openSearch(ctx()) });

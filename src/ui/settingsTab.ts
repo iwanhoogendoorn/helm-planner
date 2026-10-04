@@ -469,7 +469,7 @@ export class HelmSettingTab extends PluginSettingTab {
   private renderView(body: HTMLElement): void {
     const s = this.host.settings;
     const open = this.group(body, { icon: 'layout-dashboard', title: 'Opening Helm', subtitle: 'Where the view starts and whether it opens by itself.' });
-    this.dropdown(open.content, 'defaultTab', 'Tab to open on', '', { today: 'Today', week: 'Calendar', projects: 'Projects', inbox: 'Inbox', review: 'Review', horizons: 'Horizons', dashboard: 'Dashboard' });
+    this.dropdown(open.content, 'defaultTab', 'Tab to open on', '', { today: 'Today', week: 'Calendar', projects: 'Projects', habits: 'Habits', inbox: 'Inbox', review: 'Review', horizons: 'Horizons', dashboard: 'Dashboard' });
     this.toggle(open.content, 'openOnStartup', 'Open Helm on startup', 'Opens the Helm view when the vault loads.');
 
     const dev = this.group(body, { icon: 'bug', title: 'Developer', subtitle: 'Only useful when testing Helm itself.', chip: s.developerActions ? { text: 'on', tone: 'warn' } : { text: 'off', tone: 'pending' } });

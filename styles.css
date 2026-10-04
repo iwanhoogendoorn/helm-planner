@@ -189,6 +189,8 @@
 .helm-habit.is-done { background: rgba(var(--color-green-rgb), 0.16); border-color: rgba(var(--color-green-rgb), 0.4); color: var(--color-green); }
 .helm-habit.is-skipped { opacity: 0.6; text-decoration: line-through; }
 .helm-habit.is-missed:not(.is-done) { border-color: rgba(var(--color-red-rgb), 0.3); }
+.helm-habit.is-paused { border-style: dashed; color: var(--text-muted); }
+.helm-habit-paused { justify-content: center; margin-top: 6px; }
 .helm-streak { font-size: 11px; color: var(--color-orange); }
 .helm-habit-row { padding: 8px 6px; border-radius: var(--radius-s); cursor: pointer; }
 .helm-habit-row:hover { background: var(--background-modifier-hover); }
@@ -654,6 +656,11 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-habit-cell.is-pending { border-color: var(--hc); color: var(--hc); }
 .helm-habit-cell.is-today { box-shadow: 0 0 0 2px rgba(var(--hc-rgb), 0.45); }
 .helm-habit-month { display: flex; align-items: center; }
+.helm-habit-card:has(.helm-habit-actions) { grid-template-columns: auto minmax(0, 1fr) auto auto auto; }
+.helm-habit-actions { display: flex; align-items: center; gap: 2px; }
+.helm-habit-actions .helm-habit-delete:hover { color: var(--text-error); }
+.helm-habit-card.is-paused:has(.helm-habit-actions) { opacity: 0.8; }
+.helm-habit-when { font-style: italic; }
 .helm-habit-ring-bg { fill: none; stroke: rgba(var(--hc-rgb), 0.18); stroke-width: 3; }
 .helm-habit-ring-fg { fill: none; stroke: var(--hc); stroke-width: 3; stroke-linecap: round; }
 .helm-habit-ring-text { font-size: 9px; font-weight: 700; fill: var(--text-normal); }
@@ -667,7 +674,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-swatch, .modal .helm-swatch, button.helm-swatch { --sw: var(--color-green); width: 26px; height: 26px; border-radius: 50%; padding: 0; border: 2px solid transparent; background: var(--sw); box-shadow: none; cursor: pointer; opacity: 0.75; }
 .helm-swatch:hover { opacity: 1; }
 .helm-swatch.is-active { opacity: 1; border-color: var(--text-normal); transform: scale(1.1); }
-@media (max-width: 720px) { .helm-habit-card { grid-template-columns: auto minmax(0, 1fr); } .helm-habit-week, .helm-habit-month { grid-column: 2; } }
+@media (max-width: 720px) { .helm-habit-card, .helm-habit-card:has(.helm-habit-actions) { grid-template-columns: auto minmax(0, 1fr); } .helm-habit-week, .helm-habit-month, .helm-habit-actions { grid-column: 2; } }
 
 .helm-chip.followup { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; background: rgba(var(--color-blue-rgb), 0.12); color: var(--color-blue); border: none; height: auto; }
 .helm-chip.followup svg { width: 11px; height: 11px; }

@@ -331,7 +331,7 @@ export interface HelmSettings {
   rolloverTarget: 'tomorrow' | 'unschedule';
   staleProjectDays: number;
   weekStartsOn: 1 | 7;
-  defaultTab: 'today' | 'week' | 'projects' | 'inbox' | 'review' | 'horizons' | 'dashboard';
+  defaultTab: 'today' | 'week' | 'projects' | 'habits' | 'inbox' | 'review' | 'horizons' | 'dashboard';
   openOnStartup: boolean;
   showTimeBlocks: boolean;
   /** Whether a task's steps start folded away. Tasks you have folded or unfolded by hand ignore it. */

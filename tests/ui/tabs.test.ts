@@ -8,6 +8,7 @@ import { renderWeek } from '../../src/ui/tabs/week';
 import { renderProjects } from '../../src/ui/tabs/projects';
 import { renderInbox } from '../../src/ui/tabs/inbox';
 import { renderReview } from '../../src/ui/tabs/review';
+import { renderHabits, defaultHabitsState } from '../../src/ui/tabs/habits';
 import { openCapture } from '../../src/ui/modals/capture';
 import { openPlanDayAi } from '../../src/ui/modals/planDayAi';
 import { openPlanWeekAi } from '../../src/ui/modals/planWeekAi';
@@ -603,6 +604,60 @@ describe('Today tab', () => {
     click([...root.querySelectorAll('.helm-habit-card')].find((e) => e.textContent?.includes('Evening'))!.querySelector('.helm-habit-tick'));
     await flush();
     expect(await vault.read(dailyPath(TODAY))).toContain('- [x] Evening reading 🆔 hab-read ✅ 2026-08-26');
+  });
+
+  it('keeps the Habits section when every habit is paused, with New habit and one-click Resume', async () => {
+    const paused = (id: string, title: string): string => `---\ntype: habit\nid: ${id}\ntitle: ${title}\nschedule: every day\nactive: false\n---\n`;
+    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Morning workout.md': paused('hab-workout', 'Morning workout'), '02 PROJECTS/Habits/Evening reading.md': paused('hab-read', 'Evening reading') });
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const habits = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === 'Habits')!;
+    expect(habits).toBeTruthy();
+    expect(habits.textContent).toContain('New habit');
+    expect(habits.textContent).toContain('No habits due today — 2 paused.');
+    expect(texts(habits, '.helm-habit.is-paused > span:last-child')).toEqual(['Resume Evening reading', 'Resume Morning workout']);
+    click(habits.querySelector('.helm-habit.is-paused'));
+    await flush();
+    expect(await vault.read('02 PROJECTS/Habits/Evening reading.md')).toMatch(/active: true/);
+  });
+});
+
+describe('Habits tab', () => {
+  const note = (id: string, title: string, schedule: string, active = true): string => `---\ntype: habit\nid: ${id}\ntitle: ${title}\nschedule: ${schedule}\nactive: ${active}\n---\n`;
+  const extra = { '02 PROJECTS/Habits/Practice Piano.md': note('hab-piano', 'Practice Piano', 'every day', false), '02 PROJECTS/Habits/Long run.md': note('hab-run', 'Long run', 'every weekend') };
+  const sectionNamed = (root: HTMLElement, title: string): HTMLElement | undefined => [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === title);
+
+  it('shows every habit by where it stands today, with the tracker below', async () => {
+    const { ctx } = await ctxFor(extra);
+    const root = render((r) => renderHabits(ctx, r, defaultHabitsState()));
+    expect(texts(root, '.helm-section-title')).toEqual(['Due today', 'Not due today', 'Paused', 'Habit tracker']);
+    expect(texts(sectionNamed(root, 'Due today')!, '.helm-habit-title > span:last-child')).toEqual(['Evening reading', 'Morning workout']);
+    expect(texts(sectionNamed(root, 'Not due today')!, '.helm-habit-title > span:last-child')).toEqual(['Long run']);
+    expect(sectionNamed(root, 'Not due today')!.querySelector('.helm-habit-when')!.textContent).toMatch(/saturday, sunday/);
+    expect(texts(sectionNamed(root, 'Paused')!, '.helm-habit-title > span:last-child')).toEqual(['Practice Piano']);
+    expect(texts(root, '.helm-stat-label')).toEqual(['done today', 'best running streak', 'active', 'paused']);
+    expect(root.querySelector('.helm-toolbar')!.textContent).toContain('New habit');
+  });
+
+  it('resumes, pauses, edits and creates from the cards and toolbar', async () => {
+    const { ctx, vault } = await ctxFor(extra);
+    const root = render((r) => renderHabits(ctx, r, defaultHabitsState()));
+    click(sectionNamed(root, 'Paused')!.querySelector('[aria-label="Resume habit"]'));
+    await flush();
+    expect(await vault.read('02 PROJECTS/Habits/Practice Piano.md')).toMatch(/active: true/);
+    click(sectionNamed(root, 'Not due today')!.querySelector('[aria-label="Pause habit"]'));
+    await flush();
+    expect(await vault.read('02 PROJECTS/Habits/Long run.md')).toMatch(/active: false/);
+    click(sectionNamed(root, 'Due today')!.querySelector('[aria-label="Edit habit"]'));
+    expect(Modal.last!.titleEl.textContent).toBe('Edit habit');
+    click([...root.querySelectorAll<HTMLElement>('.helm-toolbar button')].find((b) => b.textContent?.includes('New habit')));
+    expect(Modal.last!.titleEl.textContent).toBe('New habit');
+  });
+
+  it('invites the first habit when there are none', async () => {
+    const { ctx } = await ctxFor({ '02 PROJECTS/Habits/Morning workout.md': '# not a habit\n', '02 PROJECTS/Habits/Evening reading.md': '# not a habit\n' });
+    const root = render((r) => renderHabits(ctx, r, defaultHabitsState()));
+    expect(root.querySelector('.helm-empty')!.textContent).toContain('Create your first habit');
+    expect(root.querySelector('.helm-stats')).toBeNull();
   });
 });
 

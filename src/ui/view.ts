@@ -11,6 +11,7 @@ import { renderInbox, type InboxState } from './tabs/inbox';
 import { renderReview, type ReviewState } from './tabs/review';
 import { renderHorizons, type HorizonsState } from './tabs/horizons';
 import { renderDashboard, type DashboardState, defaultDashboardState } from './tabs/dashboard';
+import { renderHabits, type HabitsState, defaultHabitsState } from './tabs/habits';
 import { openCapture } from './modals/capture';
 import { openSearch } from './modals/search';
 
@@ -20,6 +21,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'today', label: 'Today', icon: 'sun' },
   { id: 'week', label: 'Calendar', icon: 'calendar-range' },
   { id: 'projects', label: 'Projects', icon: 'folder-kanban' },
+  { id: 'habits', label: 'Habits', icon: 'repeat' },
   { id: 'inbox', label: 'Inbox', icon: 'inbox' },
   { id: 'review', label: 'Review', icon: 'clipboard-check' },
   { id: 'horizons', label: 'Horizons', icon: 'mountain' },
@@ -37,6 +39,7 @@ export class HelmView extends ItemView {
   private reviewState: ReviewState = { collapsed: new Map(), checks: new Set() };
   private horizonsState: HorizonsState;
   private dashboardState: DashboardState = defaultDashboardState();
+  private habitsState: HabitsState = defaultHabitsState();
   private body!: HTMLElement;
   private tabBar!: HTMLElement;
   private scrollTop = new Map<string, number>();
@@ -138,6 +141,7 @@ export class HelmView extends ItemView {
         case 'review': renderReview(ctx, this.body, this.reviewState); break;
         case 'horizons': renderHorizons(ctx, this.body, this.horizonsState); break;
         case 'dashboard': renderDashboard(ctx, this.body, this.dashboardState); break;
+        case 'habits': renderHabits(ctx, this.body, this.habitsState); break;
       }
     } catch (e) {
       console.error('[helm] render failed', e);

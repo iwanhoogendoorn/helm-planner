@@ -103,7 +103,8 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
 
   // Habits.
   const habits = habitsOnDay(ctx.index.allHabits(), snap.completions, date).map((r) => r.habit);
-  if (habits.length > 0 || ctx.index.allHabits().length === 0) {
+  // Always drawn, so “New habit” is never out of reach — even on a day nothing is due or every habit is paused.
+  {
     /** A chip for one occurrence of a habit (day-level, or one part of the day). */
     const habitChip = (hb: Habit, part?: HabitPart): HTMLElement => {
       const done = snap.completions.find((c) => c.habitId === hb.id && c.date === date && c.part === part);
@@ -122,7 +123,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     const board = h('div', { cls: 'helm-habit-board' }, ...habits.map((hb) => habitCard(ctx, hb, date)));
     habitChipsFor = (part) => { const list = [...parted.filter((hb) => hb.parts!.includes(part)), ...habits.filter((hb) => dayPartOf(hb, snap.completions, date) === part)]; return list.length === 0 ? null : h('div', { cls: 'helm-habit-chips helm-part-habits' }, ...list.map((hb) => colourise(habitChip(hb, part), hb))); };
     root.appendChild(section('Habits', { count: `${doneOcc}/${occurrences}`, store, key: 'habits', actions: [button('New habit', { icon: 'plus', cls: 'helm-btn-quiet', onClick: () => openHabitForm(ctx) })] },
-      habits.length === 0 ? empty('No habits yet.', button('Create one', { onClick: () => openHabitForm(ctx) })) : board));
+      habits.length === 0 ? noHabitsDue(ctx, date, today) : board));
   }
 
   // The day, by part. Each part is a drop zone.
@@ -328,3 +329,19 @@ function reasonLabel(c: Candidate): string {
 }
 
 export type { Task };
+
+/** The Habits section on a day with nothing due: say why, and bring paused habits one click from back. */
+function noHabitsDue(ctx: UiContext, date: IsoDate, today: IsoDate): HTMLElement {
+  const all = ctx.index.allHabits();
+  if (all.length === 0) return empty('No habits yet.', button('Create one', { onClick: () => openHabitForm(ctx) }));
+  const paused = all.filter((hb) => !hb.active).sort((a, b) => a.title.localeCompare(b.title));
+  const resting = all.length - paused.length;
+  const when = date === today ? 'today' : `on ${humanDate(date, today)}`;
+  const why = [resting > 0 && `${resting} not due ${when}`, paused.length > 0 && `${paused.length} paused`].filter(Boolean).join(' · ');
+  return empty(`No habits due ${when} — ${why}.`, paused.length === 0 ? null : h('div', { cls: 'helm-habit-chips helm-habit-paused' }, ...paused.map((hb) => h('button', {
+    cls: 'helm-habit is-paused',
+    title: `Resume “${hb.title}” — right-click to edit or delete`,
+    onClick: () => void ctx.run('Habit', () => ctx.mutations.setHabitFields(hb.id, { active: true })),
+    onContextMenu: (ev) => habitMenu(ctx, hb, ev),
+  }, icon('play'), habitBadge(ctx, hb), h('span', { text: `Resume ${hb.title}` })))));
+}

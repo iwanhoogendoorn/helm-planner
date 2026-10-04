@@ -35,7 +35,7 @@ export function dateCrumbs(ctx: UiContext, date: IsoDate, active: 'year' | 'quar
   return out;
 }
 
-const HOME: Record<TabId, string> = { today: 'Today', week: 'Calendar', projects: 'Projects', inbox: 'Inbox', review: 'Review', horizons: 'Horizons', dashboard: 'Dashboard' };
+const HOME: Record<TabId, string> = { today: 'Today', week: 'Calendar', projects: 'Projects', habits: 'Habits', inbox: 'Inbox', review: 'Review', horizons: 'Horizons', dashboard: 'Dashboard' };
 
 /**
  * The bar every tab starts with: `<Tab> › trail…`. Same class, same spot (first

@@ -68,7 +68,7 @@ function placeInNow(ctx: UiContext, date: IsoDate): { placeIn?: HabitPart } {
   return p === 'anytime' ? {} : { placeIn: p };
 }
 
-export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement {
+export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate, opts: { actions?: HTMLElement[] } = {}): HTMLElement {
   const snap = ctx.index.snapshot;
   const settings = ctx.settings();
   const today = ctx.today();
@@ -110,6 +110,7 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
     h('div', { cls: 'helm-habit-body' }, h('div', { cls: 'helm-habit-title' }, habitBadge(ctx, hb), h('span', { text: hb.title })), meta),
     strip,
     h('div', { cls: 'helm-habit-month', title: `${Math.round(st.rate30 * 100)}% of the last 30 days` }, ring(st.rate30)),
+    opts.actions?.length ? h('div', { cls: 'helm-habit-actions' }, ...opts.actions) : null,
   );
   colourise(card, hb);
   // A day-level habit can be dragged onto a part of the day, for this date only.

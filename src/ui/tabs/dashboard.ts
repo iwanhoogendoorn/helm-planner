@@ -194,7 +194,7 @@ const HABIT_SCOPES: [PeriodKind, string][] = [['week', 'Week'], ['month', 'Month
 const shortLabel = (p: Period): string => p.kind === 'week' ? `W${p.week}` : p.kind === 'month' ? MONTH_SHORT[p.month! - 1]! : p.kind === 'quarter' ? `Q${p.quarter}` : String(p.year);
 
 /** Every habit over its whole life, one column per week / month / quarter / year, coloured by completion rate. */
-function habitTracker(ctx: UiContext, state: DashboardState, habits: import('../../core/types').Habit[], today: IsoDate): HTMLElement {
+export function habitTracker(ctx: UiContext, state: Pick<DashboardState, 'habitScope' | 'collapsed'>, habits: import('../../core/types').Habit[], today: IsoDate): HTMLElement {
   const kind = state.habitScope;
   const { periods, rows } = habitHistories(habits, ctx.index.snapshot.completions, kind, today);
   const scopeBar = h('div', { cls: 'helm-segmented helm-habit-scope' }, ...HABIT_SCOPES.map(([k, label]) => h('button', { cls: ['helm-seg', k === kind && 'is-active'], text: label, onClick: () => { state.habitScope = k; ctx.refresh(); } })));
