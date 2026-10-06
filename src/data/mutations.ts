@@ -613,6 +613,21 @@ export class Mutations {
    * line without one gets a new key in its new note and could not be found again to set the time.
    */
   async scheduleAt(key: string, date: IsoDate, time: { start: string; end?: string }, part?: DayPart): Promise<string> {
+    const t0 = this.fresh(key);
+    // A line in a daily note or the inbox moves itself, so it needs no 🆔 to be found again: afterwards it
+    // is the open line with this text on its new day. Stamping one used to put an id on every turn of a
+    // repeating meeting moved this way, and a fresh one on each turn after it.
+    if ((t0.origin === 'daily' || t0.origin === 'inbox') && !t0.id) {
+      const text = t0.text;
+      await this.updateTask(t0.key, { time });
+      const timed = this.freshAt(t0.path, t0.line, t0.key);
+      await this.schedule(timed.key, date, part ?? this.partOfTime(time.start));
+      const open = (x: Task): boolean => x.text === text && x.status !== 'done' && x.status !== 'cancelled' && x.status !== 'forwarded';
+      const landed = this.index.allTasks().filter((x) => open(x) && x.origin === 'daily' && x.noteDate === date);
+      const found = landed.find((x) => x.time?.start === time.start) ?? landed[0]
+        ?? this.index.tasksInFile(t0.path).find((x) => open(x) && x.line === t0.line);   // a step planned in place
+      return found?.key ?? timed.key;
+    }
     const id = await this.ensureId(key);
     const t = this.index.taskById(id) ?? this.fresh(key);
     await this.updateTask(t.key, { time });

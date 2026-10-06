@@ -41,6 +41,15 @@ describe('moving one turn of a repeating task', () => {
     expect(s.open()).toEqual(['2026-09-08 10:00 morning']);
   });
 
+  it('moving a turn to a day and a time leaves no 🆔 on it, or on the turns after it', async () => {
+    const s = await meeting();
+    const key = await s.m.scheduleAt(s.on('2026-09-01')[0]!.key, '2026-09-02', { start: '15:00', end: '16:00' });
+    expect(s.index.task(key)).toMatchObject({ noteDate: '2026-09-02', time: { start: '15:00', end: '16:00' } });
+    expect(await s.vault.read(dailyPath('2026-09-02'))).not.toContain('🆔');
+    await s.m.setStatus(key, 'done');
+    expect(await s.vault.read(dailyPath('2026-09-08'))).toContain('- [ ] 10:00 - 11:00: Team sync #meeting 🔁 every week\n');
+  });
+
   it('a later time on the same day is a move of that turn too', async () => {
     const s = await meeting();
     await s.m.updateTask(s.on('2026-09-01')[0]!.key, { time: { start: '14:00', end: '15:00' } });

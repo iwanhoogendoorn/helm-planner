@@ -233,6 +233,9 @@ describe('a new day and a new time in one PATCH', () => {
     const r = await handle({ method: 'PATCH', path: `tasks/${t.key}`, query: {}, body: { scheduled: '2026-08-28', time: '09:30', timeEnd: '10:15' } }, deps) as { status: number; body: any };
     expect(r.status).toBe(200);
     expect(r.body.task).toMatchObject({ scheduled: '2026-08-28', part: 'morning', time: '09:30', timeEnd: '10:15' });
+    // Found again without stamping an id on the line.
+    expect(r.body.task.id).toBeNull();
+    expect(s.index.allTasks().find((x) => x.text === 'Evening thing')!.raw.line).not.toContain('🆔');
   });
 });
 
