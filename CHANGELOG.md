@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.43.0 — 2026-10-06
+
+- **Move the whole series…** in the Move menu of a repeating task: pick a day
+  and time, and this turn goes there with the rule, its 📅 and its time —
+  *every week on friday* becomes *every week on thursday* — while the day it
+  left stays empty. A day of the month that would fall off the month is
+  refused with a word on where to change the repeat instead.
+- Moving one turn now holds for series counted from their 📅 as well — the
+  shape of a meeting line (`📅 2026-10-09 🔁 every week on friday`). 1.42.0
+  left them out, so moving one still brought the old day back and a new time
+  spread to later weeks.
+- API: `POST /tasks/:id/move-series { date, time?, timeEnd?, part? }`.
+
 ## 1.42.0 — 2026-10-06
 
 - Moving one turn of a repeating task — a weekly meeting, say — moves **only
