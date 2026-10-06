@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.42.0 — 2026-10-06
+
+- Moving one turn of a repeating task — a weekly meeting, say — moves **only
+  that one**. The line remembers the turn it stands for
+  (`[moved from:: 2026-09-01 10:00 - 11:00]`), so the next turn is counted
+  from there at the series' own time, and the day it left is not filled in
+  again. Before, the catch-up put the meeting back on the Tuesday you moved it
+  away from, and ticking the moved one could slide a plain *every week* series
+  to the new weekday. It holds for every way of moving: the Move menu, *Pick a
+  date…*, dragging on the grid, a new time in the editor, and the API. The
+  menu reads *Move this one*, the row shows *moved from Tue 1 Sep 10:00*, and
+  putting it back where it was takes the note off. Deleting a moved turn keeps
+  both days free.
+- API: tasks carry **`movedFrom`** (`{ date, timeBlock }` or `null`).
+
 ## 1.41.0 — 2026-10-04
 
 - A **Habits** tab (also *Open Habits* in the command palette, and a choice
