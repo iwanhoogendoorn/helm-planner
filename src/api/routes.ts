@@ -493,6 +493,21 @@ async function taskAction(t: Task, sub: string, method: string, body: Record<str
     const cs = conflictsFor(d.index.snapshot, date, { start, ...(end ? { end } : {}) }, d.settings(), { ...(eff ? { effortMinutes: eff } : {}), excludeKeys: [t.key, ...(t.mirrorOf ? [t.mirrorOf] : [])] });
     return ok({ date, time: start, timeEnd: end ?? null, conflicts: cs.map((b) => ({ start: b.start, end: b.end, ref: refOf(b.task), label: b.label })) });
   }
+  if (sub === 'move-series' && method === 'POST') {
+    if (!t.recurrence?.parsed) return bad('Only a repeating task has a series to move');
+    const date = day(body['date']);
+    if (!date) return bad('move-series needs a date like 2026-10-08');
+    const start = str(body['time']);
+    if (start !== undefined && !isHhmm(start)) return bad('time must be HH:MM');
+    const end = str(body['timeEnd']);
+    if (end !== undefined && !isHhmm(end)) return bad('timeEnd must be HH:MM');
+    const part = str(body['part']);
+    if (part && !PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
+    try {
+      const moved = await d.mutations.moveSeries(t.key, date, start ? { start, ...(end ? { end } : {}) } : undefined, part as DayPart | undefined);
+      return ok({ task: moved ? taskJson(moved, d) : null, written: d.written() });
+    } catch (e) { return bad((e as Error).message); }
+  }
   if (sub === 'stop-repeating' && method === 'POST') {
     if (!t.recurrence) return bad('This task does not repeat');
     await d.mutations.stopRepeating(t.key);

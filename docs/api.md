@@ -309,6 +309,8 @@ goal's period when the project has none) or unbinds it.
 
 ### Tasks — more writes
 
+Moving a repeating turn by `PATCH` (a new `date` or `time`) moves **that turn only** — it gets `movedFrom`; use `move-series` to move them all.
+
 `PATCH /tasks/:id` also takes `time` + `timeEnd` (`time: null` clears the block; the line keeps
 its section, a day view places it by its time), `progress` (0–100 puts it in progress, 100
 finishes it, `null` clears the percentage), and `recurrence` (a rule like `every week on
@@ -317,6 +319,7 @@ other one instead.
 
 ```
 POST   /tasks/:id/stop-repeating
+POST   /tasks/:id/move-series     { date, time?, timeEnd?, part? } → { task, written }   move the whole series: this turn goes to date, the rule's weekdays / days of the month and its 📅 move with it (every week on friday → every week on thursday); 400 when a day of the month would fall off the month
 POST   /tasks/:id/followup          { date, text?, part?, markOriginalDone?, addTag?, effortMinutes?, due?, priority?, time?, timeEnd? } → 201 { followUp, original, written }
 POST   /tasks/:id/plan-into         { date, time: { start, end }, effortMinutes? }
 POST   /tasks/:id/project           { title?, status?, priority?, area?, parentId?, period?, due? } → 201 { project, carried, written }

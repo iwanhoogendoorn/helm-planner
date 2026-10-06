@@ -14,7 +14,7 @@ import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKE
 import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, addMonths, diffDays, formatDate } from '../core/dates';
-import { formatRecurrence, nextOccurrence } from '../core/recurrence';
+import { formatRecurrence, nextOccurrence, shiftRecurrence } from '../core/recurrence';
 import { formatHistoryEntry, formatPauseEntry } from '../core/habit';
 import { uniqueId } from '../core/ids';
 import { setFrontmatter } from '../core/frontmatter';
@@ -485,12 +485,13 @@ export class Mutations {
   /**
    * One turn of a repeating task changing day or time on its own: write down, once, which turn it is —
    * the day and time it had in the series — so the series carries on from there. Moved back to exactly
-   * that, the note comes off again. A task counted from its due date, or repeating when done, is not
-   * thrown off by a move, so it needs no note.
+   * that, the note comes off again. A series counted from its 📅 needs it as much — the catch-up would
+   * otherwise refill the day it left, and a new time would spread to every later turn. Only a task that
+   * repeats when done is counted from the day it is finished, so a move cannot throw it off.
    */
   private anchorTurn(old: TaskLine, next: TaskLine, oldDate: IsoDate | undefined, newDate: IsoDate | undefined): void {
     const rec = old.recurrence;
-    if (!rec?.parsed || rec.whenDone || old.due || !oldDate) return;
+    if (!rec?.parsed || rec.whenDone || !oldDate) return;
     if (old.status === 'done' || old.status === 'cancelled') return;
     const same = (a?: TimeBlock, b?: TimeBlock): boolean => (a?.start ?? '') === (b?.start ?? '') && (a?.end ?? '') === (b?.end ?? '');
     if (newDate === oldDate && same(next.time, old.time)) return;
@@ -525,6 +526,34 @@ export class Mutations {
       lines.splice(t.line, 0, serialiseTaskLine(newTaskLine(t.text, fields, t.raw.indent)));
       return true;
     });
+  }
+
+  /**
+   * Move a repeating task's series, not just this turn: this turn goes to `date` (and `time`), and the
+   * rule moves with it — every week on friday becomes every week on thursday — together with its 📅 and,
+   * when given, its time. Later turns follow from this one; the day it left is remembered as skipped, so
+   * the catch-up does not refill it from last week's record.
+   */
+  async moveSeries(key: string, date: IsoDate, time?: { start: string; end?: string }, part?: DayPart): Promise<Task | undefined> {
+    const t = this.fresh(key);
+    const rec = t.recurrence;
+    if (!rec?.parsed) throw new Error('Only a repeating task has a series to move');
+    const from = t.movedFrom?.date ?? (t.origin === 'daily' ? t.noteDate : t.scheduled) ?? t.scheduled ?? t.noteDate;
+    if (!from) throw new Error('Plan the task onto a day first');
+    const days = diffDays(from, date);
+    const rule = shiftRecurrence(rec, days);
+    if (!rule) throw new Error(`“${formatRecurrence(rec)}” cannot move ${days} days — a day of the month would fall off the month. Change the repeat in the editor instead.`);
+    const text = t.text;
+    // Not scheduleAt: that stamps an 🆔 on the line, and every later turn would then get one of its own.
+    await this.schedule(t.key, date, part ?? (time ? this.partOfTime(time.start) : undefined));
+    // Found again by what it is now: the line on its new day (or its project line) with this text, still open.
+    const find = (): Task | undefined => this.index.allTasks().find((x) => x.text === text && x.status !== 'done' && x.status !== 'cancelled' && x.recurrence?.parsed
+      && (t.origin === 'daily' ? x.origin === 'daily' && x.noteDate === date : x.path === t.path));
+    const moved = find();
+    if (!moved) return undefined;
+    await this.updateTask(moved.key, { recurrence: rule, movedFrom: undefined, ...(time ? { time } : {}), ...(moved.due ? { due: addDays(moved.due, days) } : {}) });
+    if (from >= this.today && from !== date) await this.rememberSkip(text, from);
+    return find();
   }
 
   /* ── Scheduling: the heart of "plan my day" ──────────────────────────── */

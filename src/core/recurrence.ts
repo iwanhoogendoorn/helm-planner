@@ -60,6 +60,26 @@ export function parseRecurrence(raw: string): Recurrence {
   return out;
 }
 
+/**
+ * The same rule, `days` later: the weekdays and days of the month it names move with it, so a series
+ * moved from Friday to Thursday reads “every week on thursday”. Rules that only count from the last turn
+ * (every 2 weeks, every month) need no change. Undefined when a day of the month would fall off the month.
+ */
+export function shiftRecurrence(r: Recurrence, days: number): Recurrence | undefined {
+  if (!r.parsed || !r.frequency || days === 0) return r;
+  const next: Recurrence = { ...r };
+  if (r.frequency === 'weekly' && r.weekdays && r.weekdays.length > 0) {
+    next.weekdays = [...new Set(r.weekdays.map((d) => ((((d - 1 + days) % 7) + 7) % 7) + 1))].sort((a, b) => a - b);
+  }
+  if (r.frequency === 'monthly' && r.monthDays && r.monthDays.length > 0) {
+    const moved = r.monthDays.map((d) => d + days);
+    if (moved.some((d) => d < 1 || d > 31)) return undefined;
+    next.monthDays = moved;
+  }
+  next.raw = formatRecurrence(next);
+  return next;
+}
+
 export function formatRecurrence(r: Recurrence): string {
   if (!r.parsed || !r.frequency) return r.raw;
   const unit = r.frequency === 'daily' ? 'day' : r.frequency === 'weekly' ? 'week' : r.frequency === 'monthly' ? 'month' : 'year';

@@ -141,7 +141,7 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   const its = task.scheduled ?? task.noteDate;
   menu.addItem((i) => {
     // A turn of a repeating task moves on its own: say so, and that the series keeps its rhythm.
-    const turn = task.recurrence?.parsed && !task.recurrence.whenDone && !task.due && isOpen(task);
+    const turn = task.recurrence?.parsed && !task.recurrence.whenDone && isOpen(task);
     i.setTitle(its ? `Move${turn ? ' this one' : ''} — on ${humanDate(its, today)}` : 'Move — not planned').setIcon('calendar');
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
     if (turn) {
@@ -150,6 +150,16 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
       sub.addSeparator();
     }
     addScheduleItems(sub, ctx, task, { unschedule: false });
+    if (turn) {
+      // The other kind of move: the series itself, rule and all — every week on friday becomes thursday.
+      const at = task.movedFrom?.date ?? its ?? today;
+      sub.addItem((j) => j.setTitle('Move the whole series…').setIcon('repeat-2').onClick(() => openDatePicker(ctx, {
+        title: `Move every “${plainLabel(task.text)}” (${formatRecurrence(task.recurrence!)})`,
+        initial: at,
+        parts: true,
+        times: { ...(task.movedFrom?.time ?? task.time ? { start: (task.movedFrom?.time ?? task.time)!.start } : {}), ...((task.movedFrom?.time ?? task.time)?.end ? { end: (task.movedFrom?.time ?? task.time)!.end } : {}), ...(task.effortMinutes ? { effortMinutes: task.effortMinutes } : {}) },
+      }, (d, part, time) => { if (d) void ctx.run('Move series', async () => { const moved = await ctx.mutations.moveSeries(task.key, d, time ? { start: time.start, ...(time.end ? { end: time.end } : {}) } : undefined, part); if (moved?.recurrence) ctx.notify(`Moved the series: ${formatRecurrence(moved.recurrence)}${moved.time ? ` at ${moved.time.start}` : ''}, from ${humanDate(d, today)}.`); }); })));
+    }
     if (onADay && (!task.parentKey || task.scheduled)) {
       // Within the day it is already on — it never changes the date. Say which day that is, or
       // “Afternoon” reads as “this afternoon” and looks like it will drag the task back to today.

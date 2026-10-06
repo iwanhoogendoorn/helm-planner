@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { setup, dailyPath, DAILY_YESTERDAY } from './fixture';
 import { parseTaskLine, serialiseTaskLine } from '../../src/core/taskLine';
+import { parseRecurrence, shiftRecurrence } from '../../src/core/recurrence';
 
 /** A weekly meeting: last Tuesday's done, next Tuesday's waiting (today is Wednesday 26 Aug). */
 async function meeting(rule = 'every week') {
@@ -68,9 +69,23 @@ describe('moving one turn of a repeating task', () => {
     expect(s.open()).toEqual([]);
   });
 
-  it('leaves plain tasks, when-done repeats and due-date series alone', async () => {
-    const s = await setup({ [dailyPath('2026-09-01')]: '# Day planner\n\n### Anytime\n- [ ] Water plants 🔁 every week when done\n- [ ] Pay rent 📅 2026-09-01 🔁 every month\n- [ ] Call mum\n' });
-    for (const text of ['Water plants', 'Pay rent', 'Call mum']) {
+  it('works the same for a series counted from its due date — the shape of a meeting line in the vault', async () => {
+    const s = await setup({
+      [dailyPath('2026-08-25')]: DAILY_YESTERDAY.replace('### Anytime\n', '### Anytime\n- [x] 12:30 - 13:30: #meeting Team sync 📅 2026-08-25 🔁 every week on tuesday ⏱️ 1h ✅ 2026-08-25\n'),
+      [dailyPath('2026-09-01')]: '# Day planner\n\n### B. Afternoon\n- [ ] 12:30 - 13:30: #meeting Team sync 📅 2026-09-01 🔁 every week on tuesday ⏱️ 1h\n',
+    });
+    const find = (d: string) => s.index.allTasks().filter((t) => t.text.includes('Team sync') && t.noteDate === d);
+    await s.m.scheduleAt(find('2026-09-01')[0]!.key, '2026-09-02', { start: '09:00', end: '10:00' });
+    expect(await s.m.catchUpRecurring()).toBe(0);
+    expect(find('2026-09-01')).toHaveLength(0);
+    await s.m.setStatus(find('2026-09-02')[0]!.key, 'done');
+    const open = s.index.allTasks().filter((t) => t.text.includes('Team sync') && t.status === 'todo');
+    expect(open.map((t) => `${t.noteDate} ${t.time?.start} ${t.due}`)).toEqual(['2026-09-08 12:30 2026-09-08']);
+  });
+
+  it('leaves plain tasks and when-done repeats alone', async () => {
+    const s = await setup({ [dailyPath('2026-09-01')]: '# Day planner\n\n### Anytime\n- [ ] Water plants 🔁 every week when done\n- [ ] Call mum\n' });
+    for (const text of ['Water plants', 'Call mum']) {
       const t = s.index.allTasks().find((x) => x.text === text)!;
       await s.m.schedule(t.key, '2026-09-02');
       expect(s.index.allTasks().find((x) => x.text === text)!.movedFrom).toBeUndefined();
@@ -84,6 +99,50 @@ describe('moving one turn of a repeating task', () => {
     await s.m.setStatus('tsk-wr', 'done');
     const next = s.index.allTasks().filter((t) => t.text === 'Weekly report' && t.status === 'todo');
     expect(next.map((t) => t.scheduled)).toEqual(['2026-09-08']);
+  });
+});
+
+describe('moving the whole series', () => {
+  const meetingLines = async () => setup({
+    [dailyPath('2026-08-25')]: DAILY_YESTERDAY.replace('### Anytime\n', '### Anytime\n- [x] 12:30 - 13:30: #meeting Team sync 📅 2026-08-25 🔁 every week on tuesday ⏱️ 1h ✅ 2026-08-25\n'),
+    [dailyPath('2026-09-01')]: '# Day planner\n\n### B. Afternoon\n- [ ] 12:30 - 13:30: #meeting Team sync 📅 2026-09-01 🔁 every week on tuesday ⏱️ 1h\n',
+  });
+  const find = (s: Awaited<ReturnType<typeof meetingLines>>, d: string) => s.index.allTasks().filter((t) => t.text.includes('Team sync') && t.noteDate === d);
+
+  it('moves the rule, the due date and the time with this turn, and the old day stays empty', async () => {
+    const s = await meetingLines();
+    const moved = await s.m.moveSeries(find(s, '2026-09-01')[0]!.key, '2026-09-02', { start: '09:00', end: '10:00' });
+    expect(moved?.recurrence?.raw).toBe('every week on wednesday');
+    expect(await s.vault.read(dailyPath('2026-09-02'))).toContain('09:00 - 10:00: #meeting Team sync 📅 2026-09-02 🔁 every week on wednesday ⏱️ 1h');
+    expect(await s.vault.read(dailyPath('2026-09-02'))).not.toContain('moved from');
+    expect(await s.m.catchUpRecurring()).toBe(0);
+    expect(find(s, '2026-09-01')).toHaveLength(0);
+    await s.m.setStatus(find(s, '2026-09-02')[0]!.key, 'done');
+    const open = s.index.allTasks().filter((t) => t.text.includes('Team sync') && t.status === 'todo');
+    expect(open.map((t) => `${t.noteDate} ${t.time?.start} ${t.due} ${t.recurrence?.raw}`)).toEqual(['2026-09-09 09:00 2026-09-09 every week on wednesday']);
+  });
+
+  it('counts from the turn a moved one stands for', async () => {
+    const s = await meetingLines();
+    await s.m.schedule(find(s, '2026-09-01')[0]!.key, '2026-09-05');
+    const moved = await s.m.moveSeries(find(s, '2026-09-05')[0]!.key, '2026-09-02');
+    expect(moved?.recurrence?.raw).toBe('every week on wednesday');
+    expect(moved?.noteDate).toBe('2026-09-02');
+    expect(moved?.movedFrom).toBeUndefined();
+  });
+
+  it('refuses a monthly day that would fall off the month', async () => {
+    const s = await setup({ [dailyPath('2026-09-01')]: '# Day planner\n\n### Anytime\n- [ ] Invoice run 🔁 every month on the 30th\n' });
+    const t = s.index.allTasks().find((x) => x.text === 'Invoice run')!;
+    await expect(s.m.moveSeries(t.key, '2026-09-05')).rejects.toThrow(/fall off the month/);
+  });
+
+  it('shifts weekdays round the week and leaves counting rules alone', () => {
+    expect(shiftRecurrence(parseRecurrence('every week on friday'), -1)!.raw).toBe('every week on thursday');
+    expect(shiftRecurrence(parseRecurrence('every week on sunday'), 1)!.raw).toBe('every week on monday');
+    expect(shiftRecurrence(parseRecurrence('every week on monday, thursday'), 8)!.raw).toBe('every week on tuesday, friday');
+    expect(shiftRecurrence(parseRecurrence('every 2 weeks'), 3)!.raw).toBe('every 2 weeks');
+    expect(shiftRecurrence(parseRecurrence('every month on the 1st'), 2)!.raw).toBe('every month on the 3rd');
   });
 });
 
