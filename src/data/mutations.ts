@@ -9,7 +9,7 @@
  *    than removed; mirrors on past days are never rewritten.
  */
 import { safeFolder } from '../core/paths';
-import type { Habit, HabitColor, HabitPart, HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus } from '../core/types';
+import type { Habit, HabitColor, HabitPart, HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus, TimeBlock } from '../core/types';
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
 import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
@@ -25,7 +25,7 @@ import { columnWidth } from '../core/tree';
 import type { HelmIndex } from './index';
 import { baseName, type VaultAdapter } from './vault';
 import { habitDue, habitOccurrences } from './habits';
-import { misfiledDate } from './planner';
+import { misfiledDate, seriesDate } from './planner';
 import { partWindow, preferredSlot } from './conflicts';
 import { toHhmm, toMinutes } from './timegrid';
 import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/periods';
@@ -370,7 +370,7 @@ export class Mutations {
     for (const other of this.index.allTasks()) {
       if (other.origin !== 'daily' || other.key === t.key || other.path === t.path) continue;
       if (other.text.trim() !== text || !other.recurrence?.parsed) continue;
-      const from = other.due ?? other.scheduled ?? other.noteDate;
+      const from = seriesDate(other);
       const next = from ? nextOccurrence(other.recurrence, from) : undefined;
       if (!next || next < this.today) continue; // its next turn is already behind us: nothing to spawn
       await this.updateTask(other.key, { recurrence: undefined });
@@ -413,7 +413,7 @@ export class Mutations {
       if (t0.status !== 'done' && t0.status !== 'cancelled') continue;
       const when = t0.done ?? t0.cancelled ?? t0.noteDate;
       if (!when || when < ancient || when > today) continue;
-      const next = nextOccurrence(t0.recurrence, t0.due ?? t0.scheduled ?? t0.noteDate ?? when);
+      const next = nextOccurrence(t0.recurrence, seriesDate(t0) ?? when);
       if (!next || next < today || next > horizon) continue;
       if (this.hasOccurrenceOn(t0, next)) continue;
       if (this.isSkipped(t0.text, next)) continue; // you deleted that turn on purpose
@@ -466,6 +466,7 @@ export class Mutations {
     const text = t.text;
     const stopped = mode === 'series' ? await this.stopRepeating(t.key) : 0;
     if (mode === 'once' && date) await this.rememberSkip(text, date);
+    if (mode === 'once' && t.movedFrom && t.movedFrom.date !== date) await this.rememberSkip(text, t.movedFrom.date);   // and the day it was moved from
     const again = this.index.task(t.key) ?? this.index.taskById(t.id ?? '');
     await this.deleteTask(again?.key ?? t.key);
     return { stopped, ...(mode === 'once' && date ? { skipped: date } : {}) };
@@ -476,13 +477,33 @@ export class Mutations {
     for (const other of this.index.allTasks()) {
       if (other.key === t.key || other.text.trim() !== text) continue;
       if ((other.noteDate ?? other.scheduled) === date) return true;
+      if (other.movedFrom?.date === date) return true;   // that turn is there, moved to another day
     }
     return false;
   }
 
+  /**
+   * One turn of a repeating task changing day or time on its own: write down, once, which turn it is —
+   * the day and time it had in the series — so the series carries on from there. Moved back to exactly
+   * that, the note comes off again. A task counted from its due date, or repeating when done, is not
+   * thrown off by a move, so it needs no note.
+   */
+  private anchorTurn(old: TaskLine, next: TaskLine, oldDate: IsoDate | undefined, newDate: IsoDate | undefined): void {
+    const rec = old.recurrence;
+    if (!rec?.parsed || rec.whenDone || old.due || !oldDate) return;
+    if (old.status === 'done' || old.status === 'cancelled') return;
+    const same = (a?: TimeBlock, b?: TimeBlock): boolean => (a?.start ?? '') === (b?.start ?? '') && (a?.end ?? '') === (b?.end ?? '');
+    if (newDate === oldDate && same(next.time, old.time)) return;
+    const anchor = old.movedFrom ?? { date: oldDate, ...(old.time ? { time: { ...old.time } } : {}) };
+    if (newDate === anchor.date && same(next.time, anchor.time)) delete next.movedFrom;
+    else next.movedFrom = anchor;
+  }
+
   private async spawnNextOccurrence(t: Task): Promise<void> {
     const rec = t.recurrence!;
-    const base = rec.whenDone ? this.today : (t.due ?? t.scheduled ?? t.noteDate ?? this.today);
+    // A turn moved on its own does not move the series: count from the turn it stands for, at its time.
+    const base = rec.whenDone ? this.today : (seriesDate(t) ?? this.today);
+    const time = t.movedFrom && !rec.whenDone ? t.movedFrom.time : t.time;
     const next = nextOccurrence(rec, base);
     if (!next) return;
     const shift = diffDays(base, next);
@@ -491,14 +512,15 @@ export class Mutations {
     if (t.start) fields.start = addDays(t.start, shift);
     if (t.effortRaw) fields.effortRaw = t.effortRaw;
     if (t.effortMinutes !== undefined) fields.effortMinutes = t.effortMinutes;
-    if (t.time) fields.time = t.time;
+    if (time) fields.time = time;
     if (t.id) fields.id = this.newTaskId();
     if (t.origin === 'daily') {
-      const part = t.part ?? 'anytime';
+      const part = t.movedFrom && !rec.whenDone && time ? this.partOfTime(time.start) : t.part ?? 'anytime';
       await this.editRegion(next, (rc) => ({ ...rc, [part]: [...rc[part], newTaskLine(t.text, fields)] }));
       return;
     }
-    if (t.scheduled) fields.scheduled = addDays(t.scheduled, shift);
+    const sched = t.movedFrom && !rec.whenDone ? t.movedFrom.date : t.scheduled;
+    if (sched) fields.scheduled = addDays(sched, shift);
     await this.editFile(t.path, (lines) => {
       lines.splice(t.line, 0, serialiseTaskLine(newTaskLine(t.text, fields, t.raw.indent)));
       return true;
@@ -529,7 +551,9 @@ export class Mutations {
     if (date !== undefined) { const id = await this.ensureId(key); t = this.fresh(this.index.task(id)?.key ?? key); }
     await this.editFile(t.path, (lines) => {
       const tl = this.lineOf(lines, t);
+      const before: TaskLine = { ...tl };
       if (date === undefined) delete tl.scheduled; else tl.scheduled = date;
+      this.anchorTurn(before, tl, before.scheduled, date);
       lines[t.line] = serialiseTaskLine(tl, { force: true });
       return true;
     });
@@ -626,6 +650,7 @@ export class Mutations {
       const tl = this.lineOf(lines, t);
       const next: TaskLine = { ...tl };
       if (part === 'anytime') delete next.time; else next.time = keep!;
+      this.anchorTurn(tl, next, date, date);
       lines[t.line] = serialiseTaskLine(next, { force: true });
       return true;
     });
@@ -795,8 +820,10 @@ export class Mutations {
         const slot = this.timeForPart(t, date, part);
         if (slot) rebased[0]!.time = slot;
       }
+      this.anchorTurn(carried[0]!, rebased[0]!, t.noteDate, date);
       await this.editRegion(date, (rc) => ({ ...rc, [target]: [...rc[target], ...rebased] }));
     } else {
+      this.anchorTurn(carried[0]!, rebased[0]!, t.noteDate, undefined);
       await this.appendToInbox(rebased);
     }
   }
@@ -971,6 +998,7 @@ export class Mutations {
         const next: TaskLine = { ...tl, ...rest };
         for (const [k, v] of Object.entries(rest)) if (v === undefined) delete (next as unknown as Record<string, unknown>)[k];
         if (rest.status && rest.status !== tl.status) Object.assign(next, withStatus(next, rest.status, this.today));
+        if (Object.prototype.hasOwnProperty.call(rest, 'time') && !Object.prototype.hasOwnProperty.call(rest, 'movedFrom')) this.anchorTurn(tl, next, t.noteDate ?? t.scheduled, t.noteDate ?? t.scheduled);
         lines[t.line] = serialiseTaskLine(next, { force: true });
         return true;
       });

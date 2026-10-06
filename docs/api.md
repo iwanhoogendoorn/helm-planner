@@ -156,7 +156,9 @@ yet — every route that takes `:id` accepts either. Every response carries `x-h
 
 Beyond the v1 fields: `ref`, `title` (the text without tags and link noise), `projectTitle`,
 `phaseId`, `created`, `start`, `done`, `cancelled`, `noteDate`, `section`, `timeEnd`,
-`timeBlock: {start, end}|null`, `effortRaw`, `progress`, `recurrenceParsed`, `mirrorOf` (the
+`timeBlock: {start, end}|null`, `effortRaw`, `progress`, `recurrenceParsed`, `movedFrom: {date,
+timeBlock|null}|null` (a repeating turn moved on its own: the day and time it stands for in the
+series — any date or time change to a repeating turn, `PATCH` included, moves that turn only), `mirrorOf` (the
 source task's ref, on a daily mirror line), `mirrorLink`, `parentRef`, `periodKey`; `subtasks[]`
 gains `ref`. `GET /tasks/:id` also returns `children` (the subtask tree, up to five levels, in
 note order), `followUps` (refs of tasks blocked on this one), `follows` (the task this one

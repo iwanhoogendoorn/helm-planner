@@ -174,6 +174,10 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (t.effortMinutes !== undefined) meta.appendChild(chip(minutesToHuman(t.effortMinutes), 'effort'));
   if (t.progress !== undefined && open) meta.appendChild(chip(`${t.progress}%`, 'progress', `${t.progress}% of the way — right-click the box to change it`));
   if (t.recurrence) meta.appendChild(chip(formatRecurrence(t.recurrence), 'recurrence', t.recurrence.parsed ? '' : 'Unrecognised rule'));
+  if (t.movedFrom) {
+    const was = `${humanDate(t.movedFrom.date, ctx.today())}${t.movedFrom.time ? ` ${t.movedFrom.time.start}` : ''}`;
+    meta.appendChild(chip(`moved from ${was}`, 'moved', `Only this one was moved — the series stays on ${t.recurrence ? formatRecurrence(t.recurrence) : 'its rhythm'}, and the next one is counted from ${was}.`));
+  }
   // Links live in the line but are shown as pills, like notes and drawings.
   for (const l of linksIn(t.text)) meta.appendChild(h('a', { cls: 'helm-chip link', title: l.url, attr: { href: l.url, target: '_blank', rel: 'noopener' }, onClick: (ev) => ev.stopPropagation() }, h('span', { cls: 'helm-chip-label', text: l.label })));
   // A step of a song (a task under an item that links a note): one chip to the note itself.

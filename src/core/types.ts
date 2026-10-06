@@ -57,6 +57,12 @@ export interface TaskLine {
   /** `🔗 [[Project]]` — this line mirrors a project task. */
   mirrorLink?: string;
   time?: TimeBlock;
+  /**
+   * `[moved from:: 2026-09-01 10:00 - 11:00]` — one turn of a repeating task, moved on its own. The date
+   * (and time) it stands for in the series, so the next turn is counted from there, the day it left is
+   * not filled in again, and the move never drags the rest of the series along.
+   */
+  movedFrom?: { date: IsoDate; time?: TimeBlock };
   unknown: UnknownToken[];
   raw: { indent: string; bullet: string; eol: string; line: string };
 }

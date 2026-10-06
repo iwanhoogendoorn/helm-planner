@@ -140,8 +140,15 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   const onADay = task.noteDate !== undefined || task.scheduled !== undefined;
   const its = task.scheduled ?? task.noteDate;
   menu.addItem((i) => {
-    i.setTitle(its ? `Move — on ${humanDate(its, today)}` : 'Move — not planned').setIcon('calendar');
+    // A turn of a repeating task moves on its own: say so, and that the series keeps its rhythm.
+    const turn = task.recurrence?.parsed && !task.recurrence.whenDone && !task.due && isOpen(task);
+    i.setTitle(its ? `Move${turn ? ' this one' : ''} — on ${humanDate(its, today)}` : 'Move — not planned').setIcon('calendar');
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    if (turn) {
+      const from = task.movedFrom ? ` (it is the ${humanDate(task.movedFrom.date, today)} one)` : '';
+      sub.addItem((j) => j.setTitle(`Only this one moves${from} — the rest stay ${formatRecurrence(task.recurrence!)}`).setIcon('repeat').setDisabled(true));
+      sub.addSeparator();
+    }
     addScheduleItems(sub, ctx, task, { unschedule: false });
     if (onADay && (!task.parentKey || task.scheduled)) {
       // Within the day it is already on — it never changes the date. Say which day that is, or

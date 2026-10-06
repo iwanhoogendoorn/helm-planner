@@ -61,6 +61,7 @@ const EFFORT_RE = /^\s*((?:\d+h)?(?:\d+m)?)(?=\s|$)/u;
 const PERCENT_RE = /^\s*(\d{1,3})\s*%?(?=\s|$)/u;
 const TAG_RE = /(?:^|[\s(])#([\p{L}\p{N}_\-/]+)/gu;
 const TIME_RE = /^(\d{1,2}:\d{2})\s*(?:-\s*(\d{1,2}:\d{2}))?\s*:?\s*(.*)$/u;
+const MOVED_RE = /\[moved from::\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2})(?:\s*-\s*(\d{1,2}:\d{2}))?)?\s*\]/u;
 
 interface Token { symbol: string; value: string; start: number; end: number }
 
@@ -98,7 +99,9 @@ export function parseTaskLine(line: string): TaskLine | undefined {
     const t = tokens[i]!;
     if (t.symbol === '🔁') {
       const next = tokens[i + 1];
-      const limit = next ? next.start : body.length;
+      let limit = next ? next.start : body.length;
+      const moved = body.indexOf('[moved from::', t.start);   // an inline field is not part of the rule
+      if (moved >= 0 && moved < limit) limit = moved;
       t.value = body.slice(t.start + t.symbol.length, limit).trim();
       t.end = limit;
       if (t.value === '') { tokens.splice(i, 1); i--; }
@@ -149,6 +152,22 @@ export function parseTaskLine(line: string): TaskLine | undefined {
     out.time = { start: normTime(tm[1]!), ...(tm[2] ? { end: normTime(tm[2]) } : {}) };
     text = tm[3]!.trim();
     out.text = text;
+  }
+
+  // 3b. A repeating turn moved on its own: the inline field may sit in the text or after the fields.
+  const takeMoved = (s: string): string | undefined => {
+    const mv = MOVED_RE.exec(s);
+    if (!mv || !isIsoDate(mv[1]!) || out.movedFrom) return undefined;
+    out.movedFrom = { date: mv[1]!, ...(mv[2] ? { time: { start: normTime(mv[2]), ...(mv[3] ? { end: normTime(mv[3]) } : {}) } } : {}) };
+    return (s.slice(0, mv.index) + ' ' + s.slice(mv.index + mv[0].length)).replace(/\s+/g, ' ').trim();
+  };
+  const fromText = takeMoved(out.text);
+  if (fromText !== undefined) out.text = fromText;
+  else for (let i = 0; i < out.unknown.length; i++) {
+    const rest = takeMoved(out.unknown[i]!.raw);
+    if (rest === undefined) continue;
+    if (rest === '') out.unknown.splice(i, 1); else out.unknown[i] = { ...out.unknown[i]!, raw: rest };
+    break;
   }
 
   // 4. Tags: from text and from unknown gaps.
@@ -232,6 +251,7 @@ export function serialiseTaskLine(t: TaskLine, opts: SerialiseOptions = {}): str
   let text = t.text.trim();
   if (t.time) text = `${t.time.start}${t.time.end ? ` - ${t.time.end}` : ''}: ${text}`;
   if (text !== '') parts.push(text);
+  if (t.movedFrom) parts.push(`[moved from:: ${t.movedFrom.date}${t.movedFrom.time ? ` ${t.movedFrom.time.start}${t.movedFrom.time.end ? ` - ${t.movedFrom.time.end}` : ''}` : ''}]`);
   if (t.id) parts.push(`🆔 ${t.id}`);
   if (t.created) parts.push(`➕ ${t.created}`);
   if (t.start) parts.push(`🛫 ${t.start}`);
@@ -261,7 +281,7 @@ function parseEquals(a: TaskLine, b: TaskLine | undefined): boolean {
   if (!b) return false;
   const pick = (t: TaskLine): string => JSON.stringify([
     t.marker, t.text, t.id, t.priority, t.created, t.start, t.scheduled, t.due, t.done, t.cancelled,
-    t.recurrence?.raw, t.blockedBy, t.effortRaw ?? t.effortMinutes, t.progress, t.mirrorLink, t.time, t.unknown.map((u) => u.raw),
+    t.recurrence?.raw, t.blockedBy, t.effortRaw ?? t.effortMinutes, t.progress, t.mirrorLink, t.time, t.movedFrom, t.unknown.map((u) => u.raw),
   ]);
   return pick(a) === pick(b);
 }

@@ -31,14 +31,23 @@ followed by `[x]` is a task line.
 | `⛔ tsk-a, tsk-b` | blocked by |
 | `⏱️ 1h30m` | effort estimate (Helm extension) |
 | `🔗 [[Note]]` | this line mirrors a task in *Note* (Helm extension) |
+| `[moved from:: YYYY-MM-DD HH:MM - HH:MM]` | one turn of a repeating task moved on its own: the day (and time) it stands for in the series (Helm extension, a Dataview-style inline field) |
 
 A leading `HH:MM` or `HH:MM - HH:MM:` in the text is a **time block**.
 
 Text is everything before the first *usable* symbol (a symbol whose value
 parses). Anything unrecognised after that is kept verbatim and re-emitted.
 Untouched lines round-trip byte for byte. Lines Helm rewrites use the
-canonical order: text · 🆔 · ➕ · 🛫 · ⏳ · 📅 · priority · 🔁 · ⛔ · 🔗 · ⏱️ ·
+canonical order: text · `[moved from:: …]` · 🆔 · ➕ · 🛫 · ⏳ · 📅 · priority · 🔁 · ⛔ · 🔗 · ⏱️ ·
 unknown tokens · ✅/❌.
+
+**Moving one turn of a repeating task** never moves the series. When an open
+turn of a `🔁` task (not `when done`, not counted from a `📅`) changes day or
+time, the line gets `[moved from:: <its series date> <its series time>]`, kept
+through later moves and dropped when it is put back exactly where it was. The
+next turn is counted from that date and takes that time, and the catch-up treats
+the day it left as taken, so it is not filled in again. Deleting a moved turn
+remembers both days as skipped.
 
 Subtasks are indentation (tab = 2 columns, space = 1; equal width = siblings).
 Fenced code blocks are inert.

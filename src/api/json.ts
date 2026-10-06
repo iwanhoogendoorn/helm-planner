@@ -105,6 +105,8 @@ export function taskJson(t: Task, c: Ctx): Record<string, unknown> {
     subtasks: kids.map((k) => ({ id: k.id ?? null, key: k.key, ref: refOf(k), text: k.text, status: k.status })),
     recurrence: t.recurrence?.raw ?? null,
     recurrenceParsed: t.recurrence ? recurrenceParsed : null,
+    // A repeating turn moved on its own: the day (and time) it stands for in the series.
+    movedFrom: t.movedFrom ? { date: t.movedFrom.date, timeBlock: t.movedFrom.time ? { start: t.movedFrom.time.start, ...(t.movedFrom.time.end ? { end: t.movedFrom.time.end } : {}) } : null } : null,
     mirrorOf: mirrorSrc ? refOf(mirrorSrc) : t.mirrorOf ?? null,
     // What it belongs to — project, the task it follows up, its parent, projects pointing at it.
     context: taskContext(c.index, t),

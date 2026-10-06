@@ -504,10 +504,18 @@ export function horizons(snap: Snapshot, year: number, today: IsoDate, settings:
   return { year: build(py.year), quarters: py.quarters.map(build), months: py.months.map(build) };
 }
 
+/**
+ * The day a repeating task's next turn is counted from: its due date, else the turn it stands for when it
+ * was moved on its own, else the day it is planned on.
+ */
+export function seriesDate(t: Pick<Task, 'due' | 'movedFrom' | 'scheduled' | 'noteDate'>): IsoDate | undefined {
+  return t.due ?? t.movedFrom?.date ?? t.scheduled ?? t.noteDate;
+}
+
 /** When a repeating task comes round next — what “Skip this one” names: after its date, or after today when it repeats when done. */
 export function nextOccurrenceOf(t: Task, today: IsoDate): IsoDate | undefined {
   if (!t.recurrence?.parsed) return undefined;
-  const from = t.due ?? t.scheduled ?? t.noteDate ?? today;
+  const from = seriesDate(t) ?? today;
   return nextOccurrence(t.recurrence, t.recurrence.whenDone ? today : from);
 }
 
