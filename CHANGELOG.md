@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.43.1 — 2026-10-06
+
+- Moving a task in a daily note (or the inbox) to a day *and a time* — *Pick a
+  date…* with a time, a drag onto the grid, or `PATCH` with `date` + `time` — no
+  longer writes a `🆔` onto the line. For a repeating meeting that id was copied
+  forward as a new one on every later turn. The line is found again by its text
+  on its new day instead; project tasks still get the id their mirror needs.
+
 ## 1.43.0 — 2026-10-06
 
 - **Move the whole series…** in the Move menu of a repeating task: pick a day
