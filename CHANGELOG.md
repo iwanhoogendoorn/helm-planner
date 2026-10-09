@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.46.0 — 2026-10-09
+
+- API, for the iPhone app's notes and drawings lists: every `…/attachments`
+  (and the attachments in task and project detail) carries `home` — the
+  project folder an item's own notes live in — and each note and drawing says
+  where it sits (`inFolder`, `subfolder`) and what it holds: a note's
+  `preview: { heading, text, words, openTasks, doneTasks }` and `song`, a
+  drawing's `preview`, `labels` and `legacy`. The same reading the plugin's own
+  lists use.
+
 ## 1.45.0 — 2026-10-09
 
 - **Notes and drawings read as lists**, everywhere they appear — a project, a
