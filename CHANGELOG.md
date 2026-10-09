@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.44.0 — 2026-10-09
+
+- Notes kept in a project's folder show under that project's **Notes**, no
+  frontmatter or link needed — the same rule drawings already had. A note in a
+  sub-project's folder belongs to the sub-project, not the umbrella; only
+  projects with a folder of their own (`Band Practice/Band Practice.md`) count,
+  so a loose project note in the projects folder does not claim its neighbours.
+  Unlink says so when a note stays attached by where it lives.
+
 ## 1.43.1 — 2026-10-06
 
 - Moving a task in a daily note (or the inbox) to a day *and a time* — *Pick a
