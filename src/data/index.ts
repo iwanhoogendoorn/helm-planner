@@ -552,6 +552,16 @@ export class HelmIndex {
       for (const hid of n.habitIds) if (snap.habits.has(hid)) a.habitIds.add(hid);
       for (const pid of n.phaseIds) if (this.phaseIds.has(pid)) a.phaseIds.add(pid);
     }
+    // Where it lives: a plain note inside a project's own folder belongs to that project — the deepest
+    // one, so a note in a sub-project's folder is the sub-project's, not the umbrella's. Only folder
+    // projects (`Band Practice/Band Practice.md`) count: a loose project note sitting in the projects
+    // folder would otherwise claim every stray note next to it.
+    const ownFolders = [...snap.projects.values()].filter((p) => p.folderNote && p.folder !== '').sort((a, b) => b.folder.length - a.folder.length);
+    for (const e of this.files.values()) {
+      if (e.kind !== 'note' || !e.path.endsWith('.md') || isDrawingPath(e.path) || this.excluded(e.path)) continue;
+      const owner = ownFolders.find((p) => isUnder(e.path, p.folder));
+      if (owner) att(e.path).projectIds.add(owner.id);
+    }
     // Task text links a note (the same parse pass as the drawings use).
     for (const [l, keys] of this.tasksByLink) {
       if (/\.(excalidraw|canvas)$/i.test(l)) continue;

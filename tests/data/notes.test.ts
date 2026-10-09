@@ -110,3 +110,22 @@ describe('related back-links', () => {
     expect(await vault.read(d)).toContain('related:\n  - "[[26, Wednesday, Aug, 2026]]"\n  - "[[Kitchen Remodel]]"');
   });
 });
+
+describe('notes kept in a project’s folder', () => {
+  it('belong to that project — the deepest one — without any frontmatter or link', async () => {
+    const s = await setup({
+      '02 PROJECTS/Oracle Book Writing/Research.md': '---\ntitle: Research\n---\nSources.\n',
+      '02 PROJECTS/Oracle Book Writing/drafts/Chapter 1 draft.md': '# Draft\n',
+      '02 PROJECTS/⮕ Oracle/OCI Certification/Exam notes.md': '# Exam\n',
+      '02 PROJECTS/⮕ Oracle/Oracle roadmap.md': '# Roadmap\n',
+      '02 PROJECTS/Stray note.md': '# Loose in the projects folder\n',
+    });
+    const titles = (id: string) => s.index.notesFor({ kind: 'project', id, title: id }).map((n) => n.title).sort();
+    expect(titles('prj-book')).toEqual(['Chapter 1 draft', 'Research']);
+    expect(titles('prj-cert')).toEqual(['Exam notes']);
+    expect(titles('prj-oracle')).toEqual(['Oracle roadmap']);
+    expect(titles('prj-kitchen')).toEqual([]);
+    // The project's own note is the project, not one of its notes.
+    expect(titles('prj-book')).not.toContain('Oracle Book Writing');
+  });
+});
