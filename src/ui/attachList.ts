@@ -59,8 +59,7 @@ export const wordCount = (n: number): string => (n >= 1000 ? `${(n / 1000).toFix
 
 /** The project folder that holds an item's own notes and drawings, when the target is a project or one of its phases. */
 export function projectFolderFor(ctx: UiContext, target: DrawingTarget): { folder: string; title: string } | undefined {
-  const project = target.kind === 'project' ? ctx.index.project(target.id) : target.kind === 'phase' ? ctx.index.project(target.projectId) : undefined;
-  return project?.folderNote ? { folder: ctx.index.projectFolderOf(project), title: project.title } : undefined;
+  return ctx.index.attachmentHome(target);
 }
 
 const searchText = (i: AttachItem): string => `${i.title} ${i.path} ${i.heading ?? ''} ${i.text ?? ''}`.toLowerCase();

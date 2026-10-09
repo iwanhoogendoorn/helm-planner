@@ -493,7 +493,7 @@ Every attachable thing — `/tasks/:id`, `/projects/:id`, `/day/:date`, `/period
 `/habits/:id` — answers the same five sub-routes:
 
 ```
-GET    …/attachments              { notes, drawings }
+GET    …/attachments              { notes, drawings, home }
 POST   …/notes        { name?, folder? }   create a note attached here → 201 { path, target, attachments, written }
 POST   …/notes/link   { path }             attach an existing note (a helm-* key is written into its frontmatter)
 DELETE …/notes/link   { path }             detach it
@@ -501,6 +501,17 @@ POST   …/drawings     { name?, folder? }   create an Excalidraw drawing attach
 POST   …/drawings/link   { path }          attach an existing drawing (Obsidian-format `.excalidraw.md` only; Helm refuses raw `.excalidraw` and `.canvas` files, as in the app)
 DELETE …/drawings/link   { path }          detach it
 ```
+
+**What each attachment says about itself** (1.46.0). `home` is `{ folder, title }` for a project or a
+phase whose project has a folder of its own — anything inside it is attached by where it sits — else
+`null`. Every note and drawing carries `inFolder` (`true` / `false`, or `null` without a home) and
+`subfolder` (its folder below the home, or `null`); one with `inFolder: true` cannot be unlinked, only
+moved or trashed. A note adds `song` and `preview: { heading, text, words, openTasks, doneTasks }` —
+its first heading, its first line of prose (links as their labels, callout titles, tables, code,
+embeds and stray `key: value` lines skipped), its length and the tasks in it — or `preview: null` for
+a note Helm has not read (one outside its folders, reached by a link). A drawing adds `preview` (its
+first text elements joined with ` · `, or `null`), `labels` (how many it has) and `legacy` (a raw
+`.excalidraw` file that cannot be linked until converted). Newest first, as before.
 
 `GET /notes/linkable?q=&limit=50` → `{ total, notes: [ { path, title, kind } ] }` — the picker's
 list: every note that can be attached (daily notes are attached as days, drawings are not notes),

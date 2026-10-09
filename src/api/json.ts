@@ -139,16 +139,36 @@ export function taskDetailJson(t: Task, c: Ctx): Record<string, unknown> {
   };
 }
 
-export function noteRefJson(n: NoteRef): Record<string, unknown> {
-  return { path: n.path, title: n.title, kind: 'note', mtime: n.mtime ?? null };
+/** Where an attached item sits relative to its item's own folder: in it (and which subfolder), or linked from elsewhere. */
+function placeJson(path: string, home?: { folder: string }): Record<string, unknown> {
+  if (!home) return { inFolder: null, subfolder: null };
+  const f = home.folder.replace(/\/+$/, '');
+  const inFolder = path.startsWith(`${f}/`);
+  const dir = path.slice(0, path.lastIndexOf('/'));
+  return { inFolder, subfolder: inFolder && dir.length > f.length ? dir.slice(f.length + 1) : null };
 }
 
-export function drawingJson(d: Drawing): Record<string, unknown> {
-  return { path: d.path, title: d.title, kind: d.kind, mtime: d.mtime ?? null };
+/** A note: where it is, and what it holds at a glance (null when Helm has not read it — a note outside its folders). */
+export function noteRefJson(n: NoteRef, c?: Ctx, home?: { folder: string }): Record<string, unknown> {
+  const pv = c?.index.notePreview(n.path);
+  return {
+    path: n.path, title: n.title, kind: 'note', mtime: n.mtime ?? null,
+    ...(c ? {
+      song: c.index.isSongNote(n.path),
+      preview: pv ? { heading: pv.heading ?? null, text: pv.text ?? null, words: pv.words, openTasks: pv.openTasks, doneTasks: pv.doneTasks } : null,
+      ...placeJson(n.path, home),
+    } : {}),
+  };
 }
 
-export function attachmentsJson(target: DrawingTarget, c: Ctx): { notes: Record<string, unknown>[]; drawings: Record<string, unknown>[] } {
-  return { notes: c.index.notesFor(target).map(noteRefJson), drawings: c.index.drawingsFor(target).map(drawingJson) };
+/** A drawing: where it is, and the words written in it. */
+export function drawingJson(d: Drawing, home?: { folder: string }): Record<string, unknown> {
+  return { path: d.path, title: d.title, kind: d.kind, mtime: d.mtime ?? null, preview: d.preview ?? null, labels: d.labels ?? 0, legacy: d.legacy, ...placeJson(d.path, home) };
+}
+
+export function attachmentsJson(target: DrawingTarget, c: Ctx): { notes: Record<string, unknown>[]; drawings: Record<string, unknown>[]; home: { folder: string; title: string } | null } {
+  const home = c.index.attachmentHome(target);
+  return { notes: c.index.notesFor(target).map((n) => noteRefJson(n, c, home)), drawings: c.index.drawingsFor(target).map((d) => drawingJson(d, home)), home: home ?? null };
 }
 
 export function healthJson(h: ProjectHealth, c: Ctx): Record<string, unknown> {

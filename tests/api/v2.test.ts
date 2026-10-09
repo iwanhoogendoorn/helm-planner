@@ -518,7 +518,7 @@ describe('v2 · projects', () => {
     expect((await call('DELETE', 'projects/prj-kitchen/related/tsk-nope')).status).toBe(404);
     const unrel = await call('DELETE', 'projects/prj-kitchen/related/tsk-0001');
     expect(unrel.body.relatedTaskIds).toEqual([]);
-    expect((await call('GET', 'projects/prj-book/attachments')).body).toEqual({ notes: [], drawings: [] });
+    expect((await call('GET', 'projects/prj-book/attachments')).body).toEqual({ notes: [], drawings: [], home: { folder: '02 PROJECTS/Oracle Book Writing', title: 'Oracle Book Writing' } });
   });
 });
 
@@ -615,12 +615,27 @@ describe('v2 · capture, attachments, notes, files', () => {
     expect(rec.body.task).toMatchObject({ recurrence: 'every 3 days', time: '18:00', timeEnd: '18:10' });
   });
 
+  it('says what each attached note and drawing holds, and where it sits', async () => {
+    const { call } = await api({
+      '02 PROJECTS/Kitchen Remodel/research/Tiles.md': '# Options\n\nWhite matte tiles, 30×60.\n\n- [ ] Order samples\n',
+      '10 PERSONAL/Budget.md': '---\nhelm-project: prj-kitchen\n---\nTotal so far.\n',
+      '02 PROJECTS/Kitchen Remodel/Wiring.excalidraw.md': '---\nexcalidraw-plugin: parsed\n---\n# Excalidraw Data\n\n## Text Elements\nFuse box ^a1b2c3d4\n\n%%\n## Drawing\n```json\n{"type":"excalidraw","elements":[]}\n```\n%%\n',
+    });
+    const a = (await call('GET', 'projects/prj-kitchen/attachments')).body;
+    expect(a.home).toEqual({ folder: '02 PROJECTS/Kitchen Remodel', title: 'Kitchen Remodel' });
+    const tiles = a.notes.find((n: any) => n.title === 'Tiles');
+    expect(tiles).toMatchObject({ song: false, inFolder: true, subfolder: 'research', preview: { heading: 'Options', text: 'White matte tiles, 30×60.', openTasks: 1, doneTasks: 0 } });
+    expect(tiles.preview.words).toBeGreaterThan(0);
+    expect(a.notes.find((n: any) => n.title === 'Budget')).toMatchObject({ inFolder: false, subfolder: null });
+    expect(a.drawings.find((d: any) => d.title === 'Wiring')).toMatchObject({ kind: 'excalidraw', preview: 'Fuse box', labels: 1, legacy: false, inFolder: true, subfolder: null });
+  });
+
   it('lists attachments per target and creates notes for each', async () => {
     const { call, vault } = await api({ '81 AI/Week notes.md': '---\nhelm-period: 2026-W35\nhelm-date: 2026-08-25\nhelm-habit: hab-workout\n---\n# Week notes\n' });
     expect((await call('GET', 'day/2026-08-25/attachments')).body.notes.map((n: any) => n.path)).toEqual(['81 AI/Week notes.md']);
     expect((await call('GET', 'periods/2026-W35/attachments')).body.notes.map((n: any) => n.path)).toEqual(['81 AI/Week notes.md']);
     expect((await call('GET', 'habits/hab-workout/attachments')).body.notes.map((n: any) => n.path)).toEqual(['81 AI/Week notes.md']);
-    expect((await call('GET', 'day/2026-08-24/attachments')).body).toEqual({ notes: [], drawings: [] });
+    expect((await call('GET', 'day/2026-08-24/attachments')).body).toEqual({ notes: [], drawings: [], home: null });
     const t = await call('POST', 'tasks/tsk-0002/notes', { name: 'Chapter 2 research' });
     expect(t.status).toBe(201);
     expect(t.body.path).toContain('Chapter 2 research');

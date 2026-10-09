@@ -605,6 +605,15 @@ export class HelmIndex {
   /** What a note holds, when Helm has read it (notes outside its folders, reached by a link, have none). */
   notePreview(path: string): NotePreview | undefined { return this.files.get(path)?.preview; }
 
+  /**
+   * The folder that holds an item's own notes and drawings: a project's (or a phase's project's) folder,
+   * when the project has one of its own. What lives there is attached by where it sits.
+   */
+  attachmentHome(target: DrawingTarget): { folder: string; title: string } | undefined {
+    const project = target.kind === 'project' ? this.project(target.id) : target.kind === 'phase' ? this.project(target.projectId) : undefined;
+    return project?.folderNote ? { folder: this.projectFolderOf(project), title: project.title } : undefined;
+  }
+
   /** Whether a note is a song (Maestro's `type: song`). */
   isSongNote(path: string): boolean { return this.files.get(path)?.song !== undefined; }
 
