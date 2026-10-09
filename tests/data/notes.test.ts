@@ -129,3 +129,14 @@ describe('notes kept in a project’s folder', () => {
     expect(titles('prj-book')).not.toContain('Oracle Book Writing');
   });
 });
+
+describe('what a note holds, at a glance', () => {
+  it('takes the first heading and the first line of prose, skipping frontmatter, callout titles, tables, code and embeds', async () => {
+    const { notePreview } = await import('../../src/core/noteRef');
+    const p = notePreview('---\ntitle: X\ntags: [a]\n---\n\n![[cover.png]]\n## Keyboard guide, bar by bar\n\n> [!info] Basics\n> **Key** A minor · see [[Theory|theory notes]] and [the score](https://x.y)\n\n```\ncode words here\n```\n| a | b |\n- [ ] Learn the intro\n- [x] Buy the book\n');
+    expect(p).toEqual({ heading: 'Keyboard guide, bar by bar', text: 'Key A minor · see theory notes and the score', words: 23, openTasks: 1, doneTasks: 1 });
+    expect(notePreview('')).toEqual({ words: 0, openTasks: 0, doneTasks: 0 });
+    expect(notePreview('# har2cli\nname: har2cli\nTurn a HAR file into a CLI.\n').text).toBe('Turn a HAR file into a CLI.');
+    expect(notePreview('Key: A minor, 84 BPM\n').text).toBe('Key: A minor, 84 BPM');
+  });
+});

@@ -1,16 +1,17 @@
 /**
- * Drawings UI: a button with a count, a menu that lists what exists and offers
- * to make or link more, a section for detail pages, and a manage popup with
- * open / unlink / delete. One component, used for tasks, projects, days and
- * periods alike.
+ * Drawings UI: a button with a count, a menu that lists what exists (with a
+ * search once there are many) and offers to make or link more, and the
+ * readable list for detail pages and the manage popup (see attachList). One
+ * component, used for tasks, projects, days and periods alike.
  */
-import { FuzzySuggestModal, Menu, Modal, setIcon } from 'obsidian';
+import { FuzzySuggestModal, Menu, Modal } from 'obsidian';
 import { askNameAndLocation } from './fields';
 import type { DrawingTarget, Task } from '../core/types';
 import type { Drawing } from '../core/drawing';
 import type { Period } from '../core/periods';
 import { humanDate } from '../core/dates';
-import { button, h, icon, iconButton } from './dom';
+import { button, h, iconButton } from './dom';
+import { attachList, MENU_RECENT, MENU_SHOWN, searchAttached, type AttachItem } from './attachList';
 import type { UiContext } from './context';
 
 export const targetForTask = (t: Task): DrawingTarget => ({ kind: 'task', key: t.mirrorOf ?? t.key, ...(t.id ? { id: t.id } : {}), title: t.text.trim() || 'task' });
@@ -65,12 +66,18 @@ export function linkExisting(ctx: UiContext, target: DrawingTarget): void {
 export function addDrawingItems(menu: Menu, ctx: UiContext, target: DrawingTarget): void {
   const today = ctx.today();
   const list = ctx.index.drawingsFor(target);
-  for (const d of list.slice(0, 12)) menu.addItem((i) => i.setTitle(`${d.title}${d.mtime ? ` · ${when(d, today)}` : ''}`).setIcon(d.kind === 'canvas' ? 'layout-grid' : 'pen-tool').onClick(() => void ctx.openFile(d.path)));
-  if (list.length > 12) menu.addItem((i) => i.setTitle(`… ${list.length - 12} more`).setIcon('more-horizontal').setDisabled(true));
+  // Many drawings: a search first, the most recent few, and the whole list one click away.
+  const many = list.length > MENU_SHOWN;
+  if (many) {
+    menu.addItem((i) => i.setTitle(`Search ${list.length} drawings…`).setIcon('search').onClick(() => searchAttached(ctx, list.map(drawingItem), `Search the drawings of ${target.title}…`)));
+    menu.addSeparator();
+  }
+  for (const d of list.slice(0, many ? MENU_RECENT : MENU_SHOWN)) menu.addItem((i) => i.setTitle(`${d.title}${d.mtime ? ` · ${when(d, today)}` : ''}`).setIcon(d.kind === 'canvas' ? 'layout-grid' : 'pen-tool').onClick(() => void ctx.openFile(d.path)));
+  if (many) menu.addItem((i) => i.setTitle(`All ${list.length} drawings…`).setIcon('list').onClick(() => manageModal(ctx, target)));
   if (list.length > 0) menu.addSeparator();
   menu.addItem((i) => i.setTitle('New drawing…').setIcon('pen-tool').onClick(() => newDrawing(ctx, target)));
   menu.addItem((i) => i.setTitle('Link existing drawing…').setIcon('link').onClick(() => linkExisting(ctx, target)));
-  if (list.length > 0) menu.addItem((i) => i.setTitle('Manage drawings…').setIcon('settings-2').onClick(() => manageModal(ctx, target)));
+  if (list.length > 0 && !many) menu.addItem((i) => i.setTitle('Manage drawings…').setIcon('settings-2').onClick(() => manageModal(ctx, target)));
 }
 
 export function drawingsMenu(ctx: UiContext, target: DrawingTarget, ev: MouseEvent): void {
@@ -98,47 +105,38 @@ export function drawingsIndicator(ctx: UiContext, t: Task): HTMLElement | null {
   return el;
 }
 
-/** Cards for a detail page: every drawing, then New and Link. */
-export function drawingsSection(ctx: UiContext, target: DrawingTarget): HTMLElement {
-  const today = ctx.today();
-  const list = ctx.index.drawingsFor(target);
-  const cards = h('div', { cls: 'helm-drawing-cards' });
-  for (const d of list) {
-    const card = h('button', { cls: 'helm-drawing-card', title: d.path, onClick: () => void ctx.openFile(d.path) },
-      h('span', { cls: 'helm-drawing-card-icon' }), h('span', { cls: 'helm-drawing-card-title', text: d.title }),
-      h('span', { cls: 'helm-drawing-card-meta', text: [d.kind === 'canvas' ? 'canvas' : '', when(d, today)].filter(Boolean).join(' · ') }));
-    setIcon(card.querySelector('.helm-drawing-card-icon') as HTMLElement, d.kind === 'canvas' ? 'layout-grid' : 'pen-tool');
-    card.appendChild(iconButton('trash', 'Move to trash', (ev) => { ev.stopPropagation(); if (window.confirm(`Move “${d.title}” to the trash?`)) void ctx.run('Delete drawing', () => ctx.mutations.deleteDrawing(d.path)); }, 'helm-drawing-card-delete'));
-    cards.appendChild(card);
-  }
-  if (list.length === 0) cards.appendChild(h('div', { cls: 'helm-hint', text: 'No drawings yet.' }));
-  const actions = h('div', { cls: 'helm-drawing-actions' },
-    button('New drawing', { icon: 'pen-tool', onClick: () => newDrawing(ctx, target) }),
-    button('Link existing', { icon: 'link', onClick: () => linkExisting(ctx, target) }),
-    list.length > 0 ? button('Manage', { icon: 'settings-2', cls: 'helm-btn-quiet', onClick: () => manageModal(ctx, target) }) : null);
-  return h('div', { cls: 'helm-drawings' }, cards, actions);
+/** A drawing as a list row: the words written in it, what kind it is. */
+export function drawingItem(d: Drawing): AttachItem {
+  const facts: AttachItem['facts'] = [];
+  if (d.kind === 'canvas') facts.push({ text: 'canvas' });
+  if (d.labels) facts.push({ text: `${d.labels} label${d.labels === 1 ? '' : 's'}` });
+  if (d.legacy) facts.push({ text: 'raw .excalidraw', title: 'A raw .excalidraw file: Helm can show it, but cannot link it until it is converted' });
+  return { path: d.path, title: d.title, ...(d.mtime ? { mtime: d.mtime } : {}), icon: d.kind === 'canvas' ? 'layout-grid' : 'pen-tool', ...(d.preview ? { text: d.preview } : {}), facts };
 }
 
-/* ── Manage: the drawings of a target, with open / unlink / delete ──────── */
+/** The drawings on an item, as a list you can read and search. */
+export function drawingsSection(ctx: UiContext, target: DrawingTarget): HTMLElement {
+  return attachList(ctx, {
+    target,
+    noun: ['drawing', 'drawings'],
+    items: () => ctx.index.drawingsFor(target).map(drawingItem),
+    emptyText: 'No drawings yet.',
+    actions: [
+      button('New drawing', { icon: 'pen-tool', cls: 'helm-btn-quiet', onClick: () => newDrawing(ctx, target) }),
+      button('Link existing', { icon: 'link', cls: 'helm-btn-quiet', onClick: () => linkExisting(ctx, target) }),
+    ],
+    unlink: async (i) => { await ctx.mutations.unlinkDrawing(target, i.path); if (ctx.index.drawingsFor(target).some((x) => x.path === i.path)) ctx.notify(`“${i.title}” is still attached by its folder or name.`); },
+    remove: (i) => ctx.mutations.deleteDrawing(i.path),
+  });
+}
 
+/** Every drawing on an item in a window of its own, the same list. */
 export function manageModal(ctx: UiContext, target: DrawingTarget): void {
   const m = new Modal(ctx.app);
   m.titleEl.setText(`Drawings · ${target.title}`);
   m.contentEl.addClass('helm-modal', 'helm-manage-modal');
-  const draw = (): void => {
-    m.contentEl.empty();
-    const today = ctx.today();
-    const drawings = ctx.index.drawingsFor(target);
-    const rows = h('div', { cls: 'helm-manage-list' });
-    if (drawings.length === 0) m.contentEl.appendChild(h('div', { cls: 'helm-hint', text: 'No drawings attached.' }));
-    for (const d of drawings) rows.appendChild(h('div', { cls: 'helm-manage-row' }, icon(d.kind === 'canvas' ? 'layout-grid' : 'pen-tool'), h('span', { cls: 'helm-manage-title', text: d.title }), h('span', { cls: 'helm-hint', text: when(d, today) }), h('span', { cls: 'helm-spacer' }),
-      button('Open', { icon: 'external-link', cls: 'helm-btn-quiet', onClick: () => { m.close(); void ctx.openFile(d.path); } }),
-      button('Unlink', { icon: 'unlink', cls: 'helm-btn-quiet', title: 'Detach from this item; the drawing itself stays', onClick: () => void ctx.run('Unlink drawing', async () => { await ctx.mutations.unlinkDrawing(target, d.path); const still = ctx.index.drawingsFor(target).some((x) => x.path === d.path); if (still) ctx.notify(`“${d.title}” is still attached by its folder or name.`); draw(); }) }),
-      iconButton('trash', 'Move to trash', () => { if (window.confirm(`Move “${d.title}” to the trash? Its embed lines are removed from the notes that carry it.`)) void ctx.run('Delete drawing', async () => { await ctx.mutations.deleteDrawing(d.path); draw(); }); })));
-    m.contentEl.appendChild(rows);
-    m.contentEl.appendChild(h('div', { cls: 'helm-modal-buttons' }, button('New drawing…', { icon: 'pen-tool', onClick: () => { m.close(); newDrawing(ctx, target); } }), button('Link existing…', { icon: 'link', onClick: () => { m.close(); linkExisting(ctx, target); } }), h('span', { cls: 'helm-spacer' }), button('Close', { onClick: () => m.close() })));
-  };
-  draw();
+  m.contentEl.appendChild(drawingsSection(ctx, target));
   m.open();
   ctx.trackModal(m);
+  m.contentEl.querySelector<HTMLInputElement>('.helm-note-filter')?.focus();
 }

@@ -13,7 +13,7 @@ import { findRegion, partOfLine, type Section } from '../core/dailyNote';
 import { derivedKey, hash } from '../core/ids';
 import { formatDate, parseDateFromPath } from '../core/dates';
 import { isDrawingPath, parseDrawing, type Drawing } from '../core/drawing';
-import { contentHasHelmKeys, hasHelmKeys, notesSectionLinks, noteTitle, parseNoteRef, wikilinksIn, type NoteRef } from '../core/noteRef';
+import { contentHasHelmKeys, hasHelmKeys, notePreview, notesSectionLinks, noteTitle, parseNoteRef, wikilinksIn, type NotePreview, type NoteRef } from '../core/noteRef';
 import { parseDaybook, type DaybookEntry } from '../core/daybook';
 import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
 
@@ -58,6 +58,8 @@ interface FileEntry {
   song?: SongNote;
   /** Basenames linked under this note's Notes heading. */
   noteLinks?: string[];
+  /** First heading, first prose line, size and open work — what the Notes list shows. */
+  preview?: NotePreview;
   /** Basenames of drawings this note embeds or links (`![[X.excalidraw]]`). */
   drawingLinks?: string[];
   date?: IsoDate;
@@ -245,6 +247,7 @@ export class HelmIndex {
     const entry: FileEntry = { path, kind: 'note', hash: hash(content), tasks: [], hasRegion: false, completions: [], diagnostics: [] };
     const mtime = this.vault.mtime(path);
     if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
+    if (path.endsWith('.md')) entry.preview = notePreview(content);
     if (contentHasHelmKeys(content)) { const fm = parseDocument(content).frontmatter.values as Record<string, unknown>; entry.noteRef = parseNoteRef(path, fm, mtime); }
     if (/^type:\s*song\s*$/im.test(content)) entry.song = parseSongNote(path, content);
     const date = this.dateOfPath(path);
@@ -598,6 +601,12 @@ export class HelmIndex {
     }
     return out.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
   }
+
+  /** What a note holds, when Helm has read it (notes outside its folders, reached by a link, have none). */
+  notePreview(path: string): NotePreview | undefined { return this.files.get(path)?.preview; }
+
+  /** Whether a note is a song (Maestro's `type: song`). */
+  isSongNote(path: string): boolean { return this.files.get(path)?.song !== undefined; }
 
   /** Titles of every markdown note in the vault (for `[[` completion), drawings included by their bare title. */
   noteTitles(): string[] {

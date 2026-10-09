@@ -42,6 +42,10 @@ export interface Drawing {
    * carry an attachment, so Helm can show it but cannot link it until it is converted.
    */
   legacy: boolean;
+  /** The first words written in it — its text elements, in order — for a list to show. */
+  preview?: string;
+  /** How many text elements it has. */
+  labels?: number;
 }
 
 export const DRAWING_RE = /\.(excalidraw\.md|excalidraw|canvas)$/i;
@@ -74,6 +78,13 @@ export function parseDrawing(path: string, content: string | undefined, mtime?: 
   // Text elements: between "## Text Elements" and the next "## " heading or "%%".
   const m = /## Text Elements\s*\n([\s\S]*?)(?:\n## |\n%%|$)/.exec(content);
   const text = Object.values(fm).map((v) => (typeof v === 'string' ? v : '')).join('\n') + '\n' + (m?.[1] ?? '');
+  // What it says, for a list: each text element is a paragraph ending in its ` ^id`.
+  const labels = (m?.[1] ?? '').split(/\n\s*\n/).map((p) => p.replace(/\s*\^[\w-]+\s*$/, '').replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2').replace(/\[\[([^\]]+)\]\]/g, '$1').replace(/\s+/g, ' ').trim()).filter((p) => p.length > 0);
+  if (labels.length > 0) {
+    const joined = labels.slice(0, 8).join(' · ');
+    d.preview = joined.length > 200 ? `${joined.slice(0, 199).trimEnd()}…` : joined;
+    d.labels = labels.length;
+  }
   const links = new Set<string>();
   for (const l of text.matchAll(/\[\[([^\]]+)\]\]/g)) links.add(unlink(l[1]!));
   d.links = [...links];

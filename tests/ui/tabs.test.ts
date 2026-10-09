@@ -8,6 +8,8 @@ import { renderWeek } from '../../src/ui/tabs/week';
 import { renderProjects } from '../../src/ui/tabs/projects';
 import { renderInbox } from '../../src/ui/tabs/inbox';
 import { renderReview } from '../../src/ui/tabs/review';
+import { notesMenu, notesSection } from '../../src/ui/notes';
+import { resetAttachViews } from '../../src/ui/attachList';
 import { renderHabits, defaultHabitsState } from '../../src/ui/tabs/habits';
 import { openCapture } from '../../src/ui/modals/capture';
 import { openPlanDayAi } from '../../src/ui/modals/planDayAi';
@@ -64,7 +66,7 @@ const waitFor = async <T>(get: () => T | null | undefined, what = 'condition', t
   throw new Error(`waitFor: ${what} never happened`);
 };
 
-beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; selection.clear(); clearFolds(); });
+beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; selection.clear(); clearFolds(); resetAttachViews(); });
 
 const moveMenu = (): { title: string; items: { title: string; sub?: { items: { title: string; click?: () => void }[] }; click?: () => void }[] } => {
   const mv = Menu.last!.items.find((i) => i.title.startsWith('Move — '))!;
@@ -658,6 +660,80 @@ describe('Habits tab', () => {
     const root = render((r) => renderHabits(ctx, r, defaultHabitsState()));
     expect(root.querySelector('.helm-empty')!.textContent).toContain('Create your first habit');
     expect(root.querySelector('.helm-stats')).toBeNull();
+  });
+});
+
+describe('a project’s Notes list', () => {
+  const folder = '02 PROJECTS/Kitchen Remodel';
+  const many = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`${folder}/research/Quote ${String(i + 1).padStart(2, '0')}.md`, `# Quote ${i + 1}\n\nSupplier number ${i + 1}, three weeks.\n`]));
+  const extra = {
+    [`${folder}/Tiles.md`]: '---\ntitle: Tiles\n---\n## Options\n\n> [!info] Shop\nWhite **matte** tiles from [[Gamma|the DIY shop]], 30×60.\n\n- [ ] Order samples\n- [ ] Measure the wall\n- [x] Pick a colour\n',
+    '10 PERSONAL/Budget.md': '---\nhelm-project: prj-kitchen\n---\nTotal spend so far.\n',
+    ...many,
+  };
+  const target = { kind: 'project' as const, id: 'prj-kitchen', title: 'Kitchen Remodel' };
+
+  it('says what is in each note, groups by subfolder, puts linked notes last and offers the rest', async () => {
+    const { ctx } = await ctxFor(extra);
+    const root = render((r) => r.appendChild(notesSection(ctx, target)));
+    // 14 notes: ten shown, the rest one click away.
+    expect(root.querySelectorAll('.helm-note-row')).toHaveLength(10);
+    click(root.querySelector('.helm-note-more'));
+    expect(root.querySelectorAll('.helm-note-row')).toHaveLength(14);
+    // Recent is one list; a row in a subfolder names it.
+    expect(root.querySelector('.helm-note-group')).toBeNull();
+    const quote = [...root.querySelectorAll<HTMLElement>('.helm-note-row')].find((r) => r.querySelector('.helm-note-title')?.textContent === 'Quote 01')!;
+    expect(quote.querySelector('.helm-note-folder')!.textContent).toBe('research');
+    // A–Z reads like the folder.
+    click([...root.querySelectorAll<HTMLElement>('.helm-note-sort .helm-seg')].find((b) => b.textContent === 'A–Z'));
+    expect(texts(root, '.helm-note-group-name')).toEqual(['Kitchen Remodel', 'research', 'Linked from elsewhere']);
+    expect(texts(root, '.helm-note-group-count')).toEqual(['1', '12', '1']);
+    const tiles = [...root.querySelectorAll<HTMLElement>('.helm-note-row')].find((r) => r.querySelector('.helm-note-title')?.textContent === 'Tiles')!;
+    expect(tiles.querySelector('.helm-note-preview')!.textContent).toBe('OptionsWhite matte tiles from the DIY shop, 30×60.');
+    expect(tiles.querySelector('.helm-note-meta')!.textContent).toContain('2 open tasks');
+    expect(tiles.querySelector('[aria-label^="Unlink"]')).toBeNull();          // held by its folder
+    const budget = [...root.querySelectorAll<HTMLElement>('.helm-note-row')].find((r) => r.querySelector('.helm-note-title')?.textContent === 'Budget')!;
+    expect(budget.querySelector('.helm-note-linked')).toBeTruthy();
+    expect(budget.querySelector('[aria-label^="Unlink"]')).toBeTruthy();
+  });
+
+  it('filters by title, heading or text, and sorts A–Z', async () => {
+    const { ctx } = await ctxFor(extra);
+    const root = render((r) => r.appendChild(notesSection(ctx, target)));
+    const input = root.querySelector<HTMLInputElement>('.helm-note-filter')!;
+    input.value = 'matte';
+    input.dispatchEvent(new Event('input'));
+    expect(texts(root, '.helm-note-title')).toEqual(['Tiles']);
+    input.value = 'nothing like this';
+    input.dispatchEvent(new Event('input'));
+    expect(root.querySelector('.helm-note-empty')!.textContent).toContain('Nothing matches');
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    click([...root.querySelectorAll<HTMLElement>('.helm-note-sort .helm-seg')].find((b) => b.textContent === 'A–Z'));
+    expect(texts(root, '.helm-note-row .helm-note-title').slice(0, 3)).toEqual(['Tiles', 'Quote 01', 'Quote 02']);
+  });
+
+  it('the notes button searches when there are many: a search, the five most recent, then all of them', async () => {
+    const { ctx } = await ctxFor(extra);
+    notesMenu(ctx, target, new MouseEvent('click'));
+    const titles = Menu.last!.items.map((i) => i.title).filter(Boolean);
+    expect(titles[0]).toBe('Search 14 notes…');
+    expect(titles.filter((t) => / · |^Quote|^Tiles|^Budget/.test(t))).toHaveLength(5);
+    expect(titles).toContain('All 14 notes…');
+    expect(titles).not.toContain('Manage notes…');
+    Menu.last!.items.find((i) => i.title === 'Search 14 notes…')!.click!();
+    const search = Modal.last as unknown as { getItems(): { title: string }[] };
+    expect(search.getItems()).toHaveLength(14);
+    Menu.last!.items.find((i) => i.title === 'All 14 notes…')!.click!();
+    expect(Modal.last!.contentEl.querySelectorAll('.helm-note-row')).toHaveLength(10);
+    expect(Modal.last!.contentEl.querySelector('.helm-note-filter')).toBeTruthy();
+  });
+
+  it('says where to put notes when a project has none', async () => {
+    const { ctx } = await ctxFor();
+    const root = render((r) => r.appendChild(notesSection(ctx, target)));
+    expect(root.querySelector('.helm-note-empty')!.textContent).toBe('No notes yet. A note you put in 02 PROJECTS/Kitchen Remodel/ shows up here by itself.');
+    expect(root.querySelector('.helm-note-filter')).toBeNull();
   });
 });
 
@@ -2256,13 +2332,19 @@ describe('Drawings in the UI', () => {
     const t2 = [...index.snapshot.tasks.values()].find((x) => x.text === 'Call the plumber' && x.origin !== 'daily-mirror')!;
     expect(taskRow(ctx, t2).querySelector('.helm-task-drawings .helm-badge')!.textContent).toBe('1');
   });
-  it('project detail shows a Diagrams section with cards, New and AI', async () => {
-    const { ctx, m } = await ctxFor();
+  it('project detail lists its drawings with what is written in them, plus New and Link', async () => {
+    const { ctx, m, vault, index } = await ctxFor();
     await m.createDrawing({ kind: 'project', id: 'prj-kitchen', title: 'Kitchen Remodel' }, { name: 'Architecture' });
+    const path = '02 PROJECTS/Kitchen Remodel/Wiring.excalidraw.md';
+    await vault.write(path, '---\nexcalidraw-plugin: parsed\n---\n# Excalidraw Data\n\n## Text Elements\nFuse box ^a1b2c3d4\n\nKitchen circuit [[Kitchen Remodel|plan]] ^e5f6a7b8\n\n%%\n## Drawing\n```json\n{"type":"excalidraw","elements":[]}\n```\n%%\n');
+    index.update(path, await vault.read(path));
     const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
-    expect(texts(root, '.helm-drawing-card-title')).toEqual(['Architecture']);
-    const diagrams = [...root.querySelectorAll('.helm-section')].find((sec) => sec.querySelector('.helm-section-title')?.textContent === 'Diagrams')!;
-    expect(texts(diagrams as HTMLElement, '.helm-drawing-actions button')).toEqual(['New drawing', 'Link existing', 'Manage']);
+    const diagrams = [...root.querySelectorAll('.helm-section')].find((sec) => sec.querySelector('.helm-section-title')?.textContent === 'Diagrams')! as HTMLElement;
+    expect(texts(diagrams, '.helm-note-title').sort()).toEqual(['Architecture', 'Wiring']);
+    const wiring = [...diagrams.querySelectorAll<HTMLElement>('.helm-note-row')].find((r) => r.querySelector('.helm-note-title')?.textContent === 'Wiring')!;
+    expect(wiring.querySelector('.helm-note-preview')!.textContent).toBe('Fuse box · Kitchen circuit plan');
+    expect(wiring.querySelector('.helm-note-meta')!.textContent).toContain('2 labels');
+    expect(texts(diagrams, '.helm-note-bar button')).toEqual(['New drawing', 'Link existing']);
   });
 });
 

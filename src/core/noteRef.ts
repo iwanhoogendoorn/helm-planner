@@ -48,6 +48,45 @@ export const listValues = (v: unknown): string[] => {
 };
 const unlink = (s: string): string => s.replace(/^\[\[|\]\]$/g, '').split('|')[0]!.split('#')[0]!.replace(/\.md$/, '').trim();
 
+/** What a note holds, at a glance: its first heading, its first line of prose, its size and its open work. */
+export interface NotePreview { heading?: string; text?: string; words: number; openTasks: number; doneTasks: number }
+
+/** Markdown down to the words a reader sees: links to their labels, emphasis and code marks dropped. */
+function plain(s: string): string {
+  return s
+    .replace(/!?\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2').replace(/!?\[\[([^\]]+)\]\]/g, (_, t: string) => t.split('#')[0]!.replace(/\.md$/, ''))
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__|==|~~|`)/g, '').replace(/(^|\s)[*_](\S[^*_]*)[*_](?=\s|$)/g, '$1$2')
+    .replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+export function notePreview(content: string): NotePreview {
+  let body = content;
+  if (body.startsWith('---')) { const end = body.indexOf('\n---', 3); body = end === -1 ? '' : body.slice(body.indexOf('\n', end + 4) + 1); }
+  let heading: string | undefined;
+  let text: string | undefined;
+  let fenced = false;
+  let words = 0, openTasks = 0, doneTasks = 0;
+  for (const raw of body.split('\n')) {
+    const line = raw.trim();
+    if (/^(```|~~~)/.test(line)) { fenced = !fenced; continue; }
+    if (fenced) continue;
+    // Words as read: link targets and addresses are not words anyone reads, callout markers neither.
+    if (!/^!\[\[[^\]]+\]\]$/.test(line)) words += (plain(line.replace(/^>\s*\[![^\]]*\]/, '').replace(/^[-*+]\s+(\[.\]\s+)?/, '')).match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
+    if (/^[-*+]\s+\[ \]/.test(line)) openTasks++;
+    else if (/^[-*+]\s+\[[xX]\]/.test(line)) doneTasks++;
+    if (text !== undefined) continue;
+    const hm = /^#{1,6}\s+(.+)$/.exec(line);
+    if (hm) { if (heading === undefined) heading = plain(hm[1]!.replace(/#+$/, '')) || undefined; continue; }
+    // Not prose: blank lines, rules, callout titles, tables, embeds standing alone, comments.
+    if (line === '' || /^(-{3,}|\*{3,}|_{3,})$/.test(line) || /^>\s*\[!/.test(line) || line.startsWith('|') || /^!\[\[[^\]]+\]\]$/.test(line) || line.startsWith('%%')) continue;
+    if (/^[a-z][\w-]*:\s*\S*$/.test(line)) continue;   // a stray `name: har2cli` is a field, not prose
+    const t = plain(line.replace(/^>\s?/, '').replace(/^[-*+]\s+(\[.\]\s+)?/, '').replace(/^\d+[.)]\s+/, ''));
+    if (t.length >= 2) text = t.length > 200 ? `${t.slice(0, 199).trimEnd()}…` : t;
+  }
+  return { ...(heading ? { heading } : {}), ...(text ? { text } : {}), words, openTasks, doneTasks };
+}
+
 export function noteTitle(path: string): string { return path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, ''); }
 
 /** Attachment keys of a note from its frontmatter values. */

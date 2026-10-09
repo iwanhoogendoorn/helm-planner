@@ -1,14 +1,15 @@
 /**
  * Notes UI: the twin of drawings — a button with a count, a menu that lists
- * the notes attached to a task / project / day / period and offers to make or
- * link one, a section for detail pages, and a manage popup with open / unlink
- * / delete.
+ * the notes attached to a task / project / day / period (with a search once
+ * there are many) and offers to make or link one, and the readable list for
+ * detail pages and the manage popup (see attachList).
  */
-import { FuzzySuggestModal, Menu, Modal, setIcon } from 'obsidian';
+import { FuzzySuggestModal, Menu, Modal } from 'obsidian';
 import type { DrawingTarget, Task } from '../core/types';
 import type { NoteRef } from '../core/noteRef';
 import { humanDate } from '../core/dates';
-import { button, h, icon, iconButton } from './dom';
+import { button, h, iconButton } from './dom';
+import { attachList, MENU_RECENT, MENU_SHOWN, searchAttached, wordCount, type AttachItem } from './attachList';
 import { askNameAndLocation } from './fields';
 import type { UiContext } from './context';
 import { targetForTask } from './drawings';
@@ -54,12 +55,18 @@ export function linkExistingNote(ctx: UiContext, target: DrawingTarget): void {
 export function addNoteItems(menu: Menu, ctx: UiContext, target: DrawingTarget): void {
   const today = ctx.today();
   const list = ctx.index.notesFor(target);
-  for (const n of list.slice(0, 12)) menu.addItem((i) => i.setTitle(`${n.title}${n.mtime ? ` · ${when(n, today)}` : ''}`).setIcon('sticky-note').onClick(() => void ctx.openFile(n.path)));
-  if (list.length > 12) menu.addItem((i) => i.setTitle(`… ${list.length - 12} more`).setIcon('more-horizontal').setDisabled(true));
+  // Many notes: a search first, the most recent few, and the whole list one click away.
+  const many = list.length > MENU_SHOWN;
+  if (many) {
+    menu.addItem((i) => i.setTitle(`Search ${list.length} notes…`).setIcon('search').onClick(() => searchAttached(ctx, list.map((n) => noteItem(ctx, n)), `Search the notes of ${target.title}…`)));
+    menu.addSeparator();
+  }
+  for (const n of list.slice(0, many ? MENU_RECENT : MENU_SHOWN)) menu.addItem((i) => i.setTitle(`${n.title}${n.mtime ? ` · ${when(n, today)}` : ''}`).setIcon('sticky-note').onClick(() => void ctx.openFile(n.path)));
+  if (many) menu.addItem((i) => i.setTitle(`All ${list.length} notes…`).setIcon('list').onClick(() => manageNotesModal(ctx, target)));
   if (list.length > 0) menu.addSeparator();
   menu.addItem((i) => i.setTitle('New note…').setIcon('file-plus').onClick(() => newNote(ctx, target)));
   menu.addItem((i) => i.setTitle('Link existing note…').setIcon('link').onClick(() => linkExistingNote(ctx, target)));
-  if (list.length > 0) menu.addItem((i) => i.setTitle('Manage notes…').setIcon('settings-2').onClick(() => manageNotesModal(ctx, target)));
+  if (list.length > 0 && !many) menu.addItem((i) => i.setTitle('Manage notes…').setIcon('settings-2').onClick(() => manageNotesModal(ctx, target)));
 }
 
 export function notesMenu(ctx: UiContext, target: DrawingTarget, ev: MouseEvent): void {
@@ -85,43 +92,39 @@ export function notesIndicator(ctx: UiContext, t: Task): HTMLElement | null {
   return el;
 }
 
-export function notesSection(ctx: UiContext, target: DrawingTarget): HTMLElement {
-  const today = ctx.today();
-  const list = ctx.index.notesFor(target);
-  const cards = h('div', { cls: 'helm-drawing-cards' });
-  for (const n of list) {
-    const card = h('button', { cls: 'helm-drawing-card', title: n.path, onClick: () => void ctx.openFile(n.path) },
-      h('span', { cls: 'helm-drawing-card-icon' }), h('span', { cls: 'helm-drawing-card-title', text: n.title }), h('span', { cls: 'helm-drawing-card-meta', text: when(n, today) }));
-    setIcon(card.querySelector('.helm-drawing-card-icon') as HTMLElement, 'sticky-note');
-    card.appendChild(iconButton('trash', 'Move to trash', (ev) => { ev.stopPropagation(); if (window.confirm(`Move “${n.title}” to the trash?`)) void ctx.run('Delete note', () => ctx.mutations.deleteNote(n.path)); }, 'helm-drawing-card-delete'));
-    cards.appendChild(card);
-  }
-  if (list.length === 0) cards.appendChild(h('div', { cls: 'helm-hint', text: 'No notes yet.' }));
-  const actions = h('div', { cls: 'helm-drawing-actions' },
-    button('New note', { icon: 'file-plus', onClick: () => newNote(ctx, target) }),
-    button('Link existing', { icon: 'link', onClick: () => linkExistingNote(ctx, target) }),
-    list.length > 0 ? button('Manage', { icon: 'settings-2', cls: 'helm-btn-quiet', onClick: () => manageNotesModal(ctx, target) }) : null);
-  return h('div', { cls: 'helm-drawings' }, cards, actions);
+/** A note as a list row: its first heading and line, its length, the work still open in it. */
+export function noteItem(ctx: UiContext, n: NoteRef): AttachItem {
+  const pv = ctx.index.notePreview(n.path);
+  const facts: AttachItem['facts'] = [];
+  if (pv && pv.words > 0) facts.push({ text: wordCount(pv.words) });
+  if (pv && pv.openTasks > 0) facts.push({ text: `${pv.openTasks} open task${pv.openTasks === 1 ? '' : 's'}`, accent: true });
+  else if (pv && pv.doneTasks > 0) facts.push({ text: `${pv.doneTasks} done` });
+  return { path: n.path, title: n.title, ...(n.mtime ? { mtime: n.mtime } : {}), icon: ctx.index.isSongNote(n.path) ? 'music' : 'file-text', ...(pv?.heading ? { heading: pv.heading } : {}), ...(pv?.text ? { text: pv.text } : {}), facts };
 }
 
+/** The notes on an item, as a list you can read and search. */
+export function notesSection(ctx: UiContext, target: DrawingTarget): HTMLElement {
+  return attachList(ctx, {
+    target,
+    noun: ['note', 'notes'],
+    items: () => ctx.index.notesFor(target).map((n) => noteItem(ctx, n)),
+    emptyText: 'No notes yet.',
+    actions: [
+      button('New note', { icon: 'file-plus', cls: 'helm-btn-quiet', onClick: () => newNote(ctx, target) }),
+      button('Link existing', { icon: 'link', cls: 'helm-btn-quiet', onClick: () => linkExistingNote(ctx, target) }),
+    ],
+    unlink: async (i) => { await ctx.mutations.unlinkNote(target, i.path); if (ctx.index.notesFor(target).some((x) => x.path === i.path)) ctx.notify(`“${i.title}” is still attached — the task’s text or a Notes list links it.`); },
+    remove: (i) => ctx.mutations.deleteNote(i.path),
+  });
+}
+
+/** Every note on an item in a window of its own, the same list — what a day, a period or a habit offers. */
 export function manageNotesModal(ctx: UiContext, target: DrawingTarget): void {
   const m = new Modal(ctx.app);
   m.titleEl.setText(`Notes · ${target.title}`);
   m.contentEl.addClass('helm-modal', 'helm-manage-modal');
-  const draw = (): void => {
-    m.contentEl.empty();
-    const today = ctx.today();
-    const notes = ctx.index.notesFor(target);
-    const rows = h('div', { cls: 'helm-manage-list' });
-    if (notes.length === 0) m.contentEl.appendChild(h('div', { cls: 'helm-hint', text: 'No notes attached.' }));
-    for (const n of notes) rows.appendChild(h('div', { cls: 'helm-manage-row' }, icon('sticky-note'), h('span', { cls: 'helm-manage-title', text: n.title }), h('span', { cls: 'helm-hint', text: when(n, today) }), h('span', { cls: 'helm-spacer' }),
-      button('Open', { icon: 'external-link', cls: 'helm-btn-quiet', onClick: () => { m.close(); void ctx.openFile(n.path); } }),
-      button('Unlink', { icon: 'unlink', cls: 'helm-btn-quiet', title: 'Detach from this item; the note itself stays', onClick: () => void ctx.run('Unlink note', async () => { await ctx.mutations.unlinkNote(target, n.path); if (ctx.index.notesFor(target).some((x) => x.path === n.path)) ctx.notify(`“${n.title}” is still attached — it lives in the project’s folder, or the task’s text or a Notes list links it.`); draw(); }) }),
-      iconButton('trash', 'Move to trash', () => { if (window.confirm(`Move “${n.title}” to the trash? Its link lines are removed from the notes that carry them.`)) void ctx.run('Delete note', async () => { await ctx.mutations.deleteNote(n.path); draw(); }); })));
-    m.contentEl.appendChild(rows);
-    m.contentEl.appendChild(h('div', { cls: 'helm-modal-buttons' }, button('New note…', { icon: 'file-plus', onClick: () => { m.close(); newNote(ctx, target); } }), button('Link existing…', { icon: 'link', onClick: () => { m.close(); linkExistingNote(ctx, target); } }), h('span', { cls: 'helm-spacer' }), button('Close', { onClick: () => m.close() })));
-  };
-  draw();
+  m.contentEl.appendChild(notesSection(ctx, target));
   m.open();
   ctx.trackModal(m);
+  m.contentEl.querySelector<HTMLInputElement>('.helm-note-filter')?.focus();
 }
