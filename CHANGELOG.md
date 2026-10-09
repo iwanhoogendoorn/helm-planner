@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.45.0 — 2026-10-09
+
+- **Notes and drawings read as lists**, everywhere they appear — a project, a
+  phase, the task editor, the habit form and the manage popups. Each row has
+  the full title, what is in it (a note's first heading and line, the words
+  written in a drawing), when it was edited, its length, the tasks still open
+  in it, and the subfolder it sits in. *Recent* is one list, newest first;
+  *A–Z* groups a project's items like its folder, with the ones linked from
+  elsewhere last. Ten show until you ask for the rest; unlink and trash sit on
+  the row, and unlink only where it can work.
+- **A search** in every list of more than six (Enter opens the first match,
+  Escape clears), and on the notes and drawings buttons once an item has more
+  than eight: *Search 89 notes…* first, the five most recent, then *All 89
+  notes…* — instead of twelve and a dead “… 77 more”.
+- Note previews skip a stray `name: value` line; ⌘-click opens in a new tab.
+
 ## 1.44.0 — 2026-10-09
 
 - Notes kept in a project's folder show under that project's **Notes**, no
