@@ -2,6 +2,7 @@
 import type { IsoDate, Task } from '../core/types';
 import { humanDate, minutesToHuman } from '../core/dates';
 import { formatRecurrence } from '../core/recurrence';
+import { checkboxTitle, clickedStatus } from '../core/taskLine';
 import { chip, h, icon, iconButton, richText } from './dom';
 import type { UiContext } from './context';
 import { progressMenu, taskMenu } from './menus';
@@ -124,11 +125,11 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   if (!opts.compact) {
     const cb = h('button', {
       cls: ['helm-check', `mark-${markerClass(t.status)}`, justToggledClass(t)],
-      title: open ? 'Mark done (shift-click: in progress)' : 'Reopen',
+      title: checkboxTitle(t.status),
       attr: { 'aria-label': 'Toggle done', 'data-status': t.status },
       onClick: (ev) => {
         ev.stopPropagation();
-        const next = ev.shiftKey ? (t.status === 'doing' ? 'todo' : 'doing') : open ? 'done' : 'todo';
+        const next = clickedStatus(t.status, ev.shiftKey);
         justToggled.set(t.key, Date.now());
         void ctx.run('Status', () => ctx.mutations.setStatus(t.key, next));
       },

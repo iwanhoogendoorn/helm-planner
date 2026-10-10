@@ -7,6 +7,7 @@
  * same as ticking it anywhere else in Helm.
  */
 import type { Phase, Project, Task } from '../core/types';
+import { clickedStatus } from '../core/taskLine';
 import type { ProjectProfile } from '../core/profiles';
 import { describeWork, parseAssignment } from '../core/profiles';
 import { isOpen } from '../data/planner';
@@ -258,11 +259,11 @@ function modeChip(ctx: UiContext, profile: ProjectProfile, w: Work, opts: { with
   const stepsDone = w.steps.filter((s) => s.status === 'done').length;
   return h('button', {
     cls: ['helm-chip', 'helm-profile-chip', state],
-    title: `${w.person ? `${w.person} — ` : ''}${w.mode}${w.steps.length ? ` · ${stepsDone}/${w.steps.length} steps` : ''} · ${st === 'done' ? 'done' : 'click to tick off, shift-click for in progress'}`,
+    title: `${w.person ? `${w.person} — ` : ''}${w.mode}${w.steps.length ? ` · ${stepsDone}/${w.steps.length} steps` : ''} · ${st === 'done' ? 'done — click to reopen' : w.task ? (st === 'doing' ? 'in progress — click to finish' : 'click to start, again to finish (shift-click: done right away)') : 'click to tick off'}`,
     onClick: (ev) => {
       ev.stopPropagation();
       if (w.task) {
-        const next = ev.shiftKey ? (w.task.status === 'doing' ? 'todo' : 'doing') : w.task.status === 'done' ? 'todo' : 'done';
+        const next = clickedStatus(w.task.status, ev.shiftKey);
         void ctx.run('Status', () => ctx.mutations.setStatus(w.task!.key, next));
       } else {
         // A phase has no line of its own: ticking it ticks every step (and untick puts them all back).

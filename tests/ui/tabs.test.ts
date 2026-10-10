@@ -590,7 +590,12 @@ describe('Today tab', () => {
     const { ctx, vault } = await ctxFor();
     const root = render((r) => renderToday(ctx, r, { date: '2026-08-25', collapsed: new Map() }));
     const row = [...root.querySelectorAll('.helm-task')].find((r) => r.textContent?.includes('Fix router config'))!;
+    // One click starts it, a second finishes it.
     click(row.querySelector('.helm-check'));
+    await flush();
+    expect(await vault.read(dailyPath('2026-08-25'))).toContain('- [/] Fix router config ⏱️ 30m');
+    const again = render((r) => renderToday(ctx, r, { date: '2026-08-25', collapsed: new Map() }));
+    click([...again.querySelectorAll('.helm-task')].find((r) => r.textContent?.includes('Fix router config'))!.querySelector('.helm-check'));
     await flush();
     expect(await vault.read(dailyPath('2026-08-25'))).toContain('- [x] Fix router config ⏱️ 30m ✅ 2026-08-25');
     const root2 = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
@@ -1277,7 +1282,9 @@ describe('A project with a profile', () => {
     const { ctx, index, vault, p } = await musicProject();
     const state = { projectId: p.id, filter: '', showClosed: false, collapsed: new Map(), showDone: false };
     let root = render((r) => renderProjects(ctx, r, state));
-    click([...root.querySelectorAll('.helm-profile-chip')].find((c) => c.textContent === 'Zaara Sing'));
+    // Shift-click: done in one go, as a quick tick-off.
+    const chip = [...root.querySelectorAll('.helm-profile-chip')].find((c) => c.textContent === 'Zaara Sing')!;
+    chip.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
     await waitFor(() => ([...index.snapshot.tasks.values()].some((t) => t.text.includes('Zaara · Singing') && t.status === 'done') ? true : undefined), 'the chip to tick');
     expect(await vault.read(p.path)).toContain('- [x] Zaara · Singing');
     document.body.innerHTML = '';
@@ -1478,6 +1485,9 @@ describe('Modals', () => {
     click([...m.contentEl.querySelectorAll('.helm-search-chips button')].find((b) => b.textContent === 'Open'));
     expect(input.value).toBe('chapter');
     // Ticking a task off the list writes to the note and the list stays open.
+    click(m.contentEl.querySelectorAll('.helm-search-row')[0]!.querySelector('.helm-check'));
+    await flush(); await flush();
+    expect(await vault.read('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')).toMatch(/- \[\/\] Chapter 1/);
     click(m.contentEl.querySelectorAll('.helm-search-row')[0]!.querySelector('.helm-check'));
     await flush(); await flush();
     expect(await vault.read('02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md')).toMatch(/- \[x\] Chapter 1/);

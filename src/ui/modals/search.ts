@@ -1,4 +1,5 @@
 /** Search everything, and act on what you find without leaving the list. */
+import { checkboxTitle, clickedStatus } from '../../core/taskLine';
 import { Modal } from 'obsidian';
 import { KIND_ICON, KIND_LABEL, SEARCH_KINDS, queryWords, search, startingPoints, toggleToken, type HitGroup, type SearchHit } from '../../data/search';
 import { isOpen } from '../../data/planner';
@@ -42,7 +43,7 @@ export function openSearch(ctx: UiContext, initial?: string): void {
     const open = () => { m.close(); openHit(ctx, hit); };
     const menu = t ? (ev: MouseEvent) => taskMenu(ctx, t, ev, { onEdit: () => { m.close(); openTaskEditor(ctx, t); } }) : undefined;
     const row = h('div', { cls: ['helm-search-row', index === selected && 'is-selected'], attr: { 'data-index': String(index) }, onClick: open, ...(menu ? { onContextMenu: (ev: MouseEvent) => { ev.preventDefault(); menu(ev); } } : {}) },
-      t ? h('button', { cls: ['helm-check', `mark-${t.status}`], title: isOpen(t) ? 'Mark done' : 'Reopen', onClick: (ev) => { ev.stopPropagation(); rerun('Status', () => ctx.mutations.setStatus(t.key, isOpen(t) ? 'done' : 'todo')); } }, isOpen(t) ? null : icon('check'))
+      t ? h('button', { cls: ['helm-check', `mark-${t.status}`], title: checkboxTitle(t.status), onClick: (ev) => { ev.stopPropagation(); rerun('Status', () => ctx.mutations.setStatus(t.key, clickedStatus(t.status, ev.shiftKey))); } }, t.status === 'doing' ? h('span', { cls: 'helm-check-half' }) : isOpen(t) ? null : icon('check'))
         : icon(KIND_ICON[hit.kind], 'helm-search-icon'),
       h('div', { cls: 'helm-search-main' }, h('div', { cls: 'helm-search-title', text: hit.title }), hit.subtitle ? h('div', { cls: 'helm-search-sub', text: hit.subtitle }) : null),
     );

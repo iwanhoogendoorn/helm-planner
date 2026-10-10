@@ -127,3 +127,18 @@ describe('parseTaskLine', () => {
     expect(parseTaskLine('- [ ]no space after')).toBeUndefined();
   });
 });
+
+describe('a click on the checkbox', () => {
+  it('starts a task, then finishes it, and opens a finished one again; shift-click goes straight to done', async () => {
+    const { clickedStatus } = await import('../../src/core/taskLine');
+    expect(clickedStatus('todo')).toBe('doing');
+    expect(clickedStatus('doing')).toBe('done');
+    expect(clickedStatus('done')).toBe('todo');
+    expect(clickedStatus('cancelled')).toBe('todo');
+    expect(clickedStatus('waiting')).toBe('doing');
+    expect(clickedStatus('forwarded')).toBe('doing');
+    expect(clickedStatus('todo', true)).toBe('done');
+    expect(clickedStatus('doing', true)).toBe('done');
+    expect(clickedStatus('done', true)).toBe('todo');
+  });
+});

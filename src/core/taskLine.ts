@@ -45,6 +45,24 @@ export function markerToStatus(marker: string): TaskStatus {
   return MARKER_STATUS[marker] ?? 'todo';
 }
 
+/**
+ * What a click on a task's checkbox makes of it: the first click starts it (`[/]`), the second finishes
+ * it (`[x]`), and a finished or cancelled one opens again. Shift-click is the shortcut for a task that
+ * needs no in-between — straight to done, or open again.
+ */
+export function clickedStatus(status: TaskStatus, straightToDone = false): TaskStatus {
+  if (status === 'done' || status === 'cancelled') return 'todo';
+  if (straightToDone) return 'done';
+  return status === 'doing' ? 'done' : 'doing';
+}
+
+/** What the checkbox says it will do. */
+export function checkboxTitle(status: TaskStatus): string {
+  if (status === 'done' || status === 'cancelled') return 'Reopen';
+  if (status === 'doing') return 'Mark done (shift-click works too)';
+  return 'Start it — click again to finish (shift-click: done right away)';
+}
+
 export function isTerminal(status: TaskStatus): boolean {
   return status === 'done' || status === 'cancelled';
 }
