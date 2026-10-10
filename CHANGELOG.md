@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.47.0 — 2026-10-10
+
+- **The checkbox works in two steps.** One click starts a task — `[/]`, the
+  box half-fills — and a second click finishes it, `[x]`. Waiting and
+  forwarded tasks start on a click too; a done or cancelled one opens again.
+  **Shift-click** is the quick tick: straight to done (it used to mean “in
+  progress”). Task rows everywhere, the search popup and a profile board's
+  chips all follow the same rule; goal checkboxes stay one click. The tooltip
+  says what the next click does.
+
 ## 1.46.0 — 2026-10-09
 
 - API, for the iPhone app's notes and drawings lists: every `…/attachments`
