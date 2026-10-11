@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.47.1 — 2026-10-11
+
+- *Move* names a rolling six days — tomorrow and the five after it — with a
+  line where next week starts. It used to name only the days left in this
+  week, so on a Sunday (and thin on a Saturday) the list was empty, just when
+  the coming week gets planned. On a Monday it reads as before.
+
 ## 1.47.0 — 2026-10-10
 
 - **The checkbox works in two steps.** One click starts a task — `[/]`, the
