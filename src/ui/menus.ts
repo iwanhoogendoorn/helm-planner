@@ -21,21 +21,33 @@ import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
 import { DAY_PARTS, PART_LABEL, partOfTime, type DayPart } from '../core/dailyNote';
 
-export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): { label: string; date: IsoDate | undefined; icon: string }[] {
+export interface ScheduleOption { label: string; date: IsoDate | undefined; icon: string; /** The first day of next week: a line goes above it. */ weekBreak?: boolean }
+
+/** Days ahead the Move menu names, after Today: tomorrow and the five after it. */
+export const NAMED_DAYS = 6;
+
+/**
+ * The days to move a task to, by name, so “Thursday afternoon” is two hovers instead of the date picker.
+ * A rolling week — tomorrow and the five days after it — so the list never runs dry: on a Sunday it is
+ * next week's days (a line marks where next week starts). Next week's first day is offered as such only
+ * when it lies beyond that, which is on the first day of a week.
+ */
+export function scheduleOptions(today: IsoDate, weekStartsOn: 1 | 7): ScheduleOption[] {
   const nextWeek = addDays(startOfWeek(today, weekStartsOn), 7);
-  // The rest of this week by name, so “Thursday afternoon” is two hovers instead of the date picker.
-  const restOfWeek: { label: string; date: IsoDate; icon: string }[] = [];
-  for (let d = addDays(today, 2); d < nextWeek; d = addDays(d, 1)) {
+  const named = (d: IsoDate): string => {
     const [wd, ...rest] = humanDate(d).split(' ');
     const name = WEEKDAY_NAMES[WEEKDAY_SHORT.indexOf(wd!)]!;
-    restOfWeek.push({ label: `${name[0]!.toUpperCase()}${name.slice(1)} ${rest.join(' ')}`, date: d, icon: 'calendar-range' });
+    return `${name[0]!.toUpperCase()}${name.slice(1)} ${rest.join(' ')}`;
+  };
+  const days: ScheduleOption[] = [];
+  for (let i = 1; i <= NAMED_DAYS; i++) {
+    const d = addDays(today, i);
+    days.push({ label: i === 1 ? 'Tomorrow' : named(d), date: d, icon: i === 1 ? 'sunrise' : 'calendar-range', ...(d === nextWeek ? { weekBreak: true } : {}) });
   }
   return [
     { label: 'Today', date: today, icon: 'sun' },
-    { label: 'Tomorrow', date: addDays(today, 1), icon: 'sunrise' },
-    ...restOfWeek,
-    // On the last day of the week tomorrow already is next week: offer that day once.
-    ...(addDays(today, 1) === nextWeek ? [] : [{ label: `Next week (${humanDate(nextWeek)})`, date: nextWeek, icon: 'calendar' }]),
+    ...days,
+    ...(nextWeek > addDays(today, NAMED_DAYS) ? [{ label: `Next week (${humanDate(nextWeek)})`, date: nextWeek, icon: 'calendar', weekBreak: true }] : []),
     { label: 'Pick a date…', date: 'pick' as unknown as IsoDate, icon: 'calendar-days' },
     { label: 'Unschedule', date: undefined, icon: 'calendar-x' },
   ];
@@ -54,6 +66,7 @@ export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task, opts: {
   // The day it already sits on is not a move: its submenu would be the parts of that day, which is
   // exactly what “Part of …” below already offers. Offer each day once.
   const its = task.scheduled ?? task.noteDate;
+  let days = 0;   // a line above next week only between days, never at the top
   for (const o of scheduleOptions(today, ctx.settings().weekStartsOn)) {
     if (o.date !== undefined && (o.date as unknown) !== 'pick' && o.date === its) continue;
     if ((o.date as unknown) === 'pick') {
@@ -62,6 +75,8 @@ export function addScheduleItems(menu: Menu, ctx: UiContext, task: Task, opts: {
     }
     if (o.date === undefined) { if (opts.unschedule !== false) menu.addItem((i) => i.setTitle(o.label).setIcon(o.icon).onClick(() => move(undefined))); continue; }
     const date = o.date;
+    if (o.weekBreak && days > 0) menu.addSeparator();
+    days++;
     menu.addItem((i) => {
       i.setTitle(o.label).setIcon(o.icon);
       const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
