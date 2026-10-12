@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.48.0 — 2026-10-12
+
+- **Habits on Today take one row**, not half the page. Each habit is a
+  one-line tile — its tick (one per part for a habit done in parts), icon,
+  full name, note and drawing badges, 🔥 streak and this week's count — and
+  they sit side by side. Click the tile to tick it, shift-click to skip,
+  right-click for the menu, drag it onto a part of the day. The week strip,
+  the 30-day ring and the edit buttons stay on the Habits tab, one click away
+  through the new *All habits* button.
+
 ## 1.47.1 — 2026-10-11
 
 - *Move* names a rolling six days — tomorrow and the five after it — with a
