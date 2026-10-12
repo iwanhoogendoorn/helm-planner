@@ -149,6 +149,11 @@ export function habitTile(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
   };
   const states = occ.map((p) => stateOf(p));
   const all = states.every((s) => s === 'done') ? 'done' : states.some((s) => s === 'done') ? 'partial' : states.every((s) => s === 'skipped') ? 'skipped' : 'pending';
+  const pills = attachPills(ctx, hb);
+  const extras = [
+    movedTo && !(hb.parts && hb.parts.length) ? h('span', { cls: 'helm-habit-tile-moved helm-habit-moved', title: `Moved to the ${movedTo} for this day only` }, icon(PART_ICON[movedTo]), h('span', { text: movedTo })) : null,
+    pills,
+  ].filter((x): x is HTMLElement => x !== null);
   const ticks = occ.map((part, i) => h('button', {
     cls: ['helm-habit-tick', `is-${states[i]}`, part && 'is-part'],
     title: `${part ? `${part.charAt(0).toUpperCase()}${part.slice(1)}: ` : ''}${states[i]} — click to toggle, shift-click to skip`,
@@ -165,9 +170,10 @@ export function habitTile(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
   },
     h('div', { cls: 'helm-habit-ticks' }, ...ticks),
     habitBadge(ctx, hb),
-    h('span', { cls: 'helm-habit-tile-title', text: hb.title }),
-    movedTo && !(hb.parts && hb.parts.length) ? h('span', { cls: 'helm-habit-tile-moved helm-habit-moved', text: `${movedTo} today`, title: `Moved to the ${movedTo} for this day only` }) : null,
-    attachPills(ctx, hb),
+    // The name has the line to itself; what else it carries today goes underneath, only when there is any.
+    h('div', { cls: 'helm-habit-tile-main' },
+      h('span', { cls: 'helm-habit-tile-title', text: hb.title }),
+      extras.length ? h('div', { cls: 'helm-habit-tile-sub' }, ...extras) : null),
     h('span', { cls: 'helm-habit-tile-meta' },
       st.streak > 0 ? h('span', { cls: 'helm-habit-tile-streak', text: `🔥${st.streak}` }) : null,
       h('span', { cls: 'helm-habit-tile-week', text: `${st.doneThisWeek}/${st.scheduledThisWeek}`, title: 'Done this week' })),

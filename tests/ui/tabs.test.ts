@@ -2491,7 +2491,7 @@ describe('managing habits from Today', () => {
     const chip = root.querySelector('.helm-section.part-afternoon .helm-part-habits .helm-habit')!;
     expect(chip.textContent).toContain('Morning workout');
     expect(chip.classList.contains('is-done')).toBe(true);
-    expect(cardOf('Morning workout').querySelector('.helm-habit-moved')!.textContent).toBe('afternoon today');
+    expect(cardOf('Morning workout').querySelector('.helm-habit-moved')!.textContent).toBe('afternoon');
     // Unticking keeps the line where it is, just not ticked.
     click(cardOf('Morning workout').querySelector('.helm-habit-tick'));
     await flush(); await flush();
@@ -2516,7 +2516,7 @@ describe('managing habits from Today', () => {
     expect(note.match(/hab-workout/g)).toHaveLength(1);
     root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     expect(texts(root, '.helm-section.part-morning .helm-part-habits .helm-habit').join()).toContain('Morning workout');
-    expect(cardOf('Morning workout').querySelector('.helm-habit-moved')!.textContent).toBe('morning today');
+    expect(cardOf('Morning workout').querySelector('.helm-habit-moved')!.textContent).toBe('morning');
     // Ticking from the card ticks the moved line; the board and the chip agree.
     click(cardOf('Morning workout').querySelector('.helm-habit-tick'));
     await flush(); await flush();
@@ -2544,6 +2544,22 @@ describe('managing habits from Today', () => {
     expect(tomorrow).toMatch(/#+ Habits\n(?:- .*\n)*- \[ \] 🏃 Morning workout 🆔 hab-workout/); // back in the Habits list (title order)
     expect(tomorrow.match(/hab-workout/g)).toHaveLength(1);
     void index;
+  });
+
+  it('a tile keeps the name on its own line; a moved habit’s “evening today” and its badges sit underneath', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await vault.write('81 AI/Workout plan.md', '---\nhelm-habit: hab-workout\n---\n# Workout plan\n');
+    index.update('81 AI/Workout plan.md', await vault.read('81 AI/Workout plan.md'));
+    await ctx.mutations.moveHabitForDay('hab-workout', TODAY, 'evening');
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const tile = [...root.querySelectorAll<HTMLElement>('.helm-habit-tile')].find((c) => c.textContent?.includes('Morning workout'))!;
+    expect(tile.querySelector('.helm-habit-tile-main > .helm-habit-tile-title')!.textContent).toBe('Morning workout');
+    const sub = tile.querySelector('.helm-habit-tile-main > .helm-habit-tile-sub')!;
+    expect(sub.querySelector('.helm-habit-moved')!.textContent).toBe('evening');
+    expect(sub.querySelector('.helm-habit-attach .helm-task-notes')).toBeTruthy();
+    // A habit with nothing extra has no second line.
+    const plain = [...root.querySelectorAll<HTMLElement>('.helm-habit-tile')].find((c) => c.textContent?.includes('Evening reading'))!;
+    expect(plain.querySelector('.helm-habit-tile-sub')).toBeNull();
   });
 
   it('shows note / drawing pills on a habit card that open the attachment menus, and the edit form lists them', async () => {
