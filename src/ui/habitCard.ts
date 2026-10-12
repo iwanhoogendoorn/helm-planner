@@ -68,6 +68,17 @@ function placeInNow(ctx: UiContext, date: IsoDate): { placeIn?: HabitPart } {
   return p === 'anytime' ? {} : { placeIn: p };
 }
 
+/** Note and drawing counts on a habit, each opening its menu — only the ones it has. */
+function attachPills(ctx: UiContext, hb: Habit): HTMLElement | null {
+  const target = targetForHabit(hb);
+  const nNotes = ctx.index.notesFor(target).length, nDraw = ctx.index.drawingsFor(target).length;
+  if (nNotes === 0 && nDraw === 0) return null;
+  return h('span', { cls: 'helm-habit-attach' },
+    nNotes > 0 ? (() => { const b = iconButton('sticky-note', `${nNotes} note${nNotes === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); notesMenu(ctx, target, ev); }, 'helm-task-notes'); b.appendChild(h('span', { cls: 'helm-badge', text: String(nNotes) })); return b; })() : null,
+    nDraw > 0 ? (() => { const b = iconButton('pen-tool', `${nDraw} drawing${nDraw === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); drawingsMenu(ctx, target, ev); }, 'helm-task-drawings'); b.appendChild(h('span', { cls: 'helm-badge', text: String(nDraw) })); return b; })() : null,
+  );
+}
+
 export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate, opts: { actions?: HTMLElement[] } = {}): HTMLElement {
   const snap = ctx.index.snapshot;
   const settings = ctx.settings();
@@ -93,12 +104,7 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate, opts: { acti
     title: `${c.date}: ${c.state}${c.state === 'future' ? '' : ' — click to toggle the day'}`,
     onClick: () => { if (c.state !== 'future') void ctx.run('Habit', () => toggleDay(ctx, hb, c.date, c.state)); },
   }, h('span', { cls: 'helm-habit-cell-label', text: c.label }))));
-  const target = targetForHabit(hb);
-  const nNotes = ctx.index.notesFor(target).length, nDraw = ctx.index.drawingsFor(target).length;
-  const pills = h('span', { cls: 'helm-habit-attach' },
-    nNotes > 0 ? (() => { const b = iconButton('sticky-note', `${nNotes} note${nNotes === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); notesMenu(ctx, target, ev); }, 'helm-task-notes'); b.appendChild(h('span', { cls: 'helm-badge', text: String(nNotes) })); return b; })() : null,
-    nDraw > 0 ? (() => { const b = iconButton('pen-tool', `${nDraw} drawing${nDraw === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); drawingsMenu(ctx, target, ev); }, 'helm-task-drawings'); b.appendChild(h('span', { cls: 'helm-badge', text: String(nDraw) })); return b; })() : null,
-  );
+  const pills = attachPills(ctx, hb);
   const meta = h('div', { cls: 'helm-habit-meta' },
     st.streak > 0 ? h('span', { cls: 'helm-habit-streak', text: `🔥 ${st.streak}` }) : h('span', { cls: 'helm-hint', text: 'no streak yet' }),
     h('span', { cls: 'helm-hint', text: `${st.doneThisWeek}/${st.scheduledThisWeek} this week` }),
@@ -122,4 +128,55 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate, opts: { acti
   }
   void setIcon; void HABIT_PARTS;
   return card;
+}
+
+/**
+ * A habit on Today, in one line: its tick(s), icon and name, its streak and its week. Today is for
+ * doing them — the week strip, the 30-day ring and the edit buttons live on the Habits tab — so six
+ * habits sit side by side in one row instead of filling the page.
+ */
+export function habitTile(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement {
+  const snap = ctx.index.snapshot;
+  const settings = ctx.settings();
+  const st = habitStats(hb, snap.completions, ctx.today(), settings.weekStartsOn, 30);
+  const occ = habitOccurrences(hb);
+  const movedTo = dayPartOf(hb, snap.completions, date);
+  const stateOf = (part?: HabitPart): 'done' | 'skipped' | 'missed' | 'pending' => { const c = snap.completions.find((x) => x.habitId === hb.id && x.date === date && (x.part === part || (part === undefined && movedTo !== undefined && x.part === movedTo))); return c?.state ?? 'pending'; };
+  const toggle = (part: HabitPart | undefined, shift: boolean): void => {
+    const s = stateOf(part);
+    const next = shift ? (s === 'skipped' ? 'missed' : 'skipped') : s === 'done' ? 'missed' : 'done';
+    void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, next, part, placeInNow(ctx, date)));
+  };
+  const states = occ.map((p) => stateOf(p));
+  const all = states.every((s) => s === 'done') ? 'done' : states.some((s) => s === 'done') ? 'partial' : states.every((s) => s === 'skipped') ? 'skipped' : 'pending';
+  const ticks = occ.map((part, i) => h('button', {
+    cls: ['helm-habit-tick', `is-${states[i]}`, part && 'is-part'],
+    title: `${part ? `${part.charAt(0).toUpperCase()}${part.slice(1)}: ` : ''}${states[i]} — click to toggle, shift-click to skip`,
+    onClick: (ev) => { ev.stopPropagation(); toggle(part, ev.shiftKey); },
+  }, icon(states[i] === 'done' ? 'check' : states[i] === 'skipped' ? 'minus' : part ? PART_ICON[part] : 'circle')));
+  const tile = h('div', {
+    cls: ['helm-habit-tile', `is-day-${all}`],
+    title: `${hb.title} — streak ${st.streak} · ${st.doneThisWeek}/${st.scheduledThisWeek} this week · ${Math.round(st.rate30 * 100)}% of the last 30 days${occ.length === 1 ? '\nClick to tick, shift-click to skip' : ''} · right-click for more`,
+    attr: { role: occ.length === 1 ? 'button' : 'group', tabindex: occ.length === 1 ? '0' : '-1' },
+    // A habit done once a day is one big tick; one done in parts has a tick per part.
+    onClick: (ev) => { if (occ.length === 1) toggle(occ[0], ev.shiftKey); },
+    onKeyDown: (ev) => { if (occ.length === 1 && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); toggle(occ[0], ev.shiftKey); } },
+    onContextMenu: (ev) => habitMenu(ctx, hb, ev, { date, state: all === 'done' ? 'done' : all === 'skipped' ? 'skipped' : 'pending' }),
+  },
+    h('div', { cls: 'helm-habit-ticks' }, ...ticks),
+    habitBadge(ctx, hb),
+    h('span', { cls: 'helm-habit-tile-title', text: hb.title }),
+    movedTo && !(hb.parts && hb.parts.length) ? h('span', { cls: 'helm-habit-tile-moved helm-habit-moved', text: `${movedTo} today`, title: `Moved to the ${movedTo} for this day only` }) : null,
+    attachPills(ctx, hb),
+    h('span', { cls: 'helm-habit-tile-meta' },
+      st.streak > 0 ? h('span', { cls: 'helm-habit-tile-streak', text: `🔥${st.streak}` }) : null,
+      h('span', { cls: 'helm-habit-tile-week', text: `${st.doneThisWeek}/${st.scheduledThisWeek}`, title: 'Done this week' })),
+  );
+  colourise(tile, hb);
+  if (!(hb.parts && hb.parts.length)) {
+    tile.setAttribute('draggable', 'true');
+    tile.addEventListener('dragstart', (ev) => { ev.dataTransfer?.setData('text/helm-habit', hb.id); if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'; tile.classList.add('is-dragging'); });
+    tile.addEventListener('dragend', () => tile.classList.remove('is-dragging'));
+  }
+  return tile;
 }

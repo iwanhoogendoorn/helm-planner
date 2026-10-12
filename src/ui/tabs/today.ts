@@ -22,7 +22,7 @@ import { dayPartOf } from '../../data/habits';
 import { plainLabel } from '../../core/label';
 import { partWindow, preferredSlot } from '../../data/conflicts';
 import { habitMenu } from '../habits';
-import { habitCard, colourise } from '../habitCard';
+import { habitTile, colourise } from '../habitCard';
 import { drawingsButton, targetForDate } from '../drawings';
 import { notesButton } from '../notes';
 import { dragKeys, selection } from '../selection';
@@ -120,9 +120,9 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     const parted = habits.filter((hb) => hb.parts && hb.parts.length > 0);
     const occurrences = habits.reduce((n, hb) => n + (hb.parts?.length || 1), 0);
     const doneOcc = habits.reduce((n, hb) => n + (hb.parts?.length ? snap.completions.filter((c) => c.date === date && c.state === 'done' && c.habitId === hb.id && c.part !== undefined && hb.parts!.includes(c.part)).length : snap.completions.some((c) => c.date === date && c.state === 'done' && c.habitId === hb.id) ? 1 : 0), 0);
-    const board = h('div', { cls: 'helm-habit-board' }, ...habits.map((hb) => habitCard(ctx, hb, date)));
+    const board = h('div', { cls: 'helm-habit-tiles' }, ...habits.map((hb) => habitTile(ctx, hb, date)));
     habitChipsFor = (part) => { const list = [...parted.filter((hb) => hb.parts!.includes(part)), ...habits.filter((hb) => dayPartOf(hb, snap.completions, date) === part)]; return list.length === 0 ? null : h('div', { cls: 'helm-habit-chips helm-part-habits' }, ...list.map((hb) => colourise(habitChip(hb, part), hb))); };
-    root.appendChild(section('Habits', { count: `${doneOcc}/${occurrences}`, store, key: 'habits', actions: [button('New habit', { icon: 'plus', cls: 'helm-btn-quiet', onClick: () => openHabitForm(ctx) })] },
+    root.appendChild(section('Habits', { count: `${doneOcc}/${occurrences}`, store, key: 'habits', actions: [button('All habits', { icon: 'repeat', cls: 'helm-btn-quiet', title: 'The Habits tab: every habit with its week, streaks and history', onClick: () => ctx.navigate('habits') }), button('New habit', { icon: 'plus', cls: 'helm-btn-quiet', onClick: () => openHabitForm(ctx) })] },
       habits.length === 0 ? noHabitsDue(ctx, date, today) : board));
   }
 

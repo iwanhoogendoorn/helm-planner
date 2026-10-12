@@ -1128,3 +1128,26 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-note-bar .helm-note-filter { padding-left: 28px; }
 .helm-manage-modal .helm-notes { min-width: min(640px, 80vw); }
 .helm-manage-modal .helm-note-list { max-height: 60vh; overflow-y: auto; }
+
+/* Habits on Today: one line each, side by side — doing them, not studying them (that is the Habits tab). */
+.helm-habit-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; padding: 4px 0; }
+.helm-habit-tile { --hc: var(--color-green); --hc-rgb: var(--color-green-rgb); display: flex; align-items: center; gap: 7px; min-width: 0; padding: 5px 10px 5px 6px; border-radius: var(--radius-m); border: 1px solid rgba(var(--hc-rgb), 0.3); border-left: 3px solid var(--hc); background: rgba(var(--hc-rgb), 0.06); cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease; }
+.helm-habit-tile[role="group"] { cursor: default; }
+.helm-habit-tile:hover { background: rgba(var(--hc-rgb), 0.12); }
+.helm-habit-tile:focus-visible { outline: 2px solid var(--hc); outline-offset: 1px; }
+.helm-habit-tile.is-day-done { background: rgba(var(--hc-rgb), 0.18); border-color: rgba(var(--hc-rgb), 0.5); }
+.helm-habit-tile.is-day-done .helm-habit-tile-title { color: var(--text-muted); }
+.helm-habit-tile.is-day-skipped { opacity: 0.6; }
+.helm-habit-tile.is-day-skipped .helm-habit-tile-title { text-decoration: line-through; }
+.helm-habit-tile .helm-habit-ticks { display: flex; gap: 3px; flex: none; }
+.helm-habit-tile .helm-habit-tick { width: 24px; height: 24px; padding: 0; }
+.helm-habit-tile .helm-habit-tick svg { width: 13px; height: 13px; }
+.helm-habit-tile .helm-habit-img { width: 18px; height: 18px; max-width: 18px; max-height: 18px; }
+.helm-habit-tile-title { flex: 1 1 auto; min-width: 0; font-size: var(--font-ui-small); font-weight: 600; line-height: 1.25; color: var(--text-normal); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.helm-habit-tile .helm-habit-attach { flex: none; display: inline-flex; }
+.helm-habit-tile .helm-habit-attach .helm-iconbtn { padding: 0 3px; height: auto; }
+.helm-habit-tile-moved { flex: none; font-size: var(--font-ui-smaller); padding: 0 6px; border-radius: 8px; background: rgba(var(--hc-rgb), 0.15); color: var(--text-muted); }
+.helm-habit-tile-meta { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: var(--font-ui-smaller); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.helm-habit-tile-streak { color: var(--color-orange); }
+.helm-habit-tile[draggable="true"] { cursor: pointer; }
+.helm-habit-tile.is-dragging { opacity: 0.4; }
