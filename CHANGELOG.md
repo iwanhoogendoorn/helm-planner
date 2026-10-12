@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.48.1 — 2026-10-12
+
+- A habit tile on Today no longer loses its name. A habit moved to a part of
+  the day with notes attached squeezed its name to nothing and pushed the
+  streak and week count past the tile's edge. The name now has the line to
+  itself; the part it was moved to (an icon and “evening”) and the note and
+  drawing badges sit on a small line underneath, only on tiles that have them.
+
 ## 1.48.0 — 2026-10-12
 
 - **Habits on Today take one row**, not half the page. Each habit is a
