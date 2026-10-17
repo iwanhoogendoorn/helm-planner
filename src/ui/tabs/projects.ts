@@ -182,7 +182,8 @@ function pinnedTile(ctx: UiContext, hh: ProjectHealth, today: IsoDate): HTMLElem
       p.priority !== 'normal' ? chip(p.priority, `prio prio-${p.priority}`) : null,
       p.due ? chip(`due ${humanDate(p.due, today)}`, p.due < today && hh.open > 0 ? 'due is-overdue' : 'due') : null,
       ...(closed ? [] : hh.flags.map((f) => chip(FLAG_LABEL[f], `flag flag-${f}`)))),
-    closed ? null : progressBar(hh.progress, 'is-thin'),
+    // Five rows on every tile, always — the grid lines them up across a row of tiles.
+    closed ? h('div', { cls: 'helm-pinned-bar-gap' }) : progressBar(hh.progress, 'is-thin'),
     h('div', { cls: 'helm-pinned-next' },
       hh.nextAction ? [icon('arrow-right'), h('span', { cls: 'helm-task-text' }, richText(hh.nextAction.text, (t) => ctx.openLink(t, hh.nextAction!.path)))]
         : h('span', { cls: 'helm-hint', text: closed ? `${STATUS_LABEL[p.status]}${hh.lastTouched ? ` ${relativeDays(hh.lastTouched, today)}` : ''}` : hh.open === 0 && hh.total > 0 ? 'All tasks done' : p.childIds.length > 0 ? `${p.childIds.length} sub-project${p.childIds.length === 1 ? '' : 's'}` : hh.total === 0 ? 'No tasks yet' : 'No next action' })),
