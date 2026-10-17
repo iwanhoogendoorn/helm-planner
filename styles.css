@@ -1157,3 +1157,58 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-habit-tile-moved { display: inline-flex; align-items: center; gap: 3px; }
 .helm-habit-tile-moved svg, .helm-habit-tile-moved .svg-icon { width: 11px; height: 11px; }
 .helm-selection-bar .helm-btn-warning:hover { color: var(--text-error); }
+
+/* Status filter: Open · All │ each status with its count. */
+.helm-status-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 10px; }
+.helm-status-chip { display: inline-flex; align-items: center; gap: 5px; height: auto; padding: 3px 10px; border-radius: 14px; border: 1px solid var(--background-modifier-border); background: var(--background-primary); color: var(--text-muted); font-size: var(--font-ui-small); box-shadow: none; cursor: pointer; }
+.helm-status-chip:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.helm-status-chip svg { width: 13px; height: 13px; }
+.helm-status-chip-count { font-size: var(--font-ui-smaller); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.helm-status-chip.is-active { background: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); }
+.helm-status-chip.is-active .helm-status-chip-count { color: var(--text-on-accent); opacity: 0.85; }
+.helm-status-chip.status-active:not(.is-active) svg { color: var(--color-green); }
+.helm-status-chip.status-planned:not(.is-active) svg { color: var(--color-blue); }
+.helm-status-chip.status-on-hold:not(.is-active) svg { color: var(--color-orange); }
+.helm-status-chip.status-idea:not(.is-active) svg { color: var(--color-purple); }
+.helm-status-chip.status-done:not(.is-active) svg { color: var(--color-green); }
+.helm-status-chip.status-cancelled:not(.is-active) svg, .helm-status-chip.status-archived:not(.is-active) svg { color: var(--text-faint); }
+.helm-status-chips-sep { width: 1px; height: 18px; background: var(--background-modifier-border); margin: 0 2px; }
+.helm-section-body > .helm-status-chips { margin-top: 6px; }
+
+/* A finished project: one quiet line — it is done, not one of the others. */
+.helm-project.is-closed { padding: 5px 10px; background: transparent; border-color: transparent; }
+.helm-project.is-closed:hover { background: var(--background-modifier-hover); }
+.helm-project.is-closed .helm-project-head { gap: 8px; }
+.helm-project.is-closed .helm-project-title { font-weight: 500; color: var(--text-muted); }
+.helm-project.is-done .helm-project-closed-icon { color: var(--color-green); }
+.helm-project.is-cancelled .helm-project-closed-icon, .helm-project.is-archived .helm-project-closed-icon { color: var(--text-faint); }
+.helm-project.is-cancelled .helm-project-title { text-decoration: line-through; }
+.helm-project.is-closed .helm-project-count { color: var(--text-faint); }
+.helm-chip.status.is-filled.status-done { background: rgba(var(--color-green-rgb), 0.15); border-color: transparent; color: var(--color-green); }
+.helm-chip.status.is-filled.status-cancelled, .helm-chip.status.is-filled.status-archived { background: var(--background-modifier-hover); border-color: transparent; color: var(--text-faint); }
+.helm-closed-divider { display: flex; align-items: center; gap: 6px; margin: 10px 2px 2px; padding-top: 8px; border-top: 1px dashed var(--background-modifier-border); font-size: var(--font-ui-smaller); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); }
+.helm-closed-divider svg { width: 13px; height: 13px; color: var(--color-green); }
+.helm-status-empty { padding: 6px 2px; }
+
+/* Pinned projects: tiles at the top, the first thing the page says. */
+.helm-pinned-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; padding: 4px 0 6px; }
+.helm-pinned-tile { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 12px 14px 10px; border-radius: var(--radius-l, 10px); border: 1px solid rgba(var(--interactive-accent-rgb, 72, 54, 153), 0.35); border-top: 3px solid var(--interactive-accent); background: linear-gradient(180deg, rgba(var(--interactive-accent-rgb, 72, 54, 153), 0.07), var(--background-primary) 60%); cursor: pointer; transition: box-shadow 120ms ease, transform 120ms ease; }
+.helm-pinned-tile:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); transform: translateY(-1px); }
+.helm-pinned-tile:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.helm-pinned-tile.has-flags { border-top-color: var(--color-orange); }
+.helm-pinned-tile.is-closed { border-top-color: var(--color-green); background: var(--background-primary); opacity: 0.85; }
+.helm-pinned-head { display: flex; align-items: flex-start; gap: 8px; }
+.helm-pinned-icon { color: var(--interactive-accent); padding-top: 2px; flex: none; }
+.helm-pinned-tile.is-done .helm-pinned-icon { color: var(--color-green); }
+.helm-pinned-titles { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.helm-pinned-parent { font-size: var(--font-ui-smaller); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helm-pinned-title { font-size: var(--font-ui-large, 16px); font-weight: 650; line-height: 1.25; color: var(--text-normal); overflow-wrap: anywhere; }
+.helm-pinned-unpin { flex: none; opacity: 0; color: var(--text-faint); transition: opacity 120ms ease; }
+.helm-pinned-tile:hover .helm-pinned-unpin, .helm-pinned-tile:focus-within .helm-pinned-unpin { opacity: 1; }
+.helm-pinned-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.helm-pinned-chips:empty { display: none; }
+.helm-pinned-next { display: flex; align-items: flex-start; gap: 5px; font-size: var(--font-ui-small); color: var(--text-muted); line-height: 1.35; }
+.helm-pinned-next .helm-icon svg, .helm-pinned-next .svg-icon { width: 13px; height: 13px; margin-top: 2px; }
+.helm-pinned-next .helm-task-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.helm-pinned-foot { display: flex; align-items: center; gap: 6px; font-size: var(--font-ui-smaller); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+@media (hover: none) { .helm-pinned-unpin { opacity: 1; } }

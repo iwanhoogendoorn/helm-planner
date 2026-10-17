@@ -33,9 +33,38 @@ import { dragKeys, selection } from '../selection';
 
 export type ProjectView = 'list' | 'board' | 'table' | 'timeline' | 'profile';
 
-export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; collapsed: Map<string, boolean>; showDone: boolean; openSubs?: Set<string>; profileGroup?: string; openFamilies?: Set<string> }
+/** Which projects a list shows: the open ones, all of them, or one status. */
+export type StatusFilter = 'open' | 'all' | ProjectStatus;
+
+export interface ProjectsState { projectId?: string; view?: ProjectView; listView?: ProjectView; filter: string; showClosed: boolean; statusFilter?: StatusFilter; subStatusFilter?: StatusFilter; collapsed: Map<string, boolean>; showDone: boolean; openSubs?: Set<string>; profileGroup?: string; openFamilies?: Set<string> }
 
 const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', 'not-started': 'Not started', planned: 'Planned', 'on-hold': 'On hold', idea: 'Ideas', done: 'Done', cancelled: 'Cancelled', archived: 'Archived' };
+const STATUS_ICON: Record<ProjectStatus, string> = { active: 'play-circle', 'not-started': 'circle', planned: 'calendar-clock', 'on-hold': 'pause-circle', idea: 'lightbulb', done: 'check-circle-2', cancelled: 'x-circle', archived: 'archive' };
+const STATUS_ORDER: ProjectStatus[] = ['active', 'not-started', 'planned', 'on-hold', 'idea', 'done', 'cancelled', 'archived'];
+/** Finished: no more work comes out of it. Drawn compact, and kept out of the way of what is going on. */
+export const CLOSED: ReadonlySet<ProjectStatus> = new Set<ProjectStatus>(['done', 'cancelled', 'archived']);
+
+const passes = (f: StatusFilter, s: ProjectStatus): boolean => (f === 'all' ? true : f === 'open' ? !CLOSED.has(s) : s === f);
+
+/**
+ * The status filter: Open and All, then each status there is something in, with its count. One click
+ * shows one status; Open is everything still going.
+ */
+function statusChips(ctx: UiContext, statuses: ProjectStatus[], current: StatusFilter, onPick: (f: StatusFilter) => void): HTMLElement {
+  const count = (f: StatusFilter): number => statuses.filter((s) => passes(f, s)).length;
+  const chipFor = (f: StatusFilter, label: string, ic?: string): HTMLElement => h('button', {
+    cls: ['helm-status-chip', current === f && 'is-active', f !== 'open' && f !== 'all' && `status-${f}`],
+    title: f === 'open' ? 'Everything that is not done, cancelled or archived' : f === 'all' ? 'Every project, finished ones included' : `Only ${label.toLowerCase()}`,
+    attr: { 'aria-pressed': String(current === f) },
+    onClick: () => { onPick(f); ctx.refresh(); },
+  }, ic ? icon(ic) : null, h('span', { cls: 'helm-status-chip-label', text: label }), h('span', { cls: 'helm-status-chip-count', text: String(count(f)) }));
+  const present = STATUS_ORDER.filter((s) => statuses.includes(s));
+  return h('div', { cls: 'helm-status-chips', attr: { role: 'group', 'aria-label': 'Filter by status' } },
+    chipFor('open', 'Open'), chipFor('all', 'All'),
+    h('span', { cls: 'helm-status-chips-sep' }),
+    ...present.map((s) => chipFor(s, STATUS_LABEL[s], STATUS_ICON[s])));
+}
+
 const FLAG_LABEL: Record<ProjectHealth['flags'][number], string> = { 'no-next-action': 'no next action', stale: 'stale', overdue: 'overdue tasks', 'due-soon': 'due soon', 'past-due': 'past due', blocked: 'blocked' };
 
 const VIEWS: [ProjectView, string, string][] = [['list', 'List', 'list'], ['board', 'Board', 'columns-3'], ['table', 'Table', 'table'], ['timeline', 'Timeline', 'gantt-chart']];
@@ -69,11 +98,12 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
   const all = ctx.index.allProjects().map((p) => projectHealth(snap, p, today, settings)).sort(compareProjects);
   const filter = h('input', { attr: { type: 'search', placeholder: 'Filter projects…', value: state.filter }, onInput: (ev) => { state.filter = (ev.target as HTMLInputElement).value; ctx.refresh(); } });
   const q = state.filter.trim().toLowerCase();
-  const visible = all.filter((hh) => !q || `${hh.project.title} ${hh.project.area ?? ''} ${hh.project.tags.join(' ')}`.toLowerCase().includes(q));
+  const statusFilter: StatusFilter = state.statusFilter ?? (state.showClosed ? 'all' : 'open');
+  const matching = all.filter((hh) => !q || `${hh.project.title} ${hh.project.area ?? ''} ${hh.project.tags.join(' ')}`.toLowerCase().includes(q));
+  const visible = matching.filter((hh) => passes(statusFilter, hh.project.status));
   root.appendChild(crumbBar(ctx, 'projects', []));
   root.appendChild(h('div', { cls: 'helm-toolbar' },
     filter,
-    h('label', { cls: 'helm-toggle' }, h('input', { attr: { type: 'checkbox', checked: state.showClosed }, onChange: (ev) => { state.showClosed = (ev.target as HTMLInputElement).checked; ctx.refresh(); } }), h('span', { text: 'Show closed' })),
     h('span', { cls: 'helm-spacer' }),
     viewSwitcher(ctx, state, 'listView'),
     button('Export PDF', { icon: 'file-down', title: 'Print the projects: families nested, tasks under each', onClick: () => openExportReport(ctx, { scope: 'quarter' }) }),
@@ -83,8 +113,10 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     root.appendChild(empty(`No projects found under “${settings.projectsFolder}”. A project is a note with “type: project” in its frontmatter.`, button('Create your first project', { primary: true, onClick: () => openProjectForm(ctx) })));
     return;
   }
+  root.appendChild(statusChips(ctx, matching.map((hh) => hh.project.status), statusFilter, (f) => { state.statusFilter = f; state.showClosed = f !== 'open'; }));
+  if (visible.length === 0) { root.appendChild(empty(q ? `No ${statusFilter === 'open' || statusFilter === 'all' ? '' : `${STATUS_LABEL[statusFilter].toLowerCase()} `}projects match “${state.filter}”.` : 'Nothing with that status.')); return; }
   const byId = new Map(visible.map((hh) => [hh.project.id, hh]));
-  const groups: ProjectStatus[] = ['active', 'not-started', 'planned', 'on-hold', 'idea', ...(state.showClosed ? (['done', 'cancelled', 'archived'] as ProjectStatus[]) : [])];
+  const groups: ProjectStatus[] = STATUS_ORDER.filter((s) => passes(statusFilter, s));
   const listView: ProjectView = state.listView ?? 'list';
   if (listView !== 'list') {
     if (!state.openSubs) state.openSubs = new Set();
@@ -93,8 +125,14 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     if (listView === 'timeline') renderProjectsTimeline(ctx, root, visible, today, state);
     return;
   }
+  // Pinned projects lead, as tiles you can read at a glance — and only there, so nothing is listed twice.
+  const pinned = visible.filter((hh) => hh.project.pinned);
+  if (pinned.length > 0) {
+    root.appendChild(section('Pinned', { count: pinned.length, store: state.collapsed, key: 'pinned', cls: 'helm-pinned-section' },
+      h('div', { cls: 'helm-pinned-grid' }, ...pinned.map((hh) => pinnedTile(ctx, hh, today)))));
+  }
   for (const st of groups) {
-    const roots = visible.filter((hh) => hh.project.status === st && (!hh.project.parentId || !byId.has(hh.project.parentId) || byId.get(hh.project.parentId)!.project.status !== st));
+    const roots = visible.filter((hh) => !hh.project.pinned && hh.project.status === st && (!hh.project.parentId || !byId.has(hh.project.parentId) || byId.get(hh.project.parentId)!.project.status !== st || byId.get(hh.project.parentId)!.project.pinned));
     if (roots.length === 0) continue;
     const rows: HTMLElement[] = [];
     // Reordering happens among the top-level projects of a group; a sub-project sits with its parent.
@@ -104,7 +142,7 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
     const open = state.openFamilies ?? (state.openFamilies = new Set<string>());
     const searching = state.filter.trim() !== '';
     const walk = (hh: ProjectHealth, depth: number): void => {
-      const kids = hh.project.childIds.map((cid) => byId.get(cid)).filter((c): c is ProjectHealth => c !== undefined && c.project.status === st);
+      const kids = hh.project.childIds.map((cid) => byId.get(cid)).filter((c): c is ProjectHealth => c !== undefined && c.project.status === st && !c.project.pinned);
       const unfolded = searching || open.has(hh.project.id);
       rows.push(projectCard(ctx, hh, depth, today, depth === 0 ? siblings : [], kids.length > 0 && !searching ? {
         fold: { open: unfolded, count: kids.length, onToggle: () => { if (unfolded) open.delete(hh.project.id); else open.add(hh.project.id); ctx.refresh(); } },
@@ -112,8 +150,48 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
       if (unfolded) for (const c of kids) walk(c, depth + 1);
     };
     for (const r of roots) walk(r, 0);
-    root.appendChild(section(STATUS_LABEL[st], { count: rows.length, store: state.collapsed, key: `status:${st}`, collapsed: st === 'idea' || st === 'done' || st === 'cancelled' || st === 'archived' }, ...rows));
+    // Asked for by name, a status is shown open; otherwise ideas and finished work start folded.
+    // The count is the projects with that status, folded families included — the same number the chip says.
+    root.appendChild(section(STATUS_LABEL[st], { count: visible.filter((hh) => hh.project.status === st && !hh.project.pinned).length, store: state.collapsed, key: `status:${st}`, collapsed: statusFilter !== st && (st === 'idea' || CLOSED.has(st)), cls: CLOSED.has(st) ? 'is-closed-group' : undefined }, ...rows));
   }
+}
+
+/**
+ * A pinned project as a tile: what it is, where it stands, what is next. Bigger than a row, so the few
+ * you pinned are the first thing the page says; the pin on it takes it off again.
+ */
+function pinnedTile(ctx: UiContext, hh: ProjectHealth, today: IsoDate): HTMLElement {
+  const p = hh.project;
+  const parent = p.parentId ? ctx.index.project(p.parentId) : undefined;
+  const closed = CLOSED.has(p.status);
+  const tile = h('div', {
+    cls: ['helm-pinned-tile', closed && `is-closed is-${p.status}`, hh.flags.length > 0 && !closed && 'has-flags'],
+    attr: { role: 'button', tabindex: '0' },
+    onClick: () => ctx.navigate('projects', { projectId: p.id }),
+    onKeyDown: (ev) => { if (ev.key === 'Enter') ctx.navigate('projects', { projectId: p.id }); },
+    onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); },
+  },
+    h('div', { cls: 'helm-pinned-head' },
+      icon(closed ? STATUS_ICON[p.status] : p.childIds.length > 0 ? 'folder-tree' : 'folder', 'helm-pinned-icon'),
+      h('div', { cls: 'helm-pinned-titles' },
+        parent ? h('span', { cls: 'helm-pinned-parent', text: parent.title }) : null,
+        h('span', { cls: 'helm-pinned-title', text: p.title })),
+      iconButton('pin-off', 'Unpin', (ev) => { ev.stopPropagation(); void ctx.run('Pin', () => ctx.mutations.setProjectPinned(p.id, false)); }, 'helm-pinned-unpin')),
+    h('div', { cls: 'helm-pinned-chips' },
+      p.status !== 'active' ? chip(STATUS_LABEL[p.status], `status status-${p.status}${closed ? ' is-filled' : ''}`) : null,
+      p.priority !== 'normal' ? chip(p.priority, `prio prio-${p.priority}`) : null,
+      p.due ? chip(`due ${humanDate(p.due, today)}`, p.due < today && hh.open > 0 ? 'due is-overdue' : 'due') : null,
+      ...(closed ? [] : hh.flags.map((f) => chip(FLAG_LABEL[f], `flag flag-${f}`)))),
+    closed ? null : progressBar(hh.progress, 'is-thin'),
+    h('div', { cls: 'helm-pinned-next' },
+      hh.nextAction ? [icon('arrow-right'), h('span', { cls: 'helm-task-text' }, richText(hh.nextAction.text, (t) => ctx.openLink(t, hh.nextAction!.path)))]
+        : h('span', { cls: 'helm-hint', text: closed ? `${STATUS_LABEL[p.status]}${hh.lastTouched ? ` ${relativeDays(hh.lastTouched, today)}` : ''}` : hh.open === 0 && hh.total > 0 ? 'All tasks done' : p.childIds.length > 0 ? `${p.childIds.length} sub-project${p.childIds.length === 1 ? '' : 's'}` : hh.total === 0 ? 'No tasks yet' : 'No next action' })),
+    h('div', { cls: 'helm-pinned-foot' },
+      hh.total > 0 ? h('span', { text: `${hh.done}/${hh.total} done` }) : null,
+      h('span', { cls: 'helm-spacer' }),
+      hh.lastTouched && !closed ? h('span', { text: relativeDays(hh.lastTouched, today), title: `Last activity ${hh.lastTouched}` }) : null),
+  );
+  return tile;
 }
 
 /** Drag a project onto another to put it there; the whole group is renumbered so the order sticks. */
@@ -136,8 +214,25 @@ function makeProjectDraggable(ctx: UiContext, card: HTMLElement, id: string, sib
 
 function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: IsoDate, siblings: string[] = [], opts: { showStatus?: boolean; fold?: { open: boolean; count: number; onToggle: () => void } } = {}): HTMLElement {
   const p = hh.project;
-  const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, p.pinned && 'is-pinned', hh.flags.length > 0 && 'has-flags'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev, { siblings }); } });
+  const closed = CLOSED.has(p.status);
+  const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, p.pinned && 'is-pinned', hh.flags.length > 0 && !closed && 'has-flags', closed && `is-closed is-${p.status}`], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev, { siblings }); } });
   if (siblings.length > 1) makeProjectDraggable(ctx, card, p.id, siblings);
+  if (closed) {
+    // Finished work in one quiet line: what it was, that it is done, how much it held, when it closed.
+    const when = p.status === 'done' ? 'finished' : p.status === 'cancelled' ? 'cancelled' : 'archived';
+    card.append(h('div', { cls: 'helm-project-head' },
+      opts.fold ? iconButton(opts.fold.open ? 'chevron-down' : 'chevron-right', opts.fold.open ? 'Fold the sub-projects away' : `Show ${opts.fold.count} sub-project${opts.fold.count === 1 ? '' : 's'}`, (ev) => { ev.stopPropagation(); opts.fold!.onToggle(); }, 'helm-project-fold') : null,
+      icon(STATUS_ICON[p.status], 'helm-project-closed-icon'),
+      h('span', { cls: 'helm-project-title', text: p.title }),
+      opts.fold && !opts.fold.open ? chip(`${opts.fold.count} sub`, 'count', `${opts.fold.count} sub-project${opts.fold.count === 1 ? '' : 's'} folded away`) : null,
+      opts.showStatus ? chip(STATUS_LABEL[p.status], `status status-${p.status} is-filled`, `Status: ${STATUS_LABEL[p.status]} — right-click to change it`) : null,
+      p.area ? chip(p.area, 'area') : null,
+      h('span', { cls: 'helm-spacer' }),
+      hh.total > 0 ? h('span', { cls: 'helm-project-count', text: `${hh.done}/${hh.total}`, title: `${hh.done} of ${hh.total} tasks done` }) : null,
+      hh.lastTouched ? h('span', { cls: 'helm-hint', text: `${when} ${relativeDays(hh.lastTouched, today)}`, title: `Last activity ${hh.lastTouched}` }) : null,
+    ));
+    return card;
+  }
   card.append(
     h('div', { cls: 'helm-project-head' },
       // The twisty opens the family; reordering is dragging, or the card's own menu.
@@ -265,10 +360,21 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       .map((c) => projectHealth(snap, c, today, settings))
       .sort(compareProjects);
     const order = kids.map((k) => k.project.id);
+    // A family is shown whole by default — the finished ones compact, under a line, after the live ones.
+    const subFilter: StatusFilter = state.subStatusFilter ?? 'all';
+    const shown = kids.filter((k) => passes(subFilter, k.project.status));
+    const live = shown.filter((k) => !CLOSED.has(k.project.status));
+    const closed = shown.filter((k) => CLOSED.has(k.project.status));
+    const statuses = kids.map((k) => k.project.status);
     root.appendChild(section('Sub-projects', {
-      count: p.childIds.length, store: state.collapsed, key: 'children',
+      count: kids.length, store: state.collapsed, key: 'children',
       actions: [button('New sub-project', { icon: 'folder-plus', onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) })],
-    }, ...kids.map((hh) => projectCard(ctx, hh, 0, today, order, { showStatus: true }))));
+    },
+      new Set(statuses).size > 1 ? statusChips(ctx, statuses, subFilter, (f) => { state.subStatusFilter = f; }) : null,
+      ...live.map((hh) => projectCard(ctx, hh, 0, today, order, { showStatus: true })),
+      closed.length > 0 && live.length > 0 ? h('div', { cls: 'helm-closed-divider' }, icon('check-circle-2'), h('span', { text: `Closed · ${closed.length}` })) : null,
+      ...closed.map((hh) => projectCard(ctx, hh, 0, today, order, { showStatus: true })),
+      shown.length === 0 ? h('div', { cls: 'helm-hint helm-status-empty', text: 'No sub-projects with that status.' }) : null));
   }
 
   const toolbar = h('div', { cls: 'helm-toolbar' },

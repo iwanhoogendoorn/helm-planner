@@ -781,6 +781,87 @@ describe('a project’s Notes list', () => {
   });
 });
 
+describe('project statuses: a filter, and finished projects that look finished', () => {
+  const proj = (id: string, title: string, status: string) => `---\ntitle: ${title}\ntype: project\nstatus: ${status}\npriority: medium\nid: ${id}\n---\n# ${title}\n\n## Tasks\n\n- [x] Wrap it up ✅ 2026-08-20\n`;
+  const extra = {
+    '02 PROJECTS/⮕ Oracle/NAT on DRG/NAT on DRG.md': proj('prj-nat', 'NAT on DRG', 'done'),
+    '02 PROJECTS/⮕ Oracle/Old Labs/Old Labs.md': proj('prj-old', 'Old Labs', 'cancelled'),
+  };
+  const state = (projectId?: string) => ({ ...(projectId ? { projectId } : {}), filter: '', showClosed: false, showDone: false, collapsed: new Map() }) as Parameters<typeof renderProjects>[2];
+  const chips = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('.helm-status-chips')][0]!;
+  const chipLabels = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('.helm-status-chip')].map((c) => `${c.querySelector('.helm-status-chip-label')!.textContent} ${c.querySelector('.helm-status-chip-count')!.textContent}`);
+
+  it('the projects page filters by status: Open by default, All, or one status shown open', async () => {
+    const { ctx } = await ctxFor(extra);
+    const st = state();
+    let root = render((r) => renderProjects(ctx, r, st));
+    expect(chipLabels(chips(root))).toEqual(['Open 4', 'All 6', 'Active 3', 'Planned 1', 'Done 1', 'Cancelled 1']);
+    expect(root.querySelector('.helm-status-chip.is-active')!.textContent).toContain('Open');
+    expect(texts(root, '.helm-section-title')).not.toContain('Done');
+    click([...chips(root).querySelectorAll('.helm-status-chip')].find((c) => c.textContent?.startsWith('Done')));
+    root = render((r) => renderProjects(ctx, r, st));
+    expect(texts(root, '.helm-section-title')).toEqual(['Done']);
+    const done = root.querySelector<HTMLElement>('.helm-section')!;
+    expect(done.classList.contains('is-collapsed')).toBe(false);          // asked for by name: shown open
+    expect(texts(done, '.helm-project-title')).toEqual(['NAT on DRG']);
+    click([...chips(root).querySelectorAll('.helm-status-chip')].find((c) => c.textContent?.startsWith('All')));
+    root = render((r) => renderProjects(ctx, r, st));
+    expect(texts(root, '.helm-section-title')).toEqual(['Active', 'Planned', 'Done', 'Cancelled']);
+  });
+
+  it('a parent’s page lists live sub-projects first, then the finished ones compact under a line; its chips filter them', async () => {
+    const { ctx } = await ctxFor(extra);
+    const st = state('prj-oracle');
+    let root = render((r) => renderProjects(ctx, r, st));
+    const subs = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === 'Sub-projects')!;
+    expect(texts(subs, '.helm-project-title')).toEqual(['OCI Certification', 'NAT on DRG', 'Old Labs']);
+    expect(subs.querySelector('.helm-closed-divider')!.textContent).toBe('Closed · 2');
+    const nat = [...subs.querySelectorAll<HTMLElement>('.helm-project')].find((c) => c.textContent?.includes('NAT on DRG'))!;
+    expect(nat.classList.contains('is-closed')).toBe(true);
+    expect(nat.querySelector('.helm-progress')).toBeNull();                 // no bar, no “no next action”
+    expect(nat.querySelector('.helm-chip.status.is-filled')!.textContent).toBe('Done');
+    expect(nat.textContent).toContain('finished');
+    const live = [...subs.querySelectorAll<HTMLElement>('.helm-project')].find((c) => c.textContent?.includes('OCI Certification'))!;
+    expect(live.classList.contains('is-closed')).toBe(false);
+    expect(chipLabels(chips(subs))).toEqual(['Open 1', 'All 3', 'Active 1', 'Done 1', 'Cancelled 1']);
+    click([...chips(subs).querySelectorAll('.helm-status-chip')].find((c) => c.textContent?.startsWith('Open')));
+    root = render((r) => renderProjects(ctx, r, st));
+    const subs2 = [...root.querySelectorAll<HTMLElement>('.helm-section')].find((s) => s.querySelector('.helm-section-title')?.textContent === 'Sub-projects')!;
+    expect(texts(subs2, '.helm-project-title')).toEqual(['OCI Certification']);
+    expect(subs2.querySelector('.helm-closed-divider')).toBeNull();
+  });
+});
+
+describe('pinned projects', () => {
+  it('lead the projects page as tiles, are not listed again below, and the pin on a tile unpins it', async () => {
+    const { ctx, m, index } = await ctxFor();
+    await m.setProjectPinned('prj-book', true);
+    await m.setProjectPinned('prj-cert', true);                     // a sub-project can be pinned too
+    const st = { filter: '', showClosed: false, showDone: false, collapsed: new Map() } as Parameters<typeof renderProjects>[2];
+    let root = render((r) => renderProjects(ctx, r, st));
+    expect(texts(root, '.helm-section-title')[0]).toBe('Pinned');
+    const tiles = [...root.querySelectorAll<HTMLElement>('.helm-pinned-tile')];
+    expect(tiles.map((t) => t.querySelector('.helm-pinned-title')!.textContent).sort()).toEqual(['OCI Certification', 'Oracle Book Writing']);
+    const cert = tiles.find((t) => t.textContent?.includes('OCI Certification'))!;
+    expect(cert.querySelector('.helm-pinned-parent')!.textContent).toBe('Oracle');
+    expect(cert.querySelector('.helm-pinned-next')!.textContent).toContain('Book exam');
+    const listed = [...root.querySelectorAll<HTMLElement>('.helm-section:not(.helm-pinned-section) .helm-project-title')].map((e) => e.textContent);
+    expect(listed).not.toContain('Oracle Book Writing');
+    expect(listed).not.toContain('OCI Certification');
+    click(cert.querySelector('[aria-label="Unpin"]'));
+    await flush(); await flush();
+    expect(index.project('prj-cert')!.pinned).toBeFalsy();
+    root = render((r) => renderProjects(ctx, r, st));
+    expect([...root.querySelectorAll('.helm-pinned-tile')]).toHaveLength(1);
+  });
+
+  it('no pinned section when nothing is pinned', async () => {
+    const { ctx } = await ctxFor();
+    const root = render((r) => renderProjects(ctx, r, { filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    expect(root.querySelector('.helm-pinned-section')).toBeNull();
+  });
+});
+
 describe('archiving a project from the UI', () => {
   const confirmYes = <T>(fn: () => Promise<T>): Promise<T> => { const orig = window.confirm; window.confirm = () => true; return fn().finally(() => { window.confirm = orig; }); };
   const state = (projectId?: string) => ({ ...(projectId ? { projectId } : {}), filter: '', showClosed: false, showDone: false, collapsed: new Map() });
