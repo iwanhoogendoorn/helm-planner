@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.48.3 — 2026-10-17
+
+- **Delete a selection**: *Delete…* in the right-click menu of picked tasks
+  and in the selection bar. It asks once and says what goes — subtasks with
+  their parent, and for a repeating task only this turn (the series carries
+  on, and the catch-up does not hand it back). The API's bulk delete
+  (`POST /tasks/bulk`, `action: delete`) treats repeating turns the same way.
+
 ## 1.48.2 — 2026-10-17
 
 - Archiving (or deleting) a project no longer redraws the screen in stages.
