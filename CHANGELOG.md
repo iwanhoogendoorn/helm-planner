@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.49.0 — 2026-10-17
+
+- **A status filter** on the projects page and in a project's Sub-projects:
+  *Open · All │ Active · Not started · Planned · On hold · Ideas · Done ·
+  Cancelled · Archived*, each with its count, only the statuses there are.
+  It replaces *Show closed*. Open is the projects page's default; a parent's
+  page shows the whole family. One status, picked, is shown unfolded. Board,
+  Table and Timeline follow it too.
+- **Finished projects look finished**: done, cancelled and archived ones are
+  one quiet line — a check, the title, a filled *Done* badge, “finished 3 days
+  ago” — with no progress bar or “no next action”. On a parent's page they sit
+  at the bottom under a *Closed* line.
+- **Pinned projects lead the page as tiles**: title (and parent), status,
+  priority, due date and flags, a progress bar, the next action, how much is
+  done. Click to open, the pin to unpin; they are no longer repeated below.
+- A status heading counts every project with that status, folded families
+  included — the same number as its chip.
+
 ## 1.48.3 — 2026-10-17
 
 - **Delete a selection**: *Delete…* in the right-click menu of picked tasks
