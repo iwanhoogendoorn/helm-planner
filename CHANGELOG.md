@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.48.2 — 2026-10-17
+
+- Archiving (or deleting) a project no longer redraws the screen in stages.
+  Obsidian reports a folder move file by file, and Helm redrew after each one,
+  then re-read the whole vault; removed files now join the same short batch as
+  changed ones, and the project's tasks, notes and drawings leave the index in
+  one step. You also land where you were: archive a sub-project from its
+  parent's page and you stay there, its row simply gone; archive from the
+  project's own page and Helm steps to its parent (or the list) first.
+
 ## 1.48.1 — 2026-10-12
 
 - A habit tile on Today no longer loses its name. A habit moved to a part of
