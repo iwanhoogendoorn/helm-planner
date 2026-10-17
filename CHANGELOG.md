@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.49.2 — 2026-10-17
+
+- A task no longer carries a 🎵 chip to whatever note its project links. The
+  chip — and the task menu's *Open …* — is for a song's steps: tasks of a song
+  sub-project under a music board, pointing at the song. Any other project fell
+  back to the first note under its *Notes*, so every task of, say, a project
+  linking a reference note showed that note as if it were the task's own.
+
 ## 1.49.1 — 2026-10-17
 
 - Pinned project tiles line up: every tile has the same five rows — title,
