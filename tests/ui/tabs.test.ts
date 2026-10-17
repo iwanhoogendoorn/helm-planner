@@ -1394,6 +1394,22 @@ describe('A project with a profile', () => {
     return { ctx, index, m, vault, nav, p };
   }
 
+  it('a song sub-project’s tasks carry a chip to the song; a plain project’s tasks do not, whatever notes it links', async () => {
+    const { ctx, index, m, vault, p } = await musicProject();
+    const song = await m.addProfileSubproject(p.id, { title: 'My Immortal - Evanescence', group: 'September 2026', note: 'My Immortal - Evanescence', assignments: [{ person: 'Iwan', mode: 'Singing' }] });
+    await m.addTask({ text: 'Learn the bridge', projectId: song.id });
+    const songPage = render((r) => renderProjects(ctx, r, { projectId: song.id, filter: '', showClosed: false, showDone: true, collapsed: new Map() }));
+    const step = [...songPage.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.textContent?.includes('Learn the bridge'))!;
+    expect(step.querySelector('.helm-chip-note')!.textContent).toBe('My Immortal - Evanescence');
+    // A plain project that lists a reference note under ## Notes: its task gets no chip.
+    await vault.write('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md', (await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md')) + '\n## Tasks\n\n- [ ] Order the tiles\n\n## Notes\n\n- [[Setting up the workshop]]\n');
+    index.update('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md', await vault.read('02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md'));
+    const plain = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: true, collapsed: new Map() }));
+    const row = [...plain.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.textContent?.includes('Order the tiles'))!;
+    expect(row).toBeTruthy();
+    expect(row.querySelector('.helm-chip-note')).toBeNull();
+  });
+
   it('writes the profile into the note, and reads it back as the project’s own words', async () => {
     const { vault, index, p } = await musicProject();
     const note = await vault.read(p.path);
