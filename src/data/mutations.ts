@@ -1374,8 +1374,8 @@ export class Mutations {
     const dest = `${this.settings.archiveFolder.replace(/\/+$/, '')}/${baseName(src.endsWith('.md') ? src : src + '.md')}${src.endsWith('.md') ? '.md' : ''}`;
     if (await this.d.vault.exists(dest)) throw new Error(`Already in the archive: ${dest}`);
     await this.d.vault.rename(src, dest);
-    for (const path of [...this.index.snapshot.tasksByPath.keys()]) if (path === src || path.startsWith(src + '/')) this.index.update(path, undefined);
-    await this.index.rebuild();
+    // The archive is out of Helm's scope: the project, its notes and drawings just leave — in one step.
+    this.index.forgetUnder(src);
     return dest;
   }
 
@@ -1387,7 +1387,7 @@ export class Mutations {
     await this.dropFutureMirrors(p);
     const target = p.folderNote ? p.folder : p.path;
     await this.d.vault.trash(target);
-    await this.index.rebuild();
+    this.index.forgetUnder(target);
   }
 
   async setProjectFields(id: string, fields: { status?: ProjectStatus; priority?: ProjectPriority; area?: string; due?: IsoDate | null; start?: IsoDate | null; title?: string; pinned?: boolean | null; order?: number | null; period?: string | null; goal?: string | null }): Promise<void> {

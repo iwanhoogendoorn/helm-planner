@@ -166,7 +166,8 @@ function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: Is
   return card;
 }
 
-function projectMenu(ctx: UiContext, p: Project, ev: MouseEvent, opts: { siblings?: string[] } = {}): void {
+/** `onPage`: opened from the project's own page — leaving it (archive, delete) steps off the page first. */
+function projectMenu(ctx: UiContext, p: Project, ev: MouseEvent, opts: { siblings?: string[]; onPage?: boolean } = {}): void {
   const menu = new Menu();
   menu.addItem((i) => { i.setTitle('Status').setIcon('activity'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); for (const s of PROJECT_STATUSES) sub.addItem((j) => j.setTitle(STATUS_LABEL[s]).setChecked(p.status === s).onClick(() => void ctx.run('Status', () => ctx.mutations.setProjectFields(p.id, { status: s })))); });
   menu.addItem((i) => { i.setTitle('Priority').setIcon('flag'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); for (const s of PROJECT_PRIORITIES) sub.addItem((j) => j.setTitle(s).setChecked(p.priority === s).onClick(() => void ctx.run('Priority', () => ctx.mutations.setProjectFields(p.id, { priority: s })))); });
@@ -182,12 +183,22 @@ function projectMenu(ctx: UiContext, p: Project, ev: MouseEvent, opts: { sibling
   menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => void ctx.openFile(p.path)));
   menu.addSeparator();
   menu.addItem((i) => i.setTitle('Archive project').setIcon('archive').onClick(() => {
-    if (window.confirm(`Move “${p.title}”${p.childIds.length ? ` and its ${p.childIds.length} sub-project(s)` : ''} to ${ctx.settings().archiveFolder}?`)) void ctx.run('Archive', async () => { const dest = await ctx.mutations.archiveProject(p.id); ctx.notify(`Archived to ${dest}`); ctx.navigate('projects'); });
+    if (window.confirm(`Move “${p.title}”${p.childIds.length ? ` and its ${p.childIds.length} sub-project(s)` : ''} to ${ctx.settings().archiveFolder}?`)) void ctx.run('Archive', async () => { if (opts.onPage) leaveProject(ctx, p); const dest = await ctx.mutations.archiveProject(p.id); ctx.notify(`Archived “${p.title}” to ${dest}`); });
   }));
   menu.addItem((i) => i.setTitle('Delete project…').setIcon('trash').setWarning(true).onClick(() => {
-    if (window.confirm(`Move “${p.title}”${p.folderNote ? ' (its whole folder)' : ''} to the trash? Obsidian keeps it in .trash, so this can be undone from the file system.`)) void ctx.run('Delete', async () => { await ctx.mutations.deleteProject(p.id); ctx.notify(`Deleted “${p.title}”.`); ctx.navigate('projects'); });
+    if (window.confirm(`Move “${p.title}”${p.folderNote ? ' (its whole folder)' : ''} to the trash? Obsidian keeps it in .trash, so this can be undone from the file system.`)) void ctx.run('Delete', async () => { if (opts.onPage) leaveProject(ctx, p); await ctx.mutations.deleteProject(p.id); ctx.notify(`Deleted “${p.title}”.`); });
   }));
   menu.showAtMouseEvent(ev);
+}
+
+/**
+ * Before a project is archived or trashed, step to where you will be afterwards — its parent (where its
+ * row simply goes), or the list — so the page moves once, instead of redrawing the project as it leaves.
+ */
+function leaveProject(ctx: UiContext, p: Project): void {
+  const parent = p.parentId ? ctx.index.project(p.parentId) : undefined;
+  if (parent) ctx.navigate('projects', { projectId: parent.id });
+  else ctx.navigate('projects');
 }
 
 function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: ProjectsState): void {
@@ -231,7 +242,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       notesButton(ctx, targetForProject(p.id, p.title)),
       drawingsButton(ctx, targetForProject(p.id, p.title)),
       linksButton(ctx, projectLinks(ctx, p)),
-      button('', { icon: 'more-horizontal', title: 'More', onClick: (ev) => projectMenu(ctx, p, ev) }),
+      button('', { icon: 'more-horizontal', title: 'More', onClick: (ev) => projectMenu(ctx, p, ev, { onPage: true }) }),
     ),
     h('div', { cls: 'helm-detail-meta' },
       statusSel, prioSel,

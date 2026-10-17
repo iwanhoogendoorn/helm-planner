@@ -194,6 +194,17 @@ export class HelmIndex {
     return true;
   }
 
+  /**
+   * Forget every file under a folder (or the one file) at once — a project archived or trashed takes its
+   * notes, drawings and tasks with it in one re-link and one change event, not one per file.
+   */
+  forgetUnder(target: string): number {
+    const t = target.replace(/\/+$/, '');
+    const gone = [...this.files.keys()].filter((p) => p === t || p.startsWith(`${t}/`));
+    for (const p of gone) this.noteGone(p);
+    return this.updateMany(gone.map((path) => ({ path })));
+  }
+
   /** Re-parse many files with a single re-link and a single change event. Returns how many changed. */
   updateMany(entries: { path: string; content?: string }[]): number {
     let changed = 0;

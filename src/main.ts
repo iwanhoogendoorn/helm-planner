@@ -436,8 +436,16 @@ export default class HelmPlugin extends Plugin {
     };
     this.registerEvent(this.app.vault.on('modify', (f) => { if (f instanceof TFile) touch(f.path); }));
     this.registerEvent(this.app.vault.on('create', (f) => { if (f instanceof TFile) touch(f.path); }));
-    this.registerEvent(this.app.vault.on('delete', (f) => { if (f instanceof TFile) { this.index.update(f.path, undefined); } }));
-    this.registerEvent(this.app.vault.on('rename', (f, old) => { this.index.update(old, undefined); this.index.noteGone(old); if (f instanceof TFile) touch(f.path); }));
+    // A file that went away joins the same batch: a folder moved or trashed is one render, not one per file.
+    const forget = (path: string): void => {
+      this.index.noteGone(path);
+      if (!this.index.hasFile(path)) return;
+      this.pendingPaths.add(path);
+      if (this.updateTimer) window.clearTimeout(this.updateTimer);
+      this.updateTimer = window.setTimeout(() => void this.flushUpdates(), 250);
+    };
+    this.registerEvent(this.app.vault.on('delete', (f) => { if (f instanceof TFile) forget(f.path); }));
+    this.registerEvent(this.app.vault.on('rename', (f, old) => { forget(old); if (f instanceof TFile) touch(f.path); }));
   }
 
   private async flushUpdates(): Promise<void> {

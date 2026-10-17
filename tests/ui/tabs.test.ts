@@ -742,6 +742,36 @@ describe('a project’s Notes list', () => {
   });
 });
 
+describe('archiving a project from the UI', () => {
+  const confirmYes = <T>(fn: () => Promise<T>): Promise<T> => { const orig = window.confirm; window.confirm = () => true; return fn().finally(() => { window.confirm = orig; }); };
+  const state = (projectId?: string) => ({ ...(projectId ? { projectId } : {}), filter: '', showClosed: false, showDone: false, collapsed: new Map() });
+
+  it('from a sub-project row on its parent’s page: you stay on the parent, and the row goes', async () => {
+    const { ctx, nav, index } = await ctxFor();
+    const root = render((r) => renderProjects(ctx, r, state('prj-oracle')));
+    const row = [...root.querySelectorAll<HTMLElement>('.helm-project')].find((c) => c.textContent?.includes('OCI Certification'))!;
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    await confirmYes(async () => { Menu.last!.items.find((i) => i.title === 'Archive project')!.click!(); await flush(); await flush(); });
+    expect(index.project('prj-cert')).toBeUndefined();
+    expect(nav).toEqual([]);                                     // no jump to the list
+    const again = render((r) => renderProjects(ctx, r, state('prj-oracle')));
+    expect([...again.querySelectorAll('.helm-project')].some((c) => c.textContent?.includes('OCI Certification'))).toBe(false);
+  });
+
+  it('from the project’s own page: it steps to the parent first (or the list, for a top-level project)', async () => {
+    const { ctx, nav } = await ctxFor();
+    const page = render((r) => renderProjects(ctx, r, state('prj-cert')));
+    click([...page.querySelectorAll<HTMLElement>('button')].find((b) => b.title === 'More'));
+    await confirmYes(async () => { Menu.last!.items.find((i) => i.title === 'Archive project')!.click!(); await flush(); await flush(); });
+    expect(nav).toEqual([{ tab: 'projects', opts: { projectId: 'prj-oracle' } }]);
+    nav.length = 0;
+    const top = render((r) => renderProjects(ctx, r, state('prj-kitchen')));
+    click([...top.querySelectorAll<HTMLElement>('button')].find((b) => b.title === 'More'));
+    await confirmYes(async () => { Menu.last!.items.find((i) => i.title === 'Archive project')!.click!(); await flush(); await flush(); });
+    expect(nav).toEqual([{ tab: 'projects', opts: undefined }]);
+  });
+});
+
 describe('Week tab', () => {
   it('renders seven days with the right content and a drop handler', async () => {
     const { ctx, vault } = await ctxFor();

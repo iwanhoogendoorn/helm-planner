@@ -472,6 +472,23 @@ describe('archiving and deleting projects', () => {
     expect(index.project('prj-kitchen')).toBeUndefined();
     expect(index.snapshot.projects.size).toBe(2);
   });
+
+  it('archiving takes the project’s notes and drawings along in one step: one change, no vault re-read', async () => {
+    const { m, index } = await setup({ '02 PROJECTS/Kitchen Remodel/Tiles.md': '# Tiles\n', '02 PROJECTS/Kitchen Remodel/research/Quotes.md': '# Quotes\n' });
+    expect(index.notesFor({ kind: 'project', id: 'prj-kitchen', title: 'K' })).toHaveLength(2);
+    let changes = 0;
+    const off = index.onChange(() => { changes++; });
+    const rebuild = index.rebuild.bind(index);
+    let rebuilt = 0;
+    index.rebuild = async () => { rebuilt++; await rebuild(); };
+    await m.archiveProject('prj-kitchen');
+    off();
+    expect(index.project('prj-kitchen')).toBeUndefined();
+    expect([...index.allTasks()].some((t) => t.path.startsWith('02 PROJECTS/Kitchen Remodel/'))).toBe(false);
+    expect(index.linkableNotes().some((n) => n.path.startsWith('02 PROJECTS/Kitchen Remodel/'))).toBe(false);
+    expect(rebuilt).toBe(0);
+    expect(changes).toBe(1);
+  });
 });
 
 describe('a carried-over task put on today', () => {

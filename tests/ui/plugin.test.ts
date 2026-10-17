@@ -76,10 +76,18 @@ describe('HelmPlugin', () => {
   it('delete and rename events drop and re-add files', async () => {
     const { plugin, app } = await boot();
     const p = '02 PROJECTS/Kitchen Remodel/Kitchen Remodel.md';
+    const content = app.vault.files.files.get(p)!;
+    // A removal joins the 250 ms batch, like any other change: one render for a folder, not one per file.
+    let renders = 0;
+    const off = plugin.index.onChange(() => { renders++; });
+    app.vault.files.files.delete(p);
     app.vault.emit('delete', new FakeTFile(p));
+    await tick(300);
     expect(plugin.index.project('prj-kitchen')).toBeUndefined();
+    expect(renders).toBe(1);
+    off();
     const np = '02 PROJECTS/Kitchen v2/Kitchen v2.md';
-    app.vault.files.files.set(np, app.vault.files.files.get(p)!);
+    app.vault.files.files.set(np, content);
     app.vault.emit('rename', new FakeTFile(np), p);
     await tick(300);
     expect(plugin.index.project('prj-kitchen')?.path).toBe(np);
