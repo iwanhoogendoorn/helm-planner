@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.49.1 — 2026-10-17
+
+- Pinned project tiles line up: every tile has the same five rows — title,
+  badges, progress bar, next action, footer — aligned across the row, so a
+  two-line title or a tile without badges no longer pushes the rest down.
+  The footer sits at the bottom; long titles stop at two lines.
+
 ## 1.49.0 — 2026-10-17
 
 - **A status filter** on the projects page and in a project's Sub-projects:
