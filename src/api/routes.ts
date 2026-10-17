@@ -604,7 +604,7 @@ async function bulkTasks(body: Record<string, unknown>, d: Ctx): Promise<ApiResp
       each = (key) => d.mutations.moveToProject(key, projectId, str(body['phaseId']));
       break;
     }
-    default: each = (key) => d.mutations.deleteTask(key);
+    default: each = (key) => d.mutations.removeTask(key);
   }
   const r = await runBulk(d.index, d.mutations, tasks, each);
   return ok({ action, applied: r.applied.length, appliedIds: r.applied, covered: r.covered, failed: [...failed, ...r.failed], written: d.written() });

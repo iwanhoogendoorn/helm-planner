@@ -516,6 +516,45 @@ describe('Today tab', () => {
     expect(Notice.messages.at(-1)).toBe('1 task → Wed 2 Sep 2026');
   });
 
+  it('right-clicking a selection offers Delete…: it asks once, says what goes, and deletes them all', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    const book = '02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md';
+    const pick = ['Draft chapter list', 'Chapter 2', 'Buy reference books'].map((x) => [...index.snapshot.tasks.values()].find((t) => t.text === x && t.path === book)!);
+    for (const t of pick) selection.toggle(t.key);
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-book', filter: '', showClosed: false, showDone: true, collapsed: new Map() }));
+    const row = [...root.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.textContent?.includes('Buy reference books'))!;
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const titles = Menu.last!.items.map((i) => i.title);
+    expect(titles[0]).toBe('3 tasks selected');
+    expect(titles).toContain('Delete…');
+    let asked = '';
+    const orig = window.confirm;
+    window.confirm = (msg?: string) => { asked = msg ?? ''; return true; };
+    try { Menu.last!.items.find((i) => i.title === 'Delete…')!.click!(); } finally { window.confirm = orig; }
+    expect(asked).toBe('Delete 3 tasks? One has subtasks; they go too. One repeats: only this turn goes, the series carries on.');
+    await waitFor(() => Notice.messages.find((m) => m.includes('deleted')), 'the report');
+    expect(Notice.messages.at(-1)).toBe('3 tasks deleted');
+    const text = await vault.read(book);
+    for (const gone of ['Draft chapter list', 'Collect diagrams', 'Chapter 2', 'Buy reference books']) expect(text).not.toContain(gone);
+    expect(text).toContain('Review with editor');                 // the rest stays
+    expect(selection.size()).toBe(0);
+  });
+
+  it('Delete… asks first; saying no leaves everything where it was', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    const book = '02 PROJECTS/Oracle Book Writing/Oracle Book Writing.md';
+    const before = await vault.read(book);
+    for (const x of ['Chapter 1', 'Buy reference books']) selection.toggle([...index.snapshot.tasks.values()].find((t) => t.text === x && t.path === book)!.key);
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-book', filter: '', showClosed: false, showDone: true, collapsed: new Map() }));
+    [...root.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.textContent?.includes('Chapter 1'))!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const orig = window.confirm;
+    window.confirm = () => false;
+    try { Menu.last!.items.find((i) => i.title === 'Delete…')!.click!(); } finally { window.confirm = orig; }
+    await flush(); await flush();
+    expect(await vault.read(book)).toBe(before);
+    expect(selection.size()).toBe(2);
+  });
+
   it('drags a whole selection at once, and a plain drag still carries one', async () => {
     const { index } = await ctxFor();
     const a = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB')!;

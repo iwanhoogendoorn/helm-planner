@@ -1156,3 +1156,4 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-habit-tile.is-dragging { opacity: 0.4; }
 .helm-habit-tile-moved { display: inline-flex; align-items: center; gap: 3px; }
 .helm-habit-tile-moved svg, .helm-habit-tile-moved .svg-icon { width: 11px; height: 11px; }
+.helm-selection-bar .helm-btn-warning:hover { color: var(--text-error); }

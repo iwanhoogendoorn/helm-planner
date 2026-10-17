@@ -70,6 +70,17 @@ describe('moving one turn of a repeating task', () => {
     expect(await s.vault.read(dailyPath('2026-09-01'))).not.toContain('moved from');
   });
 
+  it('removing a turn (what a bulk delete does) skips it: the catch-up does not bring it back, the series goes on', async () => {
+    const s = await meeting();
+    await s.m.removeTask(s.on('2026-09-01')[0]!.key);
+    expect(s.on('2026-09-01')).toHaveLength(0);
+    expect(await s.m.catchUpRecurring()).toBe(0);
+    // A plain task is just removed.
+    await s.m.addTask({ text: 'Plain one', date: '2026-09-01' });
+    await s.m.removeTask(s.index.allTasks().find((t) => t.text === 'Plain one')!.key);
+    expect(s.index.allTasks().some((t) => t.text === 'Plain one')).toBe(false);
+  });
+
   it('deleting a moved turn keeps both its days free', async () => {
     const s = await meeting();
     await s.m.schedule(s.on('2026-09-01')[0]!.key, '2026-09-02');

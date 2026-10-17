@@ -16,6 +16,7 @@ import type { UiContext } from './context';
 import { openDatePicker } from './modals/datePicker';
 import { pickProject } from './menus';
 import { runBulk } from '../data/bulk';
+import { isOpen } from '../data/planner';
 
 const picked = new Set<string>();
 let anchor: string | undefined;
@@ -98,7 +99,7 @@ function bulk(ctx: UiContext, label: string, each: (key: string, t: Task) => Pro
 }
 
 /** The things a selection can have done to it, in one place: the bar and the right-click menu agree. */
-function actions(ctx: UiContext): { label: string; icon: string; run: (ev: MouseEvent) => void }[] {
+function actions(ctx: UiContext): { label: string; icon: string; warning?: boolean; run: (ev: MouseEvent) => void }[] {
   const n = selection.size();
   const tasks = (k: number): string => `${k} task${k === 1 ? '' : 's'}`;
   const move = (date: IsoDate | undefined, part?: DayPart): void =>
@@ -113,6 +114,14 @@ function actions(ctx: UiContext): { label: string; icon: string; run: (ev: Mouse
     } },
     { label: 'Move to project…', icon: 'folder-input', run: () => pickProject(ctx, (p, phaseId) => bulk(ctx, 'Move', (key) => ctx.mutations.moveToProject(key, p.id, phaseId), (k) => `${tasks(k)} → ${p.title}`), { phases: true }) },
     { label: 'Mark done', icon: 'check', run: () => bulk(ctx, 'Status', (key) => ctx.mutations.setStatus(key, 'done'), (k) => `${tasks(k)} marked done`) },
+    { label: 'Delete…', icon: 'trash', warning: true, run: () => {
+      const picked = selection.keys().map((k) => ctx.index.task(k)).filter((t): t is Task => t !== undefined);
+      const repeating = picked.filter((t) => t.recurrence?.parsed && !t.recurrence.whenDone && isOpen(t)).length;
+      const withSteps = picked.filter((t) => t.childKeys.length > 0).length;
+      const notes = [withSteps ? `${withSteps === 1 ? 'One has' : `${withSteps} have`} subtasks; they go too.` : '', repeating ? `${repeating === 1 ? 'One repeats' : `${repeating} repeat`}: only this turn goes, the series carries on.` : ''].filter(Boolean).join(' ');
+      if (!window.confirm(`Delete ${tasks(n)}?${notes ? ` ${notes}` : ''}`)) return;
+      bulk(ctx, 'Delete', (key) => ctx.mutations.removeTask(key), (k) => `${tasks(k)} deleted`);
+    } },
   ];
 }
 
@@ -120,7 +129,7 @@ function actions(ctx: UiContext): { label: string; icon: string; run: (ev: Mouse
 export function selectionMenu(ctx: UiContext, ev: MouseEvent): void {
   const menu = new Menu();
   menu.addItem((i) => i.setTitle(`${selection.size()} tasks selected`).setIcon('check-square').setDisabled(true));
-  for (const a of actions(ctx)) menu.addItem((i) => i.setTitle(a.label).setIcon(a.icon).onClick(() => a.run(ev)));
+  for (const a of actions(ctx)) { if (a.warning) menu.addSeparator(); menu.addItem((i) => { i.setTitle(a.label).setIcon(a.icon).onClick(() => a.run(ev)); if (a.warning) i.setWarning(true); }); }
   menu.addSeparator();
   menu.addItem((i) => i.setTitle('Clear the selection').setIcon('x').onClick(() => { selection.clear(); ctx.refresh(); }));
   menu.showAtMouseEvent(ev);
@@ -134,7 +143,7 @@ export function selectionBar(ctx: UiContext): HTMLElement | null {
   const bar = h('div', { cls: 'helm-selection-bar' },
     icon('check-square'),
     h('span', { cls: 'helm-selection-count', text: `${n} selected` }),
-    ...acts.map((a, i) => button(a.label, { icon: a.icon, primary: i === 0, onClick: (ev) => a.run(ev) })),
+    ...acts.map((a, i) => button(a.label, { icon: a.icon, primary: i === 0, ...(a.warning ? { cls: 'helm-btn-warning' } : {}), onClick: (ev) => a.run(ev) })),
     h('span', { cls: 'helm-spacer' }),
     h('span', { cls: 'helm-hint', text: 'Cmd-click to pick · Shift-click for a run' }),
     button('Clear', { icon: 'x', onClick: () => { selection.clear(); ctx.refresh(); } }),

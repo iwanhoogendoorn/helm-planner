@@ -1063,6 +1063,17 @@ export class Mutations {
     }
   }
 
+  /**
+   * Delete a task the way a person means it: a turn of a repeating task is skipped (the series goes on,
+   * and the catch-up does not hand the turn straight back); anything else is simply removed, with its
+   * subtasks. What a bulk delete does to each picked task.
+   */
+  async removeTask(key: string): Promise<void> {
+    const t = this.fresh(key);
+    if (t.recurrence?.parsed && !t.recurrence.whenDone && t.status !== 'done' && t.status !== 'cancelled') { await this.deleteOccurrence(key, 'once'); return; }
+    await this.deleteTask(key);
+  }
+
   async deleteTask(key: string): Promise<void> {
     const t = this.fresh(key);
     if (t.origin === 'daily-mirror' || (t.origin === 'daily' && t.section !== 'outside')) {
