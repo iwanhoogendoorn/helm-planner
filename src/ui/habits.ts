@@ -6,6 +6,7 @@ import { openHabitForm } from './modals/habitForm';
 import { addDrawingItems, targetForHabit } from './drawings';
 import { dayPartOf } from '../data/habits';
 import { addNoteItems } from './notes';
+import { confirmModal } from './modals/confirm';
 
 export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { date?: IsoDate; part?: HabitPart; state?: 'done' | 'skipped' | 'missed' | 'pending' } = {}): void {
   ev.preventDefault();
@@ -36,6 +37,6 @@ export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { dat
   menu.addSeparator();
   menu.addItem((i) => i.setTitle(hb.active ? 'Pause habit' : 'Resume habit').setIcon(hb.active ? 'pause' : 'play').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitFields(hb.id, { active: !hb.active }))));
   menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => void ctx.openFile(hb.path)));
-  menu.addItem((i) => i.setTitle('Delete habit…').setIcon('trash').setWarning(true).onClick(() => { if (window.confirm(`Move the habit “${hb.title}” to the trash? Past daily notes keep their ticks.`)) void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(hb.id)); }));
+  menu.addItem((i) => i.setTitle('Delete habit…').setIcon('trash').setWarning(true).onClick(() => { void confirmModal(ctx, { title: 'Delete habit', body: `Move the habit “${hb.title}” to the trash? Past daily notes keep their ticks.`, cta: 'Move to trash', warning: true }).then((ok) => { if (ok) void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(hb.id)); }); }));
   menu.showAtMouseEvent(ev);
 }

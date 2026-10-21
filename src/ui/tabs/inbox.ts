@@ -9,7 +9,7 @@ import { wikilinkSuggest } from '../fields';
 import { crumbBar } from '../crumbs';
 import { taskRow } from '../taskRow';
 import { projectMenuForTask } from '../menus';
-import { minutesToHuman } from '../../core/dates';
+import { captureTask } from '../rules';
 
 export interface InboxState { collapsed: Map<string, boolean> }
 
@@ -19,18 +19,15 @@ export function renderInbox(ctx: UiContext, root: HTMLElement, state: InboxState
   const items = inboxItems(snap);
   root.appendChild(crumbBar(ctx, 'inbox', []));
 
-  const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Capture: Call the plumber tomorrow !high #home @Kitchen ~30m' } });
+  const input = h('input', { cls: 'helm-input-wide helm-capture-input', attr: { type: 'text', placeholder: 'Capture: Call the plumber tomorrow !high #home @Kitchen ~30m', 'aria-label': 'Capture to the inbox', 'data-focus-key': 'inbox-capture' } });
   wikilinkSuggest(ctx, input);
   input.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' || input.value.trim() === '') return;
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);
     input.value = '';
     const p = c.project ? ctx.index.projectByTitle(c.project) : undefined;
-    void ctx.run('Capture', () => ctx.mutations.addTask({
-      text: c.text, ...(p ? { projectId: p.id } : {}), ...(c.scheduled ? { date: c.scheduled } : {}),
-      fields: { priority: c.priority, ...(c.due ? { due: c.due } : {}), ...(c.effortMinutes ? { effortMinutes: c.effortMinutes, effortRaw: minutesToHuman(c.effortMinutes) } : {}), ...(c.time ? { time: c.time } : {}), ...(c.recurrence ? { recurrence: c.recurrence } : {}) },
-    }));
-    setTimeout(() => root.querySelector<HTMLInputElement>('.helm-capture-input')?.focus(), 50);
+    void ctx.run('Capture', () => ctx.mutations.addTask({ ...captureTask(c), ...(p ? { projectId: p.id } : {}) }));
+    // The view keeps focus on this box (by its data-focus-key) through the re-render the capture causes.
   });
   root.appendChild(h('div', { cls: 'helm-inbox-capture' }, icon('inbox'), input));
 

@@ -10,8 +10,11 @@
  */
 import { Notice, PluginSettingTab, Setting, setIcon, TFile, type App, type Plugin, type TextComponent } from 'obsidian';
 import { PathSuggest } from './fields';
+import { API_BASE } from '../api/base';
+import { setShown } from './dom';
 import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
 import type { PeriodKind } from '../core/periods';
+import { confirmModal } from './modals/confirm';
 
 export const PERIOD_LABELS: Record<PeriodKind, string> = { year: 'Yearly', quarter: 'Quarterly', month: 'Monthly', week: 'Weekly' };
 
@@ -105,9 +108,9 @@ export class HelmSettingTab extends PluginSettingTab {
     titles.createDiv({ cls: 'helm-sgroup-title', text: o.title });
     titles.createDiv({ cls: 'helm-sgroup-sub', text: o.subtitle });
     const chip = head.createSpan({ cls: 'helm-schip' });
-    chip.style.display = 'none';
+    setShown(chip, false);
     const setChip = (text: string, tone: ChipTone): void => {
-      chip.style.display = '';
+      setShown(chip, true);
       chip.setText(text);
       chip.removeClass('helm-schip-ok', 'helm-schip-warn', 'helm-schip-pending');
       chip.addClass(`helm-schip-${tone}`);
@@ -403,7 +406,7 @@ export class HelmSettingTab extends PluginSettingTab {
       void this.host.templateInfo(kind).then((i) => {
         const exists = i.exists && i.path === target;
         row.addButton((b) => b.setButtonText(exists ? 'Replace…' : 'Create').setCta().onClick(async () => {
-          if (exists && !window.confirm(`Replace “${target}” with Helm’s built-in ${label.toLowerCase().replace(' notes', '')} template? The current note is overwritten.`)) return;
+          if (exists && !(await confirmModal({ app: this.app }, { title: 'Replace template', body: `Replace “${target}” with Helm’s built-in ${label.toLowerCase().replace(' notes', '')} template? The current note is overwritten.`, cta: 'Replace', warning: true }))) return;
           const r = await this.host.writeTemplate(kind, exists);
           row.setDesc(`${target} — ${r}`);
           this.renderBody();
@@ -513,8 +516,14 @@ export class HelmSettingTab extends PluginSettingTab {
     new Setting(g.content).setName('Reachable from')
       .setDesc('This Mac only is the safe default. Tailscale: reachable from your other Tailscale devices, e.g. the Helm iPhone app. Traffic is encrypted by WireGuard; the token is still required. All interfaces: every network this machine is on — only behind a firewall you trust.')
       .addDropdown((d) => d.addOptions({ loopback: 'This machine only (127.0.0.1)', tailscale: 'Tailscale (your tailnet)', all: 'All interfaces (0.0.0.0)' }).setValue(bind).onChange((v) => void (async () => {
+        // Every interface sends the token in clear text over plain HTTP: ask, and put the menu back on a no.
+        if (v === 'all' && !(await confirmModal({ app: this.app }, {
+          title: 'Listen on every interface?',
+          body: 'The API speaks plain HTTP, so the token travels in clear text. Anyone on the same Wi-Fi, Ethernet or hotspot who sees one request can reuse it to read, change and delete your vault.\n\nHelm only answers private addresses (this machine, your LAN, Tailscale, link-local); a public address is refused. Tailscale is the safer way to reach Helm from another device.',
+          cta: 'Listen on every interface',
+          warning: true,
+        }))) { d.setValue(bind); return; }
         s.apiBind = v as HelmSettings['apiBind'];
-        if (v === 'all') new Notice('All interfaces: the API answers on every network this Mac is on — Wi-Fi, Ethernet, hotspots — to anyone holding the token. Prefer Tailscale.', 8000);
         await this.host.saveSettings();
         await this.host.restartApi();
         this.renderBody();
@@ -529,7 +538,7 @@ export class HelmSettingTab extends PluginSettingTab {
         this.renderBody();
         new Notice('New token — anything using the old one has to be updated.');
       })()));
-    const base = urls[0] ?? `http://127.0.0.1:${state.port ?? s.apiPort}/helm/v1`;
+    const base = urls[0] ?? `http://127.0.0.1:${state.port ?? s.apiPort}${API_BASE}`;
     const token = s.apiToken || '<token>';
     const urlSetting = new Setting(g.content).setName(state.running ? 'Base URL' : 'Base URL (when on)').setDesc(bind === 'loopback' ? 'What a script on this Mac uses.' : 'What the phone (or another device) uses; the Tailscale address is listed first.');
     // Addresses are long and the settings pane is not: the list goes under the words, full width,

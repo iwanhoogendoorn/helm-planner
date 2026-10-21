@@ -2,13 +2,15 @@
 import type { Habit, IsoDate } from '../../core/types';
 import type { PeriodKind } from '../../core/periods';
 import { formatRecurrence } from '../../core/recurrence';
-import { ghostHabits, habitDue, habitStats } from '../../data/habits';
+import { ghostHabits, habitDue } from '../../data/habits';
+import { habitStats } from '../habitMemo';
 import { button, empty, h, iconButton, section } from '../dom';
 import type { UiContext } from '../context';
 import { habitCard } from '../habitCard';
 import { openHabitForm } from '../modals/habitForm';
 import { habitTracker } from './dashboard';
 import { crumbBar } from '../crumbs';
+import { confirmModal } from '../modals/confirm';
 
 export interface HabitsState { habitScope: PeriodKind; collapsed: Map<string, boolean> }
 
@@ -21,7 +23,7 @@ function cardActions(ctx: UiContext, hb: Habit): HTMLElement[] {
   return [
     iconButton('pencil', 'Edit habit', () => openHabitForm(ctx, hb)),
     iconButton(hb.active ? 'pause' : 'play', hb.active ? 'Pause habit' : 'Resume habit', () => void ctx.run('Habit', () => ctx.mutations.setHabitFields(hb.id, { active: !hb.active }))),
-    iconButton('trash', 'Delete habit', () => { if (window.confirm(`Move the habit “${hb.title}” to the trash? Past daily notes keep their ticks.`)) void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(hb.id)); }, 'helm-habit-delete'),
+    iconButton('trash', 'Delete habit', () => { void confirmModal(ctx, { title: 'Delete habit', body: `Move the habit “${hb.title}” to the trash? Past daily notes keep their ticks.`, cta: 'Move to trash', warning: true }).then((ok) => { if (ok) void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(hb.id)); }); }, 'helm-habit-delete'),
   ];
 }
 

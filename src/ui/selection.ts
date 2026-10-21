@@ -17,6 +17,7 @@ import { openDatePicker } from './modals/datePicker';
 import { pickProject } from './menus';
 import { runBulk } from '../data/bulk';
 import { isOpen } from '../data/planner';
+import { confirmModal } from './modals/confirm';
 
 const picked = new Set<string>();
 let anchor: string | undefined;
@@ -119,8 +120,9 @@ function actions(ctx: UiContext): { label: string; icon: string; warning?: boole
       const repeating = picked.filter((t) => t.recurrence?.parsed && !t.recurrence.whenDone && isOpen(t)).length;
       const withSteps = picked.filter((t) => t.childKeys.length > 0).length;
       const notes = [withSteps ? `${withSteps === 1 ? 'One has' : `${withSteps} have`} subtasks; they go too.` : '', repeating ? `${repeating === 1 ? 'One repeats' : `${repeating} repeat`}: only this turn goes, the series carries on.` : ''].filter(Boolean).join(' ');
-      if (!window.confirm(`Delete ${tasks(n)}?${notes ? ` ${notes}` : ''}`)) return;
-      bulk(ctx, 'Delete', (key) => ctx.mutations.removeTask(key), (k) => `${tasks(k)} deleted`);
+      void confirmModal(ctx, { title: `Delete ${tasks(n)}`, body: `Delete ${tasks(n)}?${notes ? `\n\n${notes}` : ''}`, cta: 'Delete', warning: true }).then((ok) => {
+        if (ok) bulk(ctx, 'Delete', (key) => ctx.mutations.removeTask(key), (k) => `${tasks(k)} deleted`);
+      });
     } },
   ];
 }

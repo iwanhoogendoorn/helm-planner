@@ -8,12 +8,13 @@ import { addDays, humanDate, minutesToHuman, startOfWeek } from '../../core/date
 import { parseCapture, REPEAT_PATTERN } from '../../core/nlp';
 import { captureDestination, captureFields } from '../../data/capture';
 import { formatRecurrence } from '../../core/recurrence';
-import { append, button, chip, h } from '../dom';
+import { append, button, chip, h, setShown } from '../dom';
 import type { UiContext } from '../context';
 import { pickProject } from '../menus';
 import { partOfTime } from '../../core/dailyNote';
 import { conflictWarning, effortField, linkTimes, repeatButtons, wikilinkSuggest } from '../fields';
 import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot } from '../../data/conflicts';
+import { confirmModal } from './confirm';
 
 export interface CaptureDefaults {
   date?: IsoDate;
@@ -116,7 +117,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   };
   const drawTags = (): void => {
     const tags = quickTags();
-    tagRow.style.display = tags.length ? '' : 'none';
+    setShown(tagRow, tags.length > 0);
     tagRow.replaceChildren(h('span', { cls: 'helm-hint', text: 'Tags' }), ...tags.map((t) => h('button', { cls: ['helm-tag-toggle', hasTag(t) && 'is-active'], text: `#${t}`, title: hasTag(t) ? `Remove #${t}` : `Add #${t}`, onClick: () => toggleTag(t) })));
   };
   // Quick repeats: the buttons write the same phrase you would type, so the line stays the one truth.
@@ -191,7 +192,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   async function submit(keepOpen: boolean): Promise<void> {
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);
     if (c.text.trim() === '') return;
-    if (conflictText && !window.confirm(`This overlaps ${conflictText}.\n\nAdd it anyway?`)) return;
+    if (conflictText && !(await confirmModal(ctx, { title: 'Overlapping time', body: `This overlaps ${conflictText}.\n\nAdd it anyway?`, cta: 'Add anyway' }))) return;
     const fields = captureFields(c, effort.get(), timeOf(c));
     const p = project ?? (c.project ? ctx.index.projectByTitle(c.project) : undefined);
     const d = date;

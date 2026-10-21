@@ -1,6 +1,7 @@
 /* ── Helm ─────────────────────────────────────────────────────────────── */
 
-.helm-root { display: flex; flex-direction: column; height: 100%; padding: 0; }
+/* A size container: tall views (board, tables, calendar) size themselves to the leaf, not the window. */
+.helm-root { display: flex; flex-direction: column; height: 100%; padding: 0; container-type: size; }
 .helm-body { flex: 1; overflow-y: auto; padding: 0 var(--size-4-3) var(--size-4-6); }
 .helm-spacer { flex: 1; }
 .helm-hint { color: var(--text-muted); font-size: var(--font-ui-smaller); }
@@ -14,9 +15,11 @@
 .helm-tab:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 .helm-tab.is-active { background: var(--background-modifier-active-hover, var(--background-secondary)); color: var(--text-normal); font-weight: 600; }
 .helm-indexing { animation: helm-pulse 1.2s infinite; margin-right: 8px; }
+/* The tab buttons sit in a role="tablist" wrapper that takes no box of its own, so the bar lays out as before. */
+.helm-tablist { display: contents; }
+.helm-root :focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 1px; }
 @keyframes helm-pulse { 50% { opacity: 0.4; } }
 @container (max-width: 520px) { .helm-tab-label { display: none; } .helm-day-title { min-width: 0; padding: 2px 6px; } .helm-day-title-sub { display: none; } .helm-day-actions .helm-btn span { display: none; } .helm-capacity-label { font-size: var(--font-ui-smaller); } }
-.helm-root { container-type: inline-size; }
 
 /* Buttons */
 .helm-btn { display: inline-flex; align-items: center; gap: 6px; font-size: var(--font-ui-small); padding: 4px 10px; height: auto; line-height: 1.4; }
@@ -120,13 +123,12 @@
 .helm-task.depth-1 { margin-left: 22px; } .helm-task.depth-2 { margin-left: 44px; } .helm-task.depth-3 { margin-left: 66px; } .helm-task.depth-4 { margin-left: 88px; }
 .helm-task-children .helm-task { margin-left: 22px; }
 .helm-task-children .helm-task-children .helm-task { margin-left: 44px; }
-.helm-check { flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 5px; border: 1.5px solid var(--checkbox-border-color, var(--background-modifier-border-hover)); background: transparent; padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: none; color: var(--text-on-accent); }
+.helm-check { position: relative; flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 5px; border: 1.5px solid var(--checkbox-border-color, var(--background-modifier-border-hover)); background: transparent; padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: none; color: var(--text-on-accent); transition: transform 120ms ease, box-shadow 120ms ease, background-color 150ms ease, border-color 150ms ease; }
 .helm-check:hover { border-color: var(--interactive-accent); }
 .helm-check svg { width: 12px; height: 12px; }
 .helm-check.mark-done { background: var(--interactive-accent); border-color: var(--interactive-accent); }
 .helm-check.mark-cancelled { background: var(--text-faint); border-color: var(--text-faint); }
 .helm-check.mark-doing { border-color: var(--interactive-accent); }
-.helm-check { position: relative; transition: transform 120ms ease, box-shadow 120ms ease, background-color 150ms ease, border-color 150ms ease; }
 /* Pressing the box sinks it; the redrawn box then pops (done) or bounces (reopened, in progress). */
 .helm-check:active { transform: scale(0.8); border-color: var(--interactive-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 25%, transparent); }
 .helm-check.is-popping { animation: helm-check-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -219,7 +221,8 @@
 .helm-week-day.is-today .helm-week-dom { color: var(--text-accent); }
 .helm-week-day-body { padding: 4px; flex: 1; }
 .helm-week-day-body .helm-task { padding: 4px; }
-.helm-week-day-body .helm-task-actions { display: none !important; }
+/* The week is too narrow for row actions on a mouse; on touch they stay, revealed as everywhere else. */
+@media (hover: hover) { .helm-week-day-body .helm-task .helm-task-actions { display: none; } }
 .helm-week-done { font-size: var(--font-ui-smaller); color: var(--color-green); padding: 4px 6px; }
 .helm-week-empty { font-size: var(--font-ui-smaller); color: var(--text-faint); text-align: center; padding: 20px 4px; }
 .helm-week-side { margin-top: var(--size-4-2); }
@@ -265,11 +268,10 @@
 /* Review */
 .helm-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; padding: var(--size-4-3) 0 var(--size-4-2); }
 .helm-stat, button.helm-stat { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--background-secondary); border-radius: var(--radius-m); padding: 10px 8px; text-align: center; border: none; box-shadow: none; height: auto; min-width: 0; font-family: var(--font-interface); }
-.helm-stat-label { white-space: normal; line-height: 1.2; }
 .helm-stat.is-clickable { cursor: pointer; }
 .helm-stat.is-clickable:hover { background: var(--background-modifier-hover); }
 .helm-stat-value { font-size: 1.6em; font-weight: 700; line-height: 1.1; }
-.helm-stat-label { font-size: var(--font-ui-smaller); color: var(--text-muted); margin-top: 2px; }
+.helm-stat-label { font-size: var(--font-ui-smaller); color: var(--text-muted); margin-top: 2px; white-space: normal; line-height: 1.2; }
 .helm-stat.is-good .helm-stat-value { color: var(--color-green); }
 .helm-stat.is-bad .helm-stat-value { color: var(--color-red); }
 .helm-stat.is-warn .helm-stat-value { color: var(--color-orange); }
@@ -306,7 +308,7 @@
 .helm-capture-effort { display: inline-flex; align-items: center; gap: 4px; }
 .helm-effort { display: inline-flex; align-items: center; gap: 4px; }
 .helm-effort-select { height: 28px; }
-.helm-effort-custom { width: 80px !important; }
+.helm-effort input.helm-effort-custom[type='text'] { width: 80px; }
 .modal:has(.helm-plan) { width: min(1100px, 95vw); }
 .modal:has(.helm-wrapup) { width: min(900px, 95vw); }
 .modal:has(.helm-task-editor), .modal:has(.helm-project-form) { width: min(720px, 95vw); }
@@ -415,7 +417,6 @@
 .helm-gauge.is-bad .helm-gauge-fill { stroke: var(--color-red); }
 .helm-gauge-value { font-size: 18px; font-weight: 700; fill: var(--text-normal); font-family: var(--font-interface); }
 .helm-gauge-label { font-size: 9px; fill: var(--text-muted); font-family: var(--font-interface); }
-.helm-table-wrap { overflow-x: auto; }
 .helm-table { width: 100%; border-collapse: collapse; font-size: var(--font-ui-small); }
 .helm-table th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--background-modifier-border); }
 .helm-table td { padding: 5px 6px; border-bottom: 1px solid var(--background-modifier-border); vertical-align: middle; }
@@ -543,9 +544,9 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-settings { display: flex; gap: 20px; align-items: flex-start; }
 .helm-settings-nav { flex: 0 0 150px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; }
 .helm-settings .helm-settings-nav-item, .modal .helm-settings .helm-settings-nav-item { display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 6px 10px; border: none; border-radius: 6px; background: transparent; box-shadow: none; color: var(--text-muted); font-size: 13px; text-align: left; cursor: pointer; height: auto; }
-.helm-settings .helm-settings-nav-item:not(.is-active) { background: transparent !important; box-shadow: none !important; border: none !important; }
-.helm-settings .helm-settings-nav-item:not(.is-active):hover { background: var(--background-modifier-hover) !important; color: var(--text-normal); }
-.helm-settings .helm-settings-nav-item.is-active, .modal .helm-settings .helm-settings-nav-item.is-active { background: var(--background-secondary) !important; box-shadow: none !important; border: none !important; color: var(--text-normal); font-weight: 600; }
+.helm-settings .helm-settings-nav button.helm-settings-nav-item:not(.is-active) { background: transparent; box-shadow: none; border: none; }
+.helm-settings .helm-settings-nav button.helm-settings-nav-item:not(.is-active):hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.helm-settings .helm-settings-nav button.helm-settings-nav-item.is-active { background: var(--background-secondary); box-shadow: none; border: none; color: var(--text-normal); font-weight: 600; }
 .helm-settings-nav-item.is-active .helm-settings-nav-icon svg { color: var(--interactive-accent); }
 .helm-settings-nav-icon { display: flex; }
 .helm-settings-nav-icon svg { width: 15px; height: 15px; }
@@ -841,7 +842,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-project-views .helm-seg svg { width: 13px; height: 13px; }
 
 /* Kanban proper: the board scrolls sideways, each column scrolls its own cards, headers never move. */
-.helm-board { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; height: calc(100vh - 13rem); padding-bottom: 8px; align-items: stretch; }
+.helm-board { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; height: calc(100cqh - 13rem); padding-bottom: 8px; align-items: stretch; }
 .helm-board-col { position: relative; max-height: 100%; }
 .helm-board-cards { overflow-y: auto; flex: 1 1 auto; }
 .helm-board-col { flex: 0 0 260px; display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: var(--radius-m); background: var(--background-secondary); }
@@ -877,7 +878,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-timeline-count { font-size: 10px; font-weight: 700; color: var(--text-on-accent); }
 
 /* Table and timeline headers stay in view the same way. */
-.helm-table-wrap { max-height: calc(100vh - 13rem); overflow: auto; }
+.helm-table-wrap { max-height: calc(100cqh - 13rem); overflow: auto; }
 .helm-project-table thead th, .helm-timeline thead th { position: sticky; top: 0; z-index: 2; background: var(--background-primary); }
 .helm-timeline thead th.helm-timeline-name { z-index: 3; }
 .helm-timeline .helm-timeline-name { z-index: 1; }
@@ -887,7 +888,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-cal-gridhead { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; }
 .helm-cal-grid { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); overflow: hidden; background: var(--background-primary); }
 .helm-cal-head, .helm-cal-allday { display: grid; grid-template-columns: 58px repeat(var(--cal-days, 7), minmax(0, 1fr)); }
-.helm-cal-body { display: grid; grid-template-columns: 58px repeat(var(--cal-days, 7), minmax(0, 1fr)); max-height: calc(100vh - 20rem); overflow-y: auto; }
+.helm-cal-body { display: grid; grid-template-columns: 58px repeat(var(--cal-days, 7), minmax(0, 1fr)); max-height: calc(100cqh - 20rem); overflow-y: auto; }
 .helm-cal-grid[data-days="1"] { --cal-days: 1; }
 .helm-cal-grid[data-days="3"] { --cal-days: 3; }
 .helm-cal-grid[data-days="5"] { --cal-days: 5; }
@@ -1193,7 +1194,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 /* Pinned projects: tiles at the top, the first thing the page says. */
 .helm-pinned-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); column-gap: 10px; row-gap: 10px; padding: 4px 0 6px; }
 .helm-pinned-tile { display: grid; grid-row: span 5; grid-template-rows: subgrid; row-gap: 7px; align-items: start; min-width: 0; padding: 12px 14px 10px; border-radius: var(--radius-l, 10px); border: 1px solid rgba(var(--interactive-accent-rgb, 72, 54, 153), 0.35); border-top: 3px solid var(--interactive-accent); background: linear-gradient(180deg, rgba(var(--interactive-accent-rgb, 72, 54, 153), 0.07), var(--background-primary) 60%); cursor: pointer; transition: box-shadow 120ms ease, transform 120ms ease; }
-.helm-pinned-tile:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); transform: translateY(-1px); }
+.helm-pinned-tile:hover { box-shadow: var(--shadow-s); transform: translateY(-1px); }
 .helm-pinned-tile:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 .helm-pinned-tile.has-flags { border-top-color: var(--color-orange); }
 .helm-pinned-tile.is-closed { border-top-color: var(--color-green); background: var(--background-primary); opacity: 0.85; }
@@ -1220,3 +1221,6 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-pinned-foot { align-self: end; }
 .helm-pinned-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .helm-pinned-next { align-self: start; }
+
+/* Hidden by setShown(): a utility that must beat any display rule, so the one deliberate !important. */
+.helm-hidden { display: none !important; }

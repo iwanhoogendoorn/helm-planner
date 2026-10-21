@@ -10,6 +10,7 @@ import type { DaybookEntry } from '../core/daybook';
 import { button, h, icon, iconButton, richText, section } from './dom';
 import type { UiContext } from './context';
 import { askText } from './fields';
+import { confirmModal } from './modals/confirm';
 
 /** The Daybook section for one day, with its entries and the box to add another. */
 export function daybookSection(ctx: UiContext, date: IsoDate, store: Map<string, boolean>): HTMLElement {
@@ -51,8 +52,9 @@ function entryRow(ctx: UiContext, date: IsoDate, e: DaybookEntry): HTMLElement {
     m.addItem((i) => i.setTitle('Open in the note').setIcon('file-text').onClick(() => void ctx.openFile(ctx.index.dailyPath(date) ?? '', e.line)));
     m.addSeparator();
     m.addItem((i) => i.setTitle('Delete').setIcon('trash-2').setWarning(true).onClick(() => {
-      if (!window.confirm(`Delete the ${e.time} entry?`)) return;
-      void ctx.run('Daybook', () => ctx.mutations.removeDaybookEntry(date, e.line));
+      void confirmModal(ctx, { title: 'Delete entry', body: `Delete the ${e.time} entry?`, cta: 'Delete', warning: true }).then((ok) => {
+        if (ok) void ctx.run('Daybook', () => ctx.mutations.removeDaybookEntry(date, e.line));
+      });
     }));
     m.showAtMouseEvent(ev);
   };

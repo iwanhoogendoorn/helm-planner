@@ -9,7 +9,7 @@ import { Modal } from 'obsidian';
 import type { IsoDate, Project } from '../../core/types';
 import { describeWork, type Assignment, type ProjectProfile } from '../../core/profiles';
 import { monthPeriod, parsePeriod } from '../../core/periods';
-import { button, h } from '../dom';
+import { button, h, setShown } from '../dom';
 import type { UiContext } from '../context';
 import { wikilinkSuggest } from '../fields';
 
@@ -79,8 +79,8 @@ export function openProfileItem(ctx: UiContext, p: Project, profile: ProjectProf
     groupSel.appendChild(custom);
   }
   const newGroup = h('input', { cls: 'helm-input', attr: { type: 'text', placeholder: `Name of the new ${profile.groupNoun}` } }) as HTMLInputElement;
-  newGroup.style.display = 'none';
-  groupSel.addEventListener('change', () => { newGroup.style.display = groupSel.value === '__new' ? '' : 'none'; if (groupSel.value === '__new') newGroup.focus(); });
+  setShown(newGroup, false);
+  groupSel.addEventListener('change', () => { setShown(newGroup, groupSel.value === '__new'); if (groupSel.value === '__new') newGroup.focus(); });
 
   // Who does what. A row of named buttons per person rather than a grid of initials: “Chords” says what
   // it is, “PC” makes you remember. Pressing one turns it on, and the row says what it adds up to.

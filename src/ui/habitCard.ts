@@ -9,7 +9,8 @@ import { HABIT_PARTS } from '../core/types';
 import { habitColor } from '../core/habit';
 import { addDays, startOfWeek, WEEKDAY_SHORT } from '../core/dates';
 import { partOfTime } from '../core/dailyNote';
-import { dayPartOf, habitOccurrences, habitStats, type HabitDayState, type HabitStats } from '../data/habits';
+import { dayPartOf, habitOccurrences, type HabitDayState, type HabitStats } from '../data/habits';
+import { completionsOn, habitStats } from './habitMemo';
 import { h, icon } from './dom';
 import { habitBadge } from './fields';
 import { habitMenu } from './habits';
@@ -86,7 +87,7 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate, opts: { acti
   const st = habitStats(hb, snap.completions, today, settings.weekStartsOn, 84);
   const occ = habitOccurrences(hb);
   const movedTo = dayPartOf(hb, snap.completions, date);
-  const stateOf = (part?: HabitPart): 'done' | 'skipped' | 'missed' | 'pending' => { const c = snap.completions.find((x) => x.habitId === hb.id && x.date === date && (x.part === part || (part === undefined && movedTo !== undefined && x.part === movedTo))); return c?.state ?? 'pending'; };
+  const stateOf = (part?: HabitPart): 'done' | 'skipped' | 'missed' | 'pending' => { const c = completionsOn(snap.completions, hb.id, date).find((x) => x.part === part || (part === undefined && movedTo !== undefined && x.part === movedTo)); return c?.state ?? 'pending'; };
   const toggle = (part: HabitPart | undefined, ev: MouseEvent): void => {
     const s = stateOf(part);
     const next = ev.shiftKey ? (s === 'skipped' ? 'missed' : 'skipped') : s === 'done' ? 'missed' : 'done';
@@ -141,7 +142,7 @@ export function habitTile(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
   const st = habitStats(hb, snap.completions, ctx.today(), settings.weekStartsOn, 30);
   const occ = habitOccurrences(hb);
   const movedTo = dayPartOf(hb, snap.completions, date);
-  const stateOf = (part?: HabitPart): 'done' | 'skipped' | 'missed' | 'pending' => { const c = snap.completions.find((x) => x.habitId === hb.id && x.date === date && (x.part === part || (part === undefined && movedTo !== undefined && x.part === movedTo))); return c?.state ?? 'pending'; };
+  const stateOf = (part?: HabitPart): 'done' | 'skipped' | 'missed' | 'pending' => { const c = completionsOn(snap.completions, hb.id, date).find((x) => x.part === part || (part === undefined && movedTo !== undefined && x.part === movedTo)); return c?.state ?? 'pending'; };
   const toggle = (part: HabitPart | undefined, shift: boolean): void => {
     const s = stateOf(part);
     const next = shift ? (s === 'skipped' ? 'missed' : 'skipped') : s === 'done' ? 'missed' : 'done';

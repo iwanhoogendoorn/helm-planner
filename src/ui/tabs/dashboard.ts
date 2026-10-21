@@ -170,7 +170,7 @@ export function renderDashboard(ctx: UiContext, root: HTMLElement, state: Dashbo
   root.appendChild(section('Projects', { store, key: 'projects', count: s.byProject.length, actions: [h('span', { cls: 'helm-hint', text: 'velocity = done per week in range · ETA = open ÷ velocity' })] },
     h('div', { cls: 'helm-table-wrap' }, h('table', { cls: 'helm-table' },
       h('thead', {}, h('tr', {}, ...['Project', 'Progress', 'Done', 'Open', 'Velocity', 'ETA'].map((x) => h('th', { text: x })))),
-      h('tbody', {}, ...s.byProject.slice(0, 40).map((r) => h('tr', { cls: 'is-clickable', onClick: () => drill(`Done in ${r.project.title}`, r.doneTasks) },
+      h('tbody', {}, ...s.byProject.slice(0, 40).map((r) => h('tr', { cls: 'is-clickable', onActivate: () => drill(`Done in ${r.project.title}`, r.doneTasks) },
         h('td', {}, h('a', { cls: 'helm-link', text: r.project.title, onClick: (ev) => { ev.stopPropagation(); ctx.navigate('projects', { projectId: r.project.id }); } }), r.project.period ? chip(r.project.period, 'scheduled') : null),
         h('td', {}, h('div', { cls: 'helm-progress is-thin helm-table-progress' }, h('div', { cls: 'helm-progress-fill', style: { width: `${Math.round(r.progress * 100)}%` } })), h('span', { cls: 'helm-hint', text: ` ${Math.round(r.progress * 100)}%` })),
         h('td', { text: String(r.doneTasks.length) }),

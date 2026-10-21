@@ -40,14 +40,14 @@ function list(tasks: Task[], today: string, opts: { date?: boolean; project?: bo
 }
 
 /** A row of bars: magnitude in one hue, the label carrying identity. */
-function bars(rows: { label: string; value: number; note?: string }[], format: (n: number) => string): string {
+export function bars(rows: { label: string; value: number; note?: string }[], format: (n: number) => string): string {
   if (rows.length === 0) return '';
   const max = rows.reduce((m, r) => Math.max(m, r.value), 0) || 1;
   const total = rows.reduce((s, r) => s + r.value, 0) || 1;
   return `<div class="bars">${rows.map((r) => `<div class="bar-row">
 <div class="bar-name" title="${esc(r.label)}">${esc(r.label)}</div>
 <div class="bar-track"><div class="bar-fill" style="width:${Math.max(1.5, (r.value / max) * 100).toFixed(1)}%"></div></div>
-<div class="bar-value">${esc(format(r.value))}<span class="bar-share">${r.note ?? `${pct(r.value, total)}%`}</span></div>
+<div class="bar-value">${esc(format(r.value))}<span class="bar-share">${r.note !== undefined ? esc(r.note) : `${pct(r.value, total)}%`}</span></div>
 </div>`).join('')}</div>`;
 }
 

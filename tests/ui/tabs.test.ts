@@ -66,6 +66,15 @@ const waitFor = async <T>(get: () => T | null | undefined, what = 'condition', t
   throw new Error(`waitFor: ${what} never happened`);
 };
 
+/** Answer the confirm modal the last action opened (yes or no), and say what it asked. */
+const answerConfirm = async (yes: boolean): Promise<string> => {
+  const m = await waitFor(() => (Modal.last?.opened && Modal.last.contentEl.classList.contains('helm-confirm-modal') ? Modal.last : null), 'a confirm modal');
+  const asked = [...m.contentEl.querySelectorAll('.helm-confirm-text')].map((p) => p.textContent ?? '').join('\n\n');
+  click(m.contentEl.querySelector(yes ? '.helm-confirm-ok' : '.helm-modal-buttons button:not(.helm-confirm-ok)'));
+  await flush(); await flush();
+  return asked;
+};
+
 beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; selection.clear(); clearFolds(); resetAttachViews(); });
 
 const moveMenu = (): { title: string; items: { title: string; sub?: { items: { title: string; click?: () => void }[] }; click?: () => void }[] } => {
@@ -527,11 +536,9 @@ describe('Today tab', () => {
     const titles = Menu.last!.items.map((i) => i.title);
     expect(titles[0]).toBe('3 tasks selected');
     expect(titles).toContain('Delete…');
-    let asked = '';
-    const orig = window.confirm;
-    window.confirm = (msg?: string) => { asked = msg ?? ''; return true; };
-    try { Menu.last!.items.find((i) => i.title === 'Delete…')!.click!(); } finally { window.confirm = orig; }
-    expect(asked).toBe('Delete 3 tasks? One has subtasks; they go too. One repeats: only this turn goes, the series carries on.');
+    Menu.last!.items.find((i) => i.title === 'Delete…')!.click!();
+    const asked = await answerConfirm(true);
+    expect(asked).toBe('Delete 3 tasks?\n\nOne has subtasks; they go too. One repeats: only this turn goes, the series carries on.');
     await waitFor(() => Notice.messages.find((m) => m.includes('deleted')), 'the report');
     expect(Notice.messages.at(-1)).toBe('3 tasks deleted');
     const text = await vault.read(book);
@@ -547,10 +554,8 @@ describe('Today tab', () => {
     for (const x of ['Chapter 1', 'Buy reference books']) selection.toggle([...index.snapshot.tasks.values()].find((t) => t.text === x && t.path === book)!.key);
     const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-book', filter: '', showClosed: false, showDone: true, collapsed: new Map() }));
     [...root.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.textContent?.includes('Chapter 1'))!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    const orig = window.confirm;
-    window.confirm = () => false;
-    try { Menu.last!.items.find((i) => i.title === 'Delete…')!.click!(); } finally { window.confirm = orig; }
-    await flush(); await flush();
+    Menu.last!.items.find((i) => i.title === 'Delete…')!.click!();
+    await answerConfirm(false);
     expect(await vault.read(book)).toBe(before);
     expect(selection.size()).toBe(2);
   });
@@ -863,7 +868,7 @@ describe('pinned projects', () => {
 });
 
 describe('archiving a project from the UI', () => {
-  const confirmYes = <T>(fn: () => Promise<T>): Promise<T> => { const orig = window.confirm; window.confirm = () => true; return fn().finally(() => { window.confirm = orig; }); };
+  const confirmYes = async (fn: () => Promise<void>): Promise<void> => { await fn(); await answerConfirm(true); await flush(); await flush(); };
   const state = (projectId?: string) => ({ ...(projectId ? { projectId } : {}), filter: '', showClosed: false, showDone: false, collapsed: new Map() });
 
   it('from a sub-project row on its parent’s page: you stay on the parent, and the row goes', async () => {
@@ -1101,20 +1106,33 @@ describe('Calendar view', () => {
     const at = (y: number, type: string): MouseEvent => { const ev = new MouseEvent(type, { bubbles: true, button: 0 }); Object.defineProperty(ev, 'clientY', { value: y }); return ev; };
 
     // A click: one estimate's worth, starting at the slot clicked — nine hours down is 09:00.
-    col.dispatchEvent(at(9 * 56, 'mousedown'));
-    col.dispatchEvent(at(9 * 56, 'mouseup'));
+    col.dispatchEvent(at(9 * 56, 'pointerdown'));
+    col.dispatchEvent(at(9 * 56, 'pointerup'));
     const one = Modal.last!;
     const times = (m: typeof one): string[] => [...m.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')].map((i) => i.value);
     expect(times(one)).toEqual(['09:00', `09:${String(ctx.settings().defaultEffortMinutes).padStart(2, '0')}`]);
     one.close();
 
     // A drag: exactly what was dragged over, snapped to the quarter — 09:00 to 10:30.
-    col.dispatchEvent(at(9 * 56, 'mousedown'));
-    col.dispatchEvent(at(9 * 56 + 84, 'mousemove'));
+    col.dispatchEvent(at(9 * 56, 'pointerdown'));
+    col.dispatchEvent(at(9 * 56 + 84, 'pointermove'));
     expect(root.querySelector('.helm-cal-band')!.textContent).toBe('09:00–10:30');
-    col.dispatchEvent(at(9 * 56 + 84, 'mouseup'));
+    col.dispatchEvent(at(9 * 56 + 84, 'pointerup'));
     expect(times(Modal.last!)).toEqual(['09:00', '10:30']);
     expect(root.querySelector('.helm-cal-band')).toBeNull();          // the band goes with it
+    Modal.last!.close();
+
+    // F12 · a finger: a tap opens Capture too, and a touch the browser turns into a scroll creates nothing.
+    const touch = (y: number, type: string): MouseEvent => { const ev = at(y, type); Object.defineProperty(ev, 'pointerType', { value: 'touch' }); return ev; };
+    Modal.last = undefined;
+    col.dispatchEvent(touch(14 * 56, 'pointerdown'));
+    col.dispatchEvent(touch(14 * 56 + 40, 'pointermove'));
+    col.dispatchEvent(touch(14 * 56 + 40, 'pointercancel'));
+    expect(Modal.last).toBeUndefined();
+    expect(root.querySelector('.helm-cal-band')).toBeNull();
+    col.dispatchEvent(touch(14 * 56, 'pointerdown'));
+    col.dispatchEvent(touch(14 * 56, 'pointerup'));
+    expect(times(Modal.last!)[0]).toBe('14:00');
   });
 
   it('drops a task onto a day of the grid, at the hour it landed on', async () => {
@@ -1618,13 +1636,9 @@ describe('Modals', () => {
     const { ctx, m, index } = await ctxFor();
     await m.addTask({ text: 'One-off errand', date: TODAY });
     const t = [...index.snapshot.tasks.values()].find((x) => x.text === 'One-off errand')!;
-    const orig = window.confirm;
-    window.confirm = () => true;
-    try {
-      taskMenu(ctx, t, new MouseEvent('contextmenu'));
-      Menu.last!.items.find((i) => i.title === 'Delete')!.click!();
-      await flush(); await flush();
-    } finally { window.confirm = orig; }
+    taskMenu(ctx, t, new MouseEvent('contextmenu'));
+    Menu.last!.items.find((i) => i.title === 'Delete')!.click!();
+    await answerConfirm(true);
     expect([...index.snapshot.tasks.values()].some((x) => x.text === 'One-off errand')).toBe(false);
   });
 
@@ -3213,14 +3227,12 @@ describe('dragging a task between parts of the day', () => {
     const held = phase.taskKeys.map((k) => index.task(k)!.text);
     const sec = [...view().querySelectorAll<HTMLElement>('.helm-section')].find((x) => x.querySelector('.helm-section-title')?.textContent === phase.title)!;
     const del = sec.querySelector('button[aria-label="Delete this phase"]')!;
-    const orig = window.confirm;
     // Saying no changes nothing.
-    window.confirm = () => false;
-    try { click(del); await flush(); } finally { window.confirm = orig; }
+    click(del);
+    await answerConfirm(false);
     expect(index.project('prj-book')!.phases.map((x) => x.title)).toContain(phase.title);
-    let asked = '';
-    window.confirm = (msg?: string) => { asked = msg ?? ''; return true; };
-    try { click(sec.querySelector('button[aria-label="Delete this phase"]')); await flush(); await flush(); } finally { window.confirm = orig; }
+    click(sec.querySelector('button[aria-label="Delete this phase"]'));
+    const asked = await answerConfirm(true);
     expect(asked).toContain(phase.title);
     expect(asked).toMatch(/move to the project/i);
     expect(index.project('prj-book')!.phases.map((x) => x.title)).not.toContain(phase.title);
@@ -3372,13 +3384,9 @@ describe('dragging a task between parts of the day', () => {
     expect(rows()).toEqual(['Ship the draft', 'Proof it']);        // under its task, once — not listed again below
     // Delete it from where it sits, under its task.
     const step = [...root.querySelectorAll<HTMLElement>('.helm-section.part-anytime .helm-task-children .helm-task')][0]!;
-    const confirmOrig = window.confirm;
-    window.confirm = () => true;
-    try {
-      click(step.querySelector('button[aria-label="More…"]'));
-      Menu.last!.items.find((i) => i.title.startsWith('Delete'))!.click!();
-      await flush(); await flush();
-    } finally { window.confirm = confirmOrig; }
+    click(step.querySelector('button[aria-label="More…"]'));
+    Menu.last!.items.find((i) => i.title.startsWith('Delete'))!.click!();
+    await answerConfirm(true);
     expect(await vault.read(dailyPath(TODAY))).not.toContain('Proof it');
     root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     expect(rows()).toEqual(['Ship the draft']); // gone, its task untouched
@@ -3493,18 +3501,13 @@ describe('double-booking guard', () => {
     input.value = 'Haircut 10:30-11:00'; input.dispatchEvent(new Event('input'));
     expect(cap.contentEl.querySelector<HTMLElement>('.helm-conflict')!.textContent).toContain('⚠ Overlaps 10:00–11:00 Dentist');
     expect(cap.contentEl.querySelector('.helm-conflict-fix')!.textContent).toBe('Move to 11:00'); // the first slot that fits
-    const confirms: string[] = [];
-    const orig = window.confirm;
-    window.confirm = (msg?: string) => { confirms.push(msg ?? ''); return false; };
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-    await flush(); await flush();
-    expect(confirms[0]).toContain('overlaps 10:00–11:00 Dentist');
+    expect(await answerConfirm(false)).toContain('overlaps 10:00–11:00 Dentist');
     expect(await vault.read(dailyPath(TODAY))).not.toContain('Haircut');
-    window.confirm = () => true;
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-    await flush(); await flush(); await flush();
+    await answerConfirm(true);
+    await flush();
     expect(await vault.read(dailyPath(TODAY))).toContain('10:30 - 11:00: Haircut');
-    window.confirm = orig;
     // Follow-up: overlapping time on the chosen day shows the same warning.
     const { openFollowUp } = await import('../../src/ui/modals/followUp');
     const dentist = [...index.snapshot.tasks.values()].find((t) => t.text === 'Dentist')!;

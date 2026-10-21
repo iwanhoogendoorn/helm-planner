@@ -3,12 +3,13 @@ import type { IsoDate, Task } from '../core/types';
 import { humanDate, minutesToHuman } from '../core/dates';
 import { formatRecurrence } from '../core/recurrence';
 import { checkboxTitle, clickedStatus } from '../core/taskLine';
-import { chip, h, icon, iconButton, richText } from './dom';
+import { activatable, chip, h, icon, iconButton, richText } from './dom';
 import type { UiContext } from './context';
 import { progressMenu, taskMenu } from './menus';
 import { startFocus } from './focusTimer';
 import { openTaskEditor } from './modals/taskEditor';
-import { followsOf, followUpsOf, isBlocked, isOpen } from '../data/planner';
+import { isBlocked, isOpen } from '../data/planner';
+import { followsOf, followUpsOf } from './taskLinks';
 import { drawingsIndicator } from './drawings';
 import { notesIndicator } from './notes';
 import { linksIndicator } from './links';
@@ -124,9 +125,10 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   // Checkbox: click toggles done; shift-click cycles to in-progress.
   if (!opts.compact) {
     const cb = h('button', {
-      cls: ['helm-check', `mark-${markerClass(t.status)}`, justToggledClass(t)],
+      cls: ['helm-check', `mark-${t.status}`, justToggledClass(t)],
       title: checkboxTitle(t.status),
-      attr: { 'aria-label': 'Toggle done', 'data-status': t.status },
+      // A checkbox to a screen reader: the task's own words, and done / not done / part-way.
+      attr: { role: 'checkbox', 'aria-checked': t.status === 'done' ? 'true' : t.status === 'doing' || t.status === 'waiting' ? 'mixed' : 'false', 'aria-label': plainLabel(t.text) || taskLabel(t), 'data-status': t.status },
       onClick: (ev) => {
         ev.stopPropagation();
         const next = clickedStatus(t.status, ev.shiftKey);
@@ -140,11 +142,12 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     row.appendChild(cb);
   }
 
-  const main = h('div', { cls: 'helm-task-main', onClick: (ev) => {
+  const main = h('div', { cls: 'helm-task-main', attr: { 'aria-label': `Edit: ${plainLabel(t.text) || taskLabel(t)}` }, onClick: (ev) => {
     if ((ev.target as HTMLElement).closest('a')) return;
     if (selectionClick(ctx, ev, row, t.key)) return;           // cmd-click picks, shift-click takes a run
     openTaskEditor(ctx, t);
   } });
+  activatable(main, () => openTaskEditor(ctx, t));
   const line1 = h('div', { cls: 'helm-task-line' });
   if (t.time) line1.appendChild(h('span', { cls: 'helm-time', text: t.time.end ? `${t.time.start}–${t.time.end}` : t.time.start }));
   if (t.priority !== 'normal') line1.appendChild(h('span', { cls: ['helm-prio', `prio-${t.priority}`], text: PRIORITY_LABEL[t.priority] ?? '', title: `Priority: ${t.priority}` }));
@@ -295,10 +298,6 @@ function everyParentAround(ctx: UiContext, row: HTMLElement): Task[] {
     if (t) walk(t);
   }
   return out;
-}
-
-function markerClass(s: Task['status']): string {
-  return s;
 }
 
 export function taskList(ctx: UiContext, tasks: Task[], opts: RowOptions = {}): HTMLElement {
