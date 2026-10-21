@@ -2,7 +2,8 @@
 /** Regression tests for the UI review findings (REVIEW-ui.md), one describe per finding. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Modal, Notice } from '../stubs/obsidian';
-import { setup, TODAY } from '../data/fixture';
+import { TODAY } from '../data/fixture';
+import { ctxFor } from './helpers';
 import type { UiContext } from '../../src/ui/context';
 import { taskList } from '../../src/ui/taskRow';
 import { followsOf as slowFollows, followUpsOf as slowUps } from '../../src/data/planner';
@@ -14,19 +15,6 @@ import type { TabId } from '../../src/ui/context';
 import { startFocus, stopTimer } from '../../src/ui/focusTimer';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-export async function ctxFor(extra?: Record<string, string>, over: Partial<UiContext> = {}) {
-  const s = await setup(extra);
-  const ctx: UiContext = {
-    app: { vault: { adapter: { exists: async () => true } } } as never,
-    index: s.index, mutations: s.m, settings: () => s.settings, saveSettings: async () => undefined,
-    today: () => TODAY, now: () => '14:37', notify: (m) => { new Notice(m); },
-    openFile: async () => undefined, openLink: () => undefined, refresh: () => undefined, navigate: () => undefined,
-    run: async (_l, fn) => { await fn(); }, trackModal: () => undefined, resourceUrl: (p) => `app://${p}`,
-    ...over,
-  };
-  return { ...s, ctx };
-}
 
 beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; selection.clear(); clearFolds(); });
 

@@ -2,7 +2,7 @@
 import { humanDate, relativeDays, minutesToHuman } from '../../core/dates';
 import { openExportReport } from '../modals/exportReport';
 import { review, type ProjectHealth, reviewChecklist } from '../../data/planner';
-import { habitStats } from '../../data/habits';
+import { habitStats } from '../habitMemo';
 import { button, chip, empty, h, icon, section } from '../dom';
 import type { UiContext } from '../context';
 import { crumbBar, dateCrumbs } from '../crumbs';

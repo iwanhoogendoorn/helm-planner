@@ -2,7 +2,8 @@
 import type { Habit, HabitPart, HelmSettings, IsoDate, Task } from '../../core/types';
 import { addDays, humanDate, minutesToHuman } from '../../core/dates';
 import { candidates, dayPlan, DAY_PARTS, type Candidate, type DayItem, type DayPart } from '../../data/planner';
-import { habitsOnDay, habitStats } from '../../data/habits';
+import { habitsOnDay } from '../../data/habits';
+import { completionsOn, habitStats } from '../habitMemo';
 import { PART_LABEL } from '../../core/dailyNote';
 import { button, chip, empty, h, icon, iconButton, progressBar, section } from '../dom';
 import type { UiContext } from '../context';
@@ -107,7 +108,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   {
     /** A chip for one occurrence of a habit (day-level, or one part of the day). */
     const habitChip = (hb: Habit, part?: HabitPart): HTMLElement => {
-      const done = snap.completions.find((c) => c.habitId === hb.id && c.date === date && c.part === part);
+      const done = completionsOn(snap.completions, hb.id, date).find((c) => c.part === part);
       const st = habitStats(hb, snap.completions, today, settings.weekStartsOn, 14);
       const hstate = done?.state ?? 'pending';
       return h('button', {
@@ -119,7 +120,7 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
     };
     const parted = habits.filter((hb) => hb.parts && hb.parts.length > 0);
     const occurrences = habits.reduce((n, hb) => n + (hb.parts?.length || 1), 0);
-    const doneOcc = habits.reduce((n, hb) => n + (hb.parts?.length ? snap.completions.filter((c) => c.date === date && c.state === 'done' && c.habitId === hb.id && c.part !== undefined && hb.parts!.includes(c.part)).length : snap.completions.some((c) => c.date === date && c.state === 'done' && c.habitId === hb.id) ? 1 : 0), 0);
+    const doneOcc = habits.reduce((n, hb) => { const on = completionsOn(snap.completions, hb.id, date); return n + (hb.parts?.length ? on.filter((c) => c.state === 'done' && c.part !== undefined && hb.parts!.includes(c.part)).length : on.some((c) => c.state === 'done') ? 1 : 0); }, 0);
     const board = h('div', { cls: 'helm-habit-tiles' }, ...habits.map((hb) => habitTile(ctx, hb, date)));
     habitChipsFor = (part) => { const list = [...parted.filter((hb) => hb.parts!.includes(part)), ...habits.filter((hb) => dayPartOf(hb, snap.completions, date) === part)]; return list.length === 0 ? null : h('div', { cls: 'helm-habit-chips helm-part-habits' }, ...list.map((hb) => colourise(habitChip(hb, part), hb))); };
     root.appendChild(section('Habits', { count: `${doneOcc}/${occurrences}`, store, key: 'habits', actions: [button('All habits', { icon: 'repeat', cls: 'helm-btn-quiet', title: 'The Habits tab: every habit with its week, streaks and history', onClick: () => ctx.navigate('habits') }), button('New habit', { icon: 'plus', cls: 'helm-btn-quiet', onClick: () => openHabitForm(ctx) })] },

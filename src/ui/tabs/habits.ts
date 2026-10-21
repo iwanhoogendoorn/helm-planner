@@ -2,7 +2,8 @@
 import type { Habit, IsoDate } from '../../core/types';
 import type { PeriodKind } from '../../core/periods';
 import { formatRecurrence } from '../../core/recurrence';
-import { ghostHabits, habitDue, habitStats } from '../../data/habits';
+import { ghostHabits, habitDue } from '../../data/habits';
+import { habitStats } from '../habitMemo';
 import { button, empty, h, iconButton, section } from '../dom';
 import type { UiContext } from '../context';
 import { habitCard } from '../habitCard';
