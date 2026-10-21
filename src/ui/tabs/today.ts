@@ -1,5 +1,5 @@
 /** The cockpit: one day, split into parts, and the two rituals around it. */
-import type { Habit, HabitPart, HelmSettings, IsoDate, Task } from '../../core/types';
+import type { Habit, HabitPart, IsoDate, Task } from '../../core/types';
 import { addDays, humanDate, minutesToHuman } from '../../core/dates';
 import { candidates, dayPlan, DAY_PARTS, type Candidate, type DayItem, type DayPart } from '../../data/planner';
 import { habitsOnDay } from '../../data/habits';
@@ -21,7 +21,7 @@ import { timerBar } from '../focusTimer';
 import { habitBadge } from '../fields';
 import { dayPartOf } from '../../data/habits';
 import { plainLabel } from '../../core/label';
-import { partWindow, preferredSlot } from '../../data/conflicts';
+import { retimeFor, spillovers, type Spill } from '../rules';
 import { habitMenu } from '../habits';
 import { habitTile, colourise } from '../habitCard';
 import { drawingsButton, targetForDate } from '../drawings';
@@ -256,42 +256,12 @@ function makeDropZone(ctx: UiContext, el: HTMLElement, date: IsoDate, part: DayP
         const onThisDay = t.noteDate === date || t.scheduled === date;
         await (onThisDay ? ctx.mutations.setPart(key, part) : ctx.mutations.schedule(key, date, part));
         // A timed task keeps its length but takes the first free slot in the part it landed in.
-        const slot = t.time && part !== 'anytime' ? retimeFor(ctx, t, date, part) : undefined;
+        const slot = t.time && part !== 'anytime' ? retimeFor(ctx.index.snapshot, ctx.settings(), t, date, part, date === ctx.today() ? ctx.now() : undefined) : undefined;
         if (slot) await ctx.mutations.updateTask(key, { time: slot });
       }
       selection.clear();
     });
   });
-}
-
-const toMin = (hhmm: string): number => { const [hh, mm] = hhmm.split(':').map(Number); return (hh ?? 0) * 60 + (mm ?? 0); };
-
-interface Spill { item: DayItem; from: DayPart; start: string; end: string }
-
-/**
- * A timed task belongs to the part it starts in, but time does not stop at the boundary: dinner from
- * 17:00 to 19:30 runs on into the evening. Every later part it overlaps gets a ghost of it, so the day
- * reads honestly — an evening with two and a half hours already spoken for is not an empty evening.
- */
-function spillovers(plan: ReturnType<typeof dayPlan>, settings: HelmSettings): Partial<Record<DayPart, Spill[]>> {
-  const out: Partial<Record<DayPart, Spill[]>> = {};
-  for (const part of DAY_PARTS) {
-    if (part === 'anytime') continue;
-    for (const it of plan.byPart[part]) {
-      const t = it.display;
-      if (!t.time || t.status === 'done' || t.status === 'cancelled' || t.status === 'forwarded') continue;
-      const start = toMin(t.time.start);
-      const ended = t.time.end ? toMin(t.time.end) : undefined;
-      const end = ended !== undefined && ended > start ? ended : start + (t.effortMinutes ?? settings.defaultEffortMinutes);
-      for (const later of DAY_PARTS) {
-        if (later === 'anytime' || later === part) continue;
-        const w = partWindow(later, settings);
-        if (toMin(w.from) < start || toMin(w.from) >= end) continue; // it has to be running when that part opens
-        (out[later] ??= []).push({ item: it, from: part, start: t.time.start, end: t.time.end ?? '' });
-      }
-    }
-  }
-  return out;
 }
 
 /** The ghost of a task that is still running when this part begins; it names where it started. */
@@ -303,18 +273,6 @@ function spillRow(ctx: UiContext, sp: Spill): HTMLElement {
   const label = sp.end ? `runs on until ${sp.end}` : 'still running';
   meta.appendChild(h('span', { cls: 'helm-chip spill', title: `Started in the ${PART_LABEL[sp.from].toLowerCase()} at ${sp.start} — shown here because it is still running` }, icon('arrow-down-right'), h('span', { cls: 'helm-chip-label', text: `from the ${PART_LABEL[sp.from].toLowerCase()}, ${label}` })));
   return row;
-}
-
-/** Where a dragged, timed task should sit in its new part: the first free slot, keeping its length. */
-function retimeFor(ctx: UiContext, t: Task, date: IsoDate, part: DayPart): { start: string; end?: string } | undefined {
-  const s = ctx.settings();
-  const toMin = (hhmm: string): number => { const [hh, mm] = hhmm.split(':').map(Number); return (hh ?? 0) * 60 + (mm ?? 0); };
-  const toHhmm = (m: number): string => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-  const length = t.time?.end ? Math.max(5, toMin(t.time.end) - toMin(t.time.start)) : (t.effortMinutes ?? s.defaultEffortMinutes);
-  const notBefore = date === ctx.today() ? ctx.now() : undefined;
-  const start = preferredSlot(ctx.index.snapshot, date, s, { part, effortMinutes: length, excludeKeys: [t.key, ...(t.id ? [t.id] : []), ...(t.mirrorOf ? [t.mirrorOf] : [])], ...(notBefore ? { notBefore } : {}) });
-  if (t.time && t.time.start === start) return undefined;
-  return { start, ...(t.time?.end ? { end: toHhmm(toMin(start) + length) } : {}) };
 }
 
 function reasonLabel(c: Candidate): string {

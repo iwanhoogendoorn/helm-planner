@@ -4,6 +4,7 @@ import { button, h } from './dom';
 import { AbstractInputSuggest, Modal, TFolder, type App } from 'obsidian';
 import type { Recurrence } from '../core/types';
 import { formatRecurrence, parseRecurrence } from '../core/recurrence';
+import { toHhmm, toMinutes } from '../data/timegrid';
 
 export const EFFORT_PRESETS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480];
 
@@ -49,8 +50,6 @@ export function effortField(initial?: number): EffortField {
   };
 }
 
-const toMin = (hhmm: string): number => { const [hh, mm] = hhmm.split(':').map(Number); return (hh ?? 0) * 60 + (mm ?? 0); };
-const toHhmm = (min: number): string => `${String(Math.floor(((min % 1440) + 1440) % 1440 / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
 /**
  * Keep start time, end time and effort consistent:
@@ -65,20 +64,20 @@ export function linkTimes(start: HTMLInputElement, end: HTMLInputElement, effort
     previousStart = start.value;
     if (!start.value) return;
     const e = effort.get();
-    if (e !== undefined) { end.value = toHhmm(toMin(start.value) + e); return; }
+    if (e !== undefined) { end.value = toHhmm(toMinutes(start.value) + e); return; }
     if (!end.value) return;
     // No estimate: moving the start moves the whole block, so the end can never be left behind it.
-    const duration = from && toMin(end.value) > toMin(from) ? toMin(end.value) - toMin(from) : undefined;
-    if (duration !== undefined) end.value = toHhmm(toMin(start.value) + duration);
-    else if (toMin(end.value) > toMin(start.value)) effort.set(toMin(end.value) - toMin(start.value));
+    const duration = from && toMinutes(end.value) > toMinutes(from) ? toMinutes(end.value) - toMinutes(from) : undefined;
+    if (duration !== undefined) end.value = toHhmm(toMinutes(start.value) + duration);
+    else if (toMinutes(end.value) > toMinutes(start.value)) effort.set(toMinutes(end.value) - toMinutes(start.value));
     else end.value = '';
   });
   effort.onChange(() => {
     const e = effort.get();
-    if (start.value && e !== undefined) end.value = toHhmm(toMin(start.value) + e);
+    if (start.value && e !== undefined) end.value = toHhmm(toMinutes(start.value) + e);
   });
   end.addEventListener('input', () => {
-    if (start.value && end.value && toMin(end.value) > toMin(start.value)) effort.set(toMin(end.value) - toMin(start.value));
+    if (start.value && end.value && toMinutes(end.value) > toMinutes(start.value)) effort.set(toMinutes(end.value) - toMinutes(start.value));
   });
 }
 

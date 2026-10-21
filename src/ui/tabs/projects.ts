@@ -28,6 +28,7 @@ import { openTaskEditor } from '../modals/taskEditor';
 import { plainLabel } from '../../core/label';
 import { dragKeys, selection } from '../selection';
 import { confirmModal } from '../modals/confirm';
+import { captureTask, parsePhaseTitle } from '../rules';
 
 /** The profile a project works under, with whatever vocabulary its own note overrides. */
 const profileOf = (p: Project): ProjectProfile =>
@@ -893,10 +894,7 @@ function quickAdd(ctx: UiContext, placeholder: string, onSubmit: (text: string) 
 
 function addQuick(ctx: UiContext, text: string, projectId: string, phaseId?: string): void {
   const c = parseCapture(text, ctx.today(), ctx.settings().weekStartsOn);
-  void ctx.run('Add task', () => ctx.mutations.addTask({
-    text: c.text, projectId, ...(phaseId ? { phaseId } : {}), ...(c.scheduled ? { date: c.scheduled } : {}),
-    fields: { priority: c.priority, ...(c.due ? { due: c.due } : {}), ...(c.effortMinutes ? { effortMinutes: c.effortMinutes, effortRaw: minutesToHuman(c.effortMinutes) } : {}), ...(c.time ? { time: c.time } : {}), ...(c.recurrence ? { recurrence: c.recurrence } : {}) },
-  }));
+  void ctx.run('Add task', () => ctx.mutations.addTask({ ...captureTask(c), projectId, ...(phaseId ? { phaseId } : {}) }));
 }
 
 const PHASE_HINT = 'Add 📅 2026-09-30 at the end to give the phase a target date.';
@@ -904,8 +902,8 @@ const PHASE_HINT = 'Add 📅 2026-09-30 at the end to give the phase a target da
 function addPhasePrompt(ctx: UiContext, p: Project): void {
   askText(ctx, { title: `New phase in ${p.title}`, label: 'Phase name', placeholder: 'e.g. Research', hint: PHASE_HINT, cta: 'Add phase', onDone: (v) => {
     if (!v) return;
-    const m = /^(.*?)(?:\s*📅\s*(\d{4}-\d{2}-\d{2}))?\s*$/.exec(v.trim())!;
-    void ctx.run('Add phase', () => ctx.mutations.addPhase(p.id, m[1]!.trim(), m[2]));
+    const ph = parsePhaseTitle(v);
+    void ctx.run('Add phase', () => ctx.mutations.addPhase(p.id, ph.title, ph.due));
   } });
 }
 
@@ -919,7 +917,7 @@ function deletePhasePrompt(ctx: UiContext, p: Project, phaseId: string, title: s
 function renamePhasePrompt(ctx: UiContext, p: Project, phaseId: string, title: string, due?: IsoDate): void {
   askText(ctx, { title: 'Rename phase', label: 'Phase name', value: `${title}${due ? ` 📅 ${due}` : ''}`, hint: `${PHASE_HINT} Leave the date out to clear it.`, onDone: (v) => {
     if (!v) return;
-    const m = /^(.*?)(?:\s*📅\s*(\d{4}-\d{2}-\d{2}))?\s*$/.exec(v.trim())!;
-    void ctx.run('Rename phase', () => ctx.mutations.renamePhase(p.id, phaseId, m[1]!.trim(), m[2] ?? null));
+    const ph = parsePhaseTitle(v);
+    void ctx.run('Rename phase', () => ctx.mutations.renamePhase(p.id, phaseId, ph.title, ph.due ?? null));
   } });
 }
