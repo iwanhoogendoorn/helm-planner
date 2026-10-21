@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "seed": "node scripts/run.mjs scripts/seed-vault.ts",
     "serve:dev": "node scripts/run.mjs scripts/serve-dev.ts",
-    "install:vault": "node scripts/install.mjs"
+    "install:vault": "node scripts/install.mjs",
+    "check:tooling": "node scripts/check-tooling.mjs"
   },
   "keywords": [
     "obsidian",
