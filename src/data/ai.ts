@@ -157,7 +157,7 @@ export function parseAnswer(raw: string, req: PlanRequest): PlanAnswer {
   const at = text.indexOf('{');
   const to = text.lastIndexOf('}');
   if (at === -1 || to <= at) throw new Error('Claude did not answer with JSON');
-  const parsed = JSON.parse(text.slice(at, to + 1)) as Partial<PlanAnswer>;
+  const parsed = checkShape(JSON.parse(text.slice(at, to + 1)), 'order') as Partial<PlanAnswer>;
   const known = new Set(req.tasks.map((t) => t.key));
   const { alias, real } = aliasesFor(req.tasks);
   const resolve = (k: string): string | undefined => (known.has(k) ? k : real.get(k));
@@ -176,6 +176,23 @@ export function parseAnswer(raw: string, req: PlanRequest): PlanAnswer {
     minutes[t.key] = t.effortMinutes ?? 30;
   }
   return { order, minutes, ...(parsed.notes ? { notes: notesByKey(parsed.notes, real) } : {}), defer };
+}
+
+/**
+ * The model's JSON is only a promise of a plan: check every part Helm reads has the shape it expects, so a
+ * stray value ends in a plain "unexpected shape" rather than a JavaScript error shown as if it were advice.
+ */
+function checkShape(v: unknown, kind: 'order' | 'days'): Record<string, unknown> {
+  const bad = (): never => { throw new Error('Claude answered in an unexpected shape'); };
+  const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
+  const strings = (x: unknown): boolean => Array.isArray(x) && x.every((k) => typeof k === 'string');
+  if (!isObj(v)) return bad();
+  if (kind === 'order' && v['order'] !== undefined && !strings(v['order'])) bad();
+  if (kind === 'days' && v['days'] !== undefined && !isObj(v['days'])) bad(); // a day that is not a list is skipped below
+  if (v['minutes'] !== undefined && !isObj(v['minutes'])) bad();
+  if (v['notes'] !== undefined && (!isObj(v['notes']) || !Object.values(v['notes']).every((n) => typeof n === 'string'))) bad();
+  if (v['defer'] !== undefined && (!Array.isArray(v['defer']) || !v['defer'].every((d) => isObj(d) && typeof d['key'] === 'string' && (d['reason'] === undefined || typeof d['reason'] === 'string')))) bad();
+  return v;
 }
 
 /** Notes come back under whichever handle the model used; they are filed under Helm's own key. */
@@ -280,7 +297,7 @@ export function parseWeekAnswer(raw: string, req: WeekPlanRequest): WeekAnswer {
   const at = text.indexOf('{');
   const to = text.lastIndexOf('}');
   if (at === -1 || to <= at) throw new Error('Claude did not answer with JSON');
-  const parsed = JSON.parse(text.slice(at, to + 1)) as Partial<WeekAnswer>;
+  const parsed = checkShape(JSON.parse(text.slice(at, to + 1)), 'days') as Partial<WeekAnswer>;
   const known = new Map(req.tasks.map((t) => [t.key, t]));
   const { alias, real } = aliasesFor(req.tasks);
   const resolve = (k: string): string | undefined => (known.has(k) ? k : real.get(k));
