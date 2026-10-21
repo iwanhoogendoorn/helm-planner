@@ -7,25 +7,34 @@
   "private": true,
   "scripts": {
     "dev": "node esbuild.config.mjs dev",
-    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit --skipLibCheck",
+    "typecheck": "tsc --noEmit",
     "seed": "node scripts/run.mjs scripts/seed-vault.ts",
     "serve:dev": "node scripts/run.mjs scripts/serve-dev.ts",
-    "install:vault": "node scripts/install.mjs"
+    "install:vault": "node scripts/install.mjs",
+    "check:tooling": "node scripts/check-tooling.mjs"
   },
-  "keywords": ["obsidian", "tasks", "projects", "habits", "daily-notes"],
+  "keywords": [
+    "obsidian",
+    "tasks",
+    "projects",
+    "habits",
+    "daily-notes"
+  ],
   "author": "Iwan Hoogendoorn",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.0",
     "builtin-modules": "^4.0.0",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.28.2",
     "jsdom": "^25.0.1",
-    "obsidian": "latest",
+    "obsidian": "1.14.4",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^5.0.5"
   },
-  "engines": { "node": ">=20.11" }
+  "engines": {
+    "node": ">=22.12"
+  }
 }
