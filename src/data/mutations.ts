@@ -2,23 +2,27 @@
  * Every write Helm performs goes through this module.
  *
  * Rules:
- *  - Read the file fresh, change only the lines the operation is about, write.
+ *  - Read the file fresh, change only the lines the operation is about, write — one file at a time:
+ *    every read-modify-write of a path (UI, API, reconcile alike) waits for the one before it, and goes
+ *    through the vault's atomic `process` when it has one.
+ *  - A line is found again in the fresh file by what it is (its 🆔, else its text), never trusted by the
+ *    line number the index had: the index lags the disk.
  *  - After every write, update the index synchronously so the next step in the
  *    same operation sees fresh line numbers.
  *  - Past daily notes are a log: a line is marked `[>]` (forwarded) rather
  *    than removed; mirrors on past days are never rewritten.
  */
 import { safeFolder } from '../core/paths';
-import type { Habit, HabitColor, HabitPart, HelmSettings, IsoDate, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus, TimeBlock } from '../core/types';
+import type { Habit, HabitColor, HabitPart, HelmSettings, IsoDate, Phase, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus, TimeBlock } from '../core/types';
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
 import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, addMonths, diffDays, formatDate } from '../core/dates';
 import { formatRecurrence, nextOccurrence, shiftRecurrence } from '../core/recurrence';
 import { formatHistoryEntry, formatPauseEntry } from '../core/habit';
-import { uniqueId } from '../core/ids';
+import { derivedKey, uniqueId } from '../core/ids';
 import { setFrontmatter } from '../core/frontmatter';
-import { renderProjectNote } from '../core/project';
+import { parseProject, renderProjectNote } from '../core/project';
 import { assignmentLine, type Assignment } from '../core/profiles';
 import { renderHabitNote } from '../core/habit';
 import { columnWidth } from '../core/tree';
@@ -32,7 +36,7 @@ import { parsePeriod, periodOf, type Period, type PeriodKind } from '../core/per
 import { bundledTemplate, bundledDailyTemplate, type TemplateConfig } from '../core/periodicTemplates';
 import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/drawing';
 import { noteTitle, renderNewNote, listValues, type NoteRef } from '../core/noteRef';
-import { parseDaybook, renderEntry, renderReply } from '../core/daybook';
+import { parseDaybook, renderEntry, renderReply, type DaybookEntry } from '../core/daybook';
 import type { DrawingTarget } from '../core/types';
 import { addLinkToText, linkLabel, linksIn, normaliseLink, removeLinkFromText } from '../core/links';
 import { plainLabel } from '../core/label';
@@ -80,6 +84,9 @@ export interface AddTaskSpec {
   toInbox?: boolean;
 }
 
+/** A line Helm meant to write is no longer where the index said, and cannot be told apart from the rest. */
+export class LineMovedError extends Error {}
+
 export const STATUS_RANK: Record<TaskStatus, number> = { todo: 0, doing: 1, waiting: 2, forwarded: 3, cancelled: 4, done: 5 };
 
 export class Mutations {
@@ -91,23 +98,65 @@ export class Mutations {
 
   /* ── File primitives ────────────────────────────────────────────────── */
 
+  /** The tail of the queue of writes per path. */
+  private queues = new Map<string, Promise<void>>();
+
+  /**
+   * Run `fn` with `path` to itself: each read-modify-write of a file waits for the one before it, so two
+   * operations on one note — a click, an API call, the reconcile — can never interleave and lose one.
+   * `fn` must not wait on another write to the same path, or it waits for itself.
+   */
+  private async serial<T>(path: string, fn: () => Promise<T>): Promise<T> {
+    const before = this.queues.get(path) ?? Promise.resolve();
+    let release!: () => void;
+    const tail = before.then(() => new Promise<void>((r) => { release = r; }));
+    this.queues.set(path, tail);
+    await before;
+    try {
+      return await fn();
+    } finally {
+      release();
+      if (this.queues.get(path) === tail) this.queues.delete(path);
+    }
+  }
+
+  /**
+   * Transform a file's current content and save it, under the path's lock: through the vault's atomic
+   * `process` when it has one (so an editor save in between is not lost), else read-then-write. Returns
+   * the new content, or undefined when `fn` changed nothing.
+   */
+  private async transform(path: string, fn: (content: string) => string | undefined): Promise<string | undefined> {
+    return this.serial(path, async () => {
+      let out: string | undefined;
+      const step = (content: string): string => { const next = fn(content); out = next !== undefined && next !== content ? next : undefined; return out ?? content; };
+      if (this.d.vault.process) await this.d.vault.process(path, step);
+      else { step(await this.d.vault.read(path)); if (out !== undefined) await this.d.vault.write(path, out); }
+      if (out !== undefined) this.index.update(path, out);
+      return out;
+    });
+  }
+
   private async editFile(path: string, fn: (lines: string[], doc: Document) => boolean | string[] | undefined): Promise<boolean> {
-    const content = await this.d.vault.read(path);
-    const doc = parseDocument(content);
-    const lines = [...doc.lines];
-    const r = fn(lines, doc);
-    if (r === undefined || r === false) return false;
-    const next = Array.isArray(r) ? r : lines;
-    const out = next.join(doc.eol);
-    if (out === content) return false;
-    await this.d.vault.write(path, out);
-    this.index.update(path, out);
-    return true;
+    const out = await this.transform(path, (content) => {
+      const doc = parseDocument(content);
+      const lines = [...doc.lines];
+      const r = fn(lines, doc);
+      if (r === undefined || r === false) return undefined;
+      return (Array.isArray(r) ? r : lines).join(doc.eol);
+    });
+    return out !== undefined;
+  }
+
+  /** Write a whole file (new, or replaced outright) under the path's lock. */
+  private async put(path: string, content: string): Promise<void> {
+    await this.serial(path, async () => {
+      await this.d.vault.write(path, content);
+      this.index.update(path, content);
+    });
   }
 
   private async createFile(path: string, content: string): Promise<void> {
-    await this.d.vault.write(path, content);
-    this.index.update(path, content);
+    await this.put(path, content);
   }
 
   private fresh(key: string): Task {
@@ -121,16 +170,41 @@ export class Mutations {
     return this.index.tasksInFile(path).find((x) => x.line === line) ?? this.fresh(fallbackKey);
   }
 
-  private lineOf(lines: string[], t: Task): TaskLine {
-    const parsed = parseTaskLine(lines[t.line] ?? '');
-    if (!parsed || (t.id && parsed.id !== t.id) || (!t.id && parsed.text !== t.text)) throw new Error(`Line moved under us: ${t.path}:${t.line + 1}`);
-    return parsed;
+  /**
+   * Where `t` is in the fresh `lines`: the line the index had when that line is still the task, else
+   * the line that is — by 🆔, or by text (the same occurrence of that text the index keyed it by) when it
+   * has none. Throws when it cannot tell: writing on a guess would overwrite someone's line.
+   */
+  private at(lines: string[], t: Task): number {
+    const mirror = t.mirrorLink !== undefined;
+    const same = (l: TaskLine | undefined): l is TaskLine => l !== undefined && (l.mirrorLink !== undefined) === mirror && (t.id ? l.id === t.id : l.id === undefined && l.text === t.text);
+    if (same(parseTaskLine(lines[t.line] ?? ''))) return t.line;
+    const found = parseDocument(lines.join('\n')).tasks.filter((dt) => same(dt.task)).map((dt) => dt.line);
+    if (found.length === 1) return found[0]!;
+    if (!t.id && found.length > 1) {
+      // Twins: the index told them apart by their order in the note, so the same order finds this one.
+      const n = found.findIndex((_, i) => derivedKey(t.path, i, t.text) === t.key);
+      if (n !== -1) return found[n]!;
+    }
+    throw new LineMovedError(`Line moved under us: ${t.path}:${t.line + 1}`);
+  }
+
+  /** The task's line, found by identity (see `at`), and where it is now. */
+  private lineOf(lines: string[], t: Task): { tl: TaskLine; at: number } {
+    const at = this.at(lines, t);
+    return { tl: parseTaskLine(lines[at]!)!, at };
+  }
+
+  /** A project's phases as the fresh note has them: the index's line numbers may be behind the disk. */
+  private phasesNow(p: Project, lines: string[]): Phase[] {
+    return parseProject(p.path, lines.join('\n')).project.phases;
   }
 
   /** Line range of a task and its subtree (children by indentation). */
   private subtreeRange(lines: string[], t: Task): { start: number; end: number } {
-    const w = columnWidth(t.raw.indent);
-    let end = t.line + 1;
+    const start = this.at(lines, t);
+    const w = columnWidth(/^[ \t]*/.exec(lines[start]!)![0]);
+    let end = start + 1;
     while (end < lines.length) {
       const l = lines[end]!;
       if (l.trim() === '') { end++; continue; }
@@ -138,8 +212,8 @@ export class Mutations {
       if (!m || columnWidth(m[1]!) <= w) break;
       end++;
     }
-    while (end > t.line + 1 && lines[end - 1]!.trim() === '') end--;
-    return { start: t.line, end };
+    while (end > start + 1 && lines[end - 1]!.trim() === '') end--;
+    return { start, end };
   }
 
   private mirrorLink(t: Task): string {
@@ -171,11 +245,21 @@ export class Mutations {
 
   /* ── Daily notes ────────────────────────────────────────────────────── */
 
+  /** Daily notes being created right now, so two writes to a new day make it once. */
+  private creating = new Map<string, Promise<void>>();
+
   async ensureDailyNote(date: IsoDate): Promise<string> {
     const path = this.index.dailyPath(date);
+    const pending = this.creating.get(path);
+    if (pending) { await pending; return path; }
     if (await this.d.vault.exists(path)) return path;
-    const tpl = this.d.dailyTemplate ? await this.d.dailyTemplate() : undefined;
-    await this.createFromTemplate(path, tpl, date, baseName(path));
+    if (this.creating.has(path)) { await this.creating.get(path); return path; }
+    const make = (async () => {
+      const tpl = this.d.dailyTemplate ? await this.d.dailyTemplate() : undefined;
+      await this.createFromTemplate(path, tpl, date, baseName(path));
+    })();
+    this.creating.set(path, make);
+    try { await make; } finally { this.creating.delete(path); }
     return path;
   }
 
@@ -191,27 +275,23 @@ export class Mutations {
       if (ok) { const c = await this.d.vault.read(path); this.index.update(path, c); return; }
     }
     const content = renderDailyTemplate(tpl, date, title);
-    if (await this.d.vault.exists(path)) { await this.d.vault.write(path, content); this.index.update(path, content); }
-    else await this.createFile(path, content);
+    await this.put(path, content);
   }
 
   private async editRegion(date: IsoDate, fn: (rc: RegionContent) => RegionContent | undefined): Promise<boolean> {
     const path = await this.ensureDailyNote(date);
-    const content = await this.d.vault.read(path);
-    const doc = parseDocument(content);
-    const scan = findRegion(doc.lines, this.settings);
-    if (scan.broken) { this.d.notify(`Helm region in ${baseName(path)} is broken (no end marker) — not writing.`); return false; }
-    const current: RegionContent = scan.region ? readRegion(doc.lines, scan.region) : emptyContent();
-    const next = fn(current);
-    if (!next) return false;
-    if (!scan.region && isEmptyRegion(next)) return false;
-    const w = writeRegion(content, next, this.settings);
-    if (!w) return false;
-    const out = w.lines.join(w.eol);
-    if (out === content) return false;
-    await this.d.vault.write(path, out);
-    this.index.update(path, out);
-    return true;
+    const out = await this.transform(path, (content) => {
+      const doc = parseDocument(content);
+      const scan = findRegion(doc.lines, this.settings);
+      if (scan.broken) { this.d.notify(`Helm region in ${baseName(path)} is broken (no end marker) — not writing.`); return undefined; }
+      const current: RegionContent = scan.region ? readRegion(doc.lines, scan.region) : emptyContent();
+      const next = fn(current);
+      if (!next) return undefined;
+      if (!scan.region && isEmptyRegion(next)) return undefined;
+      const w = writeRegion(content, next, this.settings);
+      return w ? w.lines.join(w.eol) : undefined;
+    });
+    return out !== undefined;
   }
 
   /** Put the habits due on `date` into the note (keeping any existing ticks). */
@@ -316,8 +396,8 @@ export class Mutations {
     if (t.id) return t.id;
     const id = this.newTaskId();
     await this.editFile(t.path, (lines) => {
-      const tl = this.lineOf(lines, t);
-      lines[t.line] = serialiseTaskLine({ ...tl, id }, { force: true });
+      const { tl, at } = this.lineOf(lines, t);
+      lines[at] = serialiseTaskLine({ ...tl, id }, { force: true });
       return true;
     });
     return id;
@@ -325,11 +405,10 @@ export class Mutations {
 
   /* ── Status ─────────────────────────────────────────────────────────── */
 
-  private async writeLineStatus(path: string, line: number, status: TaskStatus, date: IsoDate): Promise<void> {
-    await this.editFile(path, (lines) => {
-      const tl = parseTaskLine(lines[line] ?? '');
-      if (!tl) return false;
-      lines[line] = serialiseTaskLine(withStatus(tl, status, date), { force: true });
+  private async writeLineStatus(t: Task, status: TaskStatus, date: IsoDate): Promise<void> {
+    await this.editFile(t.path, (lines) => {
+      const { tl, at } = this.lineOf(lines, t);
+      lines[at] = serialiseTaskLine(withStatus(tl, status, date), { force: true });
       return true;
     });
   }
@@ -344,11 +423,11 @@ export class Mutations {
     }
     if (t.status === status) return;
     const doneDate = t.origin === 'daily' && t.noteDate ? t.noteDate : today;
-    await this.writeLineStatus(t.path, t.line, status, doneDate);
+    await this.writeLineStatus(t, status, doneDate);
     t = this.fresh(key);
     // Mirrors on today and later follow the source.
     for (const m of this.index.mirrorsOf(t.key)) {
-      if (m.noteDate !== undefined && m.noteDate >= today && m.status !== status) await this.writeLineStatus(m.path, m.line, status, doneDate);
+      if (m.noteDate !== undefined && m.noteDate >= today && m.status !== status) await this.writeLineStatus(m, status, doneDate);
     }
     // Cancelling one occurrence is skipping it, not ending the series: the next one still comes. To stop
     // a repeat altogether, take the 🔁 off with `stopRepeating`.
@@ -377,10 +456,10 @@ export class Mutations {
       stopped++;
     }
     await this.editFile(t.path, (lines) => {
-      const tl = this.lineOf(lines, t);
+      const { tl, at } = this.lineOf(lines, t);
       const next: TaskLine = { ...tl };
       delete next.recurrence;
-      lines[t.line] = serialiseTaskLine(next, { force: true });
+      lines[at] = serialiseTaskLine(next, { force: true });
       return true;
     });
     const fresh = this.index.task(t.key);
@@ -523,7 +602,7 @@ export class Mutations {
     const sched = t.movedFrom && !rec.whenDone ? t.movedFrom.date : t.scheduled;
     if (sched) fields.scheduled = addDays(sched, shift);
     await this.editFile(t.path, (lines) => {
-      lines.splice(t.line, 0, serialiseTaskLine(newTaskLine(t.text, fields, t.raw.indent)));
+      lines.splice(this.at(lines, t), 0, serialiseTaskLine(newTaskLine(t.text, fields, t.raw.indent)));
       return true;
     });
   }
@@ -573,17 +652,17 @@ export class Mutations {
     if (t.origin === 'daily') { await this.moveDailyTask(t, date, part); return; }
     if (t.origin === 'inbox' && date !== undefined) { await this.moveLineToDay(t, date, part); return; }
     if (t.origin === 'inbox' && date === undefined) {
-      await this.editFile(t.path, (lines) => { const tl = this.lineOf(lines, t); delete tl.scheduled; lines[t.line] = serialiseTaskLine(tl, { force: true }); return true; });
+      await this.editFile(t.path, (lines) => { const { tl, at } = this.lineOf(lines, t); delete tl.scheduled; lines[at] = serialiseTaskLine(tl, { force: true }); return true; });
       return;
     }
     // Project or note task: ⏳ on the source + a mirror line in the day's note.
     if (date !== undefined) { const id = await this.ensureId(key); t = this.fresh(this.index.task(id)?.key ?? key); }
     await this.editFile(t.path, (lines) => {
-      const tl = this.lineOf(lines, t);
+      const { tl, at } = this.lineOf(lines, t);
       const before: TaskLine = { ...tl };
       if (date === undefined) delete tl.scheduled; else tl.scheduled = date;
       this.anchorTurn(before, tl, before.scheduled, date);
-      lines[t.line] = serialiseTaskLine(tl, { force: true });
+      lines[at] = serialiseTaskLine(tl, { force: true });
       return true;
     });
     t = this.fresh(t.key);
@@ -619,13 +698,12 @@ export class Mutations {
     // repeating meeting moved this way, and a fresh one on each turn after it.
     if ((t0.origin === 'daily' || t0.origin === 'inbox') && !t0.id) {
       const text = t0.text;
-      await this.updateTask(t0.key, { time });
-      const timed = this.freshAt(t0.path, t0.line, t0.key);
+      const timed = await this.updateLine(t0, { time });
       await this.schedule(timed.key, date, part ?? this.partOfTime(time.start));
       const open = (x: Task): boolean => x.text === text && x.status !== 'done' && x.status !== 'cancelled' && x.status !== 'forwarded';
       const landed = this.index.allTasks().filter((x) => open(x) && x.origin === 'daily' && x.noteDate === date);
       const found = landed.find((x) => x.time?.start === time.start) ?? landed[0]
-        ?? this.index.tasksInFile(t0.path).find((x) => open(x) && x.line === t0.line);   // a step planned in place
+        ?? this.index.tasksInFile(t0.path).find((x) => open(x) && x.line === timed.line);   // a step planned in place
       return found?.key ?? timed.key;
     }
     const id = await this.ensureId(key);
@@ -691,11 +769,11 @@ export class Mutations {
     const keep = part === 'anytime' ? undefined : this.timeForPart(t, date, part);
     if (part === 'anytime' ? t.time === undefined : keep === undefined) return undefined;
     await this.editFile(t.path, (lines) => {
-      const tl = this.lineOf(lines, t);
+      const { tl, at } = this.lineOf(lines, t);
       const next: TaskLine = { ...tl };
       if (part === 'anytime') delete next.time; else next.time = keep!;
       this.anchorTurn(tl, next, date, date);
-      lines[t.line] = serialiseTaskLine(next, { force: true });
+      lines[at] = serialiseTaskLine(next, { force: true });
       return true;
     });
     const fresh = this.index.task(t.key) ?? this.index.taskById(t.id ?? '');
@@ -746,15 +824,28 @@ export class Mutations {
     });
   }
 
+  /**
+   * The entry the caller meant, found again in the fresh note. `entryLine` is where the caller saw it;
+   * what it said there (`seen`, else the index's reading of that line) is what identifies it, so a line
+   * added above it since can never send an edit or a delete to its neighbour.
+   */
+  private daybookEntry(date: IsoDate, entries: DaybookEntry[], entryLine: number, seen?: { time: string; text: string }): DaybookEntry | undefined {
+    const was = seen ?? this.index.daybook(date).find((e) => e.line === entryLine);
+    if (!was) return entries.find((e) => e.line === entryLine);
+    const same = entries.filter((e) => e.time === was.time && e.text === was.text);
+    if (same.length === 0) throw new LineMovedError('That diary entry changed under us — have another look and try again');
+    return same.reduce((a, b) => (Math.abs(b.line - entryLine) < Math.abs(a.line - entryLine) ? b : a));
+  }
+
   /** A note under an entry — what the bots write back, and what you can add yourself. */
-  async addDaybookReply(date: IsoDate, entryLine: number, text: string, icon?: string): Promise<void> {
+  async addDaybookReply(date: IsoDate, entryLine: number, text: string, icon?: string, seen?: { time: string; text: string }): Promise<void> {
     const body = text.trim();
     if (body === '') return;
     const path = this.index.dailyPath(date);
     if (!path) throw new Error('That day has no note yet');
     await this.editFile(path, (lines, doc) => {
       const db = parseDaybook(doc, this.settings.daybookHeading);
-      const entry = db.entries.find((e) => e.line === entryLine);
+      const entry = this.daybookEntry(date, db.entries, entryLine, seen);
       if (!entry) return false;
       lines.splice(entry.endLine, 0, renderReply(body, this.settings.indentUnit || '\t', icon));
       return true;
@@ -762,12 +853,12 @@ export class Mutations {
   }
 
   /** Reword an entry, keeping its time and its replies. */
-  async updateDaybookEntry(date: IsoDate, entryLine: number, text: string): Promise<void> {
+  async updateDaybookEntry(date: IsoDate, entryLine: number, text: string, seen?: { time: string; text: string }): Promise<void> {
     const path = this.index.dailyPath(date);
     if (!path) throw new Error('That day has no note yet');
     await this.editFile(path, (lines, doc) => {
       const db = parseDaybook(doc, this.settings.daybookHeading);
-      const entry = db.entries.find((e) => e.line === entryLine);
+      const entry = this.daybookEntry(date, db.entries, entryLine, seen);
       if (!entry || text.trim() === '') return false;
       lines[entry.line] = renderEntry(entry.time, text, entry.icon || undefined);
       return true;
@@ -775,12 +866,12 @@ export class Mutations {
   }
 
   /** Take an entry out, replies and all. */
-  async removeDaybookEntry(date: IsoDate, entryLine: number): Promise<void> {
+  async removeDaybookEntry(date: IsoDate, entryLine: number, seen?: { time: string; text: string }): Promise<void> {
     const path = this.index.dailyPath(date);
     if (!path) throw new Error('That day has no note yet');
     await this.editFile(path, (lines, doc) => {
       const db = parseDaybook(doc, this.settings.daybookHeading);
-      const entry = db.entries.find((e) => e.line === entryLine);
+      const entry = this.daybookEntry(date, db.entries, entryLine, seen);
       if (!entry) return false;
       let end = entry.endLine;
       while (end < lines.length && lines[end]!.trim() === '') end++;      // and the blank line after it
@@ -792,7 +883,7 @@ export class Mutations {
   /** Give one subtask a day of its own, without taking it out of the list it belongs to. */
   private async planSubtask(t: Task, date: IsoDate | undefined, part?: DayPart): Promise<void> {
     await this.editFile(t.path, (lines) => {
-      const tl = this.lineOf(lines, t);
+      const { tl, at } = this.lineOf(lines, t);
       const next: TaskLine = { ...tl };
       if (date === undefined) { delete next.scheduled; delete next.time; }
       else {
@@ -807,7 +898,7 @@ export class Mutations {
           }
         } else if (part === 'anytime') delete next.time;
       }
-      lines[t.line] = serialiseTaskLine(next, { force: true });
+      lines[at] = serialiseTaskLine(next, { force: true });
       return true;
     });
   }
@@ -886,11 +977,11 @@ export class Mutations {
     const pct = percent === undefined ? undefined : Math.round(percent);
     if (pct === 100) { await this.setStatus(key, 'done'); return; }
     await this.editFile(t.path, (lines) => {
-      const tl = this.lineOf(lines, t);
+      const { tl, at } = this.lineOf(lines, t);
       const next: TaskLine = { ...tl };
       if (pct === undefined || pct === 0) delete next.progress;
       else { next.progress = pct; next.status = 'doing'; next.marker = STATUS_MARKER['doing']; }
-      lines[t.line] = serialiseTaskLine(next, { force: true });
+      lines[at] = serialiseTaskLine(next, { force: true });
       return true;
     });
     const fresh = this.index.task(t.key);
@@ -914,7 +1005,7 @@ export class Mutations {
       const block = lines.slice(cut.start, cut.end);
       if (block.length === 0) return false;
       // Where it lands, in the file as it stands *before* the cut.
-      let at = before ? before.line : this.subtreeRange(lines, this.fresh(t.parentKey!)).end;
+      let at = before ? this.at(lines, before) : this.subtreeRange(lines, this.fresh(t.parentKey!)).end;
       lines.splice(cut.start, cut.end - cut.start);
       if (at > cut.start) at -= block.length;                  // the cut moved everything below it up
       if (at === cut.start) return false;                      // already there
@@ -1001,7 +1092,7 @@ export class Mutations {
 
   /** Where a new task goes in a project note: end of the phase, else under `## Tasks` (created when missing). */
   private projectInsertPoint(lines: string[], doc: Document, p: Project, phaseId?: string): { index: number; prefix: string[] } {
-    const phase = phaseId ? p.phases.find((ph) => ph.id === phaseId) : undefined;
+    const phase = phaseId ? this.phasesNow(p, lines).find((ph) => ph.id === phaseId) : undefined;
     if (phase) {
       const h = doc.headings.find((x) => x.line === phase.headingLine);
       if (h) return { index: sectionInsertPoint(doc, h), prefix: [] };
@@ -1036,20 +1127,26 @@ export class Mutations {
     if (t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf)) { await this.updateTask(t.mirrorOf, patch); return; }
     const { scheduled, ...rest } = patch;
     const hasSched = Object.prototype.hasOwnProperty.call(patch, 'scheduled');
-    if (Object.keys(rest).length > 0) {
-      await this.editFile(t.path, (lines) => {
-        const tl = this.lineOf(lines, t);
-        const next: TaskLine = { ...tl, ...rest };
-        for (const [k, v] of Object.entries(rest)) if (v === undefined) delete (next as unknown as Record<string, unknown>)[k];
-        if (rest.status && rest.status !== tl.status) Object.assign(next, withStatus(next, rest.status, this.today));
-        if (Object.prototype.hasOwnProperty.call(rest, 'time') && !Object.prototype.hasOwnProperty.call(rest, 'movedFrom')) this.anchorTurn(tl, next, t.noteDate ?? t.scheduled, t.noteDate ?? t.scheduled);
-        lines[t.line] = serialiseTaskLine(next, { force: true });
-        return true;
-      });
-      t = this.freshAt(t.path, t.line, key);
-      await this.refreshMirrors(t);
-    }
+    if (Object.keys(rest).length > 0) t = await this.updateLine(t, rest);
     if (hasSched && (t.scheduled ?? (t.origin === 'daily' ? t.noteDate : undefined)) !== scheduled) await this.schedule(t.key, scheduled);
+  }
+
+  /** Rewrite a task's own line with `rest`, then its mirrors; returns the task as it is afterwards. */
+  private async updateLine(t: Task, rest: Partial<TaskLine>): Promise<Task> {
+    let wrote = t.line;
+    await this.editFile(t.path, (lines) => {
+      const { tl, at } = this.lineOf(lines, t);
+      wrote = at;
+      const next: TaskLine = { ...tl, ...rest };
+      for (const [k, v] of Object.entries(rest)) if (v === undefined) delete (next as unknown as Record<string, unknown>)[k];
+      if (rest.status && rest.status !== tl.status) Object.assign(next, withStatus(next, rest.status, this.today));
+      if (Object.prototype.hasOwnProperty.call(rest, 'time') && !Object.prototype.hasOwnProperty.call(rest, 'movedFrom')) this.anchorTurn(tl, next, t.noteDate ?? t.scheduled, t.noteDate ?? t.scheduled);
+      lines[at] = serialiseTaskLine(next, { force: true });
+      return true;
+    });
+    const fresh = this.freshAt(t.path, wrote, t.key);
+    await this.refreshMirrors(fresh);
+    return fresh;
   }
 
   /** Rewrite the mirrors of a source on today and later from the source. */
@@ -1057,10 +1154,24 @@ export class Mutations {
     const today = this.today;
     for (const m of this.index.mirrorsOf(src.key)) {
       if (!m.noteDate || m.noteDate < today) continue;
-      const want = serialiseTaskLine(this.mirrorLine(src, m));
-      if (want === serialiseTaskLine({ ...m, raw: { ...m.raw, eol: '' } }, { force: true })) continue;
-      await this.editFile(m.path, (lines) => { lines[m.line] = m.raw.indent + want + m.raw.eol.replace(/\r?\n$/, ''); return true; });
+      await this.rewriteMirror(m, src);
     }
+  }
+
+  /**
+   * Make one mirror line read as its source says, keeping its own status and indent. The line is found
+   * again by identity in the fresh note. Returns whether anything was written.
+   */
+  private async rewriteMirror(m: Task, src: Task): Promise<boolean> {
+    const want = serialiseTaskLine(this.mirrorLine(src, m));
+    if (want === serialiseTaskLine({ ...m, raw: { ...m.raw, indent: '', eol: '' } }, { force: true })) return false;
+    return this.editFile(m.path, (lines) => {
+      const at = this.at(lines, m);
+      const next = /^[ \t]*/.exec(lines[at]!)![0] + want;
+      if (lines[at] === next) return false;
+      lines[at] = next;
+      return true;
+    });
   }
 
   /**
@@ -1287,7 +1398,7 @@ export class Mutations {
       const r = this.subtreeRange(lines, t);
       carried = lines.slice(r.start, r.end).map((l) => parseTaskLine(l)).filter((x): x is TaskLine => x !== undefined);
       if (t.origin === 'daily' && t.noteDate !== undefined && t.noteDate < this.today) {
-        lines[r.start] = serialiseTaskLine(withStatus(this.lineOf(lines, t), 'forwarded', t.noteDate), { force: true });
+        lines[r.start] = serialiseTaskLine(withStatus(this.lineOf(lines, t).tl, 'forwarded', t.noteDate), { force: true });
       } else lines.splice(r.start, r.end - r.start);
       return true;
     });
@@ -1338,7 +1449,7 @@ export class Mutations {
       if (!cur) continue;
       if (cur.origin === 'daily-mirror') {
         const src = cur.mirrorOf ? this.index.task(cur.mirrorOf) : undefined;
-        if (from < this.today) await this.writeLineStatus(cur.path, cur.line, 'forwarded', from);
+        if (from < this.today) await this.writeLineStatus(cur, 'forwarded', from);
         if (src) await this.schedule(src.key, to, cur.part); else if (to) await this.moveDailyTask(this.fresh(cur.key), to, cur.part);
       } else {
         await this.moveDailyTask(cur, to, cur.part);
@@ -1564,7 +1675,8 @@ export class Mutations {
     const heading = `## Phase: ${title.trim()}${due ? ` 📅 ${due}` : ''}`;
     await this.editFile(p.path, (lines, doc) => {
       // After the last phase, else before `## Tasks`, else at end.
-      const last = p.phases[p.phases.length - 1];
+      const phases = this.phasesNow(p, lines);
+      const last = phases[phases.length - 1];
       let at: number;
       if (last) at = last.endLine;
       else {
@@ -1583,11 +1695,13 @@ export class Mutations {
     const ph = p?.phases.find((x) => x.id === phaseId);
     if (!p || !ph) throw new Error('Phase not found');
     await this.editFile(p.path, (lines) => {
-      const m = /^(#+)\s+(phase|fase|stage|milestone)\s*[:\-–—]\s*/i.exec(lines[ph.headingLine] ?? '');
+      const now = this.phasesNow(p, lines).find((x) => x.id === phaseId);
+      if (!now) throw new Error('Phase not found');
+      const m = /^(#+)\s+(phase|fase|stage|milestone)\s*[:\-–—]\s*/i.exec(lines[now.headingLine] ?? '');
       const hashes = m ? m[1] : '##';
       const word = m ? m[2] : 'Phase';
       const d = due === null ? undefined : due ?? ph.due;
-      lines[ph.headingLine] = `${hashes} ${word}: ${title.trim()}${d ? ` 📅 ${d}` : ''}`;
+      lines[now.headingLine] = `${hashes} ${word}: ${title.trim()}${d ? ` 📅 ${d}` : ''}`;
       return true;
     });
   }
@@ -1602,10 +1716,12 @@ export class Mutations {
     if (!p || !ph) throw new Error('Phase not found');
     let carried = 0;
     await this.editFile(p.path, (lines, doc) => {
-      const body = lines.slice(ph.startLine, ph.endLine);
+      const now = this.phasesNow(p, lines).find((x) => x.id === phaseId);
+      if (!now) throw new Error('Phase not found');
+      const body = lines.slice(now.startLine, now.endLine);
       const keep = body.filter((l) => l.trim() !== '');
       carried = keep.length;
-      lines.splice(ph.headingLine, ph.endLine - ph.headingLine);
+      lines.splice(now.headingLine, now.endLine - now.headingLine);
       if (keep.length === 0) return true;
       // Put what it held under `## Tasks`, making that heading if the project has none.
       const doc2 = parseDocument(lines.join(doc.eol));
@@ -1770,7 +1886,7 @@ export class Mutations {
   private phaseInsertPoint(lines: string[], phaseId: string): number | undefined {
     const projectId = phaseId.split('#')[0]!;
     const p = this.index.project(projectId);
-    const ph = p?.phases.find((x) => x.id === phaseId);
+    const ph = p ? this.phasesNow(p, lines).find((x) => x.id === phaseId) : undefined;
     if (!ph) return undefined;
     let at = Math.min(ph.endLine, lines.length);
     while (at > ph.startLine && lines[at - 1]!.trim() === '') at--;
@@ -1856,8 +1972,7 @@ export class Mutations {
       if (tpl !== undefined) content = setFrontmatter(tpl.split('\n'), Object.fromEntries(Object.entries(frontmatter).map(([k, v]) => [k, v.replace(/^"|"$/g, '')]))).join('\n');
     }
     content ??= renderExcalidrawDocument({ frontmatter });
-    await this.d.vault.write(path, content);
-    this.index.update(path, content);
+    await this.put(path, content);
     await this.embedDrawing(target, path);
     return path;
   }
@@ -2021,8 +2136,7 @@ export class Mutations {
     const path = await this.uniqueNotePath(this.notePathFor(target, opts.name, opts.folder));
     const fm = this.attachmentFrontmatter(target, id);
     const content = renderNewNote({ title: noteTitle(path), target: fm, forLabel: await this.forLabel(target), today: this.today });
-    await this.d.vault.write(path, content);
-    this.index.update(path, content);
+    await this.put(path, content);
     await this.linkInTargetNote(target, path);
     return path;
   }
@@ -2241,22 +2355,32 @@ export class Mutations {
       const m = this.index.task(m0.key);
       const src = m?.mirrorOf ? this.index.task(m.mirrorOf) : undefined;
       if (!m || !src || !m.noteDate) continue;
-      if (m.status !== src.status) {
-        const mr = STATUS_RANK[m.status];
-        const sr = STATUS_RANK[src.status];
-        if (mr > sr && m.status !== 'forwarded') { await this.writeLineStatus(src.path, src.line, m.status, m.done ?? m.cancelled ?? m.noteDate); writes++; if (m.status === 'done' && src.recurrence?.parsed) await this.spawnNextOccurrence(this.fresh(src.key)); }
-        else if (sr > mr && m.noteDate >= today) { await this.writeLineStatus(m.path, m.line, src.status, src.done ?? src.cancelled ?? today); writes++; }
-        continue;
-      }
-      if (m.noteDate < today) continue;
-      const want = serialiseTaskLine(this.mirrorLine(this.fresh(src.key), m));
-      const have = serialiseTaskLine({ ...m, raw: { ...m.raw, indent: '', eol: '' } }, { force: true });
-      if (want !== have) {
-        await this.editFile(m.path, (lines) => { lines[m.line] = m.raw.indent + want; return true; });
-        writes++;
+      try {
+        writes += await this.reconcileMirror(m, src, today);
+      } catch (e) {
+        // The index is behind the disk for this line: the next pass, after it catches up, deals with it.
+        if (!(e instanceof LineMovedError)) throw e;
       }
     }
     return writes;
+  }
+
+  /** One mirror against its source; returns how many lines were written. */
+  private async reconcileMirror(m: Task, src: Task, today: IsoDate): Promise<number> {
+    if (m.noteDate === undefined) return 0;
+    if (m.status !== src.status) {
+      const mr = STATUS_RANK[m.status];
+      const sr = STATUS_RANK[src.status];
+      if (mr > sr && m.status !== 'forwarded') {
+        await this.writeLineStatus(src, m.status, m.done ?? m.cancelled ?? m.noteDate);
+        if (m.status === 'done' && src.recurrence?.parsed) await this.spawnNextOccurrence(this.fresh(src.key));
+        return 1;
+      }
+      if (sr > mr && m.noteDate >= today) { await this.writeLineStatus(m, src.status, src.done ?? src.cancelled ?? today); return 1; }
+      return 0;
+    }
+    if (m.noteDate < today) return 0;
+    return (await this.rewriteMirror(m, this.fresh(src.key))) ? 1 : 0;
   }
 }
 
