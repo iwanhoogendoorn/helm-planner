@@ -99,3 +99,13 @@ describe('template notes survive a template engine that renders new files', () =
     expect(final).not.toContain('Invalid date');
   });
 });
+
+describe('template rendering lives in core (CD-18)', () => {
+  it('renders from core/periodicTemplates, pure and without the data layer', async () => {
+    const core = await import('../../src/core/periodicTemplates');
+    expect(core.renderKnownTags('<% tp.file.title %> {{date:YYYY}} <% moment(tp.file.title, "YYYY-MM-DD").add(1, "d").format("YYYY-MM-DD") %>', '2026-08-26', 'T')).toBe('T 2026 2026-08-27');
+    expect(core.renderDailyTemplate('a <%* tR += "x" %> b', '2026-08-26', 'T')).toBe('a  b');
+    const data = await import('../../src/data/mutations');
+    expect(data.renderDailyTemplate).toBe(core.renderDailyTemplate); // the old import path still works
+  });
+});
