@@ -20,7 +20,7 @@
  */
 import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitPart, type Recurrence } from './types';
 import { parseDocument, type Document } from './document';
-import { scalar } from './frontmatter';
+import { scalar, yamlScalar } from './frontmatter';
 import { formatRecurrence, parseRecurrence } from './recurrence';
 
 export function isHabitNote(doc: Document): boolean {
@@ -91,11 +91,11 @@ export function parsePauseEntry(raw: string): { from: string; to?: string } | un
 export const formatPauseEntry = (p: { from: string; to?: string }): string => `${p.from}..${p.to ?? ''}`;
 
 export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor; today: string }): string {
-  const fm = ['---', `title: ${h.title}`, 'type: habit', `id: ${h.id}`, `schedule: ${h.schedule}`, 'active: true'];
+  const fm = ['---', `title: ${yamlScalar(h.title)}`, 'type: habit', `id: ${h.id}`, `schedule: ${yamlScalar(h.schedule)}`, 'active: true'];
   if (h.targetPerWeek) fm.push(`target_per_week: ${h.targetPerWeek}`);
   fm.push(`grace_days: ${h.graceDays ?? 0}`);
-  if (h.icon) fm.push(`icon: ${h.icon}`);
-  if (h.iconImage) fm.push(`icon_image: ${h.iconImage}`);
+  if (h.icon) fm.push(`icon: ${yamlScalar(h.icon)}`);
+  if (h.iconImage) fm.push(`icon_image: ${yamlScalar(h.iconImage)}`);
   if (h.parts && h.parts.length > 0) fm.push(`parts: [${h.parts.join(', ')}]`);
   if (h.color) fm.push(`color: ${h.color}`);
   fm.push(`creation_date: ${h.today}`, '---', '', `# ${h.title}`, '', 'Why this habit matters:', '', '');
