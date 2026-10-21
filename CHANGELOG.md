@@ -1,5 +1,70 @@
 # Changelog
 
+## 1.50.0 — 2026-10-21
+
+A release of fixes from a full code review: safer writes, a stricter API, and
+a tidier, more accessible interface.
+
+- **Helm now needs Obsidian 1.14.4 or newer.** It is built and checked against
+  that version's API.
+- **Writes no longer step on each other.** Changes to one note — from the UI,
+  the API and the mirror sync — now happen one at a time, so two quick edits
+  or captures can't lose each other. Helm finds a line again by its 🆔 (or its
+  text) before changing it; if the note changed so much that it can't tell
+  which line was meant, it writes nothing rather than the wrong line. Two
+  things creating the same day note at once make it once, and a write that
+  dies half-way leaves the old note whole.
+- **Recurring tasks**: a Mon–Fri rule keeps its interval, and “every 2 weeks”
+  counts calendar weeks — a Monday task done on a Thursday comes back the
+  Monday two weeks on, not the very next one.
+- **Daily note**: removing a task keeps the subtasks you chose to keep, and
+  indentation mixing tabs and spaces is measured correctly.
+- **Frontmatter is read as YAML reads it**: escapes in quoted values, block
+  scalars (`|`, `>`) and ` # comments` are handled, and Helm quotes what it
+  writes so nothing is cut short on reading back. A hand-written
+  `title: Fix bug #12` now reads as `Fix bug`, as Obsidian's Properties
+  already show it. Habit and project notes write every value as valid YAML.
+- **The index** keeps changes that land while it rebuilds, gives every
+  duplicate of an id its own key, and reads a song only from frontmatter.
+- **AI planning** refuses an answer in the wrong shape instead of misreading it.
+- **API — changes clients will notice**:
+  - Tags must be single words (letters, digits, `_`, `-`, `/`); a tag with
+    spaces or punctuation, or any list item with a control character, is
+    refused with 400 and nothing is written.
+  - `x-helm-revision` is no longer sent on 401 and 403 answers (nor on a
+    404 before sign-in, whose body is now `{"error":"Not found"}`).
+  - `PATCH /tasks/:ref` checks every field before writing, so a refused edit
+    writes nothing rather than half of it.
+  - A 500 answers `{"error":"Internal error","requestId":…}`, with the detail
+    in the log; an oversized body gets a proper 413.
+  - Habits: `graceDays` must be a whole number from 0, `targetPerWeek` a
+    whole number from 1 to 7.
+  - Notes and drawings can't be created in hidden folders (`.obsidian`,
+    `.trash`).
+  - The token is compared in constant time, and closing the server also
+    drops clients still connected.
+- **API on all interfaces** (`apiBind: 'all'`) now only answers private
+  addresses — this machine, home and office networks (RFC 1918), Tailscale,
+  link-local — and refuses anything else with 403 before the token is even
+  checked. Choosing *All interfaces* in settings asks first, since the token
+  travels in clear text; Cancel leaves the setting as it was.
+- **Confirmations** use a themed Obsidian dialog instead of the system one.
+- **Keyboard and screen readers**: the tab bar moves with the arrow keys;
+  cards, rows and sortable headers can be reached with Tab; task checkboxes
+  are announced by their task, progress bars as progress bars.
+- **Focus stays put**: typing in a filter, capturing in the inbox or adding
+  tasks to a phase keeps the cursor where it was after the screen redraws.
+- **Smoother views**: hidden tabs wait until shown to redraw; every open Helm
+  pane ticks its own focus clock, and closing one stops its timers and
+  watchers; large lists no longer rescan every task per row.
+- **Time grid**: drag-to-create works with touch and pen, and week-view row
+  actions only hide behind hover on devices that have one.
+- Styles tidied: duplicated rules merged and `!important` overrides removed.
+- **For development**: Node 22.12 or newer is required; esbuild 0.28 and
+  vitest 5 (no known advisories), CI and release on Node 24 with actions
+  pinned to commits, `npm run check:tooling`, and a release check that every
+  version file agrees with the tag.
+
 ## 1.49.2 — 2026-10-17
 
 - A task no longer carries a 🎵 chip to whatever note its project links. The
