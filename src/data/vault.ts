@@ -1,3 +1,5 @@
+import { parseFrontmatter, splitLines } from '../core/frontmatter';
+
 /** The only thing the data layer needs from a vault. Obsidian implements it in ui/obsidianVault.ts. */
 export interface VaultAdapter {
   /** Every markdown path in the vault, vault-relative, forward slashes. */
@@ -7,6 +9,11 @@ export interface VaultAdapter {
   read(path: string): Promise<string>;
   /** Overwrite. Creates parent folders as needed. */
   write(path: string, content: string): Promise<void>;
+  /**
+   * Read, transform and save an existing file in one step, so nothing written in between (an editor
+   * saving, another plugin) is lost. Returns the content after. Obsidian's `vault.process` where there is one.
+   */
+  process?(path: string, fn: (content: string) => string): Promise<string>;
   exists(path: string): Promise<boolean>;
   mtime(path: string): number | undefined;
   /** Move a file or folder (and everything under it). */
@@ -45,23 +52,32 @@ export class MemoryVault implements VaultAdapter {
     this.mtimes.set(path, this.clock++);
     this.writes.push(path);
   }
+  async process(path: string, fn: (content: string) => string): Promise<string> {
+    const c = await this.read(path);
+    const next = fn(c);
+    if (next !== c) await this.write(path, next);
+    return next;
+  }
   folders = new Set<string>();
   async createFolder(path: string): Promise<void> { this.folders.add(path.replace(/\/+$/, '')); }
   async exists(path: string): Promise<boolean> { return this.files.has(path) || this.folders.has(path.replace(/\/+$/, '')) || [...this.files.keys()].some((p) => p.startsWith(path.replace(/\/+$/, '') + '/')); }
   mtime(path: string): number | undefined { return this.mtimes.get(path); }
   async rename(from: string, to: string): Promise<void> {
     for (const p of [...this.files.keys()]) {
-      if (p === from || p.startsWith(from + '/')) { const c = this.files.get(p)!; this.files.delete(p); this.files.set(to + p.slice(from.length), c); }
+      if (p === from || p.startsWith(from + '/')) {
+        const c = this.files.get(p)!;
+        const dest = to + p.slice(from.length);
+        this.files.delete(p);
+        this.files.set(dest, c);
+        this.mtimes.set(dest, this.mtimes.get(p) ?? this.clock++);
+        this.mtimes.delete(p);
+      }
     }
   }
-  async delete(path: string): Promise<void> { this.files.delete(path); }
+  async delete(path: string): Promise<void> { this.files.delete(path); this.mtimes.delete(path); }
   frontmatter(path: string): Record<string, unknown> | undefined {
     const c = this.files.get(path);
-    if (c === undefined || !c.startsWith('---')) return undefined;
-    const end = c.indexOf('\n---', 3);
-    const out: Record<string, unknown> = {};
-    for (const line of c.slice(4, end === -1 ? undefined : end).split('\n')) { const m = /^([\w-]+):\s*(.*)$/.exec(line); if (m) out[m[1]!] = m[2]!; }
-    return out;
+    return c === undefined ? undefined : simpleFrontmatter(c);
   }
   binaries = new Map<string, ArrayBuffer>();
   async writeBinary(path: string, data: ArrayBuffer): Promise<void> { this.binaries.set(path, data); }
@@ -72,8 +88,17 @@ export class MemoryVault implements VaultAdapter {
   }
   trashed: string[] = [];
   async trash(path: string): Promise<void> {
-    for (const p of [...this.files.keys()]) if (p === path || p.startsWith(path + '/')) { this.files.delete(p); this.trashed.push(p); }
+    for (const p of [...this.files.keys()]) if (p === path || p.startsWith(path + '/')) { this.files.delete(p); this.mtimes.delete(p); this.trashed.push(p); }
   }
+}
+
+/**
+ * A note's frontmatter the way a metadata cache hands it over — lists as lists, `key:` as null — for the
+ * vaults that have no cache of their own (memory, plain folder). Undefined when there is none.
+ */
+export function simpleFrontmatter(content: string): Record<string, unknown> | undefined {
+  const fm = parseFrontmatter(splitLines(content).lines);
+  return fm.present ? { ...fm.values } : undefined;
 }
 
 export function folderOf(path: string): string {

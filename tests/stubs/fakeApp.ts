@@ -22,6 +22,7 @@ class FakeVault {
   getAbstractFileByPath(p: string): FakeTFile | null { return this.files.files.has(p) ? new FakeTFile(p) : null; }
   async read(f: FakeTFile): Promise<string> { return this.files.read(f.path); }
   async modify(f: FakeTFile, c: string): Promise<void> { await this.files.write(f.path, c); }
+  async process(f: FakeTFile, fn: (c: string) => string): Promise<string> { return this.files.process(f.path, fn); }
   async create(p: string, c: string): Promise<FakeTFile> { await this.files.write(p, c); return new FakeTFile(p); }
   async createFolder(): Promise<void> {}
   on(name: string, fn: Handler): { name: string } { this.handlers.set(name, [...(this.handlers.get(name) ?? []), fn]); return { name }; }
