@@ -59,3 +59,36 @@ describe('H1 · a list field cannot smuggle a newline into a note', () => {
     expect((await call('POST', 'capture', { text: 'Buy milk', tags: ['#errand'], date: TODAY })).status).toBe(201);
   });
 });
+
+describe('M1 · PATCH /tasks/:ref validates every field before it writes', () => {
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['status then a bad priority', { status: 'done', priority: 'bogus' }],
+    ['a move then a parentId', { projectId: 'prj-book', parentId: 'tsk-0001' }],
+    ['a schedule then a bad due', { scheduled: TODAY, due: 'friday' }],
+    ['status then an unknown blocker', { status: 'done', blockedBy: ['tsk-nope'] }],
+    ['a known blocker then a bad effort', { blockedBy: ['tsk-0001'], effortMinutes: -1 }],
+    ['progress then a bad recurrence', { progress: 50, recurrence: 'whenever' }],
+    ['a part then a bad time', { part: 'evening', time: '25:00' }],
+    ['status then a bad text', { status: 'doing', text: 'two\nlines' }],
+  ];
+  for (const [name, body] of cases) {
+    it(`refuses ${name} and leaves the vault untouched`, async () => {
+      const { call, vault } = await api();
+      const t = (await call('POST', 'tasks', { text: 'Atomic edit', scheduled: TODAY })).body.task;
+      const before = filesOf(vault);
+      const r = await call('PATCH', `tasks/${t.id}`, body);
+      expect(r.status).toBeGreaterThanOrEqual(400);
+      expect(filesOf(vault)).toEqual(before);
+    });
+  }
+
+  it('still applies a valid multi-field edit, including timeEnd on its own and blockers', async () => {
+    const { call, index } = await api();
+    const t = (await call('POST', 'tasks', { text: 'Edit me', scheduled: TODAY, time: '10:00', timeEnd: '10:30' })).body.task;
+    const r = await call('PATCH', `tasks/${t.id}`, { status: 'doing', priority: 'high', timeEnd: '11:00', blockedBy: ['tsk-0001'] });
+    expect(r.status).toBe(200);
+    expect(r.body.task).toMatchObject({ status: 'doing', priority: 'high' });
+    expect(index.taskById(t.id)).toMatchObject({ time: { start: '10:00', end: '11:00' }, blockedBy: ['tsk-0001'] });
+    expect((await call('PATCH', `tasks/${t.id}`, {})).status).toBe(400);
+  });
+});

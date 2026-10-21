@@ -742,63 +742,66 @@ async function createTask(body: Record<string, unknown>, d: Ctx): Promise<ApiRes
   return made({ task: taskJson(t, d), written: d.written() });
 }
 
+/**
+ * `PATCH /tasks/:ref`. Every field is checked before the first write, so a 400 means nothing changed:
+ * the phone retries a refused edit, and half an edit already in the vault would be applied twice.
+ */
 async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse> {
-  if (!findTask(ref, d)) return missing(`No task ${ref}`);
-  let touched = false;
+  const task = findTask(ref, d);
+  if (!task) return missing(`No task ${ref}`);
 
+  // ── Validate ────────────────────────────────────────────────────────────────────────────────
+  let status: TaskStatus | undefined;
   if (has(body, 'status')) {
     const s = str(body['status']);
     if (!s || !STATUSES.includes(s as TaskStatus)) return bad(`status must be one of ${STATUSES.join(', ')}`);
-    await d.mutations.setStatus(findTask(ref, d)!.key, s as TaskStatus);
-    touched = true;
+    status = s as TaskStatus;
   }
-  // A new day and a new time together: the time goes on first, so the task lands in the part the new
-  // time falls in — scheduling first would place it by the time it used to have.
-  let timeDone = false;
-  if (has(body, 'scheduled') || has(body, 'date')) {
+  const scheduling = has(body, 'scheduled') || has(body, 'date');
+  let when: IsoDate | undefined;
+  let part: DayPart | undefined;
+  let schedStart: string | undefined;
+  let schedEnd: string | undefined;
+  if (scheduling) {
     const raw = has(body, 'scheduled') ? body['scheduled'] : body['date'];
-    const when = raw === null ? undefined : day(raw);
+    when = raw === null ? undefined : day(raw);
     if (raw !== null && !when) return bad('scheduled must be a date like 2026-09-01, or null to unschedule');
-    const part = str(body['part']);
-    if (part && !PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
+    const p = str(body['part']);
+    if (p && !PARTS.includes(p as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
+    part = p as DayPart | undefined;
     const start = has(body, 'time') && body['time'] !== null ? str(body['time']) : undefined;
     const end = str(body['timeEnd']);
     if (when && start) {
       if (!isHhmm(start)) return bad('time must be HH:MM, or null to clear the block');
       if (end && !isHhmm(end)) return bad('timeEnd must be HH:MM');
-      // It may have been given an id to move; everything after this finds it by that.
-      ref = await d.mutations.scheduleAt(findTask(ref, d)!.key, when, { start, ...(end ? { end } : {}) }, part as DayPart | undefined);
-      timeDone = true;
-    } else await d.mutations.schedule(findTask(ref, d)!.key, when, part as DayPart | undefined);
-    touched = true;
+      schedStart = start;
+      schedEnd = end;
+    }
   } else if (str(body['part'])) {
-    const part = str(body['part'])!;
-    if (!PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
-    await d.mutations.setPart(findTask(ref, d)!.key, part as DayPart);
-    touched = true;
+    const p = str(body['part'])!;
+    if (!PARTS.includes(p as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
+    part = p as DayPart;
   }
-
-  if (str(body['projectId'])) {
-    const projectId = str(body['projectId'])!;
-    if (!d.index.project(projectId)) return missing(`No project ${projectId}`);
-    await d.mutations.moveToProject(findTask(ref, d)!.key, projectId, str(body['phaseId']));
-    touched = true;
-  }
+  // A new day and a new time together: the time goes on with the day (scheduleAt), so the task lands
+  // in the part the new time falls in — scheduling first would place it by the time it used to have.
+  const timeDone = schedStart !== undefined;
+  const projectId = str(body['projectId']);
+  if (projectId && !d.index.project(projectId)) return missing(`No project ${projectId}`);
   if (has(body, 'parentId')) return bad('parentId cannot be changed over the API; delete the task and add it under the other one, or move it with projectId');
+  let progress: { value: number | undefined } | undefined;
   if (has(body, 'progress')) {
     const pr = body['progress'] === null ? undefined : num(body['progress']);
     if (body['progress'] !== null && (pr === undefined || pr < 0 || pr > 100)) return bad('progress must be 0–100, or null to clear it');
-    await d.mutations.setProgress(findTask(ref, d)!.key, pr);
-    touched = true;
+    progress = { value: pr };
   }
+  let recurrence: { stop: true } | { rule: ReturnType<typeof parseRecurrence> } | undefined;
   if (has(body, 'recurrence')) {
-    if (body['recurrence'] === null) { await d.mutations.stopRepeating(findTask(ref, d)!.key); touched = true; }
+    if (body['recurrence'] === null) recurrence = { stop: true };
     else {
       const raw = str(body['recurrence']);
       const r = raw ? parseRecurrence(raw) : undefined;
       if (!r || !r.parsed) return bad('recurrence must be a rule like "every week on monday", or null to stop repeating');
-      await d.mutations.updateTask(findTask(ref, d)!.key, { recurrence: { ...r, raw: formatRecurrence(r) } });
-      touched = true;
+      recurrence = { rule: r };
     }
   }
   const patch: Record<string, unknown> = {};
@@ -806,17 +809,17 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Pr
     if (body['start'] !== null && !day(body['start'])) return bad('start must be a date like 2026-09-15, or null to clear it');
     patch['start'] = body['start'] === null ? undefined : day(body['start']);
   }
+  let blockerRefs: string[] | undefined;
   if (has(body, 'blockedBy')) {
     if (!Array.isArray(body['blockedBy'])) return bad('blockedBy must be a list of refs ([] clears it)');
-    const ids: string[] = [];
-    for (const r of strList(body['blockedBy'])) {
+    blockerRefs = strList(body['blockedBy'], 'blockedBy');
+    for (const r of blockerRefs) {
       const b = findTask(r, d);
       if (!b) return missing(`No task ${r}`);
-      if (b.key === findTask(ref, d)!.key) return bad('A task cannot block itself');
-      ids.push(b.id ?? await d.mutations.ensureId(b.key));
+      if (b.key === task.key) return bad('A task cannot block itself');
     }
-    patch['blockedBy'] = [...new Set(ids)];
   }
+  let newEnd: string | undefined;
   if (has(body, 'time') && !timeDone) {
     if (body['time'] === null) patch['time'] = undefined;
     else {
@@ -827,11 +830,10 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Pr
       patch['time'] = { start, ...(end ? { end } : {}) };
     }
   } else if (str(body['timeEnd']) && !timeDone) {
-    const cur = findTask(ref, d)!.time;
-    if (!cur) return bad('timeEnd needs a time to go with it');
     const end = str(body['timeEnd'])!;
     if (!isHhmm(end)) return bad('timeEnd must be HH:MM');
-    patch['time'] = { start: cur.start, end };
+    if (!task.time) return bad('timeEnd needs a time to go with it');
+    newEnd = end; // only the end moves; the start is read when the patch is applied
   }
   if (has(body, 'text')) { const tx = str(body['text']); if (!tx) return bad('text must be one non-empty line'); patch['text'] = tx; }
   if (has(body, 'due')) {
@@ -849,8 +851,34 @@ async function patchTask(ref: string, body: Record<string, unknown>, d: Ctx): Pr
     if (!PRIORITIES.includes(p as Priority)) return bad(`priority must be one of ${PRIORITIES.join(', ')}`);
     patch['priority'] = p;
   }
-  if (Object.keys(patch).length > 0) { await d.mutations.updateTask(findTask(ref, d)!.key, patch); touched = true; }
-  if (!touched) return bad('Nothing to change');
+  const hasPatch = Object.keys(patch).length > 0 || blockerRefs !== undefined || newEnd !== undefined;
+  if (status === undefined && !scheduling && part === undefined && !projectId && !progress && !recurrence && !hasPatch) return bad('Nothing to change');
+
+  // ── Apply, in the order the fields have always been written ────────────────────────────────
+  const key = (): string => findTask(ref, d)!.key;
+  if (status !== undefined) await d.mutations.setStatus(key(), status);
+  if (scheduling) {
+    // It may have been given an id to move; everything after this finds it by that.
+    if (when && schedStart) ref = await d.mutations.scheduleAt(key(), when, { start: schedStart, ...(schedEnd ? { end: schedEnd } : {}) }, part);
+    else await d.mutations.schedule(key(), when, part);
+  } else if (part !== undefined) await d.mutations.setPart(key(), part);
+  if (projectId) await d.mutations.moveToProject(key(), projectId, str(body['phaseId']));
+  if (progress) await d.mutations.setProgress(key(), progress.value);
+  if (recurrence) {
+    if ('stop' in recurrence) await d.mutations.stopRepeating(key());
+    else await d.mutations.updateTask(key(), { recurrence: { ...recurrence.rule, raw: formatRecurrence(recurrence.rule) } });
+  }
+  if (blockerRefs) {
+    // Looked up again: an earlier write may have moved a blocker's line.
+    const ids: string[] = [];
+    for (const r of blockerRefs) { const b = findTask(r, d); if (b) ids.push(b.id ?? await d.mutations.ensureId(b.key)); }
+    patch['blockedBy'] = [...new Set(ids)];
+  }
+  if (newEnd !== undefined) {
+    const cur = findTask(ref, d)!.time;
+    if (cur) patch['time'] = { start: cur.start, end: newEnd };
+  }
+  if (Object.keys(patch).length > 0) await d.mutations.updateTask(key(), patch);
   const after = findTask(ref, d);
   return ok({ task: after ? taskJson(after, d) : null, written: d.written() });
 }
