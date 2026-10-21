@@ -49,7 +49,8 @@ describe('F1 · follow-up lookups are built once per snapshot', () => {
 async function viewFor(tab: TabId, over: Partial<UiContext> = {}) {
   const env = await ctxFor(undefined, over);
   let view!: HelmView;
-  const ctx: UiContext = { ...env.ctx, refresh: () => view.render(), navigate: (t, o) => view.navigate(t, o), ...over };
+  // Like the plugin: a mutation through ctx.run ends in a full re-render of the view.
+  const ctx: UiContext = { ...env.ctx, refresh: () => view.render(), navigate: (t, o) => view.navigate(t, o), run: async (_l, fn) => { await fn(); view.render(); }, ...over };
   env.settings.defaultTab = tab;
   view = new HelmView({} as never, () => ctx);
   (view as any).app = { workspace: { requestSaveLayout: () => undefined } };
@@ -94,13 +95,15 @@ describe('F3 · quick-capture boxes keep focus after a submit', () => {
     await settle();
     expect(index.allTasks().some((t) => t.text.includes('Call the plumber'))).toBe(true);
     const now = root.querySelector<HTMLInputElement>('.helm-capture-input')!;
-    expect(document.activeElement).toBe(now);
+    expect(now).not.toBe(input);                         // the tab was redrawn after the write…
+    expect(document.activeElement).toBe(now);            // …and the new box has focus straight away
   });
 
   it('a phase quick-add keeps focus so tasks can be added one after another', async () => {
     const { root, view, index } = await viewFor('projects');
     view.navigate('projects', { projectId: 'prj-book' });
-    const box = (): HTMLInputElement => root.querySelector<HTMLInputElement>('.helm-quickadd-input[data-focus-key="quickadd:prj-book#outline"]')!;
+    const phase = index.project('prj-book')!.phases[0]!;
+    const box = (): HTMLInputElement => root.querySelector<HTMLInputElement>(`.helm-quickadd-input[placeholder="Add to ${phase.title}…"]`)!;
     box().focus();
     box().value = 'First';
     key(box(), 'Enter');
