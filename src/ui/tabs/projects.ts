@@ -30,6 +30,7 @@ import { pickTask, taskMenu, STATUS_LABELS, pickProject } from '../menus';
 import { openTaskEditor } from '../modals/taskEditor';
 import { plainLabel } from '../../core/label';
 import { dragKeys, selection } from '../selection';
+import { confirmModal } from '../modals/confirm';
 
 export type ProjectView = 'list' | 'board' | 'table' | 'timeline' | 'profile';
 
@@ -279,10 +280,10 @@ function projectMenu(ctx: UiContext, p: Project, ev: MouseEvent, opts: { sibling
   menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => void ctx.openFile(p.path)));
   menu.addSeparator();
   menu.addItem((i) => i.setTitle('Archive project').setIcon('archive').onClick(() => {
-    if (window.confirm(`Move “${p.title}”${p.childIds.length ? ` and its ${p.childIds.length} sub-project(s)` : ''} to ${ctx.settings().archiveFolder}?`)) void ctx.run('Archive', async () => { if (opts.onPage) leaveProject(ctx, p); const dest = await ctx.mutations.archiveProject(p.id); ctx.notify(`Archived “${p.title}” to ${dest}`); });
+    void confirmModal(ctx, { title: 'Archive project', body: `Move “${p.title}”${p.childIds.length ? ` and its ${p.childIds.length} sub-project(s)` : ''} to ${ctx.settings().archiveFolder}?`, cta: 'Archive' }).then((ok) => { if (ok) void ctx.run('Archive', async () => { if (opts.onPage) leaveProject(ctx, p); const dest = await ctx.mutations.archiveProject(p.id); ctx.notify(`Archived “${p.title}” to ${dest}`); }); });
   }));
   menu.addItem((i) => i.setTitle('Delete project…').setIcon('trash').setWarning(true).onClick(() => {
-    if (window.confirm(`Move “${p.title}”${p.folderNote ? ' (its whole folder)' : ''} to the trash? Obsidian keeps it in .trash, so this can be undone from the file system.`)) void ctx.run('Delete', async () => { if (opts.onPage) leaveProject(ctx, p); await ctx.mutations.deleteProject(p.id); ctx.notify(`Deleted “${p.title}”.`); });
+    void confirmModal(ctx, { title: 'Delete project', body: `Move “${p.title}”${p.folderNote ? ' (its whole folder)' : ''} to the trash? Obsidian keeps it in .trash, so this can be undone from the file system.`, cta: 'Move to trash', warning: true }).then((ok) => { if (ok) void ctx.run('Delete', async () => { if (opts.onPage) leaveProject(ctx, p); await ctx.mutations.deleteProject(p.id); ctx.notify(`Deleted “${p.title}”.`); }); });
   }));
   menu.showAtMouseEvent(ev);
 }
@@ -908,8 +909,9 @@ function addPhasePrompt(ctx: UiContext, p: Project): void {
 
 function deletePhasePrompt(ctx: UiContext, p: Project, phaseId: string, title: string, tasks: number): void {
   const what = tasks === 0 ? 'It holds nothing.' : `Its ${tasks} task${tasks === 1 ? '' : 's'} move to the project’s own list — nothing is deleted.`;
-  if (!window.confirm(`Remove the phase “${title}” from ${p.title}?\n\n${what}`)) return;
-  void ctx.run('Delete phase', () => ctx.mutations.deletePhase(p.id, phaseId));
+  void confirmModal(ctx, { title: 'Remove phase', body: `Remove the phase “${title}” from ${p.title}?\n\n${what}`, cta: 'Remove phase', warning: true }).then((ok) => {
+    if (ok) void ctx.run('Delete phase', () => ctx.mutations.deletePhase(p.id, phaseId));
+  });
 }
 
 function renamePhasePrompt(ctx: UiContext, p: Project, phaseId: string, title: string, due?: IsoDate): void {

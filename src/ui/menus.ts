@@ -20,6 +20,7 @@ import { openDatePicker } from './modals/datePicker';
 import { openTaskEditor } from './modals/taskEditor';
 import { PRIORITY_ORDER } from '../core/taskLine';
 import { DAY_PARTS, PART_LABEL, partOfTime, type DayPart } from '../core/dailyNote';
+import { confirmModal } from './modals/confirm';
 
 export interface ScheduleOption { label: string; date: IsoDate | undefined; icon: string; /** The first day of next week: a line goes above it. */ weekBreak?: boolean }
 
@@ -227,7 +228,8 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   menu.addItem((i) => i.setTitle('Delete').setIcon('trash').setWarning(true).onClick(() => {
     // A repeating line is a series, not a line: ask which of the two things "delete" means.
     if (task.recurrence?.parsed && (task.noteDate ?? task.scheduled)) { openRecurringDelete(ctx, task); return; }
-    if (window.confirm(`Delete “${task.text}”${task.childKeys.length ? ` and ${task.childKeys.length} subtask(s)` : ''}?`)) void ctx.run('Delete', () => ctx.mutations.deleteTask(task.key));
+    void confirmModal(ctx, { title: 'Delete task', body: `Delete “${task.text}”${task.childKeys.length ? ` and ${task.childKeys.length} subtask(s)` : ''}?`, cta: 'Delete', warning: true })
+      .then((ok) => { if (ok) void ctx.run('Delete', () => ctx.mutations.deleteTask(task.key)); });
   }));
   menu.showAtMouseEvent(ev);
 }

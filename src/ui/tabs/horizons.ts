@@ -15,6 +15,7 @@ import { Menu } from 'obsidian';
 import { crumbBar } from '../crumbs';
 import { drawingsButton, targetForPeriod } from '../drawings';
 import { notesButton } from '../notes';
+import { confirmModal } from '../modals/confirm';
 
 export interface HorizonsState { year: number; selected?: string; collapsed: Map<string, boolean> }
 
@@ -151,7 +152,7 @@ function goalMenu(ctx: UiContext, goal: Goal, ev: MouseEvent): void {
   menu.addItem((i) => i.setTitle(goal.status === 'done' ? 'Reopen' : 'Mark achieved').setIcon('check-circle').onClick(() => void ctx.run('Goal', () => ctx.mutations.setStatus(goal.key, goal.status === 'done' ? 'todo' : 'done'))));
   menu.addSeparator();
   menu.addItem((i) => i.setTitle('Open in note').setIcon('file-text').onClick(() => void ctx.openFile(goal.path, goal.line)));
-  menu.addItem((i) => i.setTitle('Delete goal').setIcon('trash').setWarning(true).onClick(() => { if (window.confirm(`Delete goal “${goal.text}”?`)) void ctx.run('Delete', () => ctx.mutations.deleteTask(goal.key)); }));
+  menu.addItem((i) => i.setTitle('Delete goal').setIcon('trash').setWarning(true).onClick(() => { void confirmModal(ctx, { title: 'Delete goal', body: `Delete goal “${goal.text}”?`, cta: 'Delete', warning: true }).then((ok) => { if (ok) void ctx.run('Delete', () => ctx.mutations.deleteTask(goal.key)); }); }));
   menu.showAtMouseEvent(ev);
 }
 

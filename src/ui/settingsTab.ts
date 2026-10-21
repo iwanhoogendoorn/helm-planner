@@ -13,6 +13,7 @@ import { PathSuggest } from './fields';
 import { API_BASE } from '../api/base';
 import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
 import type { PeriodKind } from '../core/periods';
+import { confirmModal } from './modals/confirm';
 
 export const PERIOD_LABELS: Record<PeriodKind, string> = { year: 'Yearly', quarter: 'Quarterly', month: 'Monthly', week: 'Weekly' };
 
@@ -404,7 +405,7 @@ export class HelmSettingTab extends PluginSettingTab {
       void this.host.templateInfo(kind).then((i) => {
         const exists = i.exists && i.path === target;
         row.addButton((b) => b.setButtonText(exists ? 'Replace…' : 'Create').setCta().onClick(async () => {
-          if (exists && !window.confirm(`Replace “${target}” with Helm’s built-in ${label.toLowerCase().replace(' notes', '')} template? The current note is overwritten.`)) return;
+          if (exists && !(await confirmModal({ app: this.app }, { title: 'Replace template', body: `Replace “${target}” with Helm’s built-in ${label.toLowerCase().replace(' notes', '')} template? The current note is overwritten.`, cta: 'Replace', warning: true }))) return;
           const r = await this.host.writeTemplate(kind, exists);
           row.setDesc(`${target} — ${r}`);
           this.renderBody();

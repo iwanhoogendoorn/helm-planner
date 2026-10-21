@@ -12,6 +12,7 @@ import type { DrawingTarget } from '../core/types';
 import { folderOf, isUnder } from '../data/vault';
 import { h, icon, iconButton } from './dom';
 import type { UiContext } from './context';
+import { confirmModal } from './modals/confirm';
 
 export interface AttachItem {
   path: string;
@@ -90,7 +91,7 @@ export function attachList(ctx: UiContext, spec: AttachSpec): HTMLElement {
     ];
     const actions = h('div', { cls: 'helm-note-actions' },
       inFolder ? null : iconButton('unlink', `Unlink — the ${one} itself stays`, (ev) => { ev.stopPropagation(); void ctx.run(`Unlink ${one}`, async () => { await spec.unlink(item); draw(); }); }),
-      iconButton('trash', 'Move to trash', (ev) => { ev.stopPropagation(); if (window.confirm(`Move “${item.title}” to the trash?`)) void ctx.run(`Delete ${one}`, async () => { await spec.remove(item); draw(); }); }, 'helm-note-delete'));
+      iconButton('trash', 'Move to trash', (ev) => { ev.stopPropagation(); void confirmModal(ctx, { title: 'Move to trash', body: `Move “${item.title}” to the trash?`, cta: 'Move to trash', warning: true }).then((ok) => { if (ok) void ctx.run(`Delete ${one}`, async () => { await spec.remove(item); draw(); }); }); }, 'helm-note-delete'));
     return h('div', {
       cls: 'helm-note-row', title: `${item.path}\nClick to open · ${navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl'}-click for a new tab`, attr: { role: 'button', tabindex: '0' },
       onClick: (ev) => open(item, ev),

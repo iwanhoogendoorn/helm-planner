@@ -11,6 +11,7 @@ import { button, chip, h, icon, iconButton } from '../dom';
 import type { UiContext } from '../context';
 import { wikilinkSuggest } from '../fields';
 import { periodChoices } from '../tabs/horizons';
+import { confirmModal } from './confirm';
 
 export interface DraftTask { text: string }
 export interface DraftPhase { title: string; due: string; tasks: DraftTask[] }
@@ -106,7 +107,11 @@ export function openProjectForm(ctx: UiContext, opts: { parentId?: string; perio
           icon('milestone'), name, dueIn,
           iconButton('chevron-up', 'Move phase up', () => { if (i > 0) { [phases[i - 1], phases[i]] = [phases[i]!, phases[i - 1]!]; draw(); } }),
           iconButton('chevron-down', 'Move phase down', () => { if (i < phases.length - 1) { [phases[i + 1], phases[i]] = [phases[i]!, phases[i + 1]!]; draw(); } }),
-          iconButton('trash', 'Remove phase', () => { if (ph.tasks.length === 0 || window.confirm(`Remove phase “${ph.title || `Phase ${i + 1}`}” and its ${ph.tasks.length} task(s)?`)) { phases.splice(i, 1); draw(); } }),
+          iconButton('trash', 'Remove phase', () => {
+            const remove = (): void => { phases.splice(phases.indexOf(ph), 1); draw(); };
+            if (ph.tasks.length === 0) remove();
+            else void confirmModal(ctx, { title: 'Remove phase', body: `Remove phase “${ph.title || `Phase ${i + 1}`}” and its ${ph.tasks.length} task(s)?`, cta: 'Remove', warning: true }).then((ok) => { if (ok && phases.includes(ph)) remove(); });
+          }),
         ),
         taskRows(ph.tasks, `Add a task to ${ph.title || 'this phase'}… (dates, !!, ~1h work here too)`),
       ));

@@ -16,6 +16,7 @@ import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot 
 import { STATUS_LABELS, projectMenuForTask } from '../menus';
 import { DAY_PARTS, PART_LABEL, type DayPart } from '../../core/dailyNote';
 import { effortField, linkTimes , wikilinkSuggest } from '../fields';
+import { confirmModal } from './confirm';
 
 export function openTaskEditor(ctx: UiContext, task: Task): void {
   const src = task.origin === 'daily-mirror' && task.mirrorOf ? ctx.index.task(task.mirrorOf) ?? task : task;
@@ -133,7 +134,7 @@ export function openTaskEditor(ctx: UiContext, task: Task): void {
     const rv = recurrence.value.trim();
     if (rv === '') { if (src.recurrence) patch.recurrence = undefined; }
     else if (rv !== src.recurrence?.raw) { const r = parseRecurrence(rv); if (!r.parsed) { ctx.notify(`I do not understand “${rv}”. Try “every week on monday”.`); return; } patch.recurrence = { ...r, raw: formatRecurrence(r) }; }
-    if (conflictText && !window.confirm(`This overlaps ${conflictText}.\n\nSave anyway?`)) return;
+    if (conflictText && !(await confirmModal(ctx, { title: 'Overlapping time', body: `This overlaps ${conflictText}.\n\nSave anyway?`, cta: 'Save anyway' }))) return;
     const ts = timeStart.value;
     const te = timeEnd.value;
     if (ts === '') { if (src.time) patch.time = undefined; }

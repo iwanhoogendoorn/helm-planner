@@ -258,3 +258,33 @@ describe('F11 · the progress bar is announced as one', () => {
     expect(bar.getAttribute('aria-valuenow')).toBe('42');
   });
 });
+
+describe('F9 · confirmations use one tracked Obsidian modal', () => {
+  it('resolves true on the confirm button, false on cancel or close, and is tracked for unload', async () => {
+    const { confirmModal } = await import('../../src/ui/modals/confirm');
+    const tracked: unknown[] = [];
+    const host = { app: {} as never, trackModal: (m: unknown) => { tracked.push(m); } };
+    const yes = confirmModal(host, { title: 'Delete task', body: 'Delete it?\n\nIt has steps.', cta: 'Delete', warning: true });
+    const m = Modal.last!;
+    expect(tracked).toEqual([m]);
+    expect(m.titleEl.textContent).toBe('Delete task');
+    expect([...m.contentEl.querySelectorAll('.helm-confirm-text')].map((p) => p.textContent)).toEqual(['Delete it?', 'It has steps.']);
+    expect(m.contentEl.querySelector('.helm-confirm-ok')!.classList.contains('mod-warning')).toBe(true);
+    (m.contentEl.querySelector('.helm-confirm-ok') as HTMLElement).click();
+    expect(await yes).toBe(true);
+    const no = confirmModal(host, { title: 'X' });
+    (Modal.last!.contentEl.querySelector('.helm-modal-buttons button:not(.helm-confirm-ok)') as HTMLElement).click();
+    expect(await no).toBe(false);
+    const closed = confirmModal(host, { title: 'Y' });
+    Modal.last!.close();
+    expect(await closed).toBe(false);
+  });
+
+  it('no UI code calls window.confirm any more', async () => {
+    const { readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const walk = (d: string): string[] => readdirSync(d).flatMap((f) => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
+    const offenders = walk('src/ui').filter((f) => f.endsWith('.ts') && /window\.confirm\s*\(/.test(readFileSync(f, 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+});

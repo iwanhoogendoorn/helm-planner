@@ -10,6 +10,7 @@ import { conflictsFor, describeConflicts, freeSlotOn, preferredSlot } from '../.
 import { minutesToHuman } from '../../core/dates';
 import type { UiContext } from '../context';
 import { plainLabel } from '../../core/label';
+import { confirmModal } from './confirm';
 
 export function openFollowUp(ctx: UiContext, task: Task): void {
   const today = ctx.today();
@@ -76,7 +77,7 @@ export function openFollowUp(ctx: UiContext, task: Task): void {
   );
   async function create(): Promise<void> {
     if (text.value.trim() === '') { ctx.notify('Give the follow-up a title.'); text.focus(); return; }
-    if (conflictText && !window.confirm(`This overlaps ${conflictText}.\n\nCreate it anyway?`)) return;
+    if (conflictText && !(await confirmModal(ctx, { title: 'Overlapping time', body: `This overlaps ${conflictText}.\n\nCreate it anyway?`, cta: 'Create anyway' }))) return;
     m.close();
     await ctx.run('Follow up', async () => {
       const time = timeStart.value ? { start: timeStart.value, ...(timeEnd.value ? { end: timeEnd.value } : {}) } : undefined;

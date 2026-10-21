@@ -14,6 +14,7 @@ import { pickProject } from '../menus';
 import { partOfTime } from '../../core/dailyNote';
 import { conflictWarning, effortField, linkTimes, repeatButtons, wikilinkSuggest } from '../fields';
 import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot } from '../../data/conflicts';
+import { confirmModal } from './confirm';
 
 export interface CaptureDefaults {
   date?: IsoDate;
@@ -191,7 +192,7 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   async function submit(keepOpen: boolean): Promise<void> {
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);
     if (c.text.trim() === '') return;
-    if (conflictText && !window.confirm(`This overlaps ${conflictText}.\n\nAdd it anyway?`)) return;
+    if (conflictText && !(await confirmModal(ctx, { title: 'Overlapping time', body: `This overlaps ${conflictText}.\n\nAdd it anyway?`, cta: 'Add anyway' }))) return;
     const fields = captureFields(c, effort.get(), timeOf(c));
     const p = project ?? (c.project ? ctx.index.projectByTitle(c.project) : undefined);
     const d = date;

@@ -9,6 +9,7 @@ import { formatRecurrence, parseRecurrence } from '../../core/recurrence';
 import { WEEKDAY_SHORT } from '../../core/dates';
 import { button, h } from '../dom';
 import type { UiContext } from '../context';
+import { confirmModal } from './confirm';
 
 const EMOJIS = ['🏃', '🚶', '🏋️', '🧘', '🚴', '🏊', '⚽', '🎾', '🥗', '🍎', '💧', '☕', '🚭', '😴', '🌅', '📖', '✍️', '🎹', '🎸', '🎤', '🎨', '💻', '🧠', '🗣️', '🇪🇸', '🧹', '🧺', '🌱', '🐕', '💊', '🦷', '🧴', '💰', '📧', '📓', '🙏', '❤️', '📵', '🎯', '⭐'];
 
@@ -203,7 +204,7 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       field('Target per week', 'counts against the streak', targetRow),
       field('Grace', 'misses tolerated before a streak breaks', graceRow),
     ),
-    h('div', { cls: 'helm-modal-buttons' }, h('div', { cls: 'helm-segmented' }, activeBtn), existing ? button('Delete', { icon: 'trash', cls: 'helm-btn-quiet', title: 'Move the habit note to the trash', onClick: () => { if (window.confirm(`Move the habit “${existing.title}” to the trash? Past daily notes keep their ticks.`)) { m.close(); void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(existing.id)); } } }) : null, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button(existing ? 'Save' : 'Create habit', { primary: true, onClick: () => void save() })),
+    h('div', { cls: 'helm-modal-buttons' }, h('div', { cls: 'helm-segmented' }, activeBtn), existing ? button('Delete', { icon: 'trash', cls: 'helm-btn-quiet', title: 'Move the habit note to the trash', onClick: () => { void confirmModal(ctx, { title: 'Delete habit', body: `Move the habit “${existing.title}” to the trash? Past daily notes keep their ticks.`, cta: 'Move to trash', warning: true }).then((ok) => { if (ok) { m.close(); void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(existing.id)); } }); } }) : null, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button(existing ? 'Save' : 'Create habit', { primary: true, onClick: () => void save() })),
   );
   drawIcon();
 
