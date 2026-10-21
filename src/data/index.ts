@@ -166,8 +166,31 @@ export class HelmIndex {
     return s.extraFolders.some((f) => f.trim() !== '' && isUnder(path, f.trim()));
   }
 
-  async rebuild(): Promise<void> {
+  /** The rebuild in flight, and whether another was asked for while it ran. */
+  private rebuilding?: Promise<void>;
+  private rebuildAgain = false;
+  /** Files changed (or gone) while a rebuild was reading the vault: newer than what it read, so they win. */
+  private touchedDuringBuild?: Map<string, string | undefined>;
+
+  /**
+   * Read the whole vault again. Calls that overlap share one pass — plus one more after it when asked
+   * during it, so a settings change is never answered with a scan that started before it. Updates that
+   * arrive while it reads are kept: they are newer than what it read.
+   */
+  rebuild(): Promise<void> {
+    if (this.rebuilding) { this.rebuildAgain = true; return this.rebuilding; }
+    const run = async (): Promise<void> => {
+      try {
+        do { this.rebuildAgain = false; await this.rebuildOnce(); } while (this.rebuildAgain);
+      } finally { this.rebuilding = undefined; }
+    };
+    this.rebuilding = run();
+    return this.rebuilding;
+  }
+
+  private async rebuildOnce(): Promise<void> {
     this.building = true;
+    this.touchedDuringBuild = new Map();
     try {
       const all = await this.vault.list();
       // Titles resolve links; an archived or trashed note must never win a title from a live one.
@@ -177,9 +200,13 @@ export class HelmIndex {
       const next = new Map<string, FileEntry>();
       const contents = await Promise.all(paths.map(async (p) => [p, p.endsWith('.md') ? await this.vault.read(p).catch(() => undefined) : ''] as const));
       for (const [p, c] of contents) if (c !== undefined) next.set(p, this.parseFile(p, c));
+      const touched = this.touchedDuringBuild;
+      this.touchedDuringBuild = undefined;
       this.files = next;
+      for (const [p, c] of touched) this.applyOne(p, c);
       this.link();
     } finally {
+      this.touchedDuringBuild = undefined;
       this.building = false;
       this.ready = true;
     }
@@ -240,6 +267,7 @@ export class HelmIndex {
   }
 
   private applyOne(path: string, content: string | undefined): boolean {
+    this.touchedDuringBuild?.set(path, content);
     const known = this.files.get(path);
     if (content === undefined) this.noteGone(path); else this.noteSeen(path);
     if (!this.inScope(path, content) || content === undefined) {
