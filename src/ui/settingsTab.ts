@@ -10,6 +10,7 @@
  */
 import { Notice, PluginSettingTab, Setting, setIcon, TFile, type App, type Plugin, type TextComponent } from 'obsidian';
 import { PathSuggest } from './fields';
+import { API_BASE } from '../api/base';
 import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
 import type { PeriodKind } from '../core/periods';
 
@@ -529,7 +530,7 @@ export class HelmSettingTab extends PluginSettingTab {
         this.renderBody();
         new Notice('New token — anything using the old one has to be updated.');
       })()));
-    const base = urls[0] ?? `http://127.0.0.1:${state.port ?? s.apiPort}/helm/v1`;
+    const base = urls[0] ?? `http://127.0.0.1:${state.port ?? s.apiPort}${API_BASE}`;
     const token = s.apiToken || '<token>';
     const urlSetting = new Setting(g.content).setName(state.running ? 'Base URL' : 'Base URL (when on)').setDesc(bind === 'loopback' ? 'What a script on this Mac uses.' : 'What the phone (or another device) uses; the Tailscale address is listed first.');
     // Addresses are long and the settings pane is not: the list goes under the words, full width,

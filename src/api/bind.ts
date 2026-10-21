@@ -2,6 +2,8 @@
  * Where the API listens. Pure functions over an interfaces table so they can be tested without a
  * network: the plugin passes `os.networkInterfaces()`, the tests pass a fake.
  */
+import { API_BASE } from './base';
+
 export type ApiBind = 'loopback' | 'tailscale' | 'all';
 
 /** The subset of `os.NetworkInterfaceInfo` these functions look at. */
@@ -44,7 +46,7 @@ export function resolveBindHost(bind: ApiBind, ifaces: IfaceTable): { host: stri
 }
 
 /** The base URLs a client can reach the server on, given the host it is bound to. Tailscale first, loopback last. */
-export function apiUrls(host: string, port: number, ifaces: IfaceTable, base = '/helm/v1'): string[] {
+export function apiUrls(host: string, port: number, ifaces: IfaceTable, base = API_BASE): string[] {
   const url = (h: string): string => `http://${h}:${port}${base}`;
   if (host !== ANY) return [url(host)];
   const hosts: string[] = [];

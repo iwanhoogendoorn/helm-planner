@@ -17,14 +17,13 @@ import { parseProjectLog } from '../core/project';
 import { formatRecurrence, parseRecurrence } from '../core/recurrence';
 import { normaliseLink } from '../core/links';
 import { runBulk } from '../data/bulk';
+import { API_VERSION } from './base';
 import { conflictsFor } from '../data/conflicts';
 import { nextOccurrenceOf } from '../data/planner';
 
 export type { ApiDeps } from './json';
 
-export const API_BASE = '/helm/v1';
-/** The contract revision: a client checks it in `GET /health` to tell a newer plugin from an older one. */
-export const API_VERSION = 2;
+export { API_BASE, API_VERSION } from './base';
 
 export interface ApiRequest {
   method: string;

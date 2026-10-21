@@ -92,3 +92,45 @@ describe('M1 · PATCH /tasks/:ref validates every field before it writes', () =>
     expect((await call('PATCH', `tasks/${t.id}`, {})).status).toBe(400);
   });
 });
+
+describe('L7 · one source for the base path and the contract revision', () => {
+  it('routes, bind and health all use base.ts', async () => {
+    const base = await import('../../src/api/base');
+    const routes = await import('../../src/api/routes');
+    const { apiUrls } = await import('../../src/api/bind');
+    expect(routes.API_BASE).toBe(base.API_BASE);
+    expect(routes.API_VERSION).toBe(base.API_VERSION);
+    expect(apiUrls('127.0.0.1', 1, {})).toEqual([`http://127.0.0.1:1${base.API_BASE}`]);
+    const { call } = await api();
+    expect((await call('GET', 'health')).body.api).toBe(base.API_VERSION);
+  });
+});
+
+describe('L8 · the API does not create files in hidden folders', () => {
+  it('refuses .obsidian and .trash as a note or drawing folder, and still allows a normal one', async () => {
+    const { call, vault } = await api();
+    const before = filesOf(vault);
+    for (const folder of ['.obsidian/plugins/x', '.trash', 'Notes/.hidden']) {
+      expect((await call('POST', 'tasks/tsk-0001/notes', { name: 'Pwn', folder })).status, folder).toBe(400);
+      expect((await call('POST', 'tasks/tsk-0001/drawings', { name: 'Pwn', folder })).status, folder).toBe(400);
+    }
+    expect(filesOf(vault)).toEqual(before);
+    expect((await call('POST', 'tasks/tsk-0001/notes', { name: 'Fine', folder: 'Notes/sub' })).status).toBe(201);
+  });
+});
+
+describe('L9 · habit numbers are checked the same way on create and edit', () => {
+  it('refuses a negative or fractional graceDays and an out-of-range targetPerWeek on both routes', async () => {
+    const { call } = await api();
+    for (const extra of [{ graceDays: -1 }, { graceDays: 1.5 }, { targetPerWeek: 0 }, { targetPerWeek: 8 }, { targetPerWeek: 2.5 }]) {
+      expect((await call('POST', 'habits', { title: 'Stretch', schedule: 'every day', ...extra })).status, JSON.stringify(extra)).toBe(400);
+    }
+    const made = await call('POST', 'habits', { title: 'Stretch', schedule: 'every day', graceDays: 1, targetPerWeek: 5 });
+    expect(made.status).toBe(201);
+    const id = made.body.habit.id as string;
+    for (const extra of [{ graceDays: -1 }, { graceDays: 1.5 }, { targetPerWeek: 0 }, { targetPerWeek: 8 }]) {
+      expect((await call('PATCH', `habits/${id}`, extra)).status, JSON.stringify(extra)).toBe(400);
+    }
+    expect((await call('PATCH', `habits/${id}`, { targetPerWeek: null, graceDays: 0 })).status).toBe(200);
+  });
+});
