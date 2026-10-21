@@ -259,8 +259,12 @@ export class HelmIndex {
     const mtime = this.vault.mtime(path);
     if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
     if (path.endsWith('.md')) entry.preview = notePreview(content);
-    if (contentHasHelmKeys(content)) { const fm = parseDocument(content).frontmatter.values as Record<string, unknown>; entry.noteRef = parseNoteRef(path, fm, mtime); }
-    if (/^type:\s*song\s*$/im.test(content)) entry.song = parseSongNote(path, content);
+    // Parsed once: the frontmatter answers the attachment and song questions, the body everything below.
+    const doc = parseDocument(content);
+    const fm = doc.frontmatter.values as Record<string, unknown>;
+    if (contentHasHelmKeys(content)) entry.noteRef = parseNoteRef(path, fm, mtime);
+    // A song says so in its frontmatter; a `type: song` line in the body is just text.
+    if (isSongFm(fm)) entry.song = parseSongNote(path, fm);
     const date = this.dateOfPath(path);
     const dl = [...content.matchAll(/!?\[\[([^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]/g)].map((m) => m[1]!.trim()).filter((t) => /\.(excalidraw|canvas)$/i.test(t)).map((t) => t.slice(t.lastIndexOf('/') + 1).replace(/\.(excalidraw|canvas)$/i, ''));
     if (dl.length > 0) entry.drawingLinks = [...new Set(dl)];
@@ -271,7 +275,6 @@ export class HelmIndex {
       const h = parseHabit(path, content);
       if (h) { entry.kind = 'habit'; entry.habit = h; return entry; }
     }
-    const doc = parseDocument(content);
     const seen = new Map<string, number>();
     const derived = (text: string): string => { const n = seen.get(text.trim()) ?? 0; seen.set(text.trim(), n + 1); return derivedKey(path, n, text); };
 
@@ -371,7 +374,10 @@ export class HelmIndex {
         const copy: Task = { ...t, childKeys: [] };
         if (tasks.has(copy.key)) {
           diagnostics.push({ severity: 'warning', code: 'HELM-T01', message: `Duplicate task id ${copy.key} (also in ${tasks.get(copy.key)!.path})`, path: f.path, line: t.line });
-          const next = `${copy.key}~${keys.length}`;
+          // The suffix counts within this file, so another file may hold it already: take the next free one.
+          let n = keys.length;
+          while (tasks.has(`${copy.key}~${n}`)) n++;
+          const next = `${copy.key}~${n}`;
           renamed.set(copy.key, next);
           copy.key = next;
         }
@@ -766,8 +772,7 @@ function isSongFm(fm: Record<string, unknown> | undefined): boolean {
 }
 
 /** Read what a song note says about itself. Anything missing is simply not shown. */
-function parseSongNote(path: string, content: string): SongNote {
-  const fm = parseDocument(content).frontmatter.values as Record<string, unknown>;
+function parseSongNote(path: string, fm: Record<string, unknown>): SongNote {
   const one = (k: string): string | undefined => {
     const v = fm[k];
     const raw = Array.isArray(v) ? v[0] : v;
