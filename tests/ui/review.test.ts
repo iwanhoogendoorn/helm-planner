@@ -189,3 +189,72 @@ describe('F17 · nothing renders after the view closes', () => {
     expect(body.childElementCount).toBe(0);
   });
 });
+
+describe('F8 · core navigation works from the keyboard and is announced', () => {
+  it('a section header is a focusable button with aria-expanded, toggled by Enter and Space', async () => {
+    const { root } = await viewFor('inbox');
+    const head = root.querySelector<HTMLElement>('.helm-section-head')!;
+    expect(head.getAttribute('role')).toBe('button');
+    expect(head.getAttribute('tabindex')).toBe('0');
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    key(head, 'Enter');
+    expect(head.closest('.helm-section')!.classList.contains('is-collapsed')).toBe(true);
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    key(head, ' ');
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('Enter on a task opens its editor; Enter on a project card opens the project', async () => {
+    const { root, view } = await viewFor('projects');
+    const card = root.querySelector<HTMLElement>('.helm-project')!;
+    expect(card.getAttribute('tabindex')).toBe('0');
+    key(card, 'Enter');
+    expect(root.querySelector('.helm-body')!.textContent).toContain('Oracle Book Writing');
+    view.navigate('projects', { projectId: 'prj-book' });
+    const main = root.querySelector<HTMLElement>('.helm-task-main')!;
+    expect(main.getAttribute('role')).toBe('button');
+    Modal.last = undefined;
+    key(main, 'Enter');
+    expect(Modal.last).toBeDefined();
+  });
+
+  it('a sortable column header sorts from the keyboard and says which way', async () => {
+    const { root, view } = await viewFor('projects');
+    (view as any).projectsState.listView = 'table';
+    view.render();
+    const th = root.querySelector<HTMLElement>('th')!;
+    expect(th.getAttribute('tabindex')).toBe('0');
+    expect(th.getAttribute('aria-sort')).toBe('none');
+    key(th, 'Enter');
+    expect(th.getAttribute('aria-sort')).toBe('ascending');
+    key(th, ' ');
+    expect(th.getAttribute('aria-sort')).toBe('descending');
+    const row = root.querySelector<HTMLElement>('tbody tr.is-clickable')!;
+    expect(row.getAttribute('tabindex')).toBe('0');
+    key(row, 'Enter');
+    expect(root.querySelector('.helm-body table')).toBeNull();     // opened the project
+  });
+
+  it('the tab bar is a tablist; arrow keys move between tabs', async () => {
+    const { root } = await viewFor('today');
+    expect(root.querySelector('.helm-tablist')!.getAttribute('role')).toBe('tablist');
+    const today = root.querySelector<HTMLElement>('.helm-tab[data-tab="today"]')!;
+    expect(today.getAttribute('role')).toBe('tab');
+    expect(today.getAttribute('tabindex')).toBe('0');
+    key(today, 'ArrowRight');
+    expect(root.querySelector('.helm-body')!.getAttribute('data-tab')).toBe('week');
+    expect(root.querySelector('.helm-tab[data-tab="week"]')!.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(root.querySelector('.helm-tab[data-tab="week"]'));
+  });
+});
+
+describe('F11 · the progress bar is announced as one', () => {
+  it('has the progressbar role and its range', async () => {
+    const { progressBar } = await import('../../src/ui/dom');
+    const bar = progressBar(0.42);
+    expect(bar.getAttribute('role')).toBe('progressbar');
+    expect(bar.getAttribute('aria-valuemin')).toBe('0');
+    expect(bar.getAttribute('aria-valuemax')).toBe('100');
+    expect(bar.getAttribute('aria-valuenow')).toBe('42');
+  });
+});

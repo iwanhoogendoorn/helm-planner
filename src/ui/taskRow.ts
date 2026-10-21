@@ -3,7 +3,7 @@ import type { IsoDate, Task } from '../core/types';
 import { humanDate, minutesToHuman } from '../core/dates';
 import { formatRecurrence } from '../core/recurrence';
 import { checkboxTitle, clickedStatus } from '../core/taskLine';
-import { chip, h, icon, iconButton, richText } from './dom';
+import { activatable, chip, h, icon, iconButton, richText } from './dom';
 import type { UiContext } from './context';
 import { progressMenu, taskMenu } from './menus';
 import { startFocus } from './focusTimer';
@@ -141,11 +141,12 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
     row.appendChild(cb);
   }
 
-  const main = h('div', { cls: 'helm-task-main', onClick: (ev) => {
+  const main = h('div', { cls: 'helm-task-main', attr: { 'aria-label': `Edit: ${plainLabel(t.text) || taskLabel(t)}` }, onClick: (ev) => {
     if ((ev.target as HTMLElement).closest('a')) return;
     if (selectionClick(ctx, ev, row, t.key)) return;           // cmd-click picks, shift-click takes a run
     openTaskEditor(ctx, t);
   } });
+  activatable(main, () => openTaskEditor(ctx, t));
   const line1 = h('div', { cls: 'helm-task-line' });
   if (t.time) line1.appendChild(h('span', { cls: 'helm-time', text: t.time.end ? `${t.time.start}–${t.time.end}` : t.time.start }));
   if (t.priority !== 'normal') line1.appendChild(h('span', { cls: ['helm-prio', `prio-${t.priority}`], text: PRIORITY_LABEL[t.priority] ?? '', title: `Priority: ${t.priority}` }));

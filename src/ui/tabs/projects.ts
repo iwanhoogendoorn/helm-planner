@@ -5,7 +5,7 @@ import { addDays, humanDate, relativeDays, startOfWeek } from '../../core/dates'
 import { PROJECT_PRIORITIES, PROJECT_STATUSES } from '../../core/project';
 import { compareProjects, isOpen, projectHealth, type ProjectHealth } from '../../data/planner';
 import { parseCapture } from '../../core/nlp';
-import { button, chip, empty, h, icon, iconButton, progressBar, richText, section } from '../dom';
+import { activatable, button, chip, empty, h, icon, iconButton, progressBar, richText, section } from '../dom';
 import type { UiContext } from '../context';
 import { askText, wikilinkSuggest } from '../fields';
 import { taskRow } from '../taskRow';
@@ -216,7 +216,7 @@ function makeProjectDraggable(ctx: UiContext, card: HTMLElement, id: string, sib
 function projectCard(ctx: UiContext, hh: ProjectHealth, depth: number, today: IsoDate, siblings: string[] = [], opts: { showStatus?: boolean; fold?: { open: boolean; count: number; onToggle: () => void } } = {}): HTMLElement {
   const p = hh.project;
   const closed = CLOSED.has(p.status);
-  const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, p.pinned && 'is-pinned', hh.flags.length > 0 && !closed && 'has-flags', closed && `is-closed is-${p.status}`], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev, { siblings }); } });
+  const card = h('div', { cls: ['helm-project', `depth-${Math.min(depth, 3)}`, p.pinned && 'is-pinned', hh.flags.length > 0 && !closed && 'has-flags', closed && `is-closed is-${p.status}`], attr: { 'aria-label': `Open project ${p.title}` }, onActivate: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev, { siblings }); } });
   if (siblings.length > 1) makeProjectDraggable(ctx, card, p.id, siblings);
   if (closed) {
     // Finished work in one quiet line: what it was, that it is done, how much it held, when it closed.
@@ -644,7 +644,7 @@ function renderProjectsBoard(ctx: UiContext, root: HTMLElement, groups: ProjectS
       for (const { u, depth } of unfolded(group.items, open)) {
         const hh = u.hh;
         const p = hh.project;
-        const card = h('div', { cls: ['helm-board-card', (depth > 0 || group.under) && 'is-sub', p.pinned && 'is-pinned'], attr: { draggable: 'true' }, onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
+        const card = h('div', { cls: ['helm-board-card', (depth > 0 || group.under) && 'is-sub', p.pinned && 'is-pinned'], attr: { draggable: 'true', 'aria-label': `Open project ${p.title}` }, onActivate: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
           h('div', { cls: 'helm-board-card-text' }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { text: p.title })),
           h('div', { cls: 'helm-task-meta' },
             chip(`${u.done}/${u.total}`, 'count'),
@@ -687,7 +687,7 @@ function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: Project
   const draw = (): void => {
     body.replaceChildren(...unfolded(rows, open).map(({ u, depth }) => {
       const p = u.hh.project;
-      return h('tr', { cls: ['is-clickable', depth > 0 && 'is-sub'], onClick: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
+      return h('tr', { cls: ['is-clickable', depth > 0 && 'is-sub'], onActivate: () => ctx.navigate('projects', { projectId: p.id }), onContextMenu: (ev) => { ev.preventDefault(); projectMenu(ctx, p, ev); } },
         h('td', { cls: `depth-${Math.min(depth, 3)}` }, p.pinned ? icon('pin', 'helm-project-pin') : null, h('span', { cls: 'helm-project-name', text: p.title }), masterChip(u, depth, byId), subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; draw(); })),
         h('td', { text: STATUS_LABEL[p.status] }),
         h('td', { text: p.priority }),
@@ -704,17 +704,7 @@ function renderProjectsTable(ctx: UiContext, root: HTMLElement, visible: Project
     (u) => String(u.open).padStart(6, '0'), (u) => String(u.done).padStart(6, '0'),
     (u) => u.hh.project.due ?? '9999', (u) => u.touched ?? '',
   ];
-  let sorted = -1;
-  head.querySelectorAll('th').forEach((th, i) => {
-    th.addClass('is-clickable');
-    th.addEventListener('click', () => {
-      const key = keys[i]!;
-      const dir = sorted === i ? -1 : 1;
-      sorted = sorted === i ? -1 : i;
-      rows.sort((a, b) => key(a).localeCompare(key(b)) * dir);
-      draw();
-    });
-  });
+  sortableHeaders(head, (i, dir) => { const key = keys[i]!; rows.sort((a, b) => key(a).localeCompare(key(b)) * dir); draw(); });
   draw();
   table.append(h('thead', {}, head), body);
   root.appendChild(h('div', { cls: 'helm-table-wrap' }, table));
@@ -738,7 +728,7 @@ function renderProjectsTimeline(ctx: UiContext, root: HTMLElement, visible: Proj
       const p = u.hh.project;
       const s = u.start ?? u.due!;
       const e = u.due ?? u.start!;
-      return h('tr', { cls: ['is-clickable', depth > 0 && 'is-sub'], onClick: () => ctx.navigate('projects', { projectId: p.id }) },
+      return h('tr', { cls: ['is-clickable', depth > 0 && 'is-sub'], onActivate: () => ctx.navigate('projects', { projectId: p.id }) },
         h('td', { cls: `helm-timeline-name depth-${Math.min(depth, 3)}` }, h('span', { text: p.title }), masterChip(u, depth, byId), subsChip(u, open, () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); state.openSubs = open; ctx.refresh(); })),
         ...weeks.map((w) => {
           const end = addDays(w, 6);
@@ -772,7 +762,7 @@ function renderBoard(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectH
     tasks.sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)));   // what is left first, what is finished after
     const cards = h('div', { cls: 'helm-board-cards' });
     for (const t of tasks) {
-      const card = h('div', { cls: ['helm-board-card', !isOpen(t) && 'is-done'], attr: { draggable: 'true' }, onClick: () => openTaskEditor(ctx, t), onContextMenu: (ev) => { ev.preventDefault(); taskMenu(ctx, t, ev); } },
+      const card = h('div', { cls: ['helm-board-card', !isOpen(t) && 'is-done'], attr: { draggable: 'true', 'aria-label': `Edit: ${plainLabel(t.text) || t.text}` }, onActivate: () => openTaskEditor(ctx, t), onContextMenu: (ev) => { ev.preventDefault(); taskMenu(ctx, t, ev); } },
         h('div', { cls: 'helm-board-card-text' }, richText(plainLabel(t.text) || t.text, (target) => ctx.openLink(target, t.path))),
         h('div', { cls: 'helm-task-meta' },
           t.due ? chip(`due ${humanDate(t.due, today)}`, t.due < today && isOpen(t) ? 'due is-overdue' : 'due') : null,
@@ -814,7 +804,7 @@ function renderTable(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectH
   const head = h('tr', {}, ...['Task', 'Phase', 'Status', 'Due', 'Effort'].map((label) => h('th', { text: label })));
   const body = h('tbody', {});
   const draw = (): void => {
-    body.replaceChildren(...rows.map(({ t, phase }) => h('tr', { cls: ['is-clickable', !isOpen(t) && 'is-closed'], onClick: () => openTaskEditor(ctx, t), onContextMenu: (ev) => { ev.preventDefault(); taskMenu(ctx, t, ev); } },
+    body.replaceChildren(...rows.map(({ t, phase }) => h('tr', { cls: ['is-clickable', !isOpen(t) && 'is-closed'], onActivate: () => openTaskEditor(ctx, t), onContextMenu: (ev) => { ev.preventDefault(); taskMenu(ctx, t, ev); } },
       h('td', {}, richText(plainLabel(t.text) || t.text, (target) => ctx.openLink(target, t.path))),
       h('td', { text: phase }),
       h('td', { text: STATUS_LABELS[t.status]?.label ?? t.status }),
@@ -826,17 +816,7 @@ function renderTable(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectH
     (x) => plainLabel(x.t.text).toLowerCase(), (x) => x.phase.toLowerCase(), (x) => x.t.status,
     (x) => x.t.due ?? '9999', (x) => String(x.t.effortMinutes ?? 99999).padStart(6, '0'),
   ];
-  let sorted = -1;
-  head.querySelectorAll('th').forEach((th, i) => {
-    th.addClass('is-clickable');
-    th.addEventListener('click', () => {
-      const key = keys[i]!;
-      const dir = sorted === i ? -1 : 1;
-      sorted = sorted === i ? -1 : i;
-      rows.sort((a, b) => key(a).localeCompare(key(b)) * dir);
-      draw();
-    });
-  });
+  sortableHeaders(head, (i, dir) => { const key = keys[i]!; rows.sort((a, b) => key(a).localeCompare(key(b)) * dir); draw(); });
   draw();
   table.append(h('thead', {}, head), body);
   root.appendChild(rows.length === 0 ? empty('No tasks in this project yet.') : h('div', { cls: 'helm-table-wrap' }, table));
@@ -873,6 +853,28 @@ function renderTimeline(ctx: UiContext, root: HTMLElement, p: Project, hh: Proje
   );
   root.appendChild(h('div', { cls: 'helm-table-wrap' }, table));
   root.appendChild(h('div', { cls: 'helm-hint', text: 'A bar runs from the earliest to the latest date in that phase; a number is how many of its tasks fall in that week.' }));
+}
+
+/**
+ * Column headers that sort on click, Enter or Space: the first press sorts ascending, the next one
+ * descending. Each header says which way it is sorted (aria-sort) so a screen reader can tell.
+ */
+function sortableHeaders(head: HTMLElement, sort: (column: number, dir: 1 | -1) => void): void {
+  let sorted = -1;
+  const ths = [...head.querySelectorAll<HTMLElement>('th')];
+  ths.forEach((th, i) => {
+    th.addClass('is-clickable');
+    th.setAttribute('aria-sort', 'none');
+    const go = (): void => {
+      const dir = sorted === i ? -1 : 1;
+      sorted = sorted === i ? -1 : i;
+      for (const x of ths) x.setAttribute('aria-sort', 'none');
+      th.setAttribute('aria-sort', dir === 1 ? 'ascending' : 'descending');
+      sort(i, dir);
+    };
+    th.addEventListener('click', go);
+    activatable(th, go);
+  });
 }
 
 /** A one-line add box. It keeps focus across the re-render its own submit causes, so tasks can be added one after another. */

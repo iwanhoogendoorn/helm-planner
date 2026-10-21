@@ -18,6 +18,8 @@ export interface Attrs {
   onKeyDown?: (ev: KeyboardEvent) => void;
   onInput?: (ev: Event) => void;
   onChange?: (ev: Event) => void;
+  /** Click, or Enter/Space while focused: a clickable non-button element made reachable by keyboard. */
+  onActivate?: (ev: MouseEvent | KeyboardEvent) => void;
   draggable?: boolean;
 }
 
@@ -36,8 +38,27 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs = 
   if (attrs.onKeyDown) el.addEventListener('keydown', attrs.onKeyDown as EventListener);
   if (attrs.onInput) el.addEventListener('input', attrs.onInput);
   if (attrs.onChange) el.addEventListener('change', attrs.onChange);
+  if (attrs.onActivate) { const fn = attrs.onActivate; el.addEventListener('click', fn as EventListener); activatable(el, fn); }
   if (attrs.draggable) el.draggable = true;
   append(el, children);
+  return el;
+}
+
+/**
+ * Make a clickable element work from the keyboard: in the tab order, announced as a button (unless it
+ * is a table row or header, which keep their own role), and activated by Enter or Space. Only a key
+ * pressed on the element itself counts, so a field or button inside it keeps its own keys.
+ */
+export function activatable(el: HTMLElement, fn: (ev: KeyboardEvent) => void, opts: { role?: string | null } = {}): HTMLElement {
+  const tag = el.tagName.toLowerCase();
+  const role = opts.role === undefined ? (tag === 'tr' || tag === 'th' || tag === 'td' ? null : 'button') : opts.role;
+  if (role && !el.hasAttribute('role')) el.setAttribute('role', role);
+  if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+  el.addEventListener('keydown', (ev) => {
+    if (ev.target !== el || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+    ev.preventDefault();
+    fn(ev);
+  });
   return el;
 }
 
@@ -100,7 +121,7 @@ export function richText(text: string, openLink?: (target: string) => void): HTM
 
 export function progressBar(fraction: number, cls = ''): HTMLElement {
   const pct = Math.max(0, Math.min(1, fraction)) * 100;
-  return h('div', { cls: ['helm-progress', cls], attr: { 'aria-valuenow': Math.round(pct) } }, h('div', { cls: 'helm-progress-fill', style: { width: `${pct}%` } }));
+  return h('div', { cls: ['helm-progress', cls], attr: { role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': Math.round(pct) } }, h('div', { cls: 'helm-progress-fill', style: { width: `${pct}%` } }));
 }
 
 export function section(title: string, opts: { count?: number | string; collapsed?: boolean; actions?: Child[]; cls?: string; key?: string; store?: Map<string, boolean> } = {}, ...body: Child[]): HTMLElement {
@@ -110,9 +131,11 @@ export function section(title: string, opts: { count?: number | string; collapse
   const bodyEl = h('div', { cls: 'helm-section-body' }, ...body);
   const head = h('div', {
     cls: 'helm-section-head',
-    onClick: (ev) => {
+    attr: { 'aria-expanded': String(!collapsed) },
+    onActivate: (ev) => {
       if ((ev.target as HTMLElement).closest('.helm-section-actions')) return;
       wrap.classList.toggle('is-collapsed');
+      head.setAttribute('aria-expanded', String(!wrap.classList.contains('is-collapsed')));
       opts.store?.set(key, wrap.classList.contains('is-collapsed'));
     },
   },
