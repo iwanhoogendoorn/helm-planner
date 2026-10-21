@@ -62,6 +62,14 @@ export function activatable(el: HTMLElement, fn: (ev: KeyboardEvent) => void, op
   return el;
 }
 
+/**
+ * Show or hide with a class rather than an inline style, so a theme or snippet can still restyle the
+ * element. `helm-hidden` is a utility that has to win, so it is the one rule in styles.css that says !important.
+ */
+export function setShown(el: HTMLElement, show: boolean): void {
+  el.classList.toggle('helm-hidden', !show);
+}
+
 export function append(el: Node, children: Child[]): void {
   for (const c of children) {
     if (c === null || c === undefined || c === false) continue;

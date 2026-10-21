@@ -3,7 +3,7 @@ import { Menu, Modal } from 'obsidian';
 import type { Task } from '../core/types';
 import { linkLabel, linksIn, normaliseLink, type TaskLink } from '../core/links';
 import type { UiContext } from './context';
-import { button, h, iconButton } from './dom';
+import { button, h, iconButton, setShown } from './dom';
 
 export function openExternal(url: string): void {
   window.open(url, '_blank', 'noopener');
@@ -17,12 +17,12 @@ export function askLink(ctx: UiContext, onDone: (r: { url: string; label?: strin
   const url = h('input', { cls: 'helm-input-wide', attr: { type: 'url', placeholder: 'https://…', value: initial.url ?? '' } });
   const label = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: 'e.g. Jira ticket', value: initial.label ?? '' } });
   const preview = h('div', { cls: 'helm-path-preview' });
-  const problem = h('div', { cls: 'helm-hint helm-link-problem', style: { display: 'none' } });
+  const problem = h('div', { cls: 'helm-hint helm-link-problem helm-hidden' });
   const update = (): void => {
     const r = normaliseLink(url.value, label.value);
     preview.textContent = r ? `[${r.label || linkLabel(r.url)}](${r.url})` : '—';
     const typed = url.value.trim() !== '' || label.value.trim() !== '';
-    problem.style.display = !r && typed ? '' : 'none';
+    setShown(problem, !r && typed);
     problem.textContent = 'Neither box holds a web address — paste one, e.g. https://example.com/page.';
   };
   url.addEventListener('input', update); label.addEventListener('input', update);

@@ -325,3 +325,30 @@ describe('F18 · dead and repeated code is gone', () => {
     expect(projects.indexOf('const profileOf')).toBeGreaterThan(lastImport);
   });
 });
+
+describe('F15 · visibility is a class, not an inline style', () => {
+  it('the effort field and the conflict warning hide and show with helm-hidden', async () => {
+    const { effortField, conflictWarning } = await import('../../src/ui/fields');
+    const f = effortField();
+    const custom = f.el.querySelector<HTMLInputElement>('.helm-effort-custom')!;
+    expect(custom.classList.contains('helm-hidden')).toBe(true);
+    expect(custom.style.display).toBe('');
+    const sel = f.el.querySelector<HTMLSelectElement>('select')!;
+    sel.value = 'custom';
+    sel.dispatchEvent(new Event('change'));
+    expect(custom.classList.contains('helm-hidden')).toBe(false);
+    const warn = document.createElement('div');
+    conflictWarning(warn, undefined);
+    expect(warn.classList.contains('helm-hidden')).toBe(true);
+    conflictWarning(warn, '10:00–11:00 Dentist');
+    expect(warn.classList.contains('helm-hidden')).toBe(false);
+    expect(warn.style.display).toBe('');
+  });
+
+  it('none of the visibility toggles the review listed set style.display', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const f of ['src/ui/links.ts', 'src/ui/fields.ts', 'src/ui/settingsTab.ts', 'src/ui/modals/capture.ts', 'src/ui/modals/profileItem.ts']) {
+      expect(readFileSync(f, 'utf8'), f).not.toMatch(/style\.display\s*=|display: 'none'/);
+    }
+  });
+});

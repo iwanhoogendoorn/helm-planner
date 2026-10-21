@@ -1,6 +1,6 @@
 /** Shared form fields: an effort dropdown and start/end/effort linking. */
 import { minutesToHuman, parseEffort } from '../core/dates';
-import { button, h } from './dom';
+import { button, h, setShown } from './dom';
 import { AbstractInputSuggest, Modal, TFolder, type App } from 'obsidian';
 import type { Recurrence } from '../core/types';
 import { formatRecurrence, parseRecurrence } from '../core/recurrence';
@@ -18,7 +18,7 @@ export interface EffortField {
 /** A select with common durations, "no estimate", and a custom entry (30m, 2h, 1h30m). */
 export function effortField(initial?: number): EffortField {
   const sel = h('select', { cls: 'helm-effort-select', title: 'Effort estimate' });
-  const custom = h('input', { cls: 'helm-effort-custom', attr: { type: 'text', placeholder: '1h30m' }, style: { display: 'none' } });
+  const custom = h('input', { cls: 'helm-effort-custom helm-hidden', attr: { type: 'text', placeholder: '1h30m' } });
   const listeners: (() => void)[] = [];
   const fire = (): void => { for (const fn of listeners) fn(); };
   const rebuild = (value: number | undefined): void => {
@@ -33,13 +33,13 @@ export function effortField(initial?: number): EffortField {
   };
   rebuild(initial);
   sel.addEventListener('change', () => {
-    if (sel.value === 'custom') { custom.style.display = ''; custom.focus(); return; }
-    custom.style.display = 'none';
+    if (sel.value === 'custom') { setShown(custom, true); custom.focus(); return; }
+    setShown(custom, false);
     fire();
   });
   custom.addEventListener('change', () => {
     const m = parseEffort(custom.value);
-    if (m !== undefined && m > 0) { rebuild(m); custom.style.display = 'none'; custom.value = ''; fire(); }
+    if (m !== undefined && m > 0) { rebuild(m); setShown(custom, false); custom.value = ''; fire(); }
   });
   custom.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); custom.dispatchEvent(new Event('change')); } });
   return {
@@ -189,7 +189,7 @@ export function askNameAndLocation(ctx: { app: App; trackModal: (m: { close: () 
 /** An inline conflict warning; empty when there is nothing to say. Returns the current conflict text for a confirm. */
 export function conflictWarning(el: HTMLElement, text: string | undefined, suggest?: { time: string; onPick: () => void }): void {
   el.replaceChildren();
-  el.style.display = text ? '' : 'none';
+  setShown(el, !!text);
   if (!text) return;
   el.append(h('span', { cls: 'helm-conflict-icon', text: '⚠' }), h('span', { text: ` Overlaps ${text}` }));
   if (suggest) el.append(h('button', { cls: 'helm-btn helm-conflict-fix', text: `Move to ${suggest.time}`, title: 'The first free slot that fits', onClick: (ev) => { ev.preventDefault(); suggest.onPick(); } }));

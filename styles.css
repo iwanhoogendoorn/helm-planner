@@ -16,7 +16,6 @@
 .helm-indexing { animation: helm-pulse 1.2s infinite; margin-right: 8px; }
 /* The tab buttons sit in a role="tablist" wrapper that takes no box of its own, so the bar lays out as before. */
 .helm-tablist { display: contents; }
-.helm-root .is-hidden { display: none; }
 .helm-root :focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 1px; }
 @keyframes helm-pulse { 50% { opacity: 0.4; } }
 @container (max-width: 520px) { .helm-tab-label { display: none; } .helm-day-title { min-width: 0; padding: 2px 6px; } .helm-day-title-sub { display: none; } .helm-day-actions .helm-btn span { display: none; } .helm-capacity-label { font-size: var(--font-ui-smaller); } }
@@ -1224,3 +1223,6 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-pinned-foot { align-self: end; }
 .helm-pinned-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .helm-pinned-next { align-self: start; }
+
+/* Hidden by setShown(): a utility that must beat any display rule, so the one deliberate !important. */
+.helm-hidden { display: none !important; }

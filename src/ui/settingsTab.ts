@@ -11,6 +11,7 @@
 import { Notice, PluginSettingTab, Setting, setIcon, TFile, type App, type Plugin, type TextComponent } from 'obsidian';
 import { PathSuggest } from './fields';
 import { API_BASE } from '../api/base';
+import { setShown } from './dom';
 import { DEFAULT_SETTINGS, type HelmSettings } from '../core/types';
 import type { PeriodKind } from '../core/periods';
 import { confirmModal } from './modals/confirm';
@@ -107,9 +108,9 @@ export class HelmSettingTab extends PluginSettingTab {
     titles.createDiv({ cls: 'helm-sgroup-title', text: o.title });
     titles.createDiv({ cls: 'helm-sgroup-sub', text: o.subtitle });
     const chip = head.createSpan({ cls: 'helm-schip' });
-    chip.style.display = 'none';
+    setShown(chip, false);
     const setChip = (text: string, tone: ChipTone): void => {
-      chip.style.display = '';
+      setShown(chip, true);
       chip.setText(text);
       chip.removeClass('helm-schip-ok', 'helm-schip-warn', 'helm-schip-pending');
       chip.addClass(`helm-schip-${tone}`);

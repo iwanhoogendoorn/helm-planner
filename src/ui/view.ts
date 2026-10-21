@@ -1,7 +1,7 @@
 /** The Helm leaf: a tab bar and one tab body, re-rendered from the index. */
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import type { IsoDate } from '../core/types';
-import { clear, h, icon, iconButton } from './dom';
+import { clear, h, icon, iconButton, setShown } from './dom';
 import type { TabId, UiContext } from './context';
 import { selection, selectionBar } from './selection';
 import { renderToday, type TodayState } from './tabs/today';
@@ -180,7 +180,7 @@ export class HelmView extends ItemView {
       b.setAttribute('aria-selected', String(on));
       b.setAttribute('tabindex', on ? '0' : '-1');
     }
-    this.indexingHint.toggleClass('is-hidden', ready);
+    setShown(this.indexingHint, !ready);
   }
 
   /** Hidden behind another tab: Obsidian keeps the leaf's DOM, so the render can wait until it shows. */
