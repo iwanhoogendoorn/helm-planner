@@ -1,5 +1,6 @@
 /**
- * The v2 routes: everything the iPhone app needs beyond tasks and projects. Each handler is a thin
+ * The v2 routes: everything the iPhone app needs beyond tasks and projects. "v2" is the contract
+ * revision (`API_VERSION`), not a path: these are served under the same `/helm/v1` mount (see base.ts). Each handler is a thin
  * shell around a planner / stats / report / search / habits function or a Mutations method — the
  * rules live there, not here. `handleV2` answers `undefined` for a path it does not know, and
  * routes.ts turns that into a 404 or 405.
@@ -382,6 +383,13 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
   return undefined;
 }
 
+/** A folder the API may create a file in: safe, and not hidden (`.obsidian`, `.trash`, …) — those belong to the app. */
+function writeFolder(f: string | undefined): ReturnType<typeof safeFolder> {
+  const r = safeFolder(f);
+  if (r.ok && r.folder?.split('/').some((seg) => seg.startsWith('.'))) return { ok: false, error: `Not a folder Helm writes into: ${f}` };
+  return r;
+}
+
 /**
  * What every attachable thing (task, project, day, period, habit) answers under `…/attachments`,
  * `…/notes`, `…/notes/link`, `…/drawings` and `…/drawings/link`. Undefined when the path is none of those.
@@ -391,7 +399,7 @@ export async function attachmentRoutes(target: DrawingTarget, sub: string | unde
   const after = (status = 200): ApiResponse => ({ status, body: { target: { kind: target.kind, ...(target.kind === 'task' ? { ref: target.id ?? target.key } : target.kind === 'date' ? { date: target.date } : target.kind === 'period' ? { key: target.key } : target.kind === 'phase' ? { id: target.id, projectId: target.projectId } : { id: target.id }) }, attachments: attachmentsJson(target, d), written: d.written() } });
   if (sub === 'attachments' && tail === undefined && method === 'GET') return ok(attachmentsJson(target, d));
   if (sub === 'notes' && tail === undefined && method === 'POST') {
-    const f = safeFolder(str(body['folder']));
+    const f = writeFolder(str(body['folder']));
     if (!f.ok) return bad(f.error);
     if (has(body, 'name') && !str(body['name'])) return bad('name must be one non-empty line');
     const path = await d.mutations.createNote(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(f.folder ? { folder: f.folder } : {}) });
@@ -411,7 +419,7 @@ export async function attachmentRoutes(target: DrawingTarget, sub: string | unde
     return after();
   }
   if (sub === 'drawings' && tail === undefined && method === 'POST') {
-    const f = safeFolder(str(body['folder']));
+    const f = writeFolder(str(body['folder']));
     if (!f.ok) return bad(f.error);
     if (has(body, 'name') && !str(body['name'])) return bad('name must be one non-empty line');
     const path = await d.mutations.createDrawing(target, { ...(str(body['name']) ? { name: str(body['name'])! } : {}), ...(f.folder ? { folder: f.folder } : {}) });
@@ -585,6 +593,20 @@ function findHabit(ref: string, d: Ctx): Habit | undefined {
 
 const HABIT_STATES = ['done', 'skipped', 'missed', 'pending'] as const;
 
+/**
+ * One validator for a habit's numbers on create and on edit: `graceDays` a whole number ≥ 0,
+ * `targetPerWeek` a whole number 1–7. Absent gives no value; null (clear it) is allowed for the target.
+ */
+function habitNumber(body: Record<string, unknown>, k: 'graceDays' | 'targetPerWeek'): { value?: number | null; error?: string } {
+  if (!has(body, k) || body[k] === undefined) return {};
+  const msg = k === 'graceDays' ? 'graceDays must be a whole number of days, 0 or more' : 'targetPerWeek must be a whole number from 1 to 7, or null';
+  if (body[k] === null) return k === 'targetPerWeek' ? { value: null } : { error: msg };
+  const n = num(body[k]);
+  if (n === undefined || !Number.isInteger(n)) return { error: msg };
+  if (k === 'graceDays' ? n < 0 : n < 1 || n > 7) return { error: msg };
+  return { value: n };
+}
+
 async function habitsRoute(ref: string | undefined, sub: string | undefined, tail: string | undefined, method: string, query: Record<string, string>, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
   const snap = d.index.snapshot;
   if (ref === undefined && method === 'GET') {
@@ -601,7 +623,11 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
     if (parts.some((p) => !HABIT_PARTS.includes(p as HabitPart))) return bad(`parts must be from ${HABIT_PARTS.join(', ')}`);
     const color = str(body['color']);
     if (color && !HABIT_COLORS.includes(color as HabitColor)) return bad(`color must be one of ${HABIT_COLORS.join(', ')}`);
-    const id = await d.mutations.createHabit({ title, schedule, ...(num(body['targetPerWeek']) !== undefined ? { targetPerWeek: num(body['targetPerWeek'])! } : {}), ...(num(body['graceDays']) !== undefined ? { graceDays: num(body['graceDays'])! } : {}), ...(str(body['icon']) ? { icon: str(body['icon'])! } : {}), ...(parts.length ? { parts: parts as HabitPart[] } : {}), ...(color ? { color: color as HabitColor } : {}) });
+    const target = habitNumber(body, 'targetPerWeek');
+    if (target.error) return bad(target.error);
+    const grace = habitNumber(body, 'graceDays');
+    if (grace.error) return bad(grace.error);
+    const id = await d.mutations.createHabit({ title, schedule, ...(target.value != null ? { targetPerWeek: target.value } : {}), ...(grace.value != null ? { graceDays: grace.value } : {}), ...(str(body['icon']) ? { icon: str(body['icon'])! } : {}), ...(parts.length ? { parts: parts as HabitPart[] } : {}), ...(color ? { color: color as HabitColor } : {}) });
     const h = findHabit(id, d);
     return made({ habit: h ? habitJson(h, d) : { id }, written: d.written() });
   }
@@ -625,8 +651,8 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
     if (has(body, 'active')) { if (typeof body['active'] !== 'boolean') return bad('active must be true or false'); fields.active = body['active']; }
     if (has(body, 'schedule')) { const sch = str(body['schedule']); if (!sch || !parseRecurrence(sch).parsed) return bad('schedule must be a rule Helm understands'); fields.schedule = sch; }
     if (str(body['title'])) fields.title = str(body['title'])!;
-    if (has(body, 'targetPerWeek')) { const n = body['targetPerWeek'] === null ? null : num(body['targetPerWeek']); if (n === undefined) return bad('targetPerWeek must be a number or null'); fields.targetPerWeek = n; }
-    if (has(body, 'graceDays')) { const n = num(body['graceDays']); if (n === undefined || n < 0) return bad('graceDays must be a number'); fields.graceDays = n; }
+    if (has(body, 'targetPerWeek')) { const n = habitNumber(body, 'targetPerWeek'); if (n.error) return bad(n.error); fields.targetPerWeek = n.value ?? null; }
+    if (has(body, 'graceDays')) { const n = habitNumber(body, 'graceDays'); if (n.error || n.value == null) return bad(n.error ?? 'graceDays must be a whole number of days, 0 or more'); fields.graceDays = n.value; }
     if (has(body, 'icon')) fields.icon = str(body['icon']) ?? '';
     if (has(body, 'iconImage')) {
       if (body['iconImage'] === null || str(body['iconImage']) === undefined && typeof body['iconImage'] === 'string' && body['iconImage'].trim() === '') fields.iconImage = null;
