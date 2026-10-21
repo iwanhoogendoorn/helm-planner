@@ -6,7 +6,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { VaultAdapter } from './vault';
+import { simpleFrontmatter, type VaultAdapter } from './vault';
 
 const SKIP_DIRS = new Set(['node_modules']);
 
@@ -65,14 +65,21 @@ export class FsVault implements VaultAdapter {
     const full = this.abs(p);
     this.noteWrite(p);
     await fs.promises.mkdir(path.dirname(full), { recursive: true });
-    await fs.promises.writeFile(full, content, 'utf8');
+    await writeAtomic(full, content);
+  }
+
+  async process(p: string, fn: (content: string) => string): Promise<string> {
+    const c = await this.read(p);
+    const next = fn(c);
+    if (next !== c) await this.write(p, next);
+    return next;
   }
 
   async writeBinary(p: string, data: ArrayBuffer): Promise<void> {
     const full = this.abs(p);
     this.noteWrite(p);
     await fs.promises.mkdir(path.dirname(full), { recursive: true });
-    await fs.promises.writeFile(full, Buffer.from(data));
+    await writeAtomic(full, Buffer.from(data));
   }
 
   async readBinary(p: string): Promise<ArrayBuffer> {
@@ -113,14 +120,25 @@ export class FsVault implements VaultAdapter {
     await fs.promises.rename(src, dst);
   }
 
-  /** Simple frontmatter (`key: value` lines), like MemoryVault — enough for the type/id keys Helm looks at before parsing a file properly. */
+  /** Frontmatter as a metadata cache would give it, like MemoryVault — what Helm looks at before parsing a file properly. */
   frontmatter(p: string): Record<string, unknown> | undefined {
     let c: string;
     try { c = fs.readFileSync(this.abs(p), 'utf8'); } catch { return undefined; }
-    if (!c.startsWith('---')) return undefined;
-    const end = c.indexOf('\n---', 3);
-    const out: Record<string, unknown> = {};
-    for (const line of c.slice(4, end === -1 ? undefined : end).split('\n')) { const m = /^([\w-]+):\s*(.*)$/.exec(line); if (m) out[m[1]!] = m[2]!; }
-    return out;
+    return simpleFrontmatter(c);
+  }
+}
+
+/**
+ * Write beside the target and rename over it: a crash or kill half-way leaves the old note, never half
+ * of the new one. The temporary name is hidden, so a listing in between never shows it.
+ */
+async function writeAtomic(full: string, data: string | Buffer): Promise<void> {
+  const tmp = path.join(path.dirname(full), `.${path.basename(full)}.${process.pid}.${Date.now()}.helm-tmp`);
+  try {
+    await fs.promises.writeFile(tmp, data);
+    await fs.promises.rename(tmp, full);
+  } catch (e) {
+    await fs.promises.rm(tmp, { force: true });
+    throw e;
   }
 }

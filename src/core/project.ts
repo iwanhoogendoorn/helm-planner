@@ -8,7 +8,7 @@
 import { linksIn } from './links';
 import type { Diagnostic, Phase, Project, ProjectPriority, ProjectStatus } from './types';
 import { parseDocument, sectionRange, type DocHeading, type Document } from './document';
-import { list, scalar } from './frontmatter';
+import { list, scalar, yamlScalar as quote } from './frontmatter';
 import { slugify } from './ids';
 import { isIsoDate } from './dates';
 import { parsePeriod } from './periods';
@@ -193,7 +193,7 @@ export function renderProjectNote(p: {
   // Who and how also describe a plain project (a song under the music board: whose it is, and what kind).
   if (p.people?.length) fm.push('people:', ...p.people.map((x) => `  - ${quote(x)}`));
   if (p.modes?.length) fm.push('modes:', ...p.modes.map((x) => `  - ${quote(x)}`));
-  fm.push('tags:', '  - project', ...(p.tags ?? []).map((t) => `  - ${t}`));
+  fm.push('tags:', '  - project', ...(p.tags ?? []).map((t) => `  - ${quote(t)}`));
   fm.push('---', '');
   const body: string[] = [`# ${p.title}`, '', '## Objective', '', p.objective ?? 'This project is successful when…', ''];
   // A profiled note explains its own shape, so it still makes sense to someone reading the file
@@ -228,10 +228,6 @@ function howItWorks(profile: string, modes?: string[]): string[] {
     `They are ordinary task lines${modes?.length ? ` (${modes.join(' · ')})` : ''}: tick one here or in Helm, it is the same line.`,
     '',
   ];
-}
-
-function quote(s: string): string {
-  return /[:#\[\]{}&*!|>'"%@`,?]/.test(s) || s.trim() !== s ? `"${s.replace(/"/g, '\\"')}"` : s;
 }
 
 export interface LogEntry { date?: string; text: string; line: number }

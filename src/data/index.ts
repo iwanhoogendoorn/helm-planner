@@ -166,8 +166,31 @@ export class HelmIndex {
     return s.extraFolders.some((f) => f.trim() !== '' && isUnder(path, f.trim()));
   }
 
-  async rebuild(): Promise<void> {
+  /** The rebuild in flight, and whether another was asked for while it ran. */
+  private rebuilding?: Promise<void>;
+  private rebuildAgain = false;
+  /** Files changed (or gone) while a rebuild was reading the vault: newer than what it read, so they win. */
+  private touchedDuringBuild?: Map<string, string | undefined>;
+
+  /**
+   * Read the whole vault again. Calls that overlap share one pass — plus one more after it when asked
+   * during it, so a settings change is never answered with a scan that started before it. Updates that
+   * arrive while it reads are kept: they are newer than what it read.
+   */
+  rebuild(): Promise<void> {
+    if (this.rebuilding) { this.rebuildAgain = true; return this.rebuilding; }
+    const run = async (): Promise<void> => {
+      try {
+        do { this.rebuildAgain = false; await this.rebuildOnce(); } while (this.rebuildAgain);
+      } finally { this.rebuilding = undefined; }
+    };
+    this.rebuilding = run();
+    return this.rebuilding;
+  }
+
+  private async rebuildOnce(): Promise<void> {
     this.building = true;
+    this.touchedDuringBuild = new Map();
     try {
       const all = await this.vault.list();
       // Titles resolve links; an archived or trashed note must never win a title from a live one.
@@ -177,9 +200,13 @@ export class HelmIndex {
       const next = new Map<string, FileEntry>();
       const contents = await Promise.all(paths.map(async (p) => [p, p.endsWith('.md') ? await this.vault.read(p).catch(() => undefined) : ''] as const));
       for (const [p, c] of contents) if (c !== undefined) next.set(p, this.parseFile(p, c));
+      const touched = this.touchedDuringBuild;
+      this.touchedDuringBuild = undefined;
       this.files = next;
+      for (const [p, c] of touched) this.applyOne(p, c);
       this.link();
     } finally {
+      this.touchedDuringBuild = undefined;
       this.building = false;
       this.ready = true;
     }
@@ -240,6 +267,7 @@ export class HelmIndex {
   }
 
   private applyOne(path: string, content: string | undefined): boolean {
+    this.touchedDuringBuild?.set(path, content);
     const known = this.files.get(path);
     if (content === undefined) this.noteGone(path); else this.noteSeen(path);
     if (!this.inScope(path, content) || content === undefined) {
@@ -259,8 +287,12 @@ export class HelmIndex {
     const mtime = this.vault.mtime(path);
     if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
     if (path.endsWith('.md')) entry.preview = notePreview(content);
-    if (contentHasHelmKeys(content)) { const fm = parseDocument(content).frontmatter.values as Record<string, unknown>; entry.noteRef = parseNoteRef(path, fm, mtime); }
-    if (/^type:\s*song\s*$/im.test(content)) entry.song = parseSongNote(path, content);
+    // Parsed once: the frontmatter answers the attachment and song questions, the body everything below.
+    const doc = parseDocument(content);
+    const fm = doc.frontmatter.values as Record<string, unknown>;
+    if (contentHasHelmKeys(content)) entry.noteRef = parseNoteRef(path, fm, mtime);
+    // A song says so in its frontmatter; a `type: song` line in the body is just text.
+    if (isSongFm(fm)) entry.song = parseSongNote(path, fm);
     const date = this.dateOfPath(path);
     const dl = [...content.matchAll(/!?\[\[([^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]/g)].map((m) => m[1]!.trim()).filter((t) => /\.(excalidraw|canvas)$/i.test(t)).map((t) => t.slice(t.lastIndexOf('/') + 1).replace(/\.(excalidraw|canvas)$/i, ''));
     if (dl.length > 0) entry.drawingLinks = [...new Set(dl)];
@@ -271,7 +303,6 @@ export class HelmIndex {
       const h = parseHabit(path, content);
       if (h) { entry.kind = 'habit'; entry.habit = h; return entry; }
     }
-    const doc = parseDocument(content);
     const seen = new Map<string, number>();
     const derived = (text: string): string => { const n = seen.get(text.trim()) ?? 0; seen.set(text.trim(), n + 1); return derivedKey(path, n, text); };
 
@@ -371,7 +402,10 @@ export class HelmIndex {
         const copy: Task = { ...t, childKeys: [] };
         if (tasks.has(copy.key)) {
           diagnostics.push({ severity: 'warning', code: 'HELM-T01', message: `Duplicate task id ${copy.key} (also in ${tasks.get(copy.key)!.path})`, path: f.path, line: t.line });
-          const next = `${copy.key}~${keys.length}`;
+          // The suffix counts within this file, so another file may hold it already: take the next free one.
+          let n = keys.length;
+          while (tasks.has(`${copy.key}~${n}`)) n++;
+          const next = `${copy.key}~${n}`;
           renamed.set(copy.key, next);
           copy.key = next;
         }
@@ -766,8 +800,7 @@ function isSongFm(fm: Record<string, unknown> | undefined): boolean {
 }
 
 /** Read what a song note says about itself. Anything missing is simply not shown. */
-function parseSongNote(path: string, content: string): SongNote {
-  const fm = parseDocument(content).frontmatter.values as Record<string, unknown>;
+function parseSongNote(path: string, fm: Record<string, unknown>): SongNote {
   const one = (k: string): string | undefined => {
     const v = fm[k];
     const raw = Array.isArray(v) ? v[0] : v;

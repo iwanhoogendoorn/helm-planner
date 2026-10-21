@@ -329,7 +329,16 @@ export function writeRegion(content: string, next: RegionContent, settings: Regi
   for (const idx of allIndexes) if (!keptIndexes.has(idx)) removals.add(idx);
 
   for (const [i, text] of replacements) lines[i] = text;
-  for (const i of [...removals].sort((a, b) => b - a)) lines.splice(i, subtreeEnd(lines, i) - i);
+  // A removed line takes its subtree with it — except the lines `next` still holds, which stay (with their own children).
+  const drop = new Set<number>();
+  for (const i of removals) {
+    const end = subtreeEnd(lines, i);
+    for (let j = i; j < end; j++) {
+      if (j !== i && keptIndexes.has(j)) { j = subtreeEnd(lines, j) - 1; continue; }
+      drop.add(j);
+    }
+  }
+  for (const i of [...drop].sort((a, b) => b - a)) lines.splice(i, 1);
 
   // Insert per section, re-scanning after each change.
   for (const sec of SECTION_ORDER) {
@@ -429,7 +438,7 @@ export function removeLines(c: RegionContent, pred: (l: TaskLine, part: DayPart)
     const keep: TaskLine[] = [];
     let subtreeOf: string | undefined; // indent of the line being taken, while its children follow
     for (const l of c[p]) {
-      if (subtreeOf !== undefined && l.raw.indent.length > subtreeOf.length) { removed.push(l); continue; }
+      if (subtreeOf !== undefined && columnWidth(l.raw.indent) > columnWidth(subtreeOf)) { removed.push(l); continue; }
       subtreeOf = undefined;
       if (pred(l, p)) { removed.push(l); subtreeOf = l.raw.indent; } else keep.push(l);
     }

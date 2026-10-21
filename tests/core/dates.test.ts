@@ -60,6 +60,21 @@ describe('recurrence', () => {
     expect(occursOn(parseRecurrence('every 2 days'), '2026-08-26', '2026-08-24')).toBe(true);
     expect(occursOn(parseRecurrence('every 2 days'), '2026-08-27', '2026-08-24')).toBe(false);
   });
+  it('keeps the interval of a Mon–Fri rule (CD-04)', () => {
+    for (const s of ['every 2 weeks on monday, tuesday, wednesday, thursday, friday', 'every 3 weeks on monday, tuesday, wednesday, thursday, friday']) {
+      expect(formatRecurrence(parseRecurrence(s))).toBe(s);
+    }
+    expect(formatRecurrence(parseRecurrence('RRULE:FREQ=WEEKLY;INTERVAL=3;BYDAY=MO,TU,WE,TH,FR'))).toBe('every 3 weeks on monday, tuesday, wednesday, thursday, friday');
+    expect(formatRecurrence(parseRecurrence('every week on monday, tuesday, wednesday, thursday, friday'))).toBe('every weekday');
+  });
+  it('counts calendar weeks for a multi-day rule with an interval (CD-05)', () => {
+    const r = parseRecurrence('every 2 weeks on monday, thursday');
+    const anchor = '2026-01-01'; // a Thursday
+    const hits: string[] = [];
+    for (let d = anchor; d <= '2026-01-31'; d = addDays(d, 1)) if (occursOn(r, d, anchor)) hits.push(d);
+    expect(hits).toEqual(['2026-01-01', '2026-01-12', '2026-01-15', '2026-01-26', '2026-01-29']);
+    expect(nextOccurrence(r, '2026-01-01', anchor)).toBe('2026-01-12');
+  });
 });
 
 describe('quick capture', () => {

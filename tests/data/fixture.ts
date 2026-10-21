@@ -193,3 +193,20 @@ export async function setup(extra: Record<string, string> = {}, settings: Partia
   const m = new Mutations({ vault, index, settings: () => s, today: () => TODAY, now: () => NOW, notify: (x) => notices.push(x), rng });
   return { vault, index, m, notices, settings: s };
 }
+
+/**
+ * Change a file on disk behind the index's back — what the vault-event debounce leaves Helm looking at
+ * for a moment after an edit in the editor. The index keeps its old line numbers until told.
+ */
+export function editBehindIndex(vault: MemoryVault, path: string, fn: (content: string) => string): void {
+  const c = vault.files.get(path);
+  if (c === undefined) throw new Error(`No such file in the fixture: ${path}`);
+  vault.files.set(path, fn(c));
+}
+
+/** The index key of the one task with this text (and origin, when given). */
+export function keyOf(index: HelmIndex, text: string, origin?: string): string {
+  const hits = [...index.snapshot.tasks.values()].filter((t) => t.text === text && (origin === undefined || t.origin === origin));
+  if (hits.length !== 1) throw new Error(`Expected one task "${text}", found ${hits.length}`);
+  return hits[0]!.key;
+}

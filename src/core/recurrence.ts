@@ -86,7 +86,8 @@ export function formatRecurrence(r: Recurrence): string {
   const iv = r.interval ?? 1;
   let s = iv === 1 ? `every ${unit}` : `every ${iv} ${unit}s`;
   if (r.frequency === 'weekly' && r.weekdays && r.weekdays.length > 0) {
-    if (r.weekdays.length === 5 && [1, 2, 3, 4, 5].every((d) => r.weekdays!.includes(d))) s = 'every weekday';
+    // Only a weekly Mon–Fri rule is "every weekday"; with an interval the long form keeps it.
+    if (iv === 1 && r.weekdays.length === 5 && [1, 2, 3, 4, 5].every((d) => r.weekdays!.includes(d))) s = 'every weekday';
     else s += ' on ' + r.weekdays.map((d) => WEEKDAY_NAMES[d - 1]).join(', ');
   }
   if (r.frequency === 'monthly' && r.monthDays && r.monthDays.length > 0) s += ' on the ' + r.monthDays.map(ordinal).join(', ');
@@ -115,7 +116,8 @@ export function occursOn(r: Recurrence, date: IsoDate, anchor?: IsoDate): boolea
       const days = r.weekdays && r.weekdays.length > 0 ? r.weekdays : anchor ? [isoWeekday(anchor)] : [1, 2, 3, 4, 5, 6, 7];
       if (!days.includes(wd)) return false;
       if (iv === 1 || !anchor) return true;
-      const weeks = Math.floor(daysBetween(anchor, date) / 7);
+      // Calendar weeks, Monday to Sunday: a Monday after a Thursday anchor is already the next week.
+      const weeks = Math.floor(daysBetween(addDays(anchor, 1 - isoWeekday(anchor)), addDays(date, 1 - wd)) / 7);
       return weeks >= 0 && weeks % iv === 0;
     }
     case 'monthly': {

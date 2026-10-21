@@ -8,6 +8,8 @@
  * when it was rendered. The placeholders in braces are filled in by Helm with
  * the vault's actual formats before the text is used or written to disk.
  */
+import type { IsoDate } from './types';
+import { addDays, addMonths, formatDate } from './dates';
 import type { PeriodKind } from './periods';
 
 export interface TemplateConfig {
@@ -194,4 +196,70 @@ Previous day: [[<% moment(tp.file.title, '{D}').subtract(1, 'd').format('{D}') %
 
 export function bundledDailyTemplate(cfg: TemplateConfig): string {
   return DAILY_TEMPLATE.replace(/\{D\}/g, cfg.dailyTitleFormat).replace(/\{W\}/g, cfg.formats.week);
+}
+
+/**
+ * Daily-note template rendering: supports the core Daily Notes placeholders
+ * (`{{date}}`, `{{date:FORMAT}}`, `{{title}}`, `{{time}}`) and the common
+ * Templater tags (`<% tp.file.title %>`, `<% tp.date.now("FMT") %>`); any
+ * other `<% … %>` block is removed rather than left as raw code.
+ */
+export function renderDailyTemplate(template: string | undefined, date: IsoDate, title: string): string {
+  if (!template || template.trim() === '') return `---\ntitle: ${title}\ndate: ${date}\n---\n\n# ${title}\n\n`;
+  let out = renderKnownTags(template, date, title);
+  // Script blocks (<%* … %>) need a real Templater; they are dropped here, as is anything else unknown.
+  out = out.replace(/<%\*[\s\S]*?%>/g, '');
+  out = out.replace(/<%[\s\S]*?%>/g, '');
+  return out;
+}
+
+/** Fill in the tags Helm understands and leave the rest for a template engine. */
+export function renderKnownTags(template: string, date: IsoDate, title: string): string {
+  let out = template;
+  out = out.replace(/\{\{\s*date\s*:\s*([^}]+?)\s*\}\}/g, (_, f: string) => formatDate(date, f.trim()));
+  out = out.replace(/\{\{\s*date\s*\}\}/g, date);
+  out = out.replace(/\{\{\s*title\s*\}\}/g, title);
+  out = out.replace(/\{\{\s*time\s*\}\}/g, '');
+  out = out.replace(/<%[-*_]?\s*tp\.file\.title\s*%>/g, title);
+  // moment(tp.file.title, 'FMT').add(1, 'd').subtract(2, 'weeks').format('FMT') — with or without an assignment in front.
+  out = out.replace(/<%[-_]?\s*(?:[\w$]+\s*=\s*)?moment\((?:\s*tp\.file\.title\s*,\s*["'][^"']*["']\s*)?\)((?:\s*\.(?:add|subtract|startOf|endOf)\((?:\s*-?\d+\s*,)?\s*["'][A-Za-z]+["']\s*\))*)\s*\.format\(\s*["']([^"']*)["']\s*\)\s*%>/g, (_, chain: string, fmt: string) => {
+    let d = date;
+    for (const m of chain.matchAll(/\.(add|subtract|startOf|endOf)\((?:\s*(-?\d+)\s*,)?\s*["']([A-Za-z]+)["']\s*\)/g)) {
+      if (m[1] === 'startOf' || m[1] === 'endOf') d = boundaryOf(d, m[3]!, m[1] === 'endOf');
+      else { const n = Number(m[2] ?? 0) * (m[1] === 'subtract' ? -1 : 1); d = shiftDate(d, n, m[3]!); }
+    }
+    return formatDate(d, fmt);
+  });
+  out = out.replace(/<%[-*_]?\s*tp\.date\.now\(\s*["']([^"']*)["']\s*(?:,\s*(-?\d+)\s*)?[^)]*\)\s*%>/g, (_, f: string, off?: string) => formatDate(off ? addDays(date, Number(off)) : date, f));
+  out = out.replace(/<%[-*_]?\s*tp\.date\.tomorrow\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(addDays(date, 1), f));
+  out = out.replace(/<%[-*_]?\s*tp\.date\.yesterday\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(addDays(date, -1), f));
+  out = out.replace(/<%[-*_]?\s*tp\.file\.last_modified_date\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(date, f));
+  out = out.replace(/<%[-*_]?\s*tp\.file\.creation_date\(\s*["']([^"']*)["'][^)]*\)\s*%>/g, (_, f: string) => formatDate(date, f));
+  // Any remaining reference to the title (inside scripts, say) becomes a literal, so Templater cannot get it wrong.
+  out = out.replace(/\btp\.file\.title\b/g, JSON.stringify(title));
+  return out;
+}
+
+function shiftDate(d: IsoDate, n: number, unit: string): IsoDate {
+  const u = unit.toLowerCase();
+  if (u.startsWith('d')) return addDays(d, n);
+  if (u.startsWith('w')) return addDays(d, 7 * n);
+  if (u === 'q' || u.startsWith('quarter')) return addMonths(d, 3 * n);
+  if (u === 'm' || u.startsWith('month')) return addMonths(d, n);
+  if (u.startsWith('y')) return addMonths(d, 12 * n);
+  return d;
+}
+
+/** moment().startOf / endOf for the units the templates use (week = ISO week, Monday first). */
+function boundaryOf(d: IsoDate, unit: string, end: boolean): IsoDate {
+  const u = unit.toLowerCase();
+  const y = Number(d.slice(0, 4));
+  const mo = Number(d.slice(5, 7));
+  const p2 = (n: number): string => String(n).padStart(2, '0');
+  const lastDay = (yy: number, mm: number): string => `${yy}-${p2(mm)}-${p2(new Date(Date.UTC(yy, mm, 0)).getUTCDate())}`;
+  if (u.startsWith('isoweek') || u.startsWith('week')) { const monday = addDays(d, -((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7)); return end ? addDays(monday, 6) : monday; }
+  if (u.startsWith('month')) return end ? lastDay(y, mo) : `${y}-${p2(mo)}-01`;
+  if (u.startsWith('quarter')) { const q0 = Math.floor((mo - 1) / 3) * 3 + 1; return end ? lastDay(y, q0 + 2) : `${y}-${p2(q0)}-01`; }
+  if (u.startsWith('year')) return end ? `${y}-12-31` : `${y}-01-01`;
+  return d;
 }

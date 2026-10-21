@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -80,5 +80,35 @@ describe('FsVault', () => {
     expect(vault.rel(join(root, '..', 'x.md'))).toBeUndefined();
     expect(FsVault.visible('.obsidian/app.json')).toBe(false);
     expect(FsVault.visible('02 PROJECTS/Kitchen/Kitchen.md')).toBe(true);
+  });
+});
+
+describe('FsVault writes (CD-20)', () => {
+  it('leaves the old note whole when a write dies half-way', async () => {
+    const fsMod = await import('node:fs');
+    const real = fsMod.promises.writeFile.bind(fsMod.promises);
+    const spy = vi.spyOn(fsMod.promises, 'writeFile').mockImplementation(async (file, data) => {
+      const s = String(data);
+      await real(file as string, s.slice(0, Math.floor(s.length / 2)));
+      throw new Error('killed');
+    });
+    try {
+      await expect(vault.write('01 INBOX/Inbox.md', '# Inbox\n\n- [ ] Call the plumber\n- [ ] Pay the plumber\n')).rejects.toThrow('killed');
+    } finally { spy.mockRestore(); }
+    expect(readFileSync(join(root, '01 INBOX/Inbox.md'), 'utf8')).toBe('# Inbox\n\n- [ ] Call the plumber\n');
+    expect(await vault.list()).toEqual(['01 INBOX/Inbox.md', '02 PROJECTS/Kitchen/Kitchen.md']); // no temporary file left visible
+  });
+
+  it('process transforms the current content and writes only on a change', async () => {
+    vault.takeWrites();
+    expect(await vault.process('01 INBOX/Inbox.md', (c) => c)).toBe('# Inbox\n\n- [ ] Call the plumber\n');
+    expect(vault.takeWrites()).toEqual([]);
+    await vault.process('01 INBOX/Inbox.md', (c) => c.replace('[ ]', '[x]'));
+    expect(readFileSync(join(root, '01 INBOX/Inbox.md'), 'utf8')).toBe('# Inbox\n\n- [x] Call the plumber\n');
+  });
+
+  it('reads frontmatter lists as lists, like Obsidian (CD-21)', () => {
+    writeFileSync(join(root, 'n.md'), '---\nhelm-tasks:\n  - tsk-1\ntitle: x\n---\n');
+    expect(vault.frontmatter('n.md')).toEqual({ 'helm-tasks': ['tsk-1'], title: 'x' });
   });
 });

@@ -165,3 +165,19 @@ describe('asking Claude to spread a week', () => {
     expect(p.answer.days['2026-09-05']).toEqual(['b', 'd']);
   });
 });
+
+describe('an answer in the wrong shape (CD-16)', () => {
+  it('says so plainly instead of throwing a JavaScript error', () => {
+    for (const raw of ['{"order":"a"}', '{"order":["a"],"defer":{"key":"a"}}', '{"order":["a"],"notes":{"a":5}}', '{"order":[1]}', '{"order":["a"],"minutes":[]}']) {
+      expect(() => parseAnswer(raw, REQ), raw).toThrow('Claude answered in an unexpected shape');
+    }
+    for (const raw of ['{"days":[]}', '{"days":{},"defer":"a"}', '{"days":{},"notes":{"a":[]}}']) {
+      expect(() => parseWeekAnswer(raw, WEEK), raw).toThrow('Claude answered in an unexpected shape');
+    }
+  });
+  it('falls back to Helm with that message', async () => {
+    const p = await proposePlan(REQ, async () => '{"order":"a"}');
+    expect(p.source).toBe('helm');
+    expect(p.error).toBe('Claude answered in an unexpected shape');
+  });
+});

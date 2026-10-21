@@ -10,6 +10,12 @@ function inside(path: string): string {
   return p;
 }
 
+/** The same check for the lookups that answer rather than throw: an unsafe path is simply not there. */
+function safe(path: string): string | undefined {
+  const p = normalizePath(path);
+  return isSafeVaultPath(p) ? p : undefined;
+}
+
 export class ObsidianVault implements VaultAdapter {
   constructor(private app: App) {}
 
@@ -45,6 +51,16 @@ export class ObsidianVault implements VaultAdapter {
     await this.app.vault.create(p, content);
   }
 
+  async process(path: string, fn: (content: string) => string): Promise<string> {
+    const p = inside(path);
+    const f = this.app.vault.getAbstractFileByPath(p);
+    if (!(f instanceof TFile)) throw new Error(`Not in the vault: ${path}`);
+    let changed = false;
+    const out = await this.app.vault.process(f, (data) => { const next = fn(data); changed = next !== data; return next; });
+    if (changed) this.noteWrite(p);
+    return out;
+  }
+
   async createFolder(path: string): Promise<void> { await this.mkdirp(inside(path)); }
 
   private async mkdirp(folder: string): Promise<void> {
@@ -59,11 +75,14 @@ export class ObsidianVault implements VaultAdapter {
   }
 
   async exists(path: string): Promise<boolean> {
-    return this.app.vault.getAbstractFileByPath(normalizePath(path)) !== null || this.app.vault.adapter.exists(normalizePath(path));
+    const p = safe(path);
+    if (p === undefined) return false;
+    return this.app.vault.getAbstractFileByPath(p) !== null || this.app.vault.adapter.exists(p);
   }
 
   mtime(path: string): number | undefined {
-    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    const p = safe(path);
+    const f = p === undefined ? null : this.app.vault.getAbstractFileByPath(p);
     return f instanceof TFile ? f.stat.mtime : undefined;
   }
 
@@ -85,14 +104,16 @@ export class ObsidianVault implements VaultAdapter {
   }
 
   frontmatter(path: string): Record<string, unknown> | undefined {
-    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    const p = safe(path);
+    const f = p === undefined ? null : this.app.vault.getAbstractFileByPath(p);
     if (!(f instanceof TFile)) return undefined;
     const mc = this.app.metadataCache as unknown as { getFileCache?: (f: TFile) => { frontmatter?: Record<string, unknown> } | null };
     return mc.getFileCache?.(f)?.frontmatter ?? undefined;
   }
 
   resourceUrl(path: string): string | undefined {
-    const f = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    const p = safe(path);
+    const f = p === undefined ? null : this.app.vault.getAbstractFileByPath(p);
     return f instanceof TFile ? this.app.vault.getResourcePath(f) : undefined;
   }
 
