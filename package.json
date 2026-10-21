@@ -7,10 +7,10 @@
   "private": true,
   "scripts": {
     "dev": "node esbuild.config.mjs dev",
-    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit --skipLibCheck",
+    "typecheck": "tsc --noEmit",
     "seed": "node scripts/run.mjs scripts/seed-vault.ts",
     "serve:dev": "node scripts/run.mjs scripts/serve-dev.ts",
     "install:vault": "node scripts/install.mjs"
