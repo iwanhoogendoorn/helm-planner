@@ -129,17 +129,23 @@ function pickRange(ctx: UiContext, col: HTMLElement, date: IsoDate, from: number
   };
   const clear = (): void => { band?.remove(); band = undefined; anchorMin = undefined; };
 
-  col.addEventListener('mousedown', (ev) => {
+  // Pointer events, so a finger works as well as a mouse: a tap opens Capture at that slot, and a mouse
+  // or pen can drag out a stretch. A touch that turns into a scroll is cancelled by the browser, and
+  // that clears the band rather than creating anything.
+  col.addEventListener('pointerdown', (ev) => {
     if ((ev.target as HTMLElement).closest('.helm-cal-event')) return;   // that is a box being dragged
     if (ev.button !== 0) return;
     anchorMin = minutesAt(ev.clientY);
+    if (ev.pointerType !== 'touch' && ev.pointerId !== undefined && typeof col.setPointerCapture === 'function') {
+      try { col.setPointerCapture(ev.pointerId); } catch { /* not an active pointer (synthetic events) */ }
+    }
   });
-  col.addEventListener('mousemove', (ev) => {
+  col.addEventListener('pointermove', (ev) => {
     if (anchorMin === undefined) return;
     const now = minutesAt(ev.clientY);
     if (now !== anchorMin) draw(anchorMin, now);
   });
-  const finish = (ev: MouseEvent): void => {
+  const finish = (ev: PointerEvent): void => {
     if (anchorMin === undefined) return;
     const other = minutesAt(ev.clientY);
     const start = Math.min(anchorMin, other);
@@ -149,8 +155,9 @@ function pickRange(ctx: UiContext, col: HTMLElement, date: IsoDate, from: number
     const minutes = length >= 15 ? length : settings.defaultEffortMinutes;
     openCapture(ctx, { date, time: { start: toHhmm(start), end: toHhmm(Math.min(start + minutes, 24 * 60 - 1)) } });
   };
-  col.addEventListener('mouseup', finish);
-  col.addEventListener('mouseleave', () => clear());
+  col.addEventListener('pointerup', finish);
+  col.addEventListener('pointercancel', () => clear());
+  col.addEventListener('pointerleave', () => clear());
 }
 
 /** A day, three days, a week: hours down the side, days across the top, boxes where the time is. */

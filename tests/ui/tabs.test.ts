@@ -1106,20 +1106,33 @@ describe('Calendar view', () => {
     const at = (y: number, type: string): MouseEvent => { const ev = new MouseEvent(type, { bubbles: true, button: 0 }); Object.defineProperty(ev, 'clientY', { value: y }); return ev; };
 
     // A click: one estimate's worth, starting at the slot clicked — nine hours down is 09:00.
-    col.dispatchEvent(at(9 * 56, 'mousedown'));
-    col.dispatchEvent(at(9 * 56, 'mouseup'));
+    col.dispatchEvent(at(9 * 56, 'pointerdown'));
+    col.dispatchEvent(at(9 * 56, 'pointerup'));
     const one = Modal.last!;
     const times = (m: typeof one): string[] => [...m.contentEl.querySelectorAll<HTMLInputElement>('input[type="time"]')].map((i) => i.value);
     expect(times(one)).toEqual(['09:00', `09:${String(ctx.settings().defaultEffortMinutes).padStart(2, '0')}`]);
     one.close();
 
     // A drag: exactly what was dragged over, snapped to the quarter — 09:00 to 10:30.
-    col.dispatchEvent(at(9 * 56, 'mousedown'));
-    col.dispatchEvent(at(9 * 56 + 84, 'mousemove'));
+    col.dispatchEvent(at(9 * 56, 'pointerdown'));
+    col.dispatchEvent(at(9 * 56 + 84, 'pointermove'));
     expect(root.querySelector('.helm-cal-band')!.textContent).toBe('09:00–10:30');
-    col.dispatchEvent(at(9 * 56 + 84, 'mouseup'));
+    col.dispatchEvent(at(9 * 56 + 84, 'pointerup'));
     expect(times(Modal.last!)).toEqual(['09:00', '10:30']);
     expect(root.querySelector('.helm-cal-band')).toBeNull();          // the band goes with it
+    Modal.last!.close();
+
+    // F12 · a finger: a tap opens Capture too, and a touch the browser turns into a scroll creates nothing.
+    const touch = (y: number, type: string): MouseEvent => { const ev = at(y, type); Object.defineProperty(ev, 'pointerType', { value: 'touch' }); return ev; };
+    Modal.last = undefined;
+    col.dispatchEvent(touch(14 * 56, 'pointerdown'));
+    col.dispatchEvent(touch(14 * 56 + 40, 'pointermove'));
+    col.dispatchEvent(touch(14 * 56 + 40, 'pointercancel'));
+    expect(Modal.last).toBeUndefined();
+    expect(root.querySelector('.helm-cal-band')).toBeNull();
+    col.dispatchEvent(touch(14 * 56, 'pointerdown'));
+    col.dispatchEvent(touch(14 * 56, 'pointerup'));
+    expect(times(Modal.last!)[0]).toBe('14:00');
   });
 
   it('drops a task onto a day of the grid, at the hour it landed on', async () => {
