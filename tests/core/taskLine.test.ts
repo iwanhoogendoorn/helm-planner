@@ -142,3 +142,10 @@ describe('a click on the checkbox', () => {
     expect(clickedStatus('done', true)).toBe('todo');
   });
 });
+
+describe('dead code stays gone (CD-17)', () => {
+  it('no longer exports displayText, an identity rewrite with no callers', async () => {
+    const mod = await import('../../src/core/taskLine');
+    expect('displayText' in mod).toBe(false);
+  });
+});

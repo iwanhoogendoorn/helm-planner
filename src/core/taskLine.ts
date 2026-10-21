@@ -108,7 +108,7 @@ export function parseTaskLine(line: string): TaskLine | undefined {
 
   for (const c of candidates) {
     const after = body.slice(c.index + c.symbol.length);
-    const tok = readValue(c.symbol, after, body, c.index);
+    const tok = readValue(c.symbol, after, c.index);
     if (tok) tokens.push(tok);
   }
   // Recurrence values run until the next usable token: trim them now that we know all tokens.
@@ -211,7 +211,7 @@ function pushUnknown(list: UnknownToken[], raw: string, offset: number): void {
   list.push({ raw: trimmed, offset: offset + lead });
 }
 
-function readValue(symbol: string, after: string, body: string, index: number): Token | undefined {
+function readValue(symbol: string, after: string, index: number): Token | undefined {
   const start = index;
   const mk = (value: string, consumed: number): Token => ({ symbol, value, start, end: index + symbol.length + consumed });
   switch (symbol) {
@@ -254,7 +254,6 @@ function readValue(symbol: string, after: string, body: string, index: number): 
       }
       return undefined;
   }
-  void body;
 }
 
 export interface SerialiseOptions {
@@ -329,10 +328,6 @@ export function withStatus(t: TaskLine, status: TaskStatus, today: IsoDate): Tas
   if (status === 'done') next.done = today;
   if (status === 'cancelled') next.cancelled = today;
   return next;
-}
-
-export function displayText(t: TaskLine): string {
-  return t.text.replace(/\s*#[\p{L}\p{N}_\-/]+/gu, (s) => s).trim();
 }
 
 export type { TimeBlock };
