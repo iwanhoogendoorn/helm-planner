@@ -61,7 +61,29 @@ export const day = (v: unknown): IsoDate | undefined => { const s = str(v); retu
 export const has = (body: Record<string, unknown>, k: string): boolean => Object.prototype.hasOwnProperty.call(body, k);
 /** A real clock time, `HH:MM`. */
 export const isHhmm = (v: unknown): boolean => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
-export const strList = (v: unknown): string[] => (Array.isArray(v) ? (v as unknown[]).map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean) : []);
+/** Thrown by a validator deep inside a route; `handle` turns it into a 400 before anything is written. */
+export class BadInput extends Error {}
+const CONTROL = /[\u0000-\u001f\u007f]/;
+/**
+ * The non-empty strings in a list, trimmed. A control character in any item refuses the whole request
+ * (the same rule as `str`): a newline in a tag or a task line would forge a frontmatter key or a task.
+ */
+export const strList = (v: unknown, field = 'list'): string[] => {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const x of v as unknown[]) {
+    if (typeof x !== 'string') continue;
+    if (CONTROL.test(x)) throw new BadInput(`${field} must not contain line breaks or control characters`);
+    if (x.trim() !== '') out.push(x.trim());
+  }
+  return out;
+};
+/** Tags as Obsidian reads them: letters, digits, `_`, `-` and `/`, with an optional leading `#` dropped. */
+export const tagList = (v: unknown, field = 'tags'): string[] => {
+  const tags = strList(v, field).map((x) => x.replace(/^#/, ''));
+  if (tags.some((t) => !/^[\p{L}\p{N}_\-/]+$/u.test(t))) throw new BadInput(`${field} must be single words (letters, digits, _, - and /)`);
+  return tags;
+};
 
 /**
  * A profiled project's items the way its board sees them: the task in a group (phase), the note it
@@ -123,6 +145,15 @@ export function findTask(ref: string, d: Ctx): Task | undefined {
 }
 
 export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiResponse> {
+  try {
+    return await route(req, deps);
+  } catch (e) {
+    if (e instanceof BadInput) return bad(e.message);
+    throw e;
+  }
+}
+
+async function route(req: ApiRequest, deps: ApiDeps): Promise<ApiResponse> {
   const d = ctxOf(deps);
   const parts = req.path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
   const [head, ref, sub] = parts;
@@ -172,7 +203,7 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
     if (ref !== undefined && sub === 'steps' && method === 'POST') {
       const parent = findTask(ref, d);
       if (!parent) return missing(`No task ${ref}`);
-      const steps = Array.isArray(body['steps']) ? (body['steps'] as unknown[]).map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean) : [];
+      const steps = strList(body['steps'], 'steps');
       if (!steps.length) return bad('steps must be a list of texts');
       const made2 = await d.mutations.addSteps(parent.key, steps, num(body['effortMinutes']));
       return made({ tasks: made2.map((t) => taskJson(t, d)), written: d.written() });
@@ -234,7 +265,7 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
         if (!mode) return bad('Every assignment needs a mode');
         if (profile.modes.length && !profile.modes.some((m) => m.toLowerCase() === mode.toLowerCase())) return bad(`mode must be one of ${profile.modes.join(', ')}`);
         const person = str(a['person']);
-        const steps = Array.isArray(a['steps']) ? (a['steps'] as unknown[]).map((x) => (typeof x === 'string' ? x : '')).filter(Boolean) : [];
+        const steps = strList(a['steps'], 'steps');
         assignments.push({ ...(person ? { person } : {}), mode: profile.modes.find((m) => m.toLowerCase() === mode.toLowerCase()) ?? mode, ...(steps.length ? { steps } : {}) });
       }
       const eff = num(body['stepEffortMinutes']);
@@ -255,7 +286,7 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       const title = str(body['title']);
       if (!title) return bad('A phase needs a title');
       if (body['due'] !== undefined && body['due'] !== null && !day(body['due'])) return bad('due must be a date like 2026-09-30');
-      const tasks = strList(body['tasks']);
+      const tasks = strList(body['tasks'], 'tasks');
       if (tasks.length === 0) {
         await d.mutations.addPhase(p.id, title, day(body['due']));
         const after = d.index.project(p.id);
@@ -290,7 +321,7 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
       return ok({ phase: { id: ph.id, slug: ph.slug, title: ph.title }, links: d.index.project(p.id)?.phases.find((x) => x.id === ph.id)?.links ?? [], written: d.written() });
     }
     if (method === 'POST' && ref === 'reorder' && sub === undefined) {
-      const ids = strList(body['ids']);
+      const ids = strList(body['ids'], 'ids');
       if (!ids.length) return bad('ids must be a list of project ids');
       const unknown = ids.filter((id) => !d.index.project(id));
       if (unknown.length) return missing(`No project ${unknown[0]}`);
@@ -399,7 +430,7 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
         const title = str(ph['title']);
         if (!title) return bad('Every phase needs a title');
         if (ph['due'] !== undefined && ph['due'] !== null && !day(ph['due'])) return bad('A phase due must be a date like 2026-09-30');
-        phases.push({ title, ...(day(ph['due']) ? { due: day(ph['due'])! } : {}), ...(strList(ph['tasks']).length ? { tasks: strList(ph['tasks']) } : {}) });
+        phases.push({ title, ...(day(ph['due']) ? { due: day(ph['due'])! } : {}), ...(strList(ph['tasks'], 'tasks').length ? { tasks: strList(ph['tasks'], 'tasks') } : {}) });
       }
       const p = await d.mutations.createProject({
         title,
@@ -408,17 +439,17 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
         ...(str(body['area']) ? { area: str(body['area'])! } : {}),
         ...(str(body['parentId']) ? { parentId: str(body['parentId'])! } : {}),
         ...(str(body['profile']) ? { profile: str(body['profile'])! } : {}),
-        ...(Array.isArray(body['people']) ? { people: (body['people'] as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim() !== '') } : {}),
-        ...(Array.isArray(body['modes']) ? { modes: (body['modes'] as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim() !== '') } : {}),
+        ...(Array.isArray(body['people']) ? { people: strList(body['people'], 'people') } : {}),
+        ...(Array.isArray(body['modes']) ? { modes: strList(body['modes'], 'modes') } : {}),
         ...(str(body['period']) ? { period: str(body['period'])! } : {}),
         ...(day(body['start']) ? { start: day(body['start'])! } : {}),
         ...(day(body['due']) ? { due: day(body['due'])! } : {}),
         ...(str(body['goal']) ? { goal: findGoal(str(body['goal'])!, d)?.id ?? str(body['goal'])! } : {}),
-        ...(strList(body['tags']).length ? { tags: strList(body['tags']).map((x) => x.replace(/^#/, '')) } : {}),
+        ...(tagList(body['tags']).length ? { tags: tagList(body['tags']) } : {}),
         ...(str(body['objective']) ? { objective: str(body['objective'])! } : {}),
-        ...(strList(body['notes']).length ? { notes: strList(body['notes']) } : {}),
+        ...(strList(body['notes'], 'notes').length ? { notes: strList(body['notes'], 'notes') } : {}),
         ...(phases.length ? { phases } : {}),
-        ...(strList(body['tasks']).length ? { tasks: strList(body['tasks']) } : {}),
+        ...(strList(body['tasks'], 'tasks').length ? { tasks: strList(body['tasks'], 'tasks') } : {}),
       });
       return made({ project: projectJson(p, d, { health: true }), written: d.written() });
     }
@@ -569,7 +600,7 @@ const BULK_ACTIONS = ['schedule', 'part', 'status', 'move', 'delete'] as const;
 
 /** `POST /tasks/bulk`: one action over many refs, the way the selection bar does it. */
 async function bulkTasks(body: Record<string, unknown>, d: Ctx): Promise<ApiResponse> {
-  const refs = strList(body['refs']);
+  const refs = strList(body['refs'], 'refs');
   if (!refs.length) return bad('refs must be a list of task refs');
   if (refs.length > 500) return bad('At most 500 refs at a time');
   const action = str(body['action']);

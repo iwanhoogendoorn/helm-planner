@@ -5,7 +5,7 @@
  * routes.ts turns that into a 404 or 405.
  */
 import type { ApiRequest, ApiResponse } from './routes';
-import { asRecord, bad, day, findTask, has, isHhmm, made, missing, notAllowed, num, ok, PARTS, str, strList } from './routes';
+import { asRecord, bad, day, findTask, has, isHhmm, made, missing, notAllowed, num, ok, PARTS, str, strList, tagList } from './routes';
 import { candidateJson, dayItemJson, daybookJson, goalJson, habitJson, horizonPeriodJson, layoutJson, periodJson, refOf, taskJson, type Ctx } from './json';
 import { addDays, diffDays, isIsoDate } from '../core/dates';
 import type { DayPart } from '../core/dailyNote';
@@ -115,7 +115,7 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     }
     if (sub === 'fit' && sub2 === undefined && method === 'POST') {
       const { req: preq, tasks, items } = planRequestFor(d.index.snapshot, date, d.settings());
-      const only = strList(body['refs']);
+      const only = strList(body['refs'], 'refs');
       if (only.length) {
         const keys = new Set<string>();
         for (const r of only) { const t = findTask(r, d); if (!t) return missing(`No task ${r}`); keys.add(t.key); if (t.mirrorOf) keys.add(t.mirrorOf); }
@@ -554,7 +554,7 @@ async function captureRoute(body: Record<string, unknown>, d: Ctx, write: boolea
   }
   let finalText = c.text;
   const tags = new Set(c.tags);
-  for (const tag of strList(body['tags']).map((x) => x.replace(/^#/, ''))) { if (!tags.has(tag)) { finalText = `${finalText} #${tag}`; tags.add(tag); } }
+  for (const tag of tagList(body['tags'])) { if (!tags.has(tag)) { finalText = `${finalText} #${tag}`; tags.add(tag); } }
   const fields = captureFields(c, effort, time);
   const dest = captureDestination({ ...(project ? { project } : {}), ...(phaseId ? { phaseId } : {}), ...(date ? { date } : {}), ...(part ? { part } : {}), ...(time ? { time } : {}), settings: s });
   const parsed = {
@@ -597,7 +597,7 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
     const schedule = str(body['schedule']);
     if (!title) return bad('A habit needs a title');
     if (!schedule || !parseRecurrence(schedule).parsed) return bad('schedule must be a rule Helm understands, like "every weekday" or "every week on monday, thursday"');
-    const parts = strList(body['parts']);
+    const parts = strList(body['parts'], 'parts');
     if (parts.some((p) => !HABIT_PARTS.includes(p as HabitPart))) return bad(`parts must be from ${HABIT_PARTS.join(', ')}`);
     const color = str(body['color']);
     if (color && !HABIT_COLORS.includes(color as HabitColor)) return bad(`color must be one of ${HABIT_COLORS.join(', ')}`);
@@ -636,7 +636,7 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
         fields.iconImage = img;
       }
     }
-    if (has(body, 'parts')) { const parts = strList(body['parts']); if (parts.some((p) => !HABIT_PARTS.includes(p as HabitPart))) return bad(`parts must be from ${HABIT_PARTS.join(', ')}`); fields.parts = parts as HabitPart[]; }
+    if (has(body, 'parts')) { const parts = strList(body['parts'], 'parts'); if (parts.some((p) => !HABIT_PARTS.includes(p as HabitPart))) return bad(`parts must be from ${HABIT_PARTS.join(', ')}`); fields.parts = parts as HabitPart[]; }
     if (has(body, 'color')) { const c = body['color'] === null ? null : str(body['color']); if (c && !HABIT_COLORS.includes(c as HabitColor)) return bad(`color must be one of ${HABIT_COLORS.join(', ')}`); fields.color = (c ?? null) as HabitColor | null; }
     if (Object.keys(fields).length === 0) return bad('Nothing to change');
     await d.mutations.setHabitFields(h.id, fields);
@@ -742,7 +742,7 @@ async function planDay(date: IsoDate, body: Record<string, unknown>, d: Ctx): Pr
     if (part && !PARTS.includes(part as DayPart)) return bad(`part must be one of ${PARTS.join(', ')}`);
     items.push({ key: t.key, ...(part ? { part: part as DayPart } : {}) });
   }
-  const removeRefs = Array.isArray(body['remove']) ? (body['remove'] as unknown[]).map((x) => (typeof x === 'string' ? x : '')).filter(Boolean) : [];
+  const removeRefs = strList(body['remove'], 'remove');
   const remove: Task[] = [];
   for (const ref of removeRefs) { const t = findTask(ref, d); if (!t) return missing(`No task ${ref}`); remove.push(t); }
   if (items.length === 0 && remove.length === 0 && body['habits'] !== true) return bad('Nothing to plan: send items, remove, or habits: true');
