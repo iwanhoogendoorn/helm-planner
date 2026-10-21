@@ -11,10 +11,10 @@ import { splitFocus } from '../core/pomodoro';
 import { button, h, icon, iconButton } from './dom';
 import type { UiContext } from './context';
 import { plainLabel } from '../core/label';
+import { onDispose } from './lifecycle';
 
 let current: TimerState | undefined;
 let announced = false;
-let ticking: number | undefined;
 
 export const runningTimer = (): TimerState | undefined => current;
 
@@ -58,9 +58,10 @@ export function timerBar(ctx: UiContext): HTMLElement | null {
     ctx.notify(t.kind === 'focus' ? `${t.label} — time is up.` : 'Break over.');
   }
 
+  const clockEl = h('span', { cls: 'helm-timer-clock', attr: { role: 'timer', 'aria-label': 'Time left' }, text: clock(left) });
   const bar = h('div', { cls: ['helm-timer-bar', `is-${t.kind}`, done && 'is-done'] },
     icon(t.kind === 'focus' ? 'timer' : 'coffee'),
-    h('span', { cls: 'helm-timer-clock', text: clock(left) }),
+    clockEl,
     h('span', { cls: 'helm-timer-label', text: done ? `${t.label} — time is up` : t.label }),
     h('span', { cls: 'helm-spacer' }),
     done
@@ -77,16 +78,18 @@ export function timerBar(ctx: UiContext): HTMLElement | null {
         ),
   );
 
-  // One tick a second while it runs; nothing while it is paused or finished.
-  if (ticking !== undefined) { window.clearInterval(ticking); ticking = undefined; }
+  // One tick a second while it runs; nothing while it is paused or finished. Each bar ticks its own clock
+  // (a popout window or a second Helm leaf has its own), and the tick belongs to the render that drew
+  // the bar: the view stops it before it redraws and when it closes. A bar that has left the document
+  // without that (drawn outside a view) stops itself on its next tick.
   if (!done && !isPaused(t)) {
-    ticking = window.setInterval(() => {
-      const el = document.querySelector<HTMLElement>('.helm-timer-clock');
-      if (!el || !current) { window.clearInterval(ticking); ticking = undefined; return; }
+    const ticking = window.setInterval(() => {
+      if (!clockEl.isConnected || !current) { window.clearInterval(ticking); return; }
       const secs = remaining(current, Date.now());
-      el.setText(clock(secs));
+      clockEl.setText(clock(secs));
       if (secs === 0) ctx.refresh();          // finished: redraw for the “what next” buttons
     }, 1000);
+    onDispose(() => window.clearInterval(ticking));
   }
   return bar;
 }

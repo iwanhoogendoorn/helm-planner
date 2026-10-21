@@ -96,7 +96,7 @@ function renderList(ctx: UiContext, root: HTMLElement, state: ProjectsState): vo
   const settings = ctx.settings();
   const snap = ctx.index.snapshot;
   const all = ctx.index.allProjects().map((p) => projectHealth(snap, p, today, settings)).sort(compareProjects);
-  const filter = h('input', { attr: { type: 'search', placeholder: 'Filter projects…', value: state.filter }, onInput: (ev) => { state.filter = (ev.target as HTMLInputElement).value; ctx.refresh(); } });
+  const filter = h('input', { attr: { type: 'search', placeholder: 'Filter projects…', 'aria-label': 'Filter projects', value: state.filter, 'data-focus-key': 'projects-filter' }, onInput: (ev) => { state.filter = (ev.target as HTMLInputElement).value; ctx.refresh(); } });
   const q = state.filter.trim().toLowerCase();
   const statusFilter: StatusFilter = state.statusFilter ?? (state.showClosed ? 'all' : 'open');
   const matching = all.filter((hh) => !q || `${hh.project.title} ${hh.project.area ?? ''} ${hh.project.tags.join(' ')}`.toLowerCase().includes(q));
@@ -423,7 +423,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
 
   for (const pp of hh.phaseProgress) {
     const ph = pp.phase;
-    const input = quickAdd(ctx, `Add to ${ph.title}…`, (text) => addQuick(ctx, text, p.id, ph.id));
+    const input = quickAdd(ctx, `Add to ${ph.title}…`, (text) => addQuick(ctx, text, p.id, ph.id), 'plus', `quickadd:${ph.id}`);
     root.appendChild(section(ph.title, {
       count: `${pp.done}/${pp.total}`, store: state.collapsed, key: `phase:${ph.id}`, collapsed: pp.state === 'done', cls: `phase-${pp.state}`,
       actions: [
@@ -791,7 +791,7 @@ function renderBoard(ctx: UiContext, root: HTMLElement, p: Project, hh: ProjectH
         col.due ? chip(`target ${humanDate(col.due, today)}`, col.due < today ? 'due is-overdue' : 'due') : null,
       ),
       cards,
-      quickAdd(ctx, 'Add…', (text) => addQuick(ctx, text, p.id, col.id)),
+      quickAdd(ctx, 'Add…', (text) => addQuick(ctx, text, p.id, col.id), 'plus', `quickadd:board:${col.id}`),
     );
     column.addEventListener('dragover', (ev) => { if (ev.dataTransfer?.types.includes('text/helm-task')) { ev.preventDefault(); column.addClass('is-dropping'); } });
     column.addEventListener('dragleave', () => column.removeClass('is-dropping'));
@@ -875,14 +875,14 @@ function renderTimeline(ctx: UiContext, root: HTMLElement, p: Project, hh: Proje
   root.appendChild(h('div', { cls: 'helm-hint', text: 'A bar runs from the earliest to the latest date in that phase; a number is how many of its tasks fall in that week.' }));
 }
 
-function quickAdd(ctx: UiContext, placeholder: string, onSubmit: (text: string) => void, iconName = 'plus'): HTMLElement {
-  const input = h('input', { cls: 'helm-quickadd-input', attr: { type: 'text', placeholder } });
+/** A one-line add box. It keeps focus across the re-render its own submit causes, so tasks can be added one after another. */
+function quickAdd(ctx: UiContext, placeholder: string, onSubmit: (text: string) => void, iconName = 'plus', focusKey = `quickadd:${placeholder}`): HTMLElement {
+  const input = h('input', { cls: 'helm-quickadd-input', attr: { type: 'text', placeholder, 'aria-label': placeholder, 'data-focus-key': focusKey } });
   wikilinkSuggest(ctx, input);
   input.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && input.value.trim() !== '') { const v = input.value; input.value = ''; onSubmit(v); }
     if (ev.key === 'Escape') input.blur();
   });
-  void ctx;
   return h('div', { cls: 'helm-quickadd' }, icon(iconName), input);
 }
 

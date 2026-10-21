@@ -1,4 +1,5 @@
 /** Hand-rolled SVG charts. No dependencies, theme colours from CSS variables. */
+import { onDispose } from './lifecycle';
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -28,8 +29,16 @@ export function responsive(draw: (width: number) => SVGSVGElement, minHeight = 0
   paint();
   if (typeof ResizeObserver !== 'undefined') {
     let raf = 0;
-    const ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); });
+    const stop = (): void => { ro.disconnect(); cancelAnimationFrame(raf); };
+    // A chart thrown away by a re-render stops observing: through the view's clean-up when it has one,
+    // and in any case the first time it is resized while no longer in the document.
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      if (!wrap.isConnected) { stop(); return; }
+      raf = requestAnimationFrame(() => { if (wrap.isConnected) paint(); });
+    });
     ro.observe(wrap);
+    onDispose(stop);
   }
   return wrap;
 }

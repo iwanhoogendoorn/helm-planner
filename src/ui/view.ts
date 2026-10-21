@@ -14,6 +14,7 @@ import { renderDashboard, type DashboardState, defaultDashboardState } from './t
 import { renderHabits, type HabitsState, defaultHabitsState } from './tabs/habits';
 import { openCapture } from './modals/capture';
 import { openSearch } from './modals/search';
+import { collecting, Disposers, rememberFocus, restoreFocus } from './lifecycle';
 
 export const VIEW_TYPE = 'helm-view';
 
@@ -44,6 +45,15 @@ export class HelmView extends ItemView {
   private tabBar!: HTMLElement;
   private scrollTop = new Map<string, number>();
   private scheduled = false;
+  /** The queued paint, cancelled on close so nothing renders into a closed leaf. */
+  private frame = 0;
+  private closed = false;
+  /** A render was asked for while the leaf was hidden; it is done when the leaf shows again. */
+  private stale = false;
+  /** What the last render started (timer ticks, chart observers), stopped before the next one and on close. */
+  private disposers = new Disposers();
+  private tabButtons = new Map<TabId, HTMLButtonElement>();
+  private indexingHint!: HTMLElement;
 
   constructor(leaf: WorkspaceLeaf, private ctxFactory: (view: HelmView) => UiContext) {
     super(leaf);
@@ -63,15 +73,31 @@ export class HelmView extends ItemView {
   override async onOpen(): Promise<void> {
     const root = this.contentEl;
     root.addClass('helm-root');
-    this.tabBar = h('div', { cls: 'helm-tabs' });
-    this.body = h('div', { cls: 'helm-body' });
+    this.closed = false;
+    this.tabBar = this.buildTabBar();
+    this.body = h('div', { cls: 'helm-body', attr: { role: 'tabpanel' } });
     root.append(this.tabBar, this.body);
     this.tab = this.ctx().settings().defaultTab;
+    // A leaf in a background tab skips its renders; catch up the moment it is shown again.
+    const ws = (this.app as { workspace?: { on?: (name: string, cb: (leaf: unknown) => void) => unknown } } | undefined)?.workspace;
+    if (ws?.on && typeof (this as { registerEvent?: unknown }).registerEvent === 'function') {
+      this.registerEvent(ws.on('active-leaf-change', (leaf) => { if (leaf === this.leaf && this.stale) this.render(); }) as never);
+    }
     this.render();
   }
 
   override async onClose(): Promise<void> {
+    this.closed = true;
+    if (this.frame) window.cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.scheduled = false;
+    this.disposers.run();
+    if (this.body) clear(this.body);
     clear(this.contentEl);
+  }
+
+  override onResize(): void {
+    if (this.stale) this.render();
   }
 
   override getState(): Record<string, unknown> {
@@ -107,31 +133,86 @@ export class HelmView extends ItemView {
 
   /** Coalesce many index events into one paint. */
   requestRender(): void {
-    if (this.scheduled) return;
+    if (this.scheduled || this.closed) return;
     this.scheduled = true;
-    window.requestAnimationFrame(() => { this.scheduled = false; this.render(); });
+    this.frame = window.requestAnimationFrame(() => { this.scheduled = false; this.frame = 0; this.render(); });
+  }
+
+  /**
+   * The tab bar is built once; a render only moves the selection and the indexing hint. It is a
+   * tablist: the arrow keys, Home and End move between tabs, and only the current tab is in the tab order.
+   */
+  private buildTabBar(): HTMLElement {
+    const bar = h('div', { cls: 'helm-tabs' });
+    const list = h('div', { cls: 'helm-tablist', attr: { role: 'tablist', 'aria-label': 'Helm' } });
+    const go = (i: number): void => {
+      const t = TABS[(i + TABS.length) % TABS.length]!;
+      this.navigate(t.id);
+      this.tabButtons.get(t.id)?.focus();
+    };
+    TABS.forEach((t, i) => {
+      const b = h('button', {
+        cls: 'helm-tab', title: t.label,
+        attr: { role: 'tab', 'aria-selected': 'false', tabindex: '-1', 'data-tab': t.id },
+        onClick: () => this.navigate(t.id),
+        onKeyDown: (ev) => {
+          const to = ev.key === 'ArrowRight' ? i + 1 : ev.key === 'ArrowLeft' ? i - 1 : ev.key === 'Home' ? 0 : ev.key === 'End' ? TABS.length - 1 : undefined;
+          if (to === undefined) return;
+          ev.preventDefault();
+          go(to);
+        },
+      }, icon(t.icon), h('span', { cls: 'helm-tab-label', text: t.label }));
+      this.tabButtons.set(t.id, b);
+      list.appendChild(b);
+    });
+    this.indexingHint = h('span', { cls: 'helm-hint helm-indexing', text: 'indexing…' });
+    bar.append(list, h('span', { cls: 'helm-spacer' }), this.indexingHint,
+      iconButton('search', 'Search everything (tasks, projects, notes, drawings)', () => openSearch(this.ctx()), 'helm-tab-search'),
+      iconButton('plus', 'Capture (quick add)', () => openCapture(this.ctx(), this.tab === 'today' ? { date: this.todayState.date } : {}), 'helm-tab-capture'),
+      iconButton('refresh-cw', 'Rebuild index', () => { const ctx = this.ctx(); void ctx.run('Rebuild index', () => ctx.index.rebuild()); }));
+    return bar;
+  }
+
+  private syncTabBar(ready: boolean): void {
+    for (const [id, b] of this.tabButtons) {
+      const on = id === this.tab;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-selected', String(on));
+      b.setAttribute('tabindex', on ? '0' : '-1');
+    }
+    this.indexingHint.toggleClass('is-hidden', ready);
+  }
+
+  /** Hidden behind another tab: Obsidian keeps the leaf's DOM, so the render can wait until it shows. */
+  private hidden(): boolean {
+    const el = (this as { containerEl?: HTMLElement }).containerEl as (HTMLElement & { isShown?: () => boolean }) | undefined;
+    return typeof el?.isShown === 'function' && !el.isShown();
   }
 
   render(): void {
-    if (!this.body) return;
+    if (!this.body || this.closed) return;
+    if (this.hidden()) { this.stale = true; return; }
+    this.stale = false;
     const ctx = this.ctx();
-    clear(this.tabBar);
-    for (const t of TABS) {
-      this.tabBar.appendChild(h('button', { cls: ['helm-tab', this.tab === t.id && 'is-active'], title: t.label, onClick: () => this.navigate(t.id) }, icon(t.icon), h('span', { cls: 'helm-tab-label', text: t.label })));
-    }
-    this.tabBar.appendChild(h('span', { cls: 'helm-spacer' }));
-    if (!ctx.index.ready) this.tabBar.appendChild(h('span', { cls: 'helm-hint helm-indexing', text: 'indexing…' }));
-    this.tabBar.appendChild(iconButton('search', 'Search everything (tasks, projects, notes, drawings)', () => openSearch(ctx), 'helm-tab-search'));
-    this.tabBar.appendChild(iconButton('plus', 'Capture (quick add)', () => openCapture(ctx, this.tab === 'today' ? { date: this.todayState.date } : {}), 'helm-tab-capture'));
-    this.tabBar.appendChild(iconButton('refresh-cw', 'Rebuild index', () => void ctx.run('Rebuild index', () => ctx.index.rebuild())));
+    this.syncTabBar(ctx.index.ready);
+    this.body.setAttribute('aria-label', TABS.find((t) => t.id === this.tab)?.label ?? '');
 
+    const focus = rememberFocus(this.body);
     this.scrollTop.set(this.scrollKey(), this.body.scrollTop);
+    this.disposers.run();
     clear(this.body);
     this.body.setAttribute('data-tab', this.tab);
     // Whatever the tab, a selection is shown and acted on in the same place.
     selection.prune((k) => ctx.index.task(k) !== undefined);
     const bar = selectionBar(ctx);
     if (bar) this.body.appendChild(bar);
+    collecting(this.disposers, () => this.renderTab(ctx));
+    const st = this.scrollTop.get(this.scrollKey());
+    if (st) this.body.scrollTop = st;
+    restoreFocus(this.body, focus);
+  }
+
+  private renderTab(ctx: UiContext): void {
     try {
       switch (this.tab) {
         case 'today': renderToday(ctx, this.body, this.todayState); break;
@@ -147,8 +228,6 @@ export class HelmView extends ItemView {
       console.error('[helm] render failed', e);
       this.body.appendChild(h('div', { cls: 'helm-banner is-error', text: `Helm could not render this tab: ${(e as Error).message}` }));
     }
-    const st = this.scrollTop.get(this.scrollKey());
-    if (st) this.body.scrollTop = st;
   }
 
   private scrollKey(): string {
