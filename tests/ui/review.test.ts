@@ -288,3 +288,40 @@ describe('F9 · confirmations use one tracked Obsidian modal', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('F10 · the task checkbox announces the task and its state', () => {
+  it('is a checkbox named after the task, checked, unchecked or mixed', async () => {
+    const { ctx, index } = await ctxFor();
+    const box = (key: string): HTMLElement => taskList(ctx, [index.task(key)!]).querySelector<HTMLElement>('.helm-check')!;
+    for (const t of index.allTasks().filter((x) => ['todo', 'done', 'doing'].includes(x.status)).slice(0, 10)) {
+      const b = box(t.key);
+      expect(b.getAttribute('role')).toBe('checkbox');
+      expect(b.getAttribute('aria-checked')).toBe(t.status === 'done' ? 'true' : t.status === 'doing' ? 'mixed' : 'false');
+      expect(b.getAttribute('aria-label')).not.toBe('Toggle done');
+      expect(b.getAttribute('aria-label')!.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('F16 · the export escapes a bar note', () => {
+  it('writes a note as text, never as markup', async () => {
+    const { bars } = await import('../../src/ui/report/html');
+    const html = bars([{ label: 'A', value: 1, note: '<img src=x onerror=alert(1)>' }], String);
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img');
+  });
+});
+
+describe('F18 · dead and repeated code is gone', () => {
+  it('no identity markerClass, no no-op `void ctx`, one profileOf below the imports', async () => {
+    const { readFileSync } = await import('node:fs');
+    const row = readFileSync('src/ui/taskRow.ts', 'utf8');
+    const projects = readFileSync('src/ui/tabs/projects.ts', 'utf8');
+    expect(row).not.toMatch(/function markerClass/);
+    const quickAdd = projects.slice(projects.indexOf('function quickAdd('), projects.indexOf('function addQuick('));
+    expect(quickAdd).not.toMatch(/void ctx;/);
+    expect(projects.match(/profileFor\(/g)).toHaveLength(1);            // only inside profileOf
+    const lastImport = projects.lastIndexOf('\nimport ');
+    expect(projects.indexOf('const profileOf')).toBeGreaterThan(lastImport);
+  });
+});

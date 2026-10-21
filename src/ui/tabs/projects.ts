@@ -15,9 +15,6 @@ import { profileFor, type ProjectProfile } from '../../core/profiles';
 import { renderProfileBoard, type ProfileBoardState } from '../profileBoard';
 import { openProfileItem } from '../modals/profileItem';
 
-/** The profile a project works under, with whatever vocabulary its own note overrides. */
-const profileOf = (p: Project): ProjectProfile =>
-  profileFor(p.profile, { ...(p.profilePeople ? { people: p.profilePeople } : {}), ...(p.profileModes ? { modes: p.profileModes } : {}) });
 import { openCapture } from '../modals/capture';
 import { openDatePicker } from '../modals/datePicker';
 import { minutesToHuman } from '../../core/dates';
@@ -31,6 +28,10 @@ import { openTaskEditor } from '../modals/taskEditor';
 import { plainLabel } from '../../core/label';
 import { dragKeys, selection } from '../selection';
 import { confirmModal } from '../modals/confirm';
+
+/** The profile a project works under, with whatever vocabulary its own note overrides. */
+const profileOf = (p: Project): ProjectProfile =>
+  profileFor(p.profile, { ...(p.profilePeople ? { people: p.profilePeople } : {}), ...(p.profileModes ? { modes: p.profileModes } : {}) });
 
 export type ProjectView = 'list' | 'board' | 'table' | 'timeline' | 'profile';
 
@@ -299,6 +300,7 @@ function leaveProject(ctx: UiContext, p: Project): void {
 }
 
 function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: ProjectsState): void {
+  const profile = profileOf(p);
   const today = ctx.today();
   const settings = ctx.settings();
   const snap = ctx.index.snapshot;
@@ -332,7 +334,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
       h('h2', { text: p.title }),
       h('span', { cls: 'helm-spacer' }),
       // The mirror of “New project” on the list: a project is where its own sub-projects begin.
-      ...(profileOf(p).id !== 'generic' ? [button(`Add a ${profileOf(p).itemNoun}`, { icon: 'plus', primary: true, title: `Add a ${profileOf(p).itemNoun} to this ${profileOf(p).groupNoun}`, onClick: () => openProfileItem(ctx, p, profileOf(p), { ...(state.profileGroup ? { group: state.profileGroup } : {}) }) })] : []),
+      ...(profile.id !== 'generic' ? [button(`Add a ${profile.itemNoun}`, { icon: 'plus', primary: true, title: `Add a ${profile.itemNoun} to this ${profile.groupNoun}`, onClick: () => openProfileItem(ctx, p, profile, { ...(state.profileGroup ? { group: state.profileGroup } : {}) }) })] : []),
       button('New sub-project', { icon: 'folder-plus', title: `A project under “${p.title}”`, onClick: () => openProjectForm(ctx, { parentId: p.id, onCreated: (c) => ctx.navigate('projects', { projectId: c.id }) }) }),
       button('Export PDF', { icon: 'file-down', title: `Print “${p.title}”: its phases, tasks and sub-projects — nothing is written until you confirm`, onClick: () => openExportReport(ctx, { scope: 'quarter', projectId: p.id }) }),
       button('Open note', { icon: 'file-text', onClick: () => void ctx.openFile(p.path) }),
@@ -404,7 +406,7 @@ function renderDetail(ctx: UiContext, root: HTMLElement, p: Project, state: Proj
     });
   };
 
-  const profile = profileFor(p.profile, { ...(p.profilePeople ? { people: p.profilePeople } : {}), ...(p.profileModes ? { modes: p.profileModes } : {}) });
+
   const view: ProjectView = state.view ?? (profile.id !== 'generic' ? 'profile' : 'list');
   root.appendChild(h('div', { cls: 'helm-toolbar' }, viewSwitcher(ctx, state, 'view', profile)));
 

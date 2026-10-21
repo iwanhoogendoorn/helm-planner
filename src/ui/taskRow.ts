@@ -125,9 +125,10 @@ export function taskRow(ctx: UiContext, t: Task, opts: RowOptions = {}): HTMLEle
   // Checkbox: click toggles done; shift-click cycles to in-progress.
   if (!opts.compact) {
     const cb = h('button', {
-      cls: ['helm-check', `mark-${markerClass(t.status)}`, justToggledClass(t)],
+      cls: ['helm-check', `mark-${t.status}`, justToggledClass(t)],
       title: checkboxTitle(t.status),
-      attr: { 'aria-label': 'Toggle done', 'data-status': t.status },
+      // A checkbox to a screen reader: the task's own words, and done / not done / part-way.
+      attr: { role: 'checkbox', 'aria-checked': t.status === 'done' ? 'true' : t.status === 'doing' || t.status === 'waiting' ? 'mixed' : 'false', 'aria-label': plainLabel(t.text) || taskLabel(t), 'data-status': t.status },
       onClick: (ev) => {
         ev.stopPropagation();
         const next = clickedStatus(t.status, ev.shiftKey);
@@ -297,10 +298,6 @@ function everyParentAround(ctx: UiContext, row: HTMLElement): Task[] {
     if (t) walk(t);
   }
   return out;
-}
-
-function markerClass(s: Task['status']): string {
-  return s;
 }
 
 export function taskList(ctx: UiContext, tasks: Task[], opts: RowOptions = {}): HTMLElement {
