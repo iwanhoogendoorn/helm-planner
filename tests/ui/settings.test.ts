@@ -150,4 +150,31 @@ describe('Setup section', () => {
     expect(host.writeTemplate).toHaveBeenCalledWith('year', false);
     expect(host.onSettingsChanged).toHaveBeenCalled();
   });
+
+  it('choosing every interface asks first; cancelling puts the menu back and saves nothing (M2)', async () => {
+    const { Modal } = await import('../stubs/obsidian');
+    const { root, host, nav } = make({ apiEnabled: true, apiToken: 'tok' } as Partial<HelmSettings>);
+    const navLabels = [...root.querySelectorAll<HTMLElement>('.helm-settings-nav-item')].map((e) => e.textContent?.trim() ?? '');
+    nav(navLabels.find((l) => /api|connect/i.test(l))!);
+    const select = (): HTMLSelectElement => [...root.querySelectorAll<HTMLSelectElement>('select')].find((x) => [...x.options].some((o) => o.value === 'tailscale'))!;
+    const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+    select().value = 'all';
+    select().dispatchEvent(new Event('change'));
+    await flush();
+    const ask = Modal.last!;
+    expect(ask.titleEl.textContent).toBe('Listen on every interface?');
+    expect(ask.contentEl.textContent).toContain('clear text');
+    (ask.contentEl.querySelector('.helm-modal-buttons button:not(.helm-confirm-ok)') as HTMLElement).click();
+    await flush(); await flush();
+    expect(host.settings.apiBind ?? 'loopback').toBe('loopback');
+    expect(select().value).toBe('loopback');
+    expect(host.saveSettings).not.toHaveBeenCalled();
+    select().value = 'all';
+    select().dispatchEvent(new Event('change'));
+    await flush();
+    (Modal.last!.contentEl.querySelector('.helm-confirm-ok') as HTMLElement).click();
+    await flush(); await flush();
+    expect(host.settings.apiBind).toBe('all');
+    expect(host.saveSettings).toHaveBeenCalled();
+  });
 });

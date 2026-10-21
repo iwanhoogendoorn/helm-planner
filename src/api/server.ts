@@ -3,7 +3,7 @@
  * unless the settings say otherwise (a Tailscale address, or every interface); every request needs
  * the token from Settings. The routing itself lives in routes.ts — this file is only plumbing.
  */
-import { LOOPBACK } from './bind';
+import { ANY, isPrivateClient, LOOPBACK } from './bind';
 import { API_BASE, handle, type ApiDeps } from './routes';
 
 type Server = { close: () => void; port: number; host: string };
@@ -26,8 +26,14 @@ export function randomToken(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function startApiServer(opts: { port: number; host?: string; token: string; deps: ApiDeps; log?: (m: string) => void }): Promise<Server> {
+export async function startApiServer(opts: {
+  port: number; host?: string; token: string; deps: ApiDeps; log?: (m: string) => void;
+  /** Which client addresses may connect. Defaults to anyone on a loopback or Tailscale bind, and to private addresses only on every interface. */
+  allowClient?: (address: string | undefined) => boolean;
+}): Promise<Server> {
   const host = opts.host?.trim() || LOOPBACK;
+  const everywhere = host === ANY || host === '::';
+  const allowClient = opts.allowClient ?? (everywhere ? isPrivateClient : () => true);
   // Required at run time so the bundle stays loadable where node's http is not available.
   const http = require('node:http') as typeof import('node:http');
   const server = http.createServer((req, res) => {
@@ -46,6 +52,11 @@ export async function startApiServer(opts: { port: number; host?: string; token:
       send(500, { error: 'Internal error', requestId: id });
     };
     try {
+      if (!allowClient(req.socket.remoteAddress)) {
+        opts.log?.(`refused a client outside the private ranges: ${req.socket.remoteAddress ?? 'unknown'}`);
+        send(403, { error: 'Forbidden' });
+        return;
+      }
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       if (!url.pathname.startsWith(API_BASE)) { send(404, { error: 'Not found' }); return; }
       const auth = req.headers['authorization'];

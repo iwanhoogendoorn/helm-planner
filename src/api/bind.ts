@@ -54,3 +54,24 @@ export function apiUrls(host: string, port: number, ifaces: IfaceTable, base = A
   hosts.sort((a, b) => Number(isTailscaleAddress(b)) - Number(isTailscaleAddress(a)));
   return [...hosts.map(url), url(LOOPBACK)];
 }
+
+/**
+ * Whether a client address may use the API when it listens on every interface: this machine, a
+ * private LAN (RFC 1918), Tailscale (100.64.0.0/10), link-local, or the IPv6 equivalents (loopback,
+ * unique-local fc00::/7, link-local fe80::/10). Anything else — a public address that reached a
+ * forwarded port — is refused before the token is even looked at.
+ */
+export function isPrivateClient(address: string | undefined): boolean {
+  if (!address) return false;
+  const ip = address.toLowerCase().replace(/%.*$/, '');
+  const v4 = /^(?:::ffff:)?(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+      || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254);
+  }
+  if (!ip.includes(':')) return false;
+  if (ip === '::1') return true;
+  const first = parseInt(ip.split(':')[0] || '0', 16);
+  return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+}

@@ -87,3 +87,28 @@ describe('L10 · an unauthenticated request learns nothing about the server', ()
     expect(good.headers.get('x-helm-revision')).toMatch(/^\d+$/);
   });
 });
+
+describe('M2 · on every interface, only private clients get in', () => {
+  it('classifies client addresses', async () => {
+    const { isPrivateClient } = await import('../../src/api/bind');
+    for (const ip of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.20', '::ffff:192.168.1.20', '100.64.0.1', '100.127.1.1', '169.254.3.4', 'fe80::1%en0', 'fd7a:115c:a1e0::1', 'fc00::5']) expect(isPrivateClient(ip), ip).toBe(true);
+    for (const ip of ['8.8.8.8', '::ffff:8.8.8.8', '172.32.0.1', '100.128.0.1', '192.169.0.1', '2001:4860:4860::8888', '', undefined]) expect(isPrivateClient(ip as string), String(ip)).toBe(false);
+  });
+
+  it('a bind on 0.0.0.0 still serves this machine, and refuses a client the filter rejects with 403 before auth', async () => {
+    const s = await setup();
+    const token = randomToken();
+    const deps: ApiDeps = { index: s.index, mutations: s.m, settings: () => s.settings, today: () => TODAY, version: '9.9.9', written: () => [], read: (p) => s.vault.read(p) };
+    const open = await startApiServer({ port: 0, host: '0.0.0.0', token, deps });
+    stop = open.close;
+    expect((await fetch(`http://127.0.0.1:${open.port}/helm/v1/health`, { headers: { authorization: `Bearer ${token}` } })).status).toBe(200);
+    open.close();
+    const seen: (string | undefined)[] = [];
+    const shut = await startApiServer({ port: 0, host: '0.0.0.0', token, deps, allowClient: (a) => { seen.push(a); return false; } });
+    stop = shut.close;
+    const r = await fetch(`http://127.0.0.1:${shut.port}/helm/v1/health`, { headers: { authorization: `Bearer ${token}` } });
+    expect(r.status).toBe(403);
+    expect(r.headers.get('x-helm-revision')).toBeNull();
+    expect(seen[0]).toMatch(/127\.0\.0\.1/);
+  });
+});

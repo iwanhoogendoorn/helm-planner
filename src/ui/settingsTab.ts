@@ -515,8 +515,14 @@ export class HelmSettingTab extends PluginSettingTab {
     new Setting(g.content).setName('Reachable from')
       .setDesc('This Mac only is the safe default. Tailscale: reachable from your other Tailscale devices, e.g. the Helm iPhone app. Traffic is encrypted by WireGuard; the token is still required. All interfaces: every network this machine is on — only behind a firewall you trust.')
       .addDropdown((d) => d.addOptions({ loopback: 'This machine only (127.0.0.1)', tailscale: 'Tailscale (your tailnet)', all: 'All interfaces (0.0.0.0)' }).setValue(bind).onChange((v) => void (async () => {
+        // Every interface sends the token in clear text over plain HTTP: ask, and put the menu back on a no.
+        if (v === 'all' && !(await confirmModal({ app: this.app }, {
+          title: 'Listen on every interface?',
+          body: 'The API speaks plain HTTP, so the token travels in clear text. Anyone on the same Wi-Fi, Ethernet or hotspot who sees one request can reuse it to read, change and delete your vault.\n\nHelm only answers private addresses (this machine, your LAN, Tailscale, link-local); a public address is refused. Tailscale is the safer way to reach Helm from another device.',
+          cta: 'Listen on every interface',
+          warning: true,
+        }))) { d.setValue(bind); return; }
         s.apiBind = v as HelmSettings['apiBind'];
-        if (v === 'all') new Notice('All interfaces: the API answers on every network this Mac is on — Wi-Fi, Ethernet, hotspots — to anyone holding the token. Prefer Tailscale.', 8000);
         await this.host.saveSettings();
         await this.host.restartApi();
         this.renderBody();
