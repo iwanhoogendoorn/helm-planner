@@ -45,6 +45,18 @@ export function parseFrontmatter(lines: string[], eol = '\n'): Frontmatter {
     if (!m || /^\s/.test(line)) { i++; continue; }
     const key = m[1]!;
     const rawVal = m[2];
+    // A block scalar (`|` or `>`, with any chomping/indent indicator): its value is the indented lines below.
+    if (rawVal !== undefined && /^[|>][+-]?\d*(?:\s+#.*)?$/.test(rawVal)) {
+      let j = i + 1;
+      const body: string[] = [];
+      while (j < fm.lines.length && (fm.lines[j]!.trim() === '' || /^\s/.test(fm.lines[j]!))) body.push(fm.lines[j++]!);
+      while (body.length > 0 && body[body.length - 1]!.trim() === '') body.pop();
+      const indent = Math.min(...body.filter((l) => l.trim() !== '').map((l) => /^\s*/.exec(l)![0].length));
+      const text = body.map((l) => l.slice(Number.isFinite(indent) ? indent : 0));
+      fm.values[key] = rawVal.startsWith('|') ? text.join('\n') : text.map((l) => l.trim()).join(' ').replace(/ {2,}/g, ' ').trim();
+      i = j;
+      continue;
+    }
     if (rawVal === undefined || rawVal === '') {
       // Block list?
       const items: string[] = [];
@@ -84,10 +96,14 @@ function splitInline(s: string): string[] {
   return out;
 }
 
+const ESCAPES: Record<string, string> = { '\\': '\\', '"': '"', '/': '/', n: '\n', r: '\r', t: '\t', '0': '\0' };
+
+/** The inverse of `yamlScalar`: escapes undone inside "…", `''` inside '…', an inline ` # comment` dropped from a plain value. */
 export function unquote(s: string): string {
   const t = s.trim();
-  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return t.slice(1, -1);
-  return t;
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1).replace(/\\(.)/g, (all, c: string) => ESCAPES[c] ?? all);
+  if (t.length >= 2 && t.startsWith("'") && t.endsWith("'")) return t.slice(1, -1).replace(/''/g, "'");
+  return t.replace(/\s+#.*$/, '');
 }
 
 /** First scalar of a value that may be a list. */
@@ -104,7 +120,7 @@ export function list(v: string | string[] | null | undefined): string[] {
 }
 
 function needsQuotes(v: string): boolean {
-  return v === '' || /^[\s#&*!|>'"%@`{}[\],?:-]/.test(v) || /:\s/.test(v) || /\s$/.test(v) || v.startsWith('[[') || /[\u0000-\u001f\u007f]/.test(v);
+  return v === '' || /^[\s#&*!|>'"%@`{}[\],?:-]/.test(v) || /:\s/.test(v) || /\s#/.test(v) || /\s$/.test(v) || v.startsWith('[[') || /[\u0000-\u001f\u007f]/.test(v);
 }
 
 /** One YAML scalar on one line: a value that would break the line (a newline, a control character) is escaped inside quotes, never written raw. */
@@ -112,6 +128,17 @@ export function yamlScalar(v: string): string {
   if (!needsQuotes(v)) return v;
   const esc = v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t').replace(/[\u0000-\u001f\u007f]/g, '');
   return `"${esc}"`;
+}
+
+/** The line after a key's value: past its block-list items, or a block scalar's (or nested map's) indented lines. */
+function valueEnd(body: string[], idx: number): number {
+  const block = /:\s*[|>]/.test(body[idx]!);
+  let end = idx + 1;
+  for (let j = idx + 1; j < body.length; j++) {
+    if (/^\s+\S/.test(body[j]!)) end = j + 1;
+    else if (!(block && body[j]!.trim() === '')) break; // a blank line belongs to a block scalar only when more of it follows
+  }
+  return end;
 }
 
 /**
@@ -136,18 +163,15 @@ export function setFrontmatter(lines: string[], updates: Record<string, string |
     // `undefined` removes the key (and its list items); `null` keeps it with an empty value.
     if (v === undefined) {
       if (idx === -1) continue;
-      let end = idx + 1;
-      while (end < body.length && /^\s+-\s*/.test(body[end]!)) end++;
-      body.splice(idx, end - idx);
+      body.splice(idx, valueEnd(body, idx) - idx);
       continue;
     }
     if (idx === -1) { body.push(...render(key, v)); continue; }
-    let end = idx + 1;
-    while (end < body.length && /^\s+-\s*/.test(body[end]!)) end++;
+    const end = valueEnd(body, idx);
     body.splice(idx, end - idx, ...render(key, v));
   }
   // Nothing left in the block: drop it rather than leave an empty `---` pair behind.
-  if (body.every((l) => l.trim() === '')) { const rest = fm.present ? lines.slice(fm.endLine) : lines; while (rest.length > 0 && rest[0]!.trim() === '') rest.shift(); return rest; }
+  if (body.every((l) => l.trim() === '')) { const rest = fm.present ? lines.slice(fm.endLine) : [...lines]; while (rest.length > 0 && rest[0]!.trim() === '') rest.shift(); return rest; }
   if (fm.present) return ['---', ...body, '---', ...lines.slice(fm.endLine)];
   return ['---', ...body, '---', ...lines];
 }
