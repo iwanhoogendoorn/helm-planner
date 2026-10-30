@@ -739,6 +739,9 @@ describe('v2 · §14 amendments', () => {
     const detail = (await call('GET', 'tasks/tsk-0002')).body;
     expect(detail).toMatchObject({ nextOccurrence: expect.stringMatching(/^2026-/), misfiled: false });
     expect((await call('GET', 'tasks/tsk-0001')).body.nextOccurrence).toBeNull();
+    // The plain task shape carries it too, so a list row's menu can say when the next turn is.
+    const slim = (await call('PATCH', 'tasks/tsk-0002', { start: null })).body.task;
+    expect(slim.nextOccurrence).toBe(detail.nextOccurrence);
   });
 
   it('skips one occurrence, stamps an id on demand', async () => {

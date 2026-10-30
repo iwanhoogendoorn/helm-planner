@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.51.1 — 2026-10-30
+
+- **Skip this one is one click again.** It is back at the top level of every
+  task's menu, right under Follow up: greyed with the reason on a one-off, and
+  "Skipped — next …" on a turn that is already closed. Repeat keeps Stop
+  repeating and the rules.
+- **The API sends `nextOccurrence` on every task,** not only on the detail
+  page, so the iPhone app's list rows can say when the next turn is.
+
 ## 1.51.0 — 2026-10-30
 
 - **Every task has the same right-click menu.** A repeating task used to grow

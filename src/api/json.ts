@@ -71,6 +71,7 @@ export function taskJson(t: Task, c: Ctx): Record<string, unknown> {
     text: t.text,
     title: plainLabel(t.text),
     status: t.status,
+    nextOccurrence: nextOccurrenceOf(t, c.today()) ?? null,
     open: isOpen(t),
     blocked: isBlocked(t, c.index.snapshot),
     source: t.origin,
@@ -133,7 +134,6 @@ export function taskDetailJson(t: Task, c: Ctx): Record<string, unknown> {
     ...taskTree(t, c),
     followUps: followUpsOf(snap, t).map(refOf),
     follows: follows ? refOf(follows) : null,
-    nextOccurrence: nextOccurrenceOf(t, c.today()) ?? null,
     misfiled: misfiledDate(t) !== undefined,
     attachments: attachmentsJson(targetOfTask(t), c),
   };

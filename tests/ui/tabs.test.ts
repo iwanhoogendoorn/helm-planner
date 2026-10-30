@@ -122,14 +122,14 @@ describe('Today tab', () => {
     expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Anytime']);   // a past day with no diary keeps quiet
   });
 
-  it('offers Skip this one and Stop repeating under Repeat on a repeating task', async () => {
+  it('offers Skip this one on top and Stop repeating under Repeat on a repeating task', async () => {
     const { ctx, index, m } = await ctxFor();
     await m.addTask({ text: '#meeting Team meeting', date: TODAY, fields: { recurrence: { raw: 'every week on wednesday', parsed: true, frequency: 'weekly', interval: 1, weekdays: [3], monthDays: [], whenDone: false }, due: TODAY } });
     const at = () => [...index.snapshot.tasks.values()].find((t) => t.text.includes('Team meeting') && t.status === 'todo')!;
 
     taskMenu(ctx, at(), new MouseEvent('contextmenu'));
     expect(repeatMenu().title).toBe('Repeat — every week on wednesday');
-    const skip = repeatMenu().items.find((i) => i.title.startsWith('Skip this one'))!;
+    const skip = Menu.last!.items.find((i) => i.title.startsWith('Skip this one'))!;
     expect(skip.title).toBe('Skip this one — next Wed 2 Sep');
     expect(repeatMenu().items.some((i) => i.title.startsWith('Stop repeating'))).toBe(true);
 
@@ -149,12 +149,12 @@ describe('Today tab', () => {
 
     // The skipped turn cannot be skipped again: it says where the series went instead.
     taskMenu(ctx, skipped, new MouseEvent('contextmenu'));
-    expect(repeatMenu().items[0]).toMatchObject({ title: 'Skipped — next Wed 2 Sep', disabled: true });
+    expect(Menu.last!.items.find((i) => i.title.startsWith('Skipped'))).toMatchObject({ title: 'Skipped — next Wed 2 Sep', disabled: true });
 
-    // A task that does not repeat gets the same Repeat item, offering the rules and neither action.
+    // A task that does not repeat has the same items: Skip greyed with the reason, Repeat offering the rules.
     const plain = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB')!;
     taskMenu(ctx, plain, new MouseEvent('contextmenu'));
-    expect(Menu.last!.items.some((i) => /Skip this one|Stop repeating/.test(i.title))).toBe(false);
+    expect(Menu.last!.items.find((i) => i.title.startsWith('Skip'))).toMatchObject({ title: 'Skip this one — doesn’t repeat', disabled: true });
     expect(repeatMenu().title).toBe('Repeat');
     expect(repeatMenu().items.map((i) => i.title)).toEqual(['Daily', 'Weekdays', 'Weekly', 'Monthly', 'Yearly', 'Another rule…']);
   });
