@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.51.0 — 2026-10-30
+
+- **Every task has the same right-click menu.** A repeating task used to grow
+  two extra lines (Skip this one, Stop repeating), so the menu looked different
+  from task to task. Those now live under a **Repeat** item that every task
+  has: "Repeat — every week" with Skip this one and Stop repeating inside, or
+  plain "Repeat" on a one-off.
+- **Make a task repeat from the menu.** Repeat offers Daily, Weekdays, Weekly,
+  Monthly and Yearly (the current rule ticked), plus "Another rule…" for the
+  editor.
+- **A skipped turn can't be skipped again.** A done or skipped turn shows where
+  the series goes next ("Skipped — next Sat 7 Nov") instead of offering Skip.
+
 ## 1.50.0 — 2026-10-21
 
 A release of fixes from a full code review: safer writes, a stricter API, and

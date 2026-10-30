@@ -13,7 +13,8 @@ import { openSubtask } from './modals/subtask';
 import { openRecurringDelete } from './modals/deleteRecurring';
 import { openProjectForm } from './modals/projectForm';
 import { plainLabel } from '../core/label';
-import { formatRecurrence } from '../core/recurrence';
+import { formatRecurrence, parseRecurrence } from '../core/recurrence';
+import { REPEAT_PRESETS } from './fields';
 import { isOpen, nextOccurrenceOf } from '../data/planner';
 import { baseName } from '../data/vault';
 import { openDatePicker } from './modals/datePicker';
@@ -127,6 +128,35 @@ export function progressMenu(ctx: UiContext, task: Task, ev: MouseEvent): void {
   menu.showAtMouseEvent(ev);
 }
 
+/** The Repeat submenu: skip this one and stop for a repeating task, then the rules to pick from. */
+function addRepeatItems(menu: Menu, ctx: UiContext, task: Task): void {
+  const today = ctx.today();
+  const rec = task.recurrence?.parsed ? task.recurrence : undefined;
+  if (rec) {
+    const next = nextOccurrenceOf(task, today);
+    const when = next ? ` — next ${humanDate(next, today)}` : '';
+    // A closed turn has already made way for the next one: skipping it again would mean nothing.
+    if (isOpen(task)) menu.addItem((i) => i.setTitle(`Skip this one${when}`).setIcon('skip-forward').onClick(() => void ctx.run('Skip', () => ctx.mutations.setStatus(task.key, 'cancelled'))));
+    else menu.addItem((i) => i.setTitle(`${task.status === 'cancelled' ? 'Skipped' : 'Done'}${when}`).setIcon('skip-forward').setDisabled(true));
+    menu.addItem((i) => i.setTitle(`Stop repeating (${formatRecurrence(rec)})`).setIcon('repeat-1').onClick(() => void ctx.run('Stop repeating', () => ctx.mutations.stopRepeating(task.key))));
+    menu.addSeparator();
+  }
+  const same = (phrase: string): boolean => {
+    if (!rec) return false;
+    const b = parseRecurrence(phrase);
+    return rec.frequency === b.frequency && rec.interval === b.interval
+      && (rec.weekdays ?? []).join() === (b.weekdays ?? []).join() && (rec.monthDays ?? []).join() === (b.monthDays ?? []).join();
+  };
+  for (const [label, phrase] of REPEAT_PRESETS) {
+    menu.addItem((i) => i.setTitle(label).setChecked(same(phrase)).onClick(() => {
+      if (same(phrase)) return;
+      const r = parseRecurrence(rec?.whenDone ? `${phrase} when done` : phrase);
+      void ctx.run('Repeat', () => ctx.mutations.updateTask(task.key, { recurrence: { ...r, raw: formatRecurrence(r) } }));
+    }));
+  }
+  menu.addItem((i) => i.setTitle('Another rule…').setIcon('pencil').onClick(() => openTaskEditor(ctx, task)));
+}
+
 export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onEdit?: () => void } = {}): void {
   const menu = new Menu();
   const today = ctx.today();
@@ -137,19 +167,13 @@ export function taskMenu(ctx: UiContext, task: Task, ev: MouseEvent, opts: { onE
   if (note) menu.addItem((i) => i.setTitle(`Open ${note.split('/').pop()}`).setIcon('file-text').onClick(() => ctx.openLink(note, task.path)));
   menu.addItem((i) => i.setTitle('Add subtask…').setIcon('list-plus').onClick(() => openSubtask(ctx, task)));
   menu.addItem((i) => { i.setTitle(task.progress !== undefined ? `Progress — ${task.progress}%` : 'Progress').setIcon('trending-up'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addProgressItems(sub, ctx, task); });
-  // A repeating task: skipping one occurrence is not the same as ending the series, so say both plainly.
-  if (task.recurrence?.parsed) {
-    const next = nextOccurrenceOf(task, today);
-    menu.addItem((i) => i
-      .setTitle(next ? `Skip this one — next ${humanDate(next, today)}` : 'Skip this one')
-      .setIcon('skip-forward')
-      .onClick(() => void ctx.run('Skip', () => ctx.mutations.setStatus(task.key, 'cancelled'))));
-    menu.addItem((i) => i.setTitle(`Stop repeating (${formatRecurrence(task.recurrence!)})`).setIcon('repeat-1').onClick(() => void ctx.run('Stop repeating', () => ctx.mutations.stopRepeating(task.key))));
-  }
   const hasSubtasks = task.childKeys.length > 0;
   menu.addItem((i) => hasSubtasks
     ? i.setTitle('Follow up… — move it instead (it has subtasks)').setIcon('corner-down-right').setDisabled(true)
     : i.setTitle('Follow up…').setIcon('corner-down-right').onClick(() => openFollowUp(ctx, task)));
+  // Every task gets the same Repeat item, so the menu has one shape whatever you right-click. Inside it,
+  // skipping one occurrence and ending the series stay two plain, separate things.
+  menu.addItem((i) => { i.setTitle(task.recurrence?.parsed ? `Repeat — ${formatRecurrence(task.recurrence)}` : 'Repeat').setIcon('repeat'); const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu(); addRepeatItems(sub, ctx, task); });
   menu.addSeparator();
   // Everything that moves the task lives under one word, and the word says where it is now — so the
   // menu reads as a fact and an offer, not a scattering of dates.

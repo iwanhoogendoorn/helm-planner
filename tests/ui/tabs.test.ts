@@ -23,6 +23,7 @@ import { clearFolds, loadFolds } from '../../src/ui/fold';
 import { openDatePicker } from '../../src/ui/modals/datePicker';
 import { openSearch } from '../../src/ui/modals/search';
 import { taskMenu } from '../../src/ui/menus';
+import { parseRecurrence } from '../../src/core/recurrence';
 import { addDays, humanDate } from '../../src/core/dates';
 import { taskRow } from '../../src/ui/taskRow';
 import { openProjectForm, parsePhases } from '../../src/ui/modals/projectForm';
@@ -77,6 +78,10 @@ const answerConfirm = async (yes: boolean): Promise<string> => {
 
 beforeEach(() => { document.body.innerHTML = ''; Notice.messages = []; Modal.last = undefined; Menu.last = undefined; selection.clear(); clearFolds(); resetAttachViews(); });
 
+const repeatMenu = (): { title: string; items: { title: string; checked?: boolean; disabled?: boolean; click?: () => void }[] } => {
+  const rp = Menu.last!.items.find((i) => i.title === 'Repeat' || i.title.startsWith('Repeat — '))!;
+  return { title: rp.title, items: rp.sub!.items as never };
+};
 const moveMenu = (): { title: string; items: { title: string; sub?: { items: { title: string; click?: () => void }[] }; click?: () => void }[] } => {
   const mv = Menu.last!.items.find((i) => i.title.startsWith('Move — '))!;
   return { title: mv.title, items: mv.sub!.items as never };
@@ -117,15 +122,16 @@ describe('Today tab', () => {
     expect(titles('2026-08-25')).toEqual(['Habits', 'Morning', 'Anytime']);   // a past day with no diary keeps quiet
   });
 
-  it('offers Skip this one and Stop repeating on a repeating task', async () => {
+  it('offers Skip this one and Stop repeating under Repeat on a repeating task', async () => {
     const { ctx, index, m } = await ctxFor();
     await m.addTask({ text: '#meeting Team meeting', date: TODAY, fields: { recurrence: { raw: 'every week on wednesday', parsed: true, frequency: 'weekly', interval: 1, weekdays: [3], monthDays: [], whenDone: false }, due: TODAY } });
     const at = () => [...index.snapshot.tasks.values()].find((t) => t.text.includes('Team meeting') && t.status === 'todo')!;
 
     taskMenu(ctx, at(), new MouseEvent('contextmenu'));
-    const skip = Menu.last!.items.find((i) => i.title.startsWith('Skip this one'))!;
+    expect(repeatMenu().title).toBe('Repeat — every week on wednesday');
+    const skip = repeatMenu().items.find((i) => i.title.startsWith('Skip this one'))!;
     expect(skip.title).toBe('Skip this one — next Wed 2 Sep');
-    expect(Menu.last!.items.some((i) => i.title.startsWith('Stop repeating'))).toBe(true);
+    expect(repeatMenu().items.some((i) => i.title.startsWith('Stop repeating'))).toBe(true);
 
     skip.click!();
     await waitFor(() => { const all = [...index.snapshot.tasks.values()].filter((t) => t.text.includes('Team meeting')); return all.length === 2 ? all : undefined; }, 'the next occurrence');
@@ -141,10 +147,31 @@ describe('Today tab', () => {
     const done = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB' && t.status === 'cancelled')!;
     expect(texts(taskRow(ctx, done), '.helm-chip.cancelled')[0]).toMatch(/^cancelled /);
 
-    // A task that does not repeat is offered neither.
+    // The skipped turn cannot be skipped again: it says where the series went instead.
+    taskMenu(ctx, skipped, new MouseEvent('contextmenu'));
+    expect(repeatMenu().items[0]).toMatchObject({ title: 'Skipped — next Wed 2 Sep', disabled: true });
+
+    // A task that does not repeat gets the same Repeat item, offering the rules and neither action.
     const plain = [...index.snapshot.tasks.values()].find((t) => t.text === 'Start with OIB')!;
     taskMenu(ctx, plain, new MouseEvent('contextmenu'));
     expect(Menu.last!.items.some((i) => /Skip this one|Stop repeating/.test(i.title))).toBe(false);
+    expect(repeatMenu().title).toBe('Repeat');
+    expect(repeatMenu().items.map((i) => i.title)).toEqual(['Daily', 'Weekdays', 'Weekly', 'Monthly', 'Yearly', 'Another rule…']);
+  });
+
+  it('gives every task the same top-level menu, repeating or not', async () => {
+    const { ctx, index, m } = await ctxFor();
+    await m.addTask({ text: 'One-off', date: TODAY });
+    await m.addTask({ text: 'Weekly sync', date: TODAY, fields: { recurrence: parseRecurrence('every week') } });
+    const shape = (text: string): string[] => {
+      taskMenu(ctx, [...index.snapshot.tasks.values()].find((t) => t.text === text)!, new MouseEvent('contextmenu'));
+      return Menu.last!.items.map((i) => i.title.replace(/ — .*/, '').replace(' this one', '')); // a turn moves “this one”: same item
+    };
+    expect(shape('Weekly sync')).toEqual(shape('One-off'));
+    // Picking a rule from the menu makes a one-off repeat.
+    taskMenu(ctx, [...index.snapshot.tasks.values()].find((t) => t.text === 'One-off')!, new MouseEvent('contextmenu'));
+    repeatMenu().items.find((i) => i.title === 'Weekly')!.click!();
+    await waitFor(() => [...index.snapshot.tasks.values()].find((t) => t.text === 'One-off' && t.recurrence?.parsed), 'the rule to land');
   });
 
   it('offers each day once — the day it is on is “Part of …”, not a move', async () => {
