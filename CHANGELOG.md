@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.53.0 — 2026-11-01
 
 - **The day navigator is at the end of the day page too.** It takes you to the
   top of the next day.
