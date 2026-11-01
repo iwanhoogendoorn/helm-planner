@@ -15,6 +15,7 @@ import { formatDate, parseDateFromPath } from '../core/dates';
 import { isDrawingPath, parseDrawing, type Drawing } from '../core/drawing';
 import { contentHasHelmKeys, hasHelmKeys, notePreview, notesSectionLinks, noteTitle, parseNoteRef, wikilinksIn, type NotePreview, type NoteRef } from '../core/noteRef';
 import { parseDaybook, type DaybookEntry } from '../core/daybook';
+import { parseDayPictures, type DayPictureKind, type DayPictureLink } from '../core/dayPictures';
 import { baseName, folderOf, isUnder, type VaultAdapter } from './vault';
 
 export const DAILY_FALLBACK = { folder: 'Daily Notes', format: 'YYYY-MM-DD' };
@@ -54,6 +55,8 @@ interface FileEntry {
   daybook?: DaybookEntry[];
   /** The diary heading's line, when the note has one. */
   daybookHeading?: number;
+  /** The quote card and comics a daily note embeds. */
+  pictures?: DayPictureLink[];
   /** A song, when the note says it is one — Maestro's `type: song` and what it carries. */
   song?: SongNote;
   /** Basenames linked under this note's Notes heading. */
@@ -352,7 +355,7 @@ export class HelmIndex {
     const scan = date !== undefined ? findRegion(doc.lines, s) : { broken: false };
     if (scan.broken) entry.diagnostics.push({ severity: 'error', code: 'HELM-D01', message: 'Helm region has a start marker without an end marker; the note is read-only until fixed.', path });
     entry.hasRegion = scan.region !== undefined;
-    if (date !== undefined) { const db = parseDaybook(doc, s.daybookHeading); entry.daybook = db.entries; if (db.heading !== -1) entry.daybookHeading = db.heading; }
+    if (date !== undefined) { const db = parseDaybook(doc, s.daybookHeading); entry.daybook = db.entries; if (db.heading !== -1) entry.daybookHeading = db.heading; entry.pictures = parseDayPictures(content); }
     const sectionOfLine = new Map<number, Section>();
     if (scan.region) for (const sec of ['habits', 'morning', 'afternoon', 'evening', 'anytime'] as Section[]) for (const l of scan.region.sections[sec].taskLines) sectionOfLine.set(l, sec);
 
@@ -732,6 +735,21 @@ export class HelmIndex {
    * record is only returned when there is nothing else.
    */
   /** The diary of a day. Empty when the day has no note, or no daybook heading in it. */
+  /** The day's pictures whose files are really there; an embed of a missing file is not a picture yet. */
+  dayPictures(date: IsoDate): { kind: DayPictureKind; path: string }[] {
+    const from = this.dailyPath(date);
+    if (!from) return [];
+    return (this.files.get(from)?.pictures ?? []).flatMap(({ kind, link }) => { const path = this.vault.resolveLink?.(link, from); return path ? [{ kind, path }] : []; });
+  }
+
+  /** Whether a daily note shows this file as one of its pictures. */
+  isDayPicture(path: string): boolean {
+    for (const e of this.files.values()) {
+      if (e.kind === 'daily' && e.date && e.pictures?.length && this.dayPictures(e.date).some((p) => p.path === path)) return true;
+    }
+    return false;
+  }
+
   daybook(date: IsoDate): DaybookEntry[] {
     const path = this.dailyPath(date);
     return (path ? this.files.get(path)?.daybook : undefined) ?? [];

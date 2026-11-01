@@ -952,6 +952,23 @@ describe('v2 · Phase C: drawings, linking notes, binary files, daily-note info'
     expect((await call('POST', 'tasks/tsk-0002/notes/link', {})).status).toBe(400);
   });
 
+  it('lists the day’s pictures, serves them, and a diary entry stays out of the comic’s heading', async () => {
+    const { call, m, vault, index } = await api({ '99 ATTACHMENTS/comic-morning-x.jpg': 'x', '99 ATTACHMENTS/stray.jpg': 'x' });
+    const path = await m.ensureDailyNote(TODAY);
+    await vault.write(path, `${await vault.read(path)}\n![[comic-morning-x.jpg|morning-comic ${TODAY}]]\n\n## Daybook\n\n- **08:00** Up\n\n## 🌙 Evening comic\n\n![[gone.jpg|evening-comic ${TODAY}]]\n`);
+    await index.rebuild();
+    const day = (await call('GET', `day/${TODAY}`)).body;
+    expect(day.pictures).toEqual([{ kind: 'morning', path: '99 ATTACHMENTS/comic-morning-x.jpg' }]);
+    await vault.writeBinary('99 ATTACHMENTS/comic-morning-x.jpg', new Uint8Array([1, 2]).buffer as ArrayBuffer);
+    const served = await call('GET', 'files/binary', undefined, { path: '99 ATTACHMENTS/comic-morning-x.jpg' });
+    expect(served.status).toBe(200);
+    expect(served.raw).toMatchObject({ contentType: 'image/jpeg' });
+    expect((await call('GET', 'files/binary', undefined, { path: '99 ATTACHMENTS/stray.jpg' })).status).toBe(404);
+    await m.addDaybookEntry(TODAY, 'Later', { time: '09:00' });
+    const note = await vault.read(path);
+    expect(note.indexOf('**09:00** Later')).toBeLessThan(note.indexOf('## 🌙 Evening comic'));
+  });
+
   it('serves drawings and habit icons as bytes, and nothing else', async () => {
     const { call, m, vault } = await api({ 'Excalidraw/random.excalidraw.md': DRAW('', 'x ^a'), 'Excalidraw/board.canvas': '{"nodes":[]}' });
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);

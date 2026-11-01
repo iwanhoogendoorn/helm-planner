@@ -15,6 +15,7 @@ import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { daybookSection } from '../daybook';
+import { dayPictureSection, dayPictureTile } from '../dayPictures';
 import { openPlanDayAi } from '../modals/planDayAi';
 import { openExportReport } from '../modals/exportReport';
 import { timerBar } from '../focusTimer';
@@ -89,6 +90,11 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   if (note?.regionBroken) root.appendChild(h('div', { cls: 'helm-banner is-error' }, icon('alert-triangle'), h('span', { text: 'The Helm region in this daily note has no end marker. Fix the note before Helm writes to it.' }), button('Open', { onClick: () => void ctx.openFile(note.path) })));
 
   const store = state.collapsed;
+
+  for (const kind of ['quote', 'morning'] as const) {
+    const picture = dayPictureSection(ctx, date, kind, store);
+    if (picture) root.appendChild(picture);
+  }
 
   // Needs attention: work that is late, overdue or simply carried over. It follows you onto every day
   // you open until you deal with it — planning it onto a day from today onwards, or finishing it.
@@ -176,7 +182,8 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   // The day's diary, under the plan: what happened, and a line to add the next thing. A past day that
   // holds none is left alone — there is nothing to read and nothing you are about to write.
   const diary = ctx.index.daybook(date);
-  if (diary.length > 0 || !isPast) root.appendChild(daybookSection(ctx, date, store));
+  const evening = dayPictureTile(ctx, date, 'evening');
+  if (diary.length > 0 || !isPast || evening) root.appendChild(daybookSection(ctx, date, store, evening));
 
   if (plan.unmirrored.length > 0 && !isPast) root.appendChild(h('div', { cls: 'helm-hint' }, `${plan.unmirrored.length} planned project task(s) are not in the daily note yet. `, button('Write them', { onClick: () => void ctx.run('Sync', async () => { for (const t of plan.unmirrored) await ctx.mutations.schedule(t.key, date); }) })));
 

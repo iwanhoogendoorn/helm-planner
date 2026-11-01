@@ -12,8 +12,8 @@ import type { UiContext } from './context';
 import { askText } from './fields';
 import { confirmModal } from './modals/confirm';
 
-/** The Daybook section for one day, with its entries and the box to add another. */
-export function daybookSection(ctx: UiContext, date: IsoDate, store: Map<string, boolean>): HTMLElement {
+/** The Daybook section for one day, with its entries, the box to add another, and what closes the day. */
+export function daybookSection(ctx: UiContext, date: IsoDate, store: Map<string, boolean>, closing: HTMLElement | null = null): HTMLElement {
   const entries = ctx.index.daybook(date);
   const jot = h('input', {
     cls: 'helm-quickadd-input helm-daybook-input',
@@ -34,6 +34,7 @@ export function daybookSection(ctx: UiContext, date: IsoDate, store: Map<string,
   },
     ...rows,
     h('div', { cls: 'helm-quickadd helm-daybook-add' }, icon('pen-line'), jot, button('Jot', { onClick: add })),
+    closing,
   );
 }
 

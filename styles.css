@@ -1224,3 +1224,12 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 
 /* Hidden by setShown(): a utility that must beat any display rule, so the one deliberate !important. */
 .helm-hidden { display: none !important; }
+
+/* The day's pictures: each in its own shape, never cropped. */
+.helm-day-picture { display: block; min-width: 0; width: fit-content; max-width: 100%; height: auto; padding: 0; border-radius: 8px; background: none; box-shadow: none; overflow: hidden; cursor: zoom-in; }
+.helm-day-picture img { display: block; width: auto; height: auto; max-width: 100%; max-height: 360px; }
+.helm-daybook .helm-day-picture { margin-top: 12px; }
+.helm-day-picture.is-pending { display: flex; flex-direction: column; justify-content: center; gap: 4px; width: 200px; min-height: 120px; padding: 12px; border: 1px dashed var(--background-modifier-border); color: var(--text-muted); font-size: var(--font-ui-small); cursor: default; }
+.helm-picture-modal { width: auto; max-width: 92vw; }
+.helm-picture-modal .modal-content { overflow: hidden; }
+.helm-picture-large { display: block; max-width: 100%; max-height: 72vh; margin: 0 auto; }

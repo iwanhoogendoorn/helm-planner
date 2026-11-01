@@ -174,6 +174,28 @@ describe('Today tab', () => {
     await waitFor(() => [...index.snapshot.tasks.values()].find((t) => t.text === 'One-off' && t.recurrence?.parsed), 'the rule to land');
   });
 
+  it('shows the day’s pictures, and on today says which are still to come', async () => {
+    const { ctx, index, vault, m } = await ctxFor({ '99 ATTACHMENTS/q.jpg': 'x', '99 ATTACHMENTS/comic-morning-x.jpg': 'x' });
+    const path = await m.ensureDailyNote(TODAY);
+    await vault.write(path, `${await vault.read(path)}\n![[99 ATTACHMENTS/q.jpg|quote-card ${TODAY}]]\n![[comic-morning-x.jpg|morning-comic ${TODAY}]]\n![[gone.jpg|evening-comic ${TODAY}]]\n`);
+    await index.rebuild();
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    // The quote and the morning comic open the day, each in a section of its own.
+    expect(texts(root, '.helm-section-title').slice(0, 2)).toEqual(['Daily quote', 'Morning comic']);
+    expect([...root.querySelectorAll('.helm-day-picture img')].map((i) => i.getAttribute('src'))).toEqual(['app://99 ATTACHMENTS/q.jpg', 'app://99 ATTACHMENTS/comic-morning-x.jpg']);
+    // The evening comic closes the Daybook; an embed whose file is not there yet still counts as to come.
+    expect(texts(root, '.helm-daybook .helm-day-picture.is-pending')).toEqual(['Evening comicArrives when the day is finished']);
+    click(root.querySelector('.helm-day-picture'));
+    expect(Modal.last!.contentEl.querySelector('img')!.getAttribute('src')).toBe('app://99 ATTACHMENTS/q.jpg');
+    // A past day with an evening comic and no diary still shows the Daybook, with the comic in it.
+    const past = index.dailyPath('2026-08-20');
+    await vault.write(past, '# Day\n\n![[99 ATTACHMENTS/q.jpg|evening-comic 2026-08-20]]\n');
+    await index.rebuild();
+    const closed = render((r) => renderToday(ctx, r, { date: '2026-08-20', collapsed: new Map() }));
+    expect(closed.querySelector('.helm-daybook .helm-day-picture img')).not.toBeNull();
+    expect(closed.querySelector('.helm-day-picture.is-pending')).toBeNull();
+  });
+
   it('offers each day once — the day it is on is “Part of …”, not a move', async () => {
     const { ctx, index, m } = await ctxFor();
     await m.addTask({ text: 'On today already', date: TODAY });
@@ -652,7 +674,7 @@ describe('Today tab', () => {
     const { ctx } = await ctxFor();
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
     expect(root.querySelector('.helm-day-title-main')!.textContent).toBe('Today');
-    expect(texts(root, '.helm-section-title')[0]).toBe('Needs attention');
+    expect(texts(root, '.helm-section-title').slice(0, 3)).toEqual(['Daily quote', 'Morning comic', 'Needs attention']);
     expect(texts(root, '.is-attention .helm-chip.reason')).toContain('overdue');
     expect(root.querySelector('.helm-empty')!.textContent).toContain('Nothing planned yet');
   });
@@ -2162,7 +2184,7 @@ describe('Dashboard tab', () => {
     const { ctx, vault } = await ctxFor();
     await ctx.mutations.schedule('tsk-0001', TODAY, 'morning');
     const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
-    expect(texts(root, '.helm-section-title')).toEqual(['Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime', 'Daybook']);
+    expect(texts(root, '.helm-section-title')).toEqual(['Daily quote', 'Morning comic', 'Needs attention', 'Habits', 'Morning', 'Afternoon', 'Evening', 'Anytime', 'Daybook']);
     // 'Collect diagrams' is a finished subtask: it sits under its task, once, and nowhere else.
     expect(texts(root, '.helm-section.part-anytime .helm-task-text')).toEqual(['Draft chapter list', 'Collect diagrams']);
     expect(texts(root, '.helm-section.part-anytime .helm-chip.subtasks')).toEqual(['1/1']);   // its task already counts it

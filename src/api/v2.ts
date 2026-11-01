@@ -337,8 +337,8 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
     const type = BINARY_TYPES[ext];
     if (!type) return missing('Only png, jpg, gif, webp, svg, .excalidraw and .canvas files are served');
     const snap = d.index.snapshot;
-    const known = snap.drawings.has(path) || [...snap.habits.values()].some((h) => h.iconImage === path && isSafeVaultPath(h.iconImage));
-    if (!known || !isSafeVaultPath(path)) return missing(`${path} is not a drawing or habit icon the index knows`);
+    const known = snap.drawings.has(path) || [...snap.habits.values()].some((h) => h.iconImage === path && isSafeVaultPath(h.iconImage)) || d.index.isDayPicture(path);
+    if (!known || !isSafeVaultPath(path)) return missing(`${path} is not a drawing, habit icon or day picture the index knows`);
     if (!d.readBinary) return { status: 501, body: { error: 'This server cannot read binary files' } };
     try { return { status: 200, body: null, raw: { contentType: type, bytes: new Uint8Array(await d.readBinary(path)) } }; }
     catch { return missing(`${path} could not be read`); }
@@ -750,6 +750,7 @@ export function dayJson(date: IsoDate, d: Ctx): Record<string, unknown> {
     openCount: plan.openCount, doneCount: plan.doneCount, plannedMinutes: plan.plannedMinutes, doneMinutes: plan.doneMinutes, capacityMinutes: settings.dailyCapacityMinutes,
     habits,
     daybook: { heading: heading ?? null, entries: daybookJson(d.index.daybook(date)) },
+    pictures: d.index.dayPictures(date),
     timeline: layoutJson(layOutDay(date, shown, settings), d),
   };
 }

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.52.0 — 2026-11-01
+
+- **The day's pictures show in the day view.** When a daily note embeds a quote
+  card, a morning comic or an evening comic, Helm shows it whole, in its own
+  shape: the Daily quote first in a section of its own, the Morning comic right
+  after it, and the Evening comic at the very end of the Daybook. Click one to
+  enlarge it.
+- **Today says what is still to come.** A picture that isn't there yet shows as
+  a text placeholder on today; other days show only what they have.
+- **The API lists and serves them.** `GET /day/:date` has `pictures`, and
+  `GET /files/binary` serves those files, for the iPhone app.
+
 ## 1.51.1 — 2026-10-30
 
 - **Skip this one is one click again.** It is back at the top level of every

@@ -111,6 +111,10 @@ export class ObsidianVault implements VaultAdapter {
     return mc.getFileCache?.(f)?.frontmatter ?? undefined;
   }
 
+  resolveLink(link: string, from: string): string | undefined {
+    return this.app.metadataCache.getFirstLinkpathDest?.(link, from)?.path;
+  }
+
   resourceUrl(path: string): string | undefined {
     const p = safe(path);
     const f = p === undefined ? null : this.app.vault.getAbstractFileByPath(p);

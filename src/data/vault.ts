@@ -25,6 +25,8 @@ export interface VaultAdapter {
   writeBinary?(path: string, data: ArrayBuffer): Promise<void>;
   /** Read a binary file (icons, drawings). */
   readBinary?(path: string): Promise<ArrayBuffer>;
+  /** The vault file a wikilink points at from a note, as Obsidian resolves it. */
+  resolveLink?(link: string, from: string): string | undefined;
   /** Create a folder (and parents). */
   createFolder?(path: string): Promise<void>;
   /** Frontmatter of a markdown file without reading it in full (a metadata cache where there is one). */
@@ -33,6 +35,10 @@ export interface VaultAdapter {
 
 export class MemoryVault implements VaultAdapter {
   files = new Map<string, string>();
+  resolveLink(link: string): string | undefined {
+    if (this.files.has(link)) return link;
+    return [...this.files.keys()].find((p) => p.endsWith(`/${link}`));
+  }
   mtimes = new Map<string, number>();
   writes: string[] = [];
   private clock = 1;
