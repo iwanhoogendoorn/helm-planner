@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AbstractInputSuggest, Menu, Modal, Notice } from '../stubs/obsidian';
 import { setup, TODAY, dailyPath } from '../data/fixture';
 import type { UiContext, TabId } from '../../src/ui/context';
@@ -194,6 +194,66 @@ describe('Today tab', () => {
     const closed = render((r) => renderToday(ctx, r, { date: '2026-08-20', collapsed: new Map() }));
     expect(closed.querySelector('.helm-daybook .helm-day-picture img')).not.toBeNull();
     expect(closed.querySelector('.helm-day-picture.is-pending')).toBeNull();
+  });
+
+  it('flips between comics, opens one from the top of its day, marks comic days, and has the day navigator at the end', async () => {
+    const { ctx, index, vault, m } = await ctxFor({ 'a.jpg': 'x', 'b.jpg': 'x', 'c.jpg': 'x' });
+    const first = '2026-08-03', second = '2026-08-10', third = '2026-08-20';
+    for (const [d, f] of [[second, 'b.jpg'], [first, 'a.jpg'], [third, 'c.jpg']] as const) {
+      await m.ensureDailyNote(d);
+      await vault.write(index.dailyPath(d), `# Day\n\n![[${f}|evening-comic ${d}]]\n`);
+    }
+    await m.ensureDailyNote('2026-08-11');
+    await index.rebuild();
+    const shown = (): string | null | undefined => Modal.last!.contentEl.querySelector('img')?.getAttribute('src');
+
+    // From the top of the day, straight to its comic; flipping skips days with none and stops at the ends.
+    const day = render((r) => renderToday(ctx, r, { date: second, collapsed: new Map() }));
+    click([...day.querySelectorAll('.helm-day-actions button')].find((b) => b.textContent === 'Comic'));
+    expect(shown()).toBe('app://b.jpg');
+    expect(Modal.last!.contentEl.textContent).toContain('2 of 3');
+    click(Modal.last!.contentEl.querySelector('[aria-label="Next evening comic"]'));
+    expect(shown()).toBe('app://c.jpg');
+    expect(Modal.last!.contentEl.querySelector('[aria-label="Next evening comic"]')!.hasAttribute('disabled')).toBe(true);
+    Modal.last!.keys.get('ArrowLeft')!();
+    Modal.last!.keys.get('ArrowLeft')!();
+    expect(shown()).toBe('app://a.jpg');
+    Modal.last!.keys.get('ArrowLeft')!();
+    expect(shown()).toBe('app://a.jpg');
+    // Its date opens that day.
+    const nav = vi.spyOn(ctx, 'navigate');
+    click(Modal.last!.contentEl.querySelector('.helm-picture-day'));
+    expect(Modal.last!.opened).toBe(false);
+    expect(nav).toHaveBeenLastCalledWith('today', { date: first });
+    nav.mockClear();
+
+    // A day without a comic has no button.
+    const none = render((r) => renderToday(ctx, r, { date: '2026-08-11', collapsed: new Map() }));
+    expect(texts(none, '.helm-day-actions button')).not.toContain('Comic');
+
+    // The navigator at the end moves on and starts the next day at its top.
+    day.scrollTop = 400;
+    const end = day.querySelector('.helm-day-nav-end')!;
+    expect(day.lastElementChild).toBe(end);
+    click(end.querySelector('[aria-label="Next day"]'));
+    expect(nav).toHaveBeenLastCalledWith('today', { date: '2026-08-11' });
+    expect(day.scrollTop).toBe(0);
+
+    // The month marks comic days and opens the comic without going to the day; Comics opens the latest up to the day in view.
+    nav.mockClear();
+    const month = render((r) => renderCalendar(ctx, r, { scope: 'month', anchor: second, collapsed: new Map() }));
+    expect(month.querySelector(`[data-date="${second}"] .helm-comic-badge`)).not.toBeNull();
+    expect(month.querySelector('[data-date="2026-08-11"] .helm-comic-badge')).toBeNull();
+    click(month.querySelector(`[data-date="${first}"] .helm-comic-badge`));
+    expect(shown()).toBe('app://a.jpg');
+    expect(nav).not.toHaveBeenCalled();
+    click([...month.querySelectorAll('.helm-cal-bar button')].find((b) => b.textContent === 'Comics'));
+    expect(shown()).toBe('app://b.jpg');
+    // A week's grid and a quarter's mini months show them too.
+    const week = render((r) => renderCalendar(ctx, r, { scope: 'week', anchor: second, collapsed: new Map() }));
+    expect(week.querySelectorAll('.helm-cal-day-head .helm-comic-badge')).toHaveLength(1);
+    const quarter = render((r) => renderCalendar(ctx, r, { scope: 'quarter', anchor: second, collapsed: new Map() }));
+    expect(quarter.querySelectorAll('.helm-mini-day.has-comic')).toHaveLength(3);
   });
 
   it('offers each day once — the day it is on is “Part of …”, not a move', async () => {

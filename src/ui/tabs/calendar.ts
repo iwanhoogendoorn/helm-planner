@@ -25,6 +25,7 @@ import { dayMenu, firstUsefulDay, onDayContext, periodMenu } from '../dayMenu';
 import { openCapture } from '../modals/capture';
 import { dragKeys, selection } from '../selection';
 import { renderTimeGrid } from '../calendarGrid';
+import { comicBadge, comicsButton, hasComic } from '../dayPictures';
 
 export type CalendarScope = 'day' | '3days' | 'week' | 'workweek' | 'month' | 'quarter' | 'year';
 export type CalendarView = 'list' | 'calendar';
@@ -70,6 +71,7 @@ export function renderCalendar(ctx: UiContext, root: HTMLElement, state: Calenda
       : view === 'calendar' && griddable
         ? button('Fit the week', { icon: 'sparkles', title: 'Size the week’s work, spread it over the days that are left, and propose times', onClick: () => openPlanWeekAi(ctx, span[0]!) })
         : null,
+    comicsButton(ctx, state.anchor),
     button('', { icon: 'file-down', title: 'Export what you are looking at as a PDF', onClick: () => openExportReport(ctx, { scope: state.scope === 'day' ? 'day' : state.scope === 'month' || state.scope === 'quarter' || state.scope === 'year' ? state.scope : 'week', anchor: state.anchor }) }),
     h('span', { cls: 'helm-hint', text: griddable ? `${span[0]} → ${span[span.length - 1]}` : `${period.start} → ${period.end}` }),
   ));
@@ -142,6 +144,7 @@ function renderMonth(ctx: UiContext, root: HTMLElement, period: Period, days: Ma
         b.done.length > 0 ? chip(`✓${b.done.length}`, 'done-count') : null,
         b.dueUnplanned.length > 0 ? chip(`!${b.dueUnplanned.length}`, 'due is-overdue', `${b.dueUnplanned.length} due, not planned`) : null,
         h('span', { cls: 'helm-spacer' }),
+        comicBadge(ctx, b.date),
         iconButton('plus', `New task on ${humanDate(b.date, today)}`, (ev) => { ev.stopPropagation(); openCapture(ctx, { date: b.date }); }, 'helm-month-plan helm-month-add'),
         b.date >= today ? iconButton('list-plus', 'Plan this day', (ev) => { ev.stopPropagation(); openPlanDay(ctx, b.date); }, 'helm-month-plan') : null,
       ));
@@ -230,8 +233,8 @@ function miniMonth(ctx: UiContext, m: Period, days: Map<IsoDate, DayBucket>, tod
     const out = d < m.start || d > m.end;
     const level = b && !out ? Math.min(4, Math.ceil((b.done.length / max) * 4)) : 0;
     grid.appendChild(h('button', {
-      cls: ['helm-mini-day', out && 'is-outside', d === today && 'is-today', `heat-${level}`, b && b.open.length > 0 && !out && 'has-open'],
-      title: b && !out ? `${humanDate(d, today)}: ${b.done.length} done · ${b.open.length} planned${b.dueUnplanned.length ? ` · ${b.dueUnplanned.length} due` : ''}` : '',
+      cls: ['helm-mini-day', out && 'is-outside', d === today && 'is-today', `heat-${level}`, b && b.open.length > 0 && !out && 'has-open', !out && hasComic(ctx, d) && 'has-comic'],
+      title: b && !out ? `${humanDate(d, today)}: ${b.done.length} done · ${b.open.length} planned${b.dueUnplanned.length ? ` · ${b.dueUnplanned.length} due` : ''}${hasComic(ctx, d) ? ' · evening comic' : ''}` : '',
       onClick: (ev) => { ev.stopPropagation(); if (!out) ctx.navigate('today', { date: d }); },
       onContextMenu: (ev: MouseEvent) => { if (!out) dayMenu(ctx, d, ev); else ev.preventDefault(); },
     }, h('span', { text: String(Number(d.slice(8, 10))) })));   // the date, always — a square with no number is a puzzle

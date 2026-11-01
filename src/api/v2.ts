@@ -5,6 +5,7 @@
  * rules live there, not here. `handleV2` answers `undefined` for a path it does not know, and
  * routes.ts turns that into a 404 or 405.
  */
+import { DAY_PICTURE_KINDS, type DayPictureKind } from '../core/dayPictures';
 import type { ApiRequest, ApiResponse } from './routes';
 import { asRecord, bad, day, findTask, has, isHhmm, made, missing, notAllowed, num, ok, PARTS, str, strList, tagList } from './routes';
 import { candidateJson, dayItemJson, daybookJson, goalJson, habitJson, horizonPeriodJson, layoutJson, periodJson, refOf, taskJson, type Ctx } from './json';
@@ -40,7 +41,7 @@ function iconType(path: string): string | undefined {
 
 const BINARY_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', excalidraw: 'application/json', canvas: 'application/json' };
 
-const HEADS = new Set(['drawings', 'settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files', 'report', 'report.pdf', 'maintenance', 'diagnostics']);
+const HEADS = new Set(['drawings', 'settings', 'day', 'focus', 'habits', 'inbox', 'week', 'calendar', 'pictures', 'periods', 'horizons', 'goals', 'review', 'stats', 'search', 'capture', 'notes', 'files', 'report', 'report.pdf', 'maintenance', 'diagnostics']);
 
 export async function handleV2(req: ApiRequest, d: Ctx): Promise<ApiResponse | undefined> {
   const parts = req.path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
@@ -220,6 +221,12 @@ async function route(parts: string[], method: string, req: ApiRequest, d: Ctx): 
       from, to,
       days: [...days.values()].map((b) => ({ date: b.date, open: b.open.length, done: b.done.length, dueUnplanned: b.dueUnplanned.length, minutes: b.minutes, ...(embed ? { openTasks: list(b.open), doneTasks: list(b.done), dueUnplannedTasks: list(b.dueUnplanned) } : { openRefs: list(b.open), doneRefs: list(b.done), dueUnplannedRefs: list(b.dueUnplanned) }) })),
     });
+  }
+
+  if (head === 'pictures' && method === 'GET' && parts.length === 1) {
+    const kind = req.query['kind'] ?? 'evening';
+    if (!DAY_PICTURE_KINDS.includes(kind as DayPictureKind)) return bad(`kind must be one of ${DAY_PICTURE_KINDS.join(', ')}`);
+    return ok({ kind, days: d.index.pictureDays(kind as DayPictureKind) });
   }
 
   if (head === 'periods' && ref !== undefined) {

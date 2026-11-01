@@ -12,6 +12,7 @@ import { openPlanWeekAi } from '../modals/planWeekAi';
 import { openExportReport } from '../modals/exportReport';
 import { openCapture } from '../modals/capture';
 import { onDayContext } from '../dayMenu';
+import { comicBadge } from '../dayPictures';
 import { periodOf } from '../../core/periods';
 import { goalProgress } from '../../data/planner';
 import { progressBar, richText } from '../dom';
@@ -80,6 +81,7 @@ export function renderWeek(ctx: UiContext, root: HTMLElement, state: WeekState):
         h('span', { cls: 'helm-week-dom', text: String(Number(d.date.slice(8, 10))) }),
         h('span', { cls: 'helm-spacer' }),
         d.minutes > 0 ? chip(minutesToHuman(d.minutes), d.minutes > settings.dailyCapacityMinutes ? 'effort is-over' : 'effort') : null,
+        comicBadge(ctx, d.date),
         iconButton('plus', `New task on ${humanDate(d.date, today)}`, (ev) => { ev.stopPropagation(); openCapture(ctx, { date: d.date }); }),
         iconButton('list-plus', 'Plan this day', (ev) => { ev.stopPropagation(); openPlanDay(ctx, d.date); }),
       ),

@@ -15,7 +15,7 @@ import { openCapture } from '../modals/capture';
 import { openHabitForm } from '../modals/habitForm';
 import { crumbBar, dateCrumbs } from '../crumbs';
 import { daybookSection } from '../daybook';
-import { dayPictureSection, dayPictureTile } from '../dayPictures';
+import { dayPictureSection, dayPictureTile, hasComic, openDayPicture } from '../dayPictures';
 import { openPlanDayAi } from '../modals/planDayAi';
 import { openExportReport } from '../modals/exportReport';
 import { timerBar } from '../focusTimer';
@@ -60,16 +60,19 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
   const timer = timerBar(ctx);
   if (timer) root.appendChild(timer);
   root.appendChild(crumbBar(ctx, 'today', dateCrumbs(ctx, date, 'day', { day: true }), { homeClick: () => go(today), homeTitle: 'Jump to today' }));
-  root.append(h('div', { cls: 'helm-day-head' },
-    h('div', { cls: 'helm-day-nav' },
-      iconButton('chevron-left', 'Previous day', () => go(addDays(date, -1))),
-      h('button', { cls: ['helm-day-title', isToday && 'is-today'], onClick: () => go(today), title: isToday ? date : 'Jump to today' },
-        h('span', { cls: 'helm-day-title-main', text: humanDate(date, today) }),
-        h('span', { cls: 'helm-day-title-sub', text: humanDate(date, undefined, { year: true }) }),
-      ),
-      iconButton('chevron-right', 'Next day', () => go(addDays(date, 1))),
+  const dayNav = (to: (d: IsoDate) => void, cls = ''): HTMLElement => h('div', { cls: ['helm-day-nav', cls] },
+    iconButton('chevron-left', 'Previous day', () => to(addDays(date, -1))),
+    h('button', { cls: ['helm-day-title', isToday && 'is-today'], onClick: () => to(today), title: isToday ? date : 'Jump to today' },
+      h('span', { cls: 'helm-day-title-main', text: humanDate(date, today) }),
+      h('span', { cls: 'helm-day-title-sub', text: humanDate(date, undefined, { year: true }) }),
     ),
+    iconButton('chevron-right', 'Next day', () => to(addDays(date, 1))),
+  );
+  root.append(h('div', { cls: 'helm-day-head' },
+    dayNav(go),
     h('div', { cls: 'helm-day-actions' },
+      // The comic closes the day, a long scroll down; looking back, this is the way straight to it.
+      hasComic(ctx, date) ? button('Comic', { icon: 'image', title: 'See the evening comic', onClick: () => openDayPicture(ctx, date, 'evening') }) : null,
       button('Plan day', { icon: 'list-plus', primary: !isPast && plan.openCount === 0, onClick: () => openPlanDay(ctx, date) }),
       button('Fit the day', { icon: 'sparkles', title: 'Size the day’s work, split it into stretches with breaks, and propose times', onClick: () => openPlanDayAi(ctx, date) }),
       button('Wrap up', { icon: 'moon', onClick: () => openWrapUp(ctx, date) }),
@@ -187,6 +190,8 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
 
   if (plan.unmirrored.length > 0 && !isPast) root.appendChild(h('div', { cls: 'helm-hint' }, `${plan.unmirrored.length} planned project task(s) are not in the daily note yet. `, button('Write them', { onClick: () => void ctx.run('Sync', async () => { for (const t of plan.unmirrored) await ctx.mutations.schedule(t.key, date); }) })));
 
+  // The same way on, for when you have read to the end. The next day starts at its top, not down here.
+  root.appendChild(dayNav((d) => { go(d); root.scrollTop = 0; }, 'helm-day-nav-end'));
 }
 
 /**

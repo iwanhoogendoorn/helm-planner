@@ -1232,4 +1232,12 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-day-picture.is-pending { display: flex; flex-direction: column; justify-content: center; gap: 4px; width: 200px; min-height: 120px; padding: 12px; border: 1px dashed var(--background-modifier-border); color: var(--text-muted); font-size: var(--font-ui-small); cursor: default; }
 .helm-picture-modal { width: auto; max-width: 92vw; }
 .helm-picture-modal .modal-content { overflow: hidden; }
-.helm-picture-large { display: block; max-width: 100%; max-height: 72vh; margin: 0 auto; }
+.helm-picture-large { display: block; max-width: 100%; max-height: 68vh; margin: 0 auto; }
+.helm-picture-bar { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
+.helm-picture-when { display: flex; flex-direction: column; align-items: center; min-width: 170px; }
+.helm-picture-day { background: none; border: none; box-shadow: none; height: auto; padding: 2px 8px; font-weight: 600; cursor: pointer; }
+.helm-picture-day:hover { background: var(--background-modifier-hover); }
+.helm-picture-bar .helm-iconbtn[disabled] { opacity: 0.3; cursor: default; }
+.helm-day-nav-end { justify-content: center; padding: var(--size-4-3) 0; margin-top: var(--size-4-2); border-top: 1px solid var(--background-modifier-border); }
+.helm-comic-badge { color: var(--color-purple); }
+.helm-mini-day.has-comic::before { content: ''; position: absolute; left: 2px; bottom: 2px; width: 4px; height: 4px; border-radius: 2px; background: var(--color-purple); }

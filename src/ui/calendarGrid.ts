@@ -20,6 +20,7 @@ import { taskMenu } from './menus';
 import { plainLabel } from '../core/label';
 import { dragKeys, selection, setDragKeys } from './selection';
 import { onDayContext } from './dayMenu';
+import { comicBadge } from './dayPictures';
 
 const PX_PER_HOUR = 56;
 
@@ -188,6 +189,7 @@ export function renderTimeGrid(ctx: UiContext, root: HTMLElement, dates: IsoDate
       h('span', { cls: 'helm-cal-dow', text: WEEKDAY_SHORT[isoWeekday(d) - 1] ?? '' }),
       h('span', { cls: 'helm-cal-dom', text: String(Number(d.slice(8, 10))) }),
       h('span', { cls: 'helm-cal-mon', text: MONTH_SHORT[Number(d.slice(5, 7)) - 1] ?? '' }),
+      comicBadge(ctx, d),
     ), ctx, d));
 
     const cell = h('div', { cls: ['helm-cal-allday-cell', isToday && 'is-today'] }, ...layout.allDay.map((t) => eventBox(ctx, t, { compact: true })));

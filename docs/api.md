@@ -518,6 +518,10 @@ list: every note that can be attached (daily notes are attached as days, drawing
 title-prefix matches first. `DELETE /drawings { path }` trashes a drawing Helm knows and removes
 its embeds. `DELETE /notes { path }` (above) does the same for an attached note.
 
+`GET /pictures?kind=evening` lists every day with that picture, oldest first:
+`{ kind, days: [{ date, path }] }`. `kind` is `quote`, `morning` or `evening` (the default).
+A calendar's comic marks and flipping from one comic to the next both read this.
+
 `GET /files/binary?path=…` serves the bytes of an image (png, jpg, gif, webp, svg) or a
 `.excalidraw` / `.canvas` file with the right content type — only for drawings the index knows
 and the icon images of habits the index knows; anything else, an image merely dropped in the

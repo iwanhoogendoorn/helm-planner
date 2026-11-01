@@ -742,6 +742,17 @@ export class HelmIndex {
     return (this.files.get(from)?.pictures ?? []).flatMap(({ kind, link }) => { const path = this.vault.resolveLink?.(link, from); return path ? [{ kind, path }] : []; });
   }
 
+  /** Every day that has this picture, oldest first: what flipping from one comic to the next walks through. */
+  pictureDays(kind: DayPictureKind): { date: IsoDate; path: string }[] {
+    const days: { date: IsoDate; path: string }[] = [];
+    for (const e of this.files.values()) {
+      if (e.kind !== 'daily' || !e.date || !e.pictures?.some((p) => p.kind === kind)) continue;
+      const path = this.dayPictures(e.date).find((p) => p.kind === kind)?.path;
+      if (path) days.push({ date: e.date, path });
+    }
+    return days.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
   /** Whether a daily note shows this file as one of its pictures. */
   isDayPicture(path: string): boolean {
     for (const e of this.files.values()) {

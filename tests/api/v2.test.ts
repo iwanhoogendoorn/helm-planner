@@ -964,6 +964,9 @@ describe('v2 · Phase C: drawings, linking notes, binary files, daily-note info'
     expect(served.status).toBe(200);
     expect(served.raw).toMatchObject({ contentType: 'image/jpeg' });
     expect((await call('GET', 'files/binary', undefined, { path: '99 ATTACHMENTS/stray.jpg' })).status).toBe(404);
+    expect((await call('GET', 'pictures', undefined, { kind: 'morning' })).body).toEqual({ kind: 'morning', days: [{ date: TODAY, path: '99 ATTACHMENTS/comic-morning-x.jpg' }] });
+    expect((await call('GET', 'pictures')).body).toEqual({ kind: 'evening', days: [] }); // the embed's file is not there yet
+    expect((await call('GET', 'pictures', undefined, { kind: 'selfie' })).status).toBe(400);
     await m.addDaybookEntry(TODAY, 'Later', { time: '09:00' });
     const note = await vault.read(path);
     expect(note.indexOf('**09:00** Later')).toBeLessThan(note.indexOf('## 🌙 Evening comic'));

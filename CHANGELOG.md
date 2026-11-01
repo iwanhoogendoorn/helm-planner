@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **The day navigator is at the end of the day page too.** It takes you to the
+  top of the next day.
+- **A day with an evening comic has a Comic button at the top**, so looking back
+  needs no scroll to the end of the Daybook.
+- **The calendar marks comic days.** Week and month views show a button that opens
+  the comic; quarter and year views show a dot. A Comics button opens the latest one up to the day in view.
+- **Flip between comics.** An enlarged picture has previous and next, by button or
+  arrow key, plus its date, which opens that day. Works for all three kinds.
+- **API:** `GET /pictures?kind=evening` lists every day with that picture.
+
 ## 1.52.0 — 2026-11-01
 
 - **The day's pictures show in the day view.** When a daily note embeds a quote

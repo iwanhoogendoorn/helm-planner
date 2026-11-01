@@ -20,6 +20,8 @@ export class ItemView { contentEl: HTMLElement; app: unknown; navigation = true;
 export class WorkspaceLeaf {}
 export class Modal {
   app: unknown; titleEl: HTMLElement; contentEl: HTMLElement; opened = false;
+  keys = new Map<string, () => unknown>();
+  scope = { register: (_mods: string[], key: string, fn: () => unknown): void => { this.keys.set(key, fn); } };
   constructor(app: unknown) { this.app = app; this.titleEl = document.createElement('div'); this.contentEl = document.createElement('div'); }
   open(): void { this.opened = true; Modal.last = this; }
   close(): void { this.opened = false; this.onClose(); }
