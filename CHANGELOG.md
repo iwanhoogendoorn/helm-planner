@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.53.1 — 2026-11-01
+
+- **The day navigator at the end of the day page sits where the top one does**,
+  on the left, instead of centred.
+
 ## 1.53.0 — 2026-11-01
 
 - **The day navigator is at the end of the day page too.** It takes you to the

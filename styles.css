@@ -1238,6 +1238,6 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-picture-day { background: none; border: none; box-shadow: none; height: auto; padding: 2px 8px; font-weight: 600; cursor: pointer; }
 .helm-picture-day:hover { background: var(--background-modifier-hover); }
 .helm-picture-bar .helm-iconbtn[disabled] { opacity: 0.3; cursor: default; }
-.helm-day-nav-end { justify-content: center; padding: var(--size-4-3) 0; margin-top: var(--size-4-2); border-top: 1px solid var(--background-modifier-border); }
+.helm-day-nav-end { padding: var(--size-4-3) 0; margin-top: var(--size-4-2); border-top: 1px solid var(--background-modifier-border); }
 .helm-comic-badge { color: var(--color-purple); }
 .helm-mini-day.has-comic::before { content: ''; position: absolute; left: 2px; bottom: 2px; width: 4px; height: 4px; border-radius: 2px; background: var(--color-purple); }
