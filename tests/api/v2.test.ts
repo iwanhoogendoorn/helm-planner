@@ -953,18 +953,20 @@ describe('v2 · Phase C: drawings, linking notes, binary files, daily-note info'
   });
 
   it('lists the day’s pictures, serves them, and a diary entry stays out of the comic’s heading', async () => {
-    const { call, m, vault, index } = await api({ '99 ATTACHMENTS/comic-morning-x.jpg': 'x', '99 ATTACHMENTS/stray.jpg': 'x' });
+    const { call, m, vault, index } = await api({ '99 ATTACHMENTS/quote-x.jpg': 'x', '99 ATTACHMENTS/comic-morning-x.jpg': 'x', '99 ATTACHMENTS/stray.jpg': 'x' });
     const path = await m.ensureDailyNote(TODAY);
-    await vault.write(path, `${await vault.read(path)}\n![[comic-morning-x.jpg|morning-comic ${TODAY}]]\n\n## Daybook\n\n- **08:00** Up\n\n## 🌙 Evening comic\n\n![[gone.jpg|evening-comic ${TODAY}]]\n`);
+    await vault.write(path, `${await vault.read(path)}\n![[quote-x.jpg|quote-card ${TODAY}]]\n![[comic-morning-x.jpg|morning-comic ${TODAY}]]\n\n## Daybook\n\n- **08:00** Up\n\n## 🌙 Evening comic\n\n![[gone.jpg|evening-comic ${TODAY}]]\n`);
     await index.rebuild();
     const day = (await call('GET', `day/${TODAY}`)).body;
-    expect(day.pictures).toEqual([{ kind: 'morning', path: '99 ATTACHMENTS/comic-morning-x.jpg' }]);
-    await vault.writeBinary('99 ATTACHMENTS/comic-morning-x.jpg', new Uint8Array([1, 2]).buffer as ArrayBuffer);
-    const served = await call('GET', 'files/binary', undefined, { path: '99 ATTACHMENTS/comic-morning-x.jpg' });
+    expect(day.pictures).toEqual([{ kind: 'quote', path: '99 ATTACHMENTS/quote-x.jpg' }]); // a morning comic is no longer shown
+    await vault.writeBinary('99 ATTACHMENTS/quote-x.jpg', new Uint8Array([1, 2]).buffer as ArrayBuffer);
+    const served = await call('GET', 'files/binary', undefined, { path: '99 ATTACHMENTS/quote-x.jpg' });
     expect(served.status).toBe(200);
     expect(served.raw).toMatchObject({ contentType: 'image/jpeg' });
     expect((await call('GET', 'files/binary', undefined, { path: '99 ATTACHMENTS/stray.jpg' })).status).toBe(404);
-    expect((await call('GET', 'pictures', undefined, { kind: 'morning' })).body).toEqual({ kind: 'morning', days: [{ date: TODAY, path: '99 ATTACHMENTS/comic-morning-x.jpg' }] });
+    expect((await call('GET', 'files/binary', undefined, { path: '99 ATTACHMENTS/comic-morning-x.jpg' })).status).toBe(404);
+    expect((await call('GET', 'pictures', undefined, { kind: 'quote' })).body).toEqual({ kind: 'quote', days: [{ date: TODAY, path: '99 ATTACHMENTS/quote-x.jpg' }] });
+    expect((await call('GET', 'pictures', undefined, { kind: 'morning' })).status).toBe(400);
     expect((await call('GET', 'pictures')).body).toEqual({ kind: 'evening', days: [] }); // the embed's file is not there yet
     expect((await call('GET', 'pictures', undefined, { kind: 'selfie' })).status).toBe(400);
     await m.addDaybookEntry(TODAY, 'Later', { time: '09:00' });

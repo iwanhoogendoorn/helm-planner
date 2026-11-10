@@ -94,10 +94,8 @@ export function renderToday(ctx: UiContext, root: HTMLElement, state: TodayState
 
   const store = state.collapsed;
 
-  for (const kind of ['quote', 'morning'] as const) {
-    const picture = dayPictureSection(ctx, date, kind, store);
-    if (picture) root.appendChild(picture);
-  }
+  const quote = dayPictureSection(ctx, date, 'quote', store);
+  if (quote) root.appendChild(quote);
 
   // Needs attention: work that is late, overdue or simply carried over. It follows you onto every day
   // you open until you deal with it — planning it onto a day from today onwards, or finishing it.

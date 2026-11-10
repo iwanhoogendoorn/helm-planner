@@ -519,7 +519,7 @@ title-prefix matches first. `DELETE /drawings { path }` trashes a drawing Helm k
 its embeds. `DELETE /notes { path }` (above) does the same for an attached note.
 
 `GET /pictures?kind=evening` lists every day with that picture, oldest first:
-`{ kind, days: [{ date, path }] }`. `kind` is `quote`, `morning` or `evening` (the default).
+`{ kind, days: [{ date, path }] }`. `kind` is `quote` or `evening` (the default).
 A calendar's comic marks and flipping from one comic to the next both read this.
 
 `GET /files/binary?path=…` serves the bytes of an image (png, jpg, gif, webp, svg) or a

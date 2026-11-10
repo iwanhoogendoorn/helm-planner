@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.54.0 — 2026-11-10
+
+- **The morning comic is gone.** Helm no longer shows it in the day view or lists
+  and serves it over the API; an older note that still embeds one is left as it is.
+  The daily quote and the evening comic stay.
+
 ## 1.53.1 — 2026-11-01
 
 - **The day navigator at the end of the day page sits where the top one does**,

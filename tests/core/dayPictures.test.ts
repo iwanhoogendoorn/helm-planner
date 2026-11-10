@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseDayPictures } from '../../src/core/dayPictures';
 
 describe('parseDayPictures', () => {
-  it('reads the bot’s embeds by alias or name, each kind once, in day order', () => {
+  it('reads the bot’s embeds by alias or name, each kind once, in day order, and leaves a morning comic out', () => {
     const note = [
       '## 🌙 Evening comic', '![[99 ATTACHMENTS/e.jpg|evening-comic 2026-10-31]]',
       '![[99 ATTACHMENTS/q.jpg|quote-card 2026-10-31]]',
@@ -11,7 +11,6 @@ describe('parseDayPictures', () => {
     ].join('\n');
     expect(parseDayPictures(note)).toEqual([
       { kind: 'quote', link: '99 ATTACHMENTS/q.jpg' },
-      { kind: 'morning', link: 'comic-morning-2026-10-31.jpg' },
       { kind: 'evening', link: '99 ATTACHMENTS/e.jpg' },
     ]);
   });

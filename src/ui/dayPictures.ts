@@ -1,6 +1,6 @@
 /**
- * The day's pictures, each whole and in its own shape, each in its own place: the quote and the morning
- * comic open the day, the evening comic closes the Daybook. Today says what is still to come; any other
+ * The day's pictures, each whole and in its own shape, each in its own place: the quote opens the day,
+ * the evening comic closes the Daybook. Today says what is still to come; any other
  * day shows only what it has.
  */
 import { Modal } from 'obsidian';
@@ -10,8 +10,8 @@ import type { IsoDate } from '../core/types';
 import type { UiContext } from './context';
 import { button, h, iconButton, section } from './dom';
 
-const LABEL: Record<DayPictureKind, string> = { quote: 'Daily quote', morning: 'Morning comic', evening: 'Evening comic' };
-const PENDING: Record<DayPictureKind, string> = { quote: 'Arrives when the day starts', morning: 'Arrives when the day starts', evening: 'Arrives when the day is finished' };
+const LABEL: Record<DayPictureKind, string> = { quote: 'Daily quote', evening: 'Evening comic' };
+const PENDING: Record<DayPictureKind, string> = { quote: 'Arrives when the day starts', evening: 'Arrives when the day is finished' };
 
 /** One picture of the day, or on today what is still to come; nothing otherwise. */
 export function dayPictureTile(ctx: UiContext, date: IsoDate, kind: DayPictureKind): HTMLElement | null {
@@ -22,7 +22,7 @@ export function dayPictureTile(ctx: UiContext, date: IsoDate, kind: DayPictureKi
   return date === ctx.today() ? h('div', { cls: 'helm-day-picture is-pending' }, h('strong', { text: label }), h('span', { text: PENDING[kind] })) : null;
 }
 
-/** A picture with a section of its own: the quote and the morning comic open the day. */
+/** A picture with a section of its own: the quote opens the day. */
 export function dayPictureSection(ctx: UiContext, date: IsoDate, kind: DayPictureKind, store: Map<string, boolean>): HTMLElement | null {
   const tile = dayPictureTile(ctx, date, kind);
   return tile && section(LABEL[kind], { store, key: `picture-${kind}`, cls: 'helm-day-picture-section', collapsed: false }, tile);

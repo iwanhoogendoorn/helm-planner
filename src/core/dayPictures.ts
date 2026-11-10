@@ -1,19 +1,19 @@
 /**
- * The pictures a daily note carries: the quote card and the two comics the bot embeds through the day.
- * It marks each with an alias (`![[x.jpg|morning-comic 2026-11-01]]`); a bare `comic-morning-…` name counts too.
+ * The pictures a daily note carries: the quote card the bot embeds as the day starts, and the comic as it ends.
+ * It marks each with an alias (`![[x.jpg|evening-comic 2026-11-01]]`); a bare `comic-evening-…` name counts too.
+ * A morning comic is no longer made, and one an older note still embeds is not shown.
  */
-export type DayPictureKind = 'quote' | 'morning' | 'evening';
+export type DayPictureKind = 'quote' | 'evening';
 
 export interface DayPictureLink { kind: DayPictureKind; link: string }
 
-export const DAY_PICTURE_KINDS: DayPictureKind[] = ['quote', 'morning', 'evening'];
+export const DAY_PICTURE_KINDS: DayPictureKind[] = ['quote', 'evening'];
 
 const EMBED_RE = /!\[\[([^\]|#]+\.(?:png|jpe?g|gif|webp))(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/gi;
 
 function kindOf(mark: string): DayPictureKind | undefined {
   const m = mark.toLowerCase();
   if (m.includes('quote-card')) return 'quote';
-  if (m.includes('morning-comic') || m.includes('comic-morning')) return 'morning';
   if (m.includes('evening-comic') || m.includes('comic-evening')) return 'evening';
   return undefined;
 }
