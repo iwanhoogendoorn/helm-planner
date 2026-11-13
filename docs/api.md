@@ -34,6 +34,15 @@ curl -s $HELM/health -H "Authorization: Bearer $TOKEN"
 - **status** is `todo`, `doing`, `done`, `cancelled`, `waiting` or `forwarded`.
 - Every write replies with `written`: the vault files that changed.
 
+## Sending a POST twice
+
+A `POST` may carry `Idempotency-Key: <8 to 128 printable characters, no spaces>`. The same key on
+the same path is done once: a second request gets the first one's answer, with
+`Idempotent-Replay: true`, and nothing is written again. That is for a caller that never heard
+the answer (a phone that timed out) and tries again. Only an answer that succeeded is remembered,
+for thirty days, and across a restart of Obsidian (in `idempotency.json` beside the plugin's files);
+a refused request can be corrected and sent under the same key.
+
 ## Routes
 
 ### `GET /health`
@@ -526,6 +535,9 @@ A calendar's comic marks and flipping from one comic to the next both read this.
 `.excalidraw` / `.canvas` file with the right content type — only for drawings the index knows
 and the icon images of habits the index knows; anything else, an image merely dropped in the
 icons folder included, is a 404.
+The reply carries an `ETag` that is a hash of the bytes, `"sha256-<first 32 hex digits>"`. Send it
+back as `If-None-Match` and an unchanged file answers `304` with no body, so a client that kept
+a copy (and can work the tag out from that copy) does not download it again.
 
 Every path a caller names — a `folder` for a new note or drawing, a note or drawing to link, a
 file to read, a habit's `iconImage` — must be relative and inside the vault: no leading slash,

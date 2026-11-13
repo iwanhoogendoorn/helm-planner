@@ -18,7 +18,7 @@ export class FsVault implements VaultAdapter {
 
   /** Paths written since the last call — the API reports them so a caller can see what it changed. */
   takeWrites(): string[] { const w = [...new Set(this.writes)]; this.writes = []; return w; }
-  private noteWrite(p: string): void { this.writes.push(p); if (this.writes.length > 200) this.writes = this.writes.slice(-200); }
+  private noteWrite(p: string): void { this.walked = undefined; this.writes.push(p); if (this.writes.length > 200) this.writes = this.writes.slice(-200); }
 
   /** Absolute path for a vault-relative one; refuses anything that would leave the vault. */
   abs(rel: string): string {
@@ -38,6 +38,13 @@ export class FsVault implements VaultAdapter {
   /** Hidden files and folders (`.obsidian`, `.trash`, `.git`, `.helm-dev-token`) are not part of the vault, as in Obsidian. */
   static visible(rel: string): boolean {
     return rel.split('/').every((seg) => seg !== '' && !seg.startsWith('.') && !SKIP_DIRS.has(seg));
+  }
+
+  /** The last walk, for the many links of one request: resolving each must not read the whole vault again. */
+  private walked: { at: number; files: string[] } | undefined;
+  private walkRecent(): string[] {
+    if (!this.walked || Date.now() - this.walked.at > 1000) this.walked = { at: Date.now(), files: this.walk() };
+    return this.walked.files;
   }
 
   private walk(): string[] {
@@ -85,6 +92,29 @@ export class FsVault implements VaultAdapter {
   async readBinary(p: string): Promise<ArrayBuffer> {
     const buf = await fs.promises.readFile(this.abs(p));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  }
+
+  /**
+   * The file a wikilink names, as Obsidian finds it: that path itself, else the file of that name
+   * wherever it is in the vault: beside the note that links to it first, else the shortest path when
+   * several share the name. Hidden folders, anything outside the vault and a symbolic link (which
+   * could point outside it) are never an answer.
+   */
+  resolveLink(link: string, from?: string): string | undefined {
+    const want = link.replace(/^\/+/, '');
+    if (!want || !FsVault.visible(want) || want.split('/').includes('..')) return undefined;
+    if (this.isPlainFile(want)) return want;
+    const beside = from?.includes('/') ? `${from.slice(0, from.lastIndexOf('/'))}/${want}` : undefined;
+    if (beside && FsVault.visible(beside) && this.isPlainFile(beside)) return beside;
+    return this.walkRecent().filter((p) => p.endsWith(`/${want}`) && this.isPlainFile(p)).sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
+  }
+
+  /** A real file at this path, reached through real folders: no link anywhere on the way. */
+  private isPlainFile(rel: string): boolean {
+    try {
+      const full = this.abs(rel);
+      return fs.lstatSync(full).isFile() && fs.realpathSync(full) === path.join(fs.realpathSync(this.root), ...rel.split('/'));
+    } catch { return false; }
   }
 
   async createFolder(p: string): Promise<void> { await fs.promises.mkdir(this.abs(p), { recursive: true }); }

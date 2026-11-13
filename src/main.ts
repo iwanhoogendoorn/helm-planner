@@ -150,6 +150,7 @@ export default class HelmPlugin extends Plugin {
         host: bind.host,
         token: this.settings.apiToken,
         log: (m) => console.log(`[helm/api] ${m}`),
+        idempotency: this.idempotencyStore(),
         deps: {
           index: this.index,
           mutations: this.mutations,
@@ -167,6 +168,16 @@ export default class HelmPlugin extends Plugin {
       console.error('[helm/api]', e);
       new Notice(`Helm API: ${this.apiError}.`);
     }
+  }
+
+  /** The answers to keyed POSTs live beside the plugin's own files, so they are there after Obsidian restarts. */
+  private idempotencyStore(): { load: () => Promise<string | undefined>; save: (json: string) => Promise<void> } {
+    const path = `${this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`}/idempotency.json`;
+    const adapter = this.app.vault.adapter;
+    return {
+      load: async () => ((await adapter.exists(path)) ? adapter.read(path) : undefined),
+      save: (json) => adapter.write(path, json),
+    };
   }
 
   override onunload(): void {

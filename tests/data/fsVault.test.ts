@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FsVault } from '../../src/data/fsVault';
@@ -26,6 +26,37 @@ describe('FsVault', () => {
   it('lists markdown files recursively and leaves hidden folders, the trash and node_modules out', async () => {
     expect(await vault.list()).toEqual(['01 INBOX/Inbox.md', '02 PROJECTS/Kitchen/Kitchen.md']);
     expect(await vault.listOther()).toEqual(['02 PROJECTS/Kitchen/board.canvas', '02 PROJECTS/Kitchen/plan.excalidraw']);
+  });
+
+  it('resolves a wikilink to the file of that name, as Obsidian does, and never to something hidden or outside', () => {
+    writeFileSync(join(root, '02 PROJECTS/Kitchen/comic.jpg'), 'x');
+    mkdirSync(join(root, '99 ATTACHMENTS/deep'), { recursive: true });
+    writeFileSync(join(root, '99 ATTACHMENTS/deep/comic.jpg'), 'x');
+    expect(vault.resolveLink('02 PROJECTS/Kitchen/plan.excalidraw')).toBe('02 PROJECTS/Kitchen/plan.excalidraw');
+    expect(vault.resolveLink('plan.excalidraw')).toBe('02 PROJECTS/Kitchen/plan.excalidraw');
+    expect(vault.resolveLink('Kitchen/board.canvas')).toBe('02 PROJECTS/Kitchen/board.canvas');
+    expect(vault.resolveLink('comic.jpg')).toBe('02 PROJECTS/Kitchen/comic.jpg'); // the shorter path of the two
+    expect(vault.resolveLink('nope.jpg')).toBeUndefined();
+    expect(vault.resolveLink('02 PROJECTS')).toBeUndefined(); // a folder is not a file
+    expect(vault.resolveLink('app.json')).toBeUndefined();
+    expect(vault.resolveLink('.obsidian/app.json')).toBeUndefined();
+    expect(vault.resolveLink('.helm-dev-token')).toBeUndefined();
+    expect(vault.resolveLink('../outside.md')).toBeUndefined();
+    expect(vault.resolveLink('')).toBeUndefined();
+
+    // Beside the note that links to it wins over a shorter path elsewhere, as in Obsidian.
+    expect(vault.resolveLink('comic.jpg', '99 ATTACHMENTS/deep/Note.md')).toBe('99 ATTACHMENTS/deep/comic.jpg');
+    expect(vault.resolveLink('comic.jpg', 'Root note.md')).toBe('02 PROJECTS/Kitchen/comic.jpg');
+
+    // A link to a file outside the vault, or a folder that is one, is not a file of the vault.
+    const outside = mkdtempSync(join(tmpdir(), 'helm-outside-'));
+    writeFileSync(join(outside, 'secret.jpg'), 'x');
+    symlinkSync(join(outside, 'secret.jpg'), join(root, '99 ATTACHMENTS/linked.jpg'));
+    symlinkSync(outside, join(root, '99 ATTACHMENTS/away'));
+    expect(vault.resolveLink('99 ATTACHMENTS/linked.jpg')).toBeUndefined();
+    expect(vault.resolveLink('linked.jpg')).toBeUndefined();
+    expect(vault.resolveLink('99 ATTACHMENTS/away/secret.jpg')).toBeUndefined();
+    rmSync(outside, { recursive: true, force: true });
   });
 
   it('reads, writes (creating folders), reports mtimes and remembers what it wrote', async () => {

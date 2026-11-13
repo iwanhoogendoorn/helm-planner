@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.55.0 — 2026-11-13
+
+- **A picture the phone already has is not sent again.** `GET /files/binary` names
+  each file by a hash of its bytes (`ETag`) and answers `304` with no body when the
+  caller sends that name back (`If-None-Match`). Nothing changes for a caller that
+  does not.
+- **A capture sent twice is written once.** A `POST` may carry an
+  `Idempotency-Key`; the same key gets the first answer back, for thirty days and
+  across a restart of Obsidian. The phone uses it to send what it saved while Helm
+  was out of reach without risking a double.
+- The dev server (`npm run serve:dev`) resolves embedded pictures, so a day's
+  quote and comic are served from a disposable vault too.
+
 ## 1.54.0 — 2026-11-10
 
 - **The morning comic is gone.** Helm no longer shows it in the day view or lists

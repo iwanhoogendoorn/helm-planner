@@ -160,6 +160,11 @@ async function main(): Promise<void> {
   const server = await startApiServer({
     port, host, token,
     log: (m) => console.log(`[helm/api] ${m}`),
+    // Hidden, so it is not part of the vault; there after a restart, as in the plugin.
+    idempotency: {
+      load: async () => (existsSync(join(vaultDir, '.helm-dev-idempotency.json')) ? readFileSync(join(vaultDir, '.helm-dev-idempotency.json'), 'utf8') : undefined),
+      save: async (json) => { writeFileSync(join(vaultDir, '.helm-dev-idempotency.json'), json, { mode: 0o600 }); },
+    },
     deps: {
       index, mutations,
       settings: () => settings,
