@@ -7,7 +7,7 @@ import { addDrawingItems, targetForHabit } from './drawings';
 import { dayPartOf } from '../data/habits';
 import { addNoteItems } from './notes';
 import { confirmModal } from './modals/confirm';
-import { pickItemMenu } from './habitItems';
+import { openItemLog } from './habitItems';
 
 export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { date?: IsoDate; part?: HabitPart; state?: 'done' | 'skipped' | 'missed' | 'pending' } = {}): void {
   ev.preventDefault();
@@ -23,7 +23,7 @@ export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { dat
   }
   if (opts.date && (hb.items ?? []).some((x) => !x.retired)) {
     const date = opts.date;
-    menu.addItem((i) => i.setTitle('Log a sub-habit…').setIcon('list-plus').onClick((ev) => pickItemMenu(ctx, hb, date, ev instanceof MouseEvent ? ev : new MouseEvent('click', { clientX: 0, clientY: 0 }))));
+    menu.addItem((i) => i.setTitle('Log practice…').setIcon('list-plus').onClick(() => openItemLog(ctx, hb, date)));
   }
   if (opts.date && !(hb.parts && hb.parts.length)) {
     const date = opts.date;

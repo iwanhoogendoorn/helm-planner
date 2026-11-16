@@ -766,7 +766,7 @@ describe('Today tab', () => {
     expect(await vault.read(dailyPath(TODAY))).toContain('- [x] Evening reading 🆔 hab-read ✅ 2026-08-26');
   });
 
-  it('sub-habits: the Today tile carries one summary pill, the Habits card the chips; a chip click logs a song, again adds a round', async () => {
+  it('sub-habits: the Today tile carries one summary pill, the Habits card the chips; a chip click logs a song and a second takes the log off', async () => {
     const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n  - Layla 🆔 hsi-layla\n---\n';
     const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
     const tile = (): HTMLElement => [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
@@ -774,16 +774,48 @@ describe('Today tab', () => {
     expect(tile().querySelectorAll('.helm-subhabit')).toHaveLength(0);
     expect(texts(tile(), '.helm-subhabit-summary')).toEqual(['Wonderwall']);
     const card = (): HTMLElement => [...render((r) => renderHabits(ctx, r, defaultHabitsState())).querySelectorAll<HTMLElement>('.helm-habit-card')].find((e) => e.textContent?.includes('Guitar'))!;
-    expect(texts(card(), '.helm-subhabit')).toEqual(['Wonderwall', 'Blackbird', 'Layla']);
+    expect(texts(card(), '.helm-subhabit')).toEqual(['Wonderwall', 'Blackbird', 'Layla', 'Log practice…']);
     click(card().querySelector('.helm-subhabit.is-next'));
     await flush();
     expect(await vault.read(dailyPath(TODAY))).toMatch(/- \[x\] Guitar 🆔 hab-guitar ✅ 2026-08-26\n\t- \[x\] Wonderwall 🆔 hsi-wonder/);
-    click(card().querySelector('.helm-subhabit.is-done'));
-    await flush();
-    expect(await vault.read(dailyPath(TODAY))).toContain('Wonderwall ×2 🆔 hsi-wonder');
     expect(tile().classList.contains('is-day-done')).toBe(true);
     expect(texts(tile(), '.helm-subhabit-summary')).toEqual(['1']);
-    expect(tile().querySelector('.helm-subhabit-summary')!.getAttribute('title')).toContain('✓ Wonderwall ×2');
+    click(card().querySelector('.helm-subhabit.is-done'));
+    await flush();
+    expect(await vault.read(dailyPath(TODAY))).not.toContain('Wonderwall');
+    expect(tile().classList.contains('is-day-done')).toBe(false);
+  });
+
+  it('Log practice: + logs a song and adds rounds, − takes them off down to nothing, the name toggles', async () => {
+    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n---\n';
+    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
+    const tile = [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
+    click(tile.querySelector('.helm-subhabit-summary'));
+    const panel = (): HTMLElement => Modal.last!.contentEl;
+    const row = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes(name))!;
+    const note = (): Promise<string> => vault.read(dailyPath(TODAY)).catch(() => '');
+    expect(texts(panel(), '.helm-itemlog-title > span:first-child')).toEqual(['Wonderwall', 'Blackbird']); // up next first
+    expect(panel().querySelector('.helm-itemlog-head')!.textContent).toContain('0 of 2 today');
+    const plus = (name: string): void => click(row(name).querySelector('[aria-label^="One more"]'));
+    const minus = (name: string): void => click(row(name).querySelector('[aria-label^="One less"]'));
+    // Three quick clicks: shown at once, written in order, the note ends on ×3.
+    plus('Wonderwall'); plus('Wonderwall'); plus('Wonderwall');
+    expect(row('Wonderwall').querySelector('.helm-itemlog-count')!.textContent).toBe('3');
+    await flush(); await flush(); await flush();
+    expect(await note()).toContain('\t- [x] Wonderwall ×3 🆔 hsi-wonder');
+    expect(panel().querySelector('.helm-itemlog-head')!.textContent).toContain('1 of 2 today');
+    expect(panel().querySelector('.helm-itemlog-head')!.textContent).toContain('done for the day');
+    minus('Wonderwall'); await flush();
+    expect(await note()).toContain('\t- [x] Wonderwall ×2 🆔 hsi-wonder');
+    minus('Wonderwall'); minus('Wonderwall'); await flush(); await flush();
+    expect(await note()).not.toContain('Wonderwall');
+    expect(row('Wonderwall').querySelector('[aria-label^="One less"]')!.hasAttribute('disabled')).toBe(true);
+    // The name is a toggle.
+    click(row('Blackbird').querySelector('.helm-itemlog-name')); await flush();
+    expect(await note()).toContain('\t- [x] Blackbird 🆔 hsi-black');
+    click(row('Blackbird').querySelector('.helm-itemlog-name')); await flush();
+    expect(await note()).not.toContain('Blackbird');
+    expect(await note()).toMatch(/- \[ \] Guitar 🆔 hab-guitar/);
   });
 
   it('keeps the Habits section when every habit is paused, with New habit and one-click Resume', async () => {

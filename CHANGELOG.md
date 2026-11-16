@@ -6,6 +6,11 @@
   the number practised today, or the song up next when there is none yet. Its
   tooltip lists what was practised; a click opens the list to log one. Every tile
   is the same height again. The Habits card keeps the full row of chips.
+- **Log practice: logging and un-logging a sub-habit is one click.** The tile's
+  pill (and *Log practice…* on the card and in the habit's menu) opens a panel
+  with a row per song: **+** logs it or adds a round, **−** takes one off, down to
+  nothing, and the song's name toggles it. Quick clicks are written in order. On
+  the Habits card a chip is now a plain toggle; rounds are counted in the panel.
 
 ## 1.56.0 — 2026-11-16
 

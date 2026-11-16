@@ -1267,3 +1267,27 @@ button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 .helm-habit-tile-sub { flex-wrap: nowrap; overflow: hidden; }
 .helm-habit-tile-sub > * { flex: 0 0 auto; }
 .helm-habit-tile-sub > .helm-subhabit-summary { flex: 0 1 auto; min-width: 48px; }
+
+/* Log practice: a row per sub-habit, its name a toggle, − count + on the right. */
+.helm-itemlog { min-width: min(460px, 90vw); }
+.helm-itemlog-head { display: flex; gap: 6px; align-items: baseline; font-weight: 600; margin-bottom: 10px; }
+.helm-itemlog-head.is-met { color: var(--color-green); }
+.helm-itemlog .helm-segmented { margin-bottom: 10px; }
+.helm-itemlog-list { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
+.helm-itemlog-row { display: flex; align-items: center; gap: 10px; padding: 4px 6px; border-radius: var(--radius-m); border: 1px solid var(--background-modifier-border); }
+.helm-itemlog-row.is-done { background: rgba(var(--color-green-rgb), 0.08); border-color: rgba(var(--color-green-rgb), 0.4); }
+.helm-itemlog .helm-itemlog-name { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; text-align: left; height: auto; padding: 4px 2px; background: transparent; border: none; box-shadow: none; cursor: pointer; }
+.helm-itemlog-name > .svg-icon, .helm-itemlog-name > svg { grid-row: 1 / span 2; width: 18px; height: 18px; color: var(--text-faint); }
+.helm-itemlog-row.is-done .helm-itemlog-name > .svg-icon, .helm-itemlog-row.is-done .helm-itemlog-name > svg { color: var(--color-green); }
+.helm-itemlog-title { display: flex; gap: 6px; align-items: baseline; min-width: 0; font-weight: 500; color: var(--text-normal); }
+.helm-itemlog-title > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helm-itemlog-next { flex: none; font-size: 10px; padding: 0 6px; border-radius: 8px; border: 1px dashed var(--text-faint); color: var(--text-muted); }
+.helm-itemlog-sub { grid-column: 2; font-size: 11px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.helm-itemlog-stepper { flex: none; display: flex; align-items: center; gap: 4px; }
+.helm-itemlog .helm-itemlog-step { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
+.helm-itemlog .helm-itemlog-step[disabled] { opacity: 0.35; cursor: default; }
+.helm-itemlog-count { min-width: 22px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.helm-itemlog-row:not(.is-done) .helm-itemlog-count { color: var(--text-faint); }
+.helm-itemlog .helm-itemlog-name .helm-itemlog-sub { color: var(--text-faint); }
+.helm-itemlog .helm-itemlog-count { color: var(--text-normal); }
+.helm-itemlog .helm-itemlog-row:not(.is-done) .helm-itemlog-count { color: var(--text-faint); }
