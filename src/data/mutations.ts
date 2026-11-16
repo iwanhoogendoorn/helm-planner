@@ -15,7 +15,7 @@
 import { safeFolder } from '../core/paths';
 import type { Habit, HabitColor, HabitItem, HabitPart, HelmSettings, IsoDate, Phase, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus, TimeBlock } from '../core/types';
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
-import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
+import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, partOfTime, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, diffDays, formatDate } from '../core/dates';
 import { formatRecurrence, nextOccurrence, shiftRecurrence } from '../core/recurrence';
@@ -1832,6 +1832,21 @@ export class Mutations {
     await this.editFile(h.path, (lines) => setFrontmatter(lines, itemsFrontmatter(items)));
   }
 
+  /**
+   * A once-a-day habit's line in one part of the day, beside any it already has: a second session.
+   * The day still counts once; the note shows when each session was.
+   */
+  private async addHabitSession(h: Habit, date: IsoDate, part: HabitPart): Promise<void> {
+    const label = `${h.icon ? h.icon + ' ' : ''}${h.title}`;
+    await this.editRegion(date, (rc) => {
+      if (rc[part].some((l) => l.id === h.id)) return undefined;
+      const list = [...rc[part]];
+      const at = list.findIndex((l) => !(l.id ?? '').startsWith('hab-'));
+      list.splice(at === -1 ? list.length : at, 0, newTaskLine(label, { id: h.id }));
+      return { ...rc, [part]: list };
+    });
+  }
+
   /** Add a sub-habit (a song to Guitar). Returns it. */
   async addHabitItem(habitId: string, title: string): Promise<HabitItem> {
     const h = this.habitOrThrow(habitId);
@@ -1876,7 +1891,7 @@ export class Mutations {
    * than once; `missed` takes the line out. The habit's own line follows the items-per-day rule: it
    * is ticked when enough sub-habits are done, and unticked again when that rule stops holding.
    */
-  async setHabitItemState(habitId: string, itemId: string, date: IsoDate, state: 'done' | 'skipped' | 'missed', opts: { part?: HabitPart; count?: number } = {}): Promise<void> {
+  async setHabitItemState(habitId: string, itemId: string, date: IsoDate, state: 'done' | 'skipped' | 'missed', opts: { part?: HabitPart | null; count?: number } = {}): Promise<void> {
     const h = this.habitOrThrow(habitId);
     const item = (h.items ?? []).find((x) => x.id === itemId);
     if (!item) throw new Error('Sub-habit not found');
@@ -1884,15 +1899,30 @@ export class Mutations {
     if (opts.count !== undefined && (!Number.isInteger(opts.count) || opts.count < 1)) throw new Error('count must be a whole number, 1 or more');
     const parted = !!h.parts?.length;
     if (parted && !opts.part) throw new Error(`This habit is done per part of the day; name the part: ${h.parts!.join(' | ')}`);
-    const findParent = () => {
-      const snap = this.index.snapshot;
-      const part = parted ? opts.part : dayPartOf(h, snap.completions, date);
-      return snap.completions.find((c) => c.habitId === h.id && c.date === date && c.part === part);
-    };
+    if (parted && opts.part && !h.parts!.includes(opts.part)) throw new Error(`${h.title} is done in the ${h.parts!.join(', ')}, not the ${opts.part}`);
+    // A once-a-day habit is logged by session: the part of the day it is practised in. Today that is the
+    // part named, else the part of the day it is now; another day, the part named, else where its line sits.
+    // `part: null` names the line in the Habits list; taking a log off without a part takes it from wherever it is.
+    const now = this.d.now?.();
+    const logged = this.index.snapshot.itemCompletions.filter((c) => c.habitId === h.id && c.date === date && (c.itemId === item.id || (!c.itemId && c.text.toLowerCase() === item.title.toLowerCase())));
+    const part: HabitPart | undefined = parted ? opts.part ?? undefined
+      : opts.part === null ? undefined
+      : opts.part ?? (state === 'missed' && logged.length ? logged[logged.length - 1]!.part
+        : date === this.today && now ? partOfTime(now, this.settings) as HabitPart : dayPartOf(h, this.index.snapshot.completions, date));
+    const findParent = () => this.index.snapshot.completions.find((c) => c.habitId === h.id && c.date === date && c.part === part);
     let parent = findParent();
     if (!parent) {
       if (state === 'missed') return;
-      await this.syncHabitsForDay(date, [h.id]);
+      if (parted || part === undefined) await this.syncHabitsForDay(date, [h.id]);
+      else {
+        // The first session takes the day's open line along from the Habits list (as ticking it does);
+        // a later one gets a line of its own.
+        const lines = this.index.snapshot.completions.filter((c) => c.habitId === h.id && c.date === date);
+        const only = lines.length === 1 ? lines[0]! : undefined;
+        const bare = only && only.part === undefined && only.state !== 'done' && !this.index.snapshot.itemCompletions.some((x) => x.path === only.path && x.parentLine === only.line);
+        if (bare) await this.moveHabitForDay(h.id, date, part);
+        else await this.addHabitSession(h, date, part);
+      }
       parent = findParent();
       if (!parent) throw new Error(`Could not put ${h.title} into the note for ${date}`);
     }
@@ -1945,6 +1975,11 @@ export class Mutations {
         const text = serialiseTaskLine(tl, { force: true });
         if (mine) { lines[mine.i] = text; after = kids.map((k) => (k === mine ? { i: k.i, tl } : k)); }
         else { lines.splice(end, 0, text); after = [...kids, { i: end, tl }]; }
+      }
+      // An extra session emptied of its last song goes: the habit's other line that day still holds the day.
+      if (state === 'missed' && after.length === 0 && !parted && lines.some((l, i) => i !== at && parseTaskLine(l)?.id === h.id && !/^[ \t]/.test(l))) {
+        lines.splice(at, 1);
+        return true;
       }
       const nowMet = doneSet(after) >= need;
       if (nowMet && parentTl.status !== 'done') lines[at] = serialiseTaskLine(withStatus(parentTl, 'done', date), { force: true });

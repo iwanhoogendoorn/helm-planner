@@ -818,6 +818,36 @@ describe('Today tab', () => {
     expect(await note()).toMatch(/- \[ \] Guitar 🆔 hab-guitar/);
   });
 
+  it('Log practice for a once-a-day habit: by session, the afternoon now and the evening picked, one Guitar line each', async () => {
+    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\nitems_per_day: 2\n---\n';
+    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
+    const tile = [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
+    click(tile.querySelector('.helm-subhabit-summary'));
+    const panel = (): HTMLElement => Modal.last!.contentEl;
+    const row = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes(name))!;
+    const seg = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('.helm-seg')].find((b) => b.textContent?.startsWith(name))!;
+    const count = (name: string): string => row(name).querySelector('.helm-itemlog-count')!.textContent!;
+    const note = (): Promise<string> => vault.read(dailyPath(TODAY)).catch(() => '');
+    // 14:37: the panel starts on the afternoon.
+    expect(texts(panel(), '.helm-seg')).toEqual(['Morning', 'Afternoon', 'Evening']);
+    expect(seg('Afternoon').classList.contains('is-active')).toBe(true);
+    click(row('Wonderwall').querySelector('[aria-label^="One more"]')); await flush(); await flush();
+    click(seg('Evening'));
+    expect(count('Wonderwall')).toBe('0'); // this session's rounds
+    expect(seg('Afternoon').textContent).toBe('Afternoon · 1');
+    click(row('Blackbird').querySelector('[aria-label^="One more"]')); await flush(); await flush();
+    const text = await note();
+    expect(text.match(/- \[.\] Guitar 🆔 hab-guitar/g)).toHaveLength(2);
+    expect(text.indexOf('Wonderwall')).toBeLessThan(text.indexOf('Blackbird'));
+    expect(panel().querySelector('.helm-itemlog-head')!.textContent).toContain('2 of 2 today');
+    // Taking the evening's only song off takes the Evening line away; the afternoon's stays.
+    click(row('Blackbird').querySelector('[aria-label^="One less"]')); await flush(); await flush();
+    const after = await note();
+    expect(after).not.toContain('Blackbird');
+    expect(after.match(/- \[.\] Guitar 🆔 hab-guitar/g)).toHaveLength(1);
+    expect(after).toContain('\t- [x] Wonderwall 🆔 hsi-wonder');
+  });
+
   it('keeps the Habits section when every habit is paused, with New habit and one-click Resume', async () => {
     const paused = (id: string, title: string): string => `---\ntype: habit\nid: ${id}\ntitle: ${title}\nschedule: every day\nactive: false\n---\n`;
     const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Morning workout.md': paused('hab-workout', 'Morning workout'), '02 PROJECTS/Habits/Evening reading.md': paused('hab-read', 'Evening reading') });

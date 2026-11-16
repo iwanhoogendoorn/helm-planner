@@ -289,7 +289,12 @@ adds `items` (active ones: `{ id, title }`), `itemsPerDay`, `suggestedItem`, and
 occurrence's line. `POST /habits/:id/state` with `item` logs a sub-habit instead of the habit:
 `done` writes the line with `×count` (no count: keep the one it has, 1 for a new line), `skipped`
 writes `[-]`, `missed`/`pending` take the line out; `part` picks the occurrence for a habit with
-parts (required, as for the habit). The habit's own line follows the `itemsPerDay` rule. 400 for an
+parts (required, as for the habit). For a once-a-day habit (since 1.57.0) `part` is the session it
+was practised in: a Guitar line in that part of the day is used or added (the first session moves the
+day's open line there). Without `part` a log goes to the part of the day it is now (today) and a
+take-off to the line the item is on; `part: null` names the line in the Habits list. A habit logged
+in more than one session has one occurrence per session in `GET /day/:date`, each with its part;
+any done one makes the day. The habit's own line follows the `itemsPerDay` rule. 400 for an
 unknown or retired item, or a count below 1.
 
 A habit carries its fields (`id`, `title`, `path`, `schedule` parsed with `raw`, `active`,

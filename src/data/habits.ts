@@ -3,6 +3,7 @@ import type { Habit, HabitCompletion, HabitItem, HabitItemCompletion, HabitPart,
 import { addDays, diffDays, startOfWeek } from '../core/dates';
 import { occursOn } from '../core/recurrence';
 import { periodOf, type Period, type PeriodKind } from '../core/periods';
+import { HABIT_PARTS as HABIT_PART_ORDER } from '../core/types';
 
 /** The schedule and parts in force on a day: an earlier definition from `history`, else the current one. */
 export function definitionAt(h: Habit, date: IsoDate): { schedule: Habit['schedule']; parts?: HabitPart[] } {
@@ -72,9 +73,16 @@ function dayStates(h: Habit, completions: HabitCompletion[], today: IsoDate): { 
   const rec = new Map<string, HabitCompletion['state']>();
   const anyPart = new Map<IsoDate, HabitCompletion['state']>(); // a line moved into a part of the day, for that day only
   let first: IsoDate | undefined;
-  for (const c of completions) if (c.habitId === h.id) { rec.set(key(c.date, c.part), c.state); if (c.part !== undefined && !anyPart.has(c.date)) anyPart.set(c.date, c.state); if (first === undefined || c.date < first) first = c.date; }
+  // A once-a-day habit can sit in several parts of a day (a session in the afternoon, another in the
+  // evening): the day takes the best of them — done over skipped over missed.
+  const rank = { done: 2, skipped: 1, missed: 0 } as const;
+  for (const c of completions) if (c.habitId === h.id) { rec.set(key(c.date, c.part), c.state); if (c.part !== undefined) { const cur = anyPart.get(c.date); if (cur === undefined || rank[c.state] > rank[cur]) anyPart.set(c.date, c.state); } if (first === undefined || c.date < first) first = c.date; }
   // A day-level tick also satisfies a parted habit's single remaining occurrence, and vice versa, so an old note still counts.
-  const stateOf = (d: IsoDate, part?: HabitPart): HabitCompletion['state'] | undefined => rec.get(key(d, part)) ?? (occAt(d).length === 1 ? (part !== undefined ? rec.get(key(d)) : anyPart.get(d)) : undefined);
+  const best = (...xs: (HabitCompletion['state'] | undefined)[]): HabitCompletion['state'] | undefined => xs.reduce<HabitCompletion['state'] | undefined>((a, x) => (x !== undefined && (a === undefined || rank[x] > rank[a]) ? x : a), undefined);
+  // A once-a-day habit takes the best of its lines that day: the Habits list's and any session's.
+  const stateOf = (d: IsoDate, part?: HabitPart): HabitCompletion['state'] | undefined => occAt(d).length === 1
+    ? (part !== undefined ? rec.get(key(d, part)) ?? rec.get(key(d)) : best(rec.get(key(d)), anyPart.get(d)))
+    : rec.get(key(d, part));
   /** Fold the day's occurrences into one state. */
   const stateOn = (d: IsoDate): HabitDayState => {
     if (d > today) return 'future';
@@ -170,6 +178,14 @@ export interface HabitDayRow { habit: Habit; due: boolean; occurrences: HabitDay
 export function habitsOnDay(habits: Habit[], completions: HabitCompletion[], date: IsoDate): HabitDayRow[] {
   const rows = habits.filter((hb) => habitDue(hb, date) || completions.some((c) => c.habitId === hb.id && c.date === date));
   return rows.map((hb) => {
+    // A once-a-day habit logged in sessions (lines in more than one part of the day): one occurrence per session.
+    if (!(hb.parts && hb.parts.length)) {
+      const sessions = completions.filter((x) => x.habitId === hb.id && x.date === date && x.part !== undefined);
+      if (sessions.length > 1) {
+        const byPart = [...sessions].sort((a, b) => HABIT_PART_ORDER.indexOf(a.part!) - HABIT_PART_ORDER.indexOf(b.part!));
+        return { habit: hb, due: habitDue(hb, date), occurrences: byPart.map((c) => ({ part: c.part!, state: c.state, line: c.line, path: c.path })) };
+      }
+    }
     const movedTo = dayPartOf(hb, completions, date);
     const occurrences = habitOccurrences(hb).map((part): HabitDayOccurrence => {
       const c = completions.find((x) => x.habitId === hb.id && x.date === date && (x.part === part || (part === undefined && movedTo !== undefined && x.part === movedTo)));

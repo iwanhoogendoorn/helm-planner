@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { setup, TODAY, dailyPath } from './fixture';
 import { api } from '../api/v2.test';
 import { itemsNeeded, parseHabit, parseItemEntry, renderHabitNote, splitItemCount } from '../../src/core/habit';
-import { habitItemStats, suggestedItem } from '../../src/data/habits';
+import { habitItemStats, habitsOnDay, habitStats, suggestedItem } from '../../src/data/habits';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -123,6 +123,37 @@ describe('sub-habits: ticking writes lines under the habit and follows the rule'
   });
 });
 
+describe('sub-habits: a once-a-day habit is logged by session', () => {
+  it('songs go under the part of the day they are logged in; a second session gets its own line; the day counts once', async () => {
+    const { m, vault, index } = await setup({ [PATH]: GUITAR });
+    // The test clock says 14:37: the afternoon.
+    await m.setHabitItemState('hab-guitar', 'hsi-wonder', TODAY, 'done', { count: 3 });
+    // Later, in the evening.
+    await m.setHabitItemState('hab-guitar', 'hsi-black', TODAY, 'done', { part: 'evening' });
+    await m.setHabitItemState('hab-guitar', 'hsi-wonder', TODAY, 'done', { part: 'evening' });
+    const note = await vault.read(dailyPath(TODAY));
+    const section = (head: string): string => note.split(new RegExp(`\\n#+ ${head}\\n`))[1]!.split(/\n#+ /)[0]!;
+    expect(section('Afternoon')).toMatch(/- \[x\] 🎸 Guitar 🆔 hab-guitar ✅ 2026-08-26\n\t- \[x\] Wonderwall ×3 🆔 hsi-wonder/);
+    expect(section('Evening')).toMatch(/- \[x\] 🎸 Guitar 🆔 hab-guitar ✅ 2026-08-26\n\t- \[x\] Blackbird 🆔 hsi-black ✅ 2026-08-26\n\t- \[x\] Wonderwall 🆔 hsi-wonder/);
+    expect(section('Evening')).not.toContain('×3'); // a session counts its own rounds
+    const h = index.snapshot.habits.get('hab-guitar')!;
+    const rows = habitsOnDay([h], index.snapshot.completions, TODAY);
+    expect(rows[0]!.occurrences.map((o) => `${o.part}:${o.state}`)).toEqual(['afternoon:done', 'evening:done']);
+    const st = habitStats(h, index.snapshot.completions, TODAY);
+    expect(st.doneToday).toBe(true);
+    expect(st.today).toEqual([{ state: 'done' }]); // still one occurrence a day for the streak
+    expect(habitItemStats(h, index.snapshot.itemCompletions, TODAY).find((x) => x.item.id === 'hsi-wonder')!.todayCount).toBe(4);
+    // Taking the evening songs off leaves the afternoon session alone, and the day still counts.
+    await m.setHabitItemState('hab-guitar', 'hsi-black', TODAY, 'missed', { part: 'evening' });
+    await m.setHabitItemState('hab-guitar', 'hsi-wonder', TODAY, 'missed', { part: 'evening' });
+    const after = await vault.read(dailyPath(TODAY));
+    expect(after).toContain('Wonderwall ×3');
+    expect(after).not.toContain('Blackbird');
+    expect(after.match(/🆔 hab-guitar/g)).toHaveLength(1); // the emptied evening session is gone
+    expect(habitStats(index.snapshot.habits.get('hab-guitar')!, index.snapshot.completions, TODAY).doneToday).toBe(true);
+  });
+});
+
 describe('sub-habits: the API', () => {
   it('habit and day JSON carry items, and the routes add, tick and remove them', async () => {
     const { call } = await api({ [PATH]: GUITAR });
@@ -135,7 +166,7 @@ describe('sub-habits: the API', () => {
     const layla = r.body.item.id;
     r = await call('POST', 'habits/hab-guitar/state', { item: layla, state: 'done', count: 2 });
     expect(r.status).toBe(200);
-    expect(r.body.occurrences[0]).toMatchObject({ part: null, state: 'done', items: [{ id: layla, title: 'Layla', state: 'done', count: 2 }] });
+    expect(r.body.occurrences[0]).toMatchObject({ part: 'afternoon', state: 'done', items: [{ id: layla, title: 'Layla', state: 'done', count: 2 }] });
     r = await call('GET', `day/${TODAY}`);
     const row = r.body.habits.find((x: any) => x.id === 'hab-guitar');
     expect(row.items.map((i: any) => i.title)).toEqual(['Wonderwall', 'Blackbird', 'Layla']);

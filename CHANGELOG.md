@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.57.0 — 2026-11-16
+
+- **Sub-habits are logged by session.** Songs practised in the afternoon go under
+  a Guitar line in the Afternoon section, the evening's under one in the Evening
+  section, so the note says when you played what. Any one session done makes the
+  day; streaks and targets count the day once. The Log practice panel has a
+  Morning / Afternoon / Evening switch, starting on the part of the day it is now,
+  and shows that session's rounds (the other sessions' count on their button).
+  Taking the last song off a later session removes its line again.
+
 ## 1.56.1 — 2026-11-16
 
 - **Sub-habits on the Today tile are one small pill**, not a column of song chips:

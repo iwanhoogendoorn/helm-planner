@@ -738,7 +738,7 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
     if (h.parts?.length && !part) return bad(`This habit is done per part of the day; send part: ${h.parts.join(' | ')}`);
     let count: number | undefined;
     if (body['count'] !== undefined && body['count'] !== null) { const n = body['count']; if (typeof n !== 'number' || !Number.isInteger(n) || n < 1) return bad('count must be a whole number, 1 or more'); count = n; }
-    await d.mutations.setHabitItemState(h.id, item.id, date, state === 'pending' ? 'missed' : state as 'done' | 'skipped' | 'missed', { ...(part ? { part: part as HabitPart } : {}), ...(count !== undefined ? { count } : {}) });
+    await d.mutations.setHabitItemState(h.id, item.id, date, state === 'pending' ? 'missed' : state as 'done' | 'skipped' | 'missed', { ...(part ? { part: part as HabitPart } : !h.parts?.length && body['part'] === null ? { part: null } : {}), ...(count !== undefined ? { count } : {}) });
     const row = habitsOnDay([findHabit(h.id, d) ?? h], d.index.snapshot.completions, date)[0];
     return ok({ id: h.id, date, item: item.id, occurrences: row ? occurrencesJson(row, date, d) : [], written: d.written() });
   }

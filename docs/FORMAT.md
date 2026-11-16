@@ -186,6 +186,20 @@ done once `items_per_day` distinct sub-habits are done under it, even if its
 own box is open; Helm ticks (and, when the rule stops holding, unticks) it when
 it writes a sub-habit. Lines under a habit are never indexed as tasks.
 
+A once-a-day habit is logged **by session**: songs practised in the afternoon
+go under a Guitar line in the Afternoon section, the evening's under one in the
+Evening section. Each session is its own habit line; any one of them that is
+done makes the day (streaks and targets count the day once).
+
+```markdown
+## Afternoon
+- [x] 🎸 Guitar 🆔 hab-guitar ✅ 2026-11-16
+	- [x] Wonderwall ×2 🆔 hsi-a1b2c3 ✅ 2026-11-16
+## Evening
+- [ ] 🎸 Guitar 🆔 hab-guitar
+	- [x] Blackbird 🆔 hsi-d4e5f6 ✅ 2026-11-16
+```
+
 ## 5. Horizons: goals and periods
 
 **Periods** are keys: `2026` (year), `2026-Q3` (quarter), `2026-08` (month), `2026-W35` (ISO week).
