@@ -159,6 +159,33 @@ Completions are lines in `### Habits` carrying the habit id: `[x]` done,
 `[-]` skipped (neutral), anything else a miss. The completion date is the
 note's date.
 
+**Sub-habits** (the songs under Guitar) are listed on the habit note:
+
+```yaml
+items:                       # active sub-habits: "<title> 🆔 <id>"
+  - Wonderwall 🆔 hsi-a1b2c3
+  - Blackbird 🆔 hsi-d4e5f6
+items_retired:               # learned / shelved: no longer offered, history kept
+  - Smoke on the Water 🆔 hsi-0f0f0f
+items_per_day: 1             # sub-habits that make the day; 0 or `all` = every active one (default 1)
+```
+
+A sub-habit practised on a day is a line indented straight under the habit's
+line (under the occurrence's line for a habit with parts); `×N` (or `xN`) says
+how many times:
+
+```markdown
+- [x] 🎸 Guitar 🆔 hab-guitar ✅ 2026-11-16
+	- [x] Wonderwall ×3 🆔 hsi-a1b2c3 ✅ 2026-11-16
+	- [-] Blackbird 🆔 hsi-d4e5f6 ❌ 2026-11-16
+```
+
+A line without an id is matched to a sub-habit by its title, so typing
+`- [x] Blackbird` under the habit by hand works. The habit's line counts as
+done once `items_per_day` distinct sub-habits are done under it, even if its
+own box is open; Helm ticks (and, when the rule stops holding, unticks) it when
+it writes a sub-habit. Lines under a habit are never indexed as tasks.
+
 ## 5. Horizons: goals and periods
 
 **Periods** are keys: `2026` (year), `2026-Q3` (quarter), `2026-08` (month), `2026-W35` (ISO week).

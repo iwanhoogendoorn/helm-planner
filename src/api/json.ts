@@ -13,7 +13,7 @@ import type { Period } from '../core/periods';
 import type { DrawingTarget, Goal, Habit, HelmSettings, IsoDate, Project, Task } from '../core/types';
 import type { HelmIndex } from '../data/index';
 import type { Mutations } from '../data/mutations';
-import { habitStats, type HabitStats } from '../data/habits';
+import { habitItemStats, habitStats, suggestedItem, type HabitStats } from '../data/habits';
 import { taskContext } from '../data/taskContext';
 import { followsOf, followUpsOf, goalProgress, isBlocked, isOpen, misfiledDate, nextOccurrenceOf, plannedDate, projectHealth, type Candidate, type DayItem, type HorizonGoal, type HorizonPeriod, type ProjectHealth } from '../data/planner';
 import { profileFor } from '../core/profiles';
@@ -241,6 +241,17 @@ export function habitJson(h: Habit, c: Ctx, stats?: HabitStats): Record<string, 
       doneThisWeek: st.doneThisWeek, scheduledThisWeek: st.scheduledThisWeek,
       days: st.days,
     },
+    ...habitItemsJson(h, c),
+  };
+}
+
+/** A habit's sub-habits with their numbers, how many make a day, and which one is up next. */
+export function habitItemsJson(h: Habit, c: Ctx): { items: Record<string, unknown>[]; itemsPerDay: number; suggestedItem: string | null } {
+  const stats = habitItemStats(h, c.index.snapshot.itemCompletions, c.today());
+  return {
+    items: stats.map((s) => ({ id: s.item.id, title: s.item.title, retired: s.item.retired ?? false, stats: { lastDone: s.lastDone ?? null, daysSince: s.daysSince ?? null, count7: s.count7, count30: s.count30, days30: s.days30, total: s.total, todayCount: s.todayCount, todayState: s.todayState } })),
+    itemsPerDay: h.itemsPerDay ?? 1,
+    suggestedItem: suggestedItem(stats)?.id ?? null,
   };
 }
 

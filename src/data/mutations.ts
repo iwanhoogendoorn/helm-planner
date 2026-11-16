@@ -13,13 +13,13 @@
  *    than removed; mirrors on past days are never rewritten.
  */
 import { safeFolder } from '../core/paths';
-import type { Habit, HabitColor, HabitPart, HelmSettings, IsoDate, Phase, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus, TimeBlock } from '../core/types';
+import type { Habit, HabitColor, HabitItem, HabitPart, HelmSettings, IsoDate, Phase, Project, ProjectPriority, ProjectStatus, Task, TaskLine, TaskStatus, TimeBlock } from '../core/types';
 import { parseTaskLine, serialiseTaskLine, withStatus, newTaskLine, STATUS_MARKER } from '../core/taskLine';
 import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, readRegion, removeLines, writeRegion, type DayPart, type RegionContent, type Section } from '../core/dailyNote';
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, diffDays, formatDate } from '../core/dates';
 import { formatRecurrence, nextOccurrence, shiftRecurrence } from '../core/recurrence';
-import { formatHistoryEntry, formatPauseEntry } from '../core/habit';
+import { formatHistoryEntry, formatPauseEntry, itemLineText, itemsFrontmatter, itemsNeeded, splitItemCount } from '../core/habit';
 import { derivedKey, uniqueId } from '../core/ids';
 import { setFrontmatter } from '../core/frontmatter';
 import { parseProject, renderProjectNote } from '../core/project';
@@ -28,7 +28,7 @@ import { renderHabitNote } from '../core/habit';
 import { columnWidth } from '../core/tree';
 import type { HelmIndex } from './index';
 import { baseName, type VaultAdapter } from './vault';
-import { habitDue, habitOccurrences } from './habits';
+import { dayPartOf, habitDue, habitOccurrences } from './habits';
 import { misfiledDate, seriesDate } from './planner';
 import { partWindow, preferredSlot } from './conflicts';
 import { toHhmm, toMinutes } from './timegrid';
@@ -1754,13 +1754,13 @@ export class Mutations {
     });
   }
 
-  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor }): Promise<string> {
+  async createHabit(spec: { title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor; items?: string[]; itemsPerDay?: number }): Promise<string> {
     const folder = this.settings.habitsFolder.replace(/\/+$/, '');
     const title = spec.title.trim().replace(/[\\/:*?"<>|]/g, '-');
     const path = `${folder ? folder + '/' : ''}${title}.md`;
     if (await this.d.vault.exists(path)) throw new Error(`A note already exists at ${path}`);
     const id = uniqueId('hab', (x) => this.index.snapshot.habits.has(x), this.d.rng);
-    await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}), ...(spec.iconImage ? { iconImage: spec.iconImage } : {}) , ...(spec.parts && spec.parts.length ? { parts: spec.parts } : {}), ...(spec.color ? { color: spec.color } : {}) }));
+    await this.createFile(path, renderHabitNote({ id, title: spec.title.trim(), schedule: spec.schedule, today: this.today, ...(spec.targetPerWeek ? { targetPerWeek: spec.targetPerWeek } : {}), ...(spec.graceDays !== undefined ? { graceDays: spec.graceDays } : {}), ...(spec.icon ? { icon: spec.icon } : {}), ...(spec.iconImage ? { iconImage: spec.iconImage } : {}) , ...(spec.parts && spec.parts.length ? { parts: spec.parts } : {}), ...(spec.color ? { color: spec.color } : {}), ...(spec.items && spec.items.length ? { items: this.newItems(spec.items, []) } : {}), ...(spec.itemsPerDay !== undefined ? { itemsPerDay: spec.itemsPerDay } : {}) }));
     return id;
   }
 
@@ -1775,7 +1775,7 @@ export class Mutations {
     return path;
   }
 
-  async setHabitFields(id: string, fields: { active?: boolean; schedule?: string; title?: string; targetPerWeek?: number | null; graceDays?: number; icon?: string; iconImage?: string | null; parts?: HabitPart[]; color?: HabitColor | null }): Promise<void> {
+  async setHabitFields(id: string, fields: { active?: boolean; schedule?: string; title?: string; targetPerWeek?: number | null; graceDays?: number; icon?: string; iconImage?: string | null; parts?: HabitPart[]; color?: HabitColor | null; itemsPerDay?: number }): Promise<void> {
     const h = this.index.snapshot.habits.get(id);
     if (!h) throw new Error('Habit not found');
     const u: Record<string, string | null> = {};
@@ -1802,7 +1802,155 @@ export class Mutations {
       (u as Record<string, string | string[] | null | undefined>)['paused'] = spans.length ? spans.map(formatPauseEntry) : undefined;
     }
     if (fields.color !== undefined) (u as Record<string, string | string[] | null | undefined>)['color'] = fields.color ?? undefined;
+    if (fields.itemsPerDay !== undefined) u['items_per_day'] = String(fields.itemsPerDay);
     await this.editFile(h.path, (lines) => setFrontmatter(lines, u));
+  }
+
+  /* ── Sub-habits ─────────────────────────────────────────────────────── */
+
+  /** Fresh sub-habits for these titles, with ids no habit already uses. */
+  private newItems(titles: string[], existing: HabitItem[]): HabitItem[] {
+    const taken = new Set([...existing.map((i) => i.id), ...[...this.index.snapshot.habits.values()].flatMap((h) => (h.items ?? []).map((i) => i.id))]);
+    const out: HabitItem[] = [];
+    for (const raw of titles) {
+      const title = raw.replace(/🆔/g, '').trim();
+      if (!title) continue;
+      const id = uniqueId('hsi', (x) => taken.has(x), this.d.rng);
+      taken.add(id);
+      out.push({ id, title });
+    }
+    return out;
+  }
+
+  private habitOrThrow(id: string): Habit {
+    const h = this.index.snapshot.habits.get(id);
+    if (!h) throw new Error('Habit not found');
+    return h;
+  }
+
+  private async writeItems(h: Habit, items: HabitItem[]): Promise<void> {
+    await this.editFile(h.path, (lines) => setFrontmatter(lines, itemsFrontmatter(items)));
+  }
+
+  /** Add a sub-habit (a song to Guitar). Returns it. */
+  async addHabitItem(habitId: string, title: string): Promise<HabitItem> {
+    const h = this.habitOrThrow(habitId);
+    const t = title.trim();
+    if (!t) throw new Error('A sub-habit needs a title');
+    const items = h.items ?? [];
+    if (items.some((i) => !i.retired && i.title.toLowerCase() === t.toLowerCase())) throw new Error(`${h.title} already has “${t}”`);
+    const [item] = this.newItems([t], items);
+    // A new one goes after the active ones, before the retired.
+    const active = items.filter((i) => !i.retired);
+    await this.writeItems(h, [...active, item!, ...items.filter((i) => i.retired)]);
+    return item!;
+  }
+
+  /** Rename, retire or bring back a sub-habit. Its lines in past notes keep their id, so history follows it. */
+  async setHabitItem(habitId: string, itemId: string, fields: { title?: string; retired?: boolean }): Promise<void> {
+    const h = this.habitOrThrow(habitId);
+    const items = [...(h.items ?? [])];
+    const i = items.findIndex((x) => x.id === itemId);
+    if (i === -1) throw new Error('Sub-habit not found');
+    const cur = items[i]!;
+    const title = fields.title?.replace(/🆔/g, '').trim();
+    const next: HabitItem = { id: cur.id, title: title || cur.title, ...((fields.retired ?? cur.retired) ? { retired: true } : {}) };
+    items.splice(i, 1);
+    if (!!next.retired === !!cur.retired) items.splice(i, 0, next);
+    else if (next.retired) items.push(next);
+    else items.splice(items.filter((x) => !x.retired).length, 0, next);
+    await this.writeItems(h, items);
+  }
+
+  /** Take a sub-habit off the habit. The lines already in daily notes stay as they are. */
+  async removeHabitItem(habitId: string, itemId: string): Promise<void> {
+    const h = this.habitOrThrow(habitId);
+    const items = h.items ?? [];
+    if (!items.some((x) => x.id === itemId)) throw new Error('Sub-habit not found');
+    await this.writeItems(h, items.filter((x) => x.id !== itemId));
+  }
+
+  /**
+   * Tick, skip or clear one sub-habit for a day: a line indented under the habit's line (the
+   * occurrence `part` names, for a habit with parts). `done` writes `×count` when practised more
+   * than once; `missed` takes the line out. The habit's own line follows the items-per-day rule: it
+   * is ticked when enough sub-habits are done, and unticked again when that rule stops holding.
+   */
+  async setHabitItemState(habitId: string, itemId: string, date: IsoDate, state: 'done' | 'skipped' | 'missed', opts: { part?: HabitPart; count?: number } = {}): Promise<void> {
+    const h = this.habitOrThrow(habitId);
+    const item = (h.items ?? []).find((x) => x.id === itemId);
+    if (!item) throw new Error('Sub-habit not found');
+    if (item.retired && state !== 'missed') throw new Error(`“${item.title}” is retired; bring it back first`);
+    if (opts.count !== undefined && (!Number.isInteger(opts.count) || opts.count < 1)) throw new Error('count must be a whole number, 1 or more');
+    const parted = !!h.parts?.length;
+    if (parted && !opts.part) throw new Error(`This habit is done per part of the day; name the part: ${h.parts!.join(' | ')}`);
+    const findParent = () => {
+      const snap = this.index.snapshot;
+      const part = parted ? opts.part : dayPartOf(h, snap.completions, date);
+      return snap.completions.find((c) => c.habitId === h.id && c.date === date && c.part === part);
+    };
+    let parent = findParent();
+    if (!parent) {
+      if (state === 'missed') return;
+      await this.syncHabitsForDay(date, [h.id]);
+      parent = findParent();
+      if (!parent) throw new Error(`Could not put ${h.title} into the note for ${date}`);
+    }
+    const need = itemsNeeded(h);
+    const unit = this.settings.indentUnit || '\t';
+    const titleKey = item.title.toLowerCase();
+    const p = parent;
+    await this.editFile(p.path, (lines) => {
+      let at = p.line;
+      if (parseTaskLine(lines[at] ?? '')?.id !== h.id) {
+        // The note moved on since it was read: the habit's line is wherever its id is now.
+        const found = lines.findIndex((l) => parseTaskLine(l)?.id === h.id);
+        if (found === -1) throw new Error(`${h.title} is no longer in the note for ${date}`);
+        at = found;
+      }
+      const parentTl = parseTaskLine(lines[at]!)!;
+      const pw = columnWidth(parentTl.raw.indent);
+      // The parent's subtree: the list lines indented deeper than it.
+      let end = at + 1;
+      while (end < lines.length) {
+        const l = lines[end]!;
+        if (l.trim() === '') break;
+        const m = /^([ \t]*)/.exec(l)!;
+        if (columnWidth(m[1]!) <= pw) break;
+        end++;
+      }
+      const kids: { i: number; tl: TaskLine }[] = [];
+      let childWidth: number | undefined;
+      for (let i = at + 1; i < end; i++) {
+        const tl = parseTaskLine(lines[i]!);
+        if (!tl) continue;
+        const w = columnWidth(tl.raw.indent);
+        if (childWidth === undefined) childWidth = w;
+        if (w === childWidth) kids.push({ i, tl });
+      }
+      const doneSet = (ks: { tl: TaskLine }[]): number => new Set(ks.filter((k) => k.tl.status === 'done').map((k) => k.tl.id ?? `t:${splitItemCount(k.tl.text).text.toLowerCase()}`)).size;
+      const wasMet = doneSet(kids) >= need;
+      const mine = kids.find((k) => k.tl.id === item.id || (!k.tl.id && splitItemCount(k.tl.text).text.toLowerCase() === titleKey));
+      const indent = kids[0]?.tl.raw.indent ?? parentTl.raw.indent + unit;
+      let after = kids;
+      if (state === 'missed') {
+        if (!mine) return false;
+        lines.splice(mine.i, 1);
+        after = kids.filter((k) => k !== mine);
+      } else {
+        const curCount = mine && mine.tl.status === 'done' ? splitItemCount(mine.tl.text).count : 0;
+        const count = state === 'done' ? opts.count ?? (curCount || 1) : 1;
+        const base = mine ? { ...mine.tl, raw: { ...mine.tl.raw, eol: '' } } : newTaskLine(item.title, { id: item.id }, indent);
+        const tl = withStatus({ ...base, text: itemLineText(item.title, count), id: item.id }, state === 'done' ? 'done' : 'cancelled', date);
+        const text = serialiseTaskLine(tl, { force: true });
+        if (mine) { lines[mine.i] = text; after = kids.map((k) => (k === mine ? { i: k.i, tl } : k)); }
+        else { lines.splice(end, 0, text); after = [...kids, { i: end, tl }]; }
+      }
+      const nowMet = doneSet(after) >= need;
+      if (nowMet && parentTl.status !== 'done') lines[at] = serialiseTaskLine(withStatus(parentTl, 'done', date), { force: true });
+      else if (!nowMet && wasMet && parentTl.status === 'done') lines[at] = serialiseTaskLine(withStatus(parentTl, 'todo', date), { force: true });
+      return true;
+    });
   }
 
   /* ── Follow-ups ────────────────────────────────────────────────────── */

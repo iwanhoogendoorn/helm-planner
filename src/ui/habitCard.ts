@@ -14,6 +14,7 @@ import { completionsOn, habitStats } from './habitMemo';
 import { h, icon } from './dom';
 import { habitBadge } from './fields';
 import { habitMenu } from './habits';
+import { itemChips } from './habitItems';
 import { drawingsMenu, targetForHabit } from './drawings';
 import { notesMenu } from './notes';
 import { iconButton } from './dom';
@@ -114,7 +115,7 @@ export function habitCard(ctx: UiContext, hb: Habit, date: IsoDate, opts: { acti
   );
   const card = h('div', { cls: ['helm-habit-card', `is-day-${dayState}`, !hb.active && 'is-paused'], onContextMenu: (ev) => habitMenu(ctx, hb, ev, { date, state: dayState === 'done' ? 'done' : dayState === 'skipped' ? 'skipped' : 'pending' }) },
     ticks,
-    h('div', { cls: 'helm-habit-body' }, h('div', { cls: 'helm-habit-title' }, habitBadge(ctx, hb), h('span', { text: hb.title })), meta),
+    h('div', { cls: 'helm-habit-body' }, h('div', { cls: 'helm-habit-title' }, habitBadge(ctx, hb), h('span', { text: hb.title })), meta, itemChips(ctx, hb, date)),
     strip,
     h('div', { cls: 'helm-habit-month', title: `${Math.round(st.rate30 * 100)}% of the last 30 days` }, ring(st.rate30)),
     opts.actions?.length ? h('div', { cls: 'helm-habit-actions' }, ...opts.actions) : null,
@@ -174,7 +175,8 @@ export function habitTile(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
     // The name has the line to itself; what else it carries today goes underneath, only when there is any.
     h('div', { cls: 'helm-habit-tile-main' },
       h('span', { cls: 'helm-habit-tile-title', text: hb.title }),
-      extras.length ? h('div', { cls: 'helm-habit-tile-sub' }, ...extras) : null),
+      extras.length ? h('div', { cls: 'helm-habit-tile-sub' }, ...extras) : null,
+      itemChips(ctx, hb, date, { compact: true })),
     h('span', { cls: 'helm-habit-tile-meta' },
       st.streak > 0 ? h('span', { cls: 'helm-habit-tile-streak', text: `🔥${st.streak}` }) : null,
       h('span', { cls: 'helm-habit-tile-week', text: `${st.doneThisWeek}/${st.scheduledThisWeek}`, title: 'Done this week' })),

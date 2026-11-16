@@ -1,5 +1,5 @@
 /** Habit analytics: all computed from daily-note lines. */
-import type { Habit, HabitCompletion, HabitPart, IsoDate } from '../core/types';
+import type { Habit, HabitCompletion, HabitItem, HabitItemCompletion, HabitPart, IsoDate } from '../core/types';
 import { addDays, diffDays, startOfWeek } from '../core/dates';
 import { occursOn } from '../core/recurrence';
 import { periodOf, type Period, type PeriodKind } from '../core/periods';
@@ -253,4 +253,76 @@ export function habitHistories(habits: Habit[], completions: HabitCompletion[], 
     return { habit: h, from: start, cells, due, done, rate: due ? Math.min(1, done / due) : 0, streak, bestStreak: Math.max(best, streak) };
   });
   return { periods, rows };
+}
+
+/* ── Sub-habits ──────────────────────────────────────────────────────── */
+
+export interface HabitItemStats {
+  item: HabitItem;
+  lastDone?: IsoDate;
+  daysSince?: number;
+  /** Repetitions (`×N` summed) over the last 7 / 30 days, and ever. */
+  count7: number;
+  count30: number;
+  total: number;
+  /** Distinct days practised in the last 30. */
+  days30: number;
+  todayCount: number;
+  todayState: 'done' | 'skipped' | 'pending';
+}
+
+/** Which item a sub-habit line is: by its id, else by its title (a line typed by hand). */
+export function itemOfLine(h: Habit, c: HabitItemCompletion): HabitItem | undefined {
+  const items = h.items ?? [];
+  if (c.itemId) return items.find((i) => i.id === c.itemId);
+  const t = c.text.toLowerCase();
+  return items.find((i) => i.title.toLowerCase() === t);
+}
+
+/** The lines of one habit's sub-habits, each resolved to its item (when it matches one). */
+function linesOf(h: Habit, all: HabitItemCompletion[]): { c: HabitItemCompletion; item?: HabitItem }[] {
+  const out: { c: HabitItemCompletion; item?: HabitItem }[] = [];
+  for (const c of all) if (c.habitId === h.id) { const item = itemOfLine(h, c); out.push(item ? { c, item } : { c }); }
+  return out;
+}
+
+export function habitItemStats(h: Habit, all: HabitItemCompletion[], today: IsoDate): HabitItemStats[] {
+  const lines = linesOf(h, all);
+  return (h.items ?? []).map((item) => {
+    const mine = lines.filter((l) => l.item?.id === item.id && l.c.date <= today);
+    const done = mine.filter((l) => l.c.state === 'done');
+    const sum = (from: IsoDate): number => done.filter((l) => l.c.date >= from).reduce((a, l) => a + l.c.count, 0);
+    const lastDone = done.reduce<IsoDate | undefined>((a, l) => (a === undefined || l.c.date > a ? l.c.date : a), undefined);
+    const todays = mine.filter((l) => l.c.date === today);
+    const todayCount = todays.filter((l) => l.c.state === 'done').reduce((a, l) => a + l.c.count, 0);
+    const from30 = addDays(today, -29);
+    return {
+      item,
+      ...(lastDone ? { lastDone, daysSince: diffDays(lastDone, today) } : {}),
+      count7: sum(addDays(today, -6)),
+      count30: sum(from30),
+      total: done.reduce((a, l) => a + l.c.count, 0),
+      days30: new Set(done.filter((l) => l.c.date >= from30).map((l) => l.c.date)).size,
+      todayCount,
+      todayState: todayCount > 0 ? 'done' : todays.some((l) => l.c.state === 'skipped') ? 'skipped' : 'pending',
+    };
+  });
+}
+
+/** The active sub-habit practised longest ago — one never practised comes first, in note order. */
+export function suggestedItem(stats: HabitItemStats[]): HabitItem | undefined {
+  const active = stats.filter((s) => !s.item.retired);
+  if (active.length === 0) return undefined;
+  const never = active.find((s) => s.lastDone === undefined);
+  if (never) return never.item;
+  return [...active].sort((a, b) => a.lastDone!.localeCompare(b.lastDone!))[0]!.item;
+}
+
+export interface HabitItemLine { id?: string; title: string; state: 'done' | 'skipped' | 'missed'; count: number; line: number; path: string }
+
+/** The sub-habit lines under one occurrence of a habit on a day (the occurrence's line in `path`). */
+export function itemLinesOn(h: Habit, all: HabitItemCompletion[], date: IsoDate, path: string | undefined, parentLine: number | undefined): HabitItemLine[] {
+  if (path === undefined || parentLine === undefined) return [];
+  return linesOf(h, all).filter((l) => l.c.date === date && l.c.path === path && l.c.parentLine === parentLine)
+    .map((l) => ({ ...(l.item ? { id: l.item.id } : l.c.itemId ? { id: l.c.itemId } : {}), title: l.item?.title ?? l.c.text, state: l.c.state, count: l.c.count, line: l.c.line, path: l.c.path }));
 }

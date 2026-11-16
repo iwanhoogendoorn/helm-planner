@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.56.0 — 2026-11-16
+
+- **Sub-habits.** A habit can hold the things you practise inside it — the songs
+  under Guitar, the pieces under Piano. Add them in the habit form; log one or more
+  a day from the chips under the habit (Today tile and Habits card), several times
+  each (`×3`). The one practised longest ago is marked *up next*. Each carries its
+  own numbers: last practised, times in 7 and 30 days, in all. A habit ticks itself
+  once enough sub-habits are done (*Sub-habits that make the day*: 1, 2, 3 or all);
+  a sub-habit learned or shelved can be retired and keeps its history. In the daily
+  note they are plain lines indented under the habit's line; ticking one by hand in
+  the note counts too.
+- API: habits carry `items`, `itemsPerDay` and `suggestedItem`; a day's habit
+  occurrences list their sub-habit lines; `POST/PATCH/DELETE /habits/:id/items`,
+  and `POST /habits/:id/state` takes `item` and `count`.
+- **The installed version is shown**, small, at the top of the settings and in the
+  Helm view's tab bar.
+
 ## 1.55.0 — 2026-11-13
 
 - **A picture the phone already has is not sent again.** `GET /files/binary` names

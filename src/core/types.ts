@@ -187,6 +187,37 @@ export interface Habit {
   pauses?: { from: IsoDate; to?: IsoDate }[];
   /** No habit note any more — reconstructed from the ticks left in daily notes. */
   removed?: boolean;
+  /** Sub-habits (the songs under Guitar): active ones in note order, then retired ones. */
+  items?: HabitItem[];
+  /** Distinct sub-habits that make an occurrence count as done; 0 = every active one. Default 1. */
+  itemsPerDay?: number;
+}
+
+/** One sub-habit of a habit: what is practised inside it on a day. */
+export interface HabitItem {
+  id: string;
+  title: string;
+  /** Learned or shelved: no longer offered, its history kept. */
+  retired?: boolean;
+}
+
+/** A sub-habit line under a habit's line in a daily note. */
+export interface HabitItemCompletion {
+  habitId: string;
+  /** The sub-habit's id; undefined for a hand-typed line without one (matched to an item by title). */
+  itemId?: string;
+  /** The line's text without the `×N` count. */
+  text: string;
+  /** Repetitions that day (`×N`), 1 when unmarked. */
+  count: number;
+  date: IsoDate;
+  path: string;
+  line: number;
+  /** The parent habit line's line number. */
+  parentLine: number;
+  state: 'done' | 'skipped' | 'missed';
+  /** The occurrence it sits under (undefined = the day-level line). */
+  part?: HabitPart;
 }
 
 export type HabitColor = 'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'pink';
@@ -241,6 +272,8 @@ export interface Snapshot {
   habits: Map<string, Habit>;
   goals: Map<string, Goal>;
   completions: HabitCompletion[];
+  /** Sub-habit lines (indented under a habit's line). */
+  itemCompletions: HabitItemCompletion[];
   dailyNotes: Map<IsoDate, DailyNoteInfo>;
   diagnostics: Diagnostic[];
   /** path -> keys of tasks in that file, in line order. */

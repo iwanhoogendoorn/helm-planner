@@ -267,14 +267,30 @@ treated as booked.
 ```
 GET    /habits?all=true          active habits (all=true adds paused ones and ghosts: ticks whose note is gone)
 GET    /habits/:id?history=week|month|quarter|year
-POST   /habits                   { title, schedule, targetPerWeek?, graceDays?, icon?, parts?, color? } → 201
-PATCH  /habits/:id               any of active, schedule, title, targetPerWeek (null clears), graceDays, icon, iconImage, parts, color
+POST   /habits                   { title, schedule, targetPerWeek?, graceDays?, icon?, parts?, color?, items?: [title], itemsPerDay? } → 201
+PATCH  /habits/:id               any of active, schedule, title, targetPerWeek (null clears), graceDays, icon, iconImage, parts, color, itemsPerDay
 DELETE /habits/:id
-POST   /habits/:id/state         { date?, state: done|skipped|missed|pending, part?, placeIn? }
+POST   /habits/:id/state         { date?, state: done|skipped|missed|pending, part?, placeIn?, item?, count? }
+GET    /habits/:id/items
+POST   /habits/:id/items         { title } → 201 { item, habit }
+PATCH  /habits/:id/items/:itemId { title?, retired? } → { habit }
+DELETE /habits/:id/items/:itemId → { habit }   (lines in daily notes stay)
 POST   /habits/:id/move          { date?, part: morning|afternoon|evening|null }
 POST   /habits/:id/pause         opens a pause span at today (the same as active: false)
 POST   /habits/:id/resume        closes it
 ```
+
+**Sub-habits** (since 1.56.0). Every habit carries `items: [ { id, title, retired, stats:
+{ lastDone, daysSince, count7, count30, days30, total, todayCount, todayState } } ]` (active ones
+first), `itemsPerDay` (0 = every active one; `"all"` is accepted on input) and `suggestedItem` (the
+active one practised longest ago, never-practised first, or null). In `GET /day/:date` each habit row
+adds `items` (active ones: `{ id, title }`), `itemsPerDay`, `suggestedItem`, and each occurrence adds
+`items: [ { id, title, state: done|skipped, count, line } ]` — the sub-habit lines under that
+occurrence's line. `POST /habits/:id/state` with `item` logs a sub-habit instead of the habit:
+`done` writes the line with `×count` (no count: keep the one it has, 1 for a new line), `skipped`
+writes `[-]`, `missed`/`pending` take the line out; `part` picks the occurrence for a habit with
+parts (required, as for the habit). The habit's own line follows the `itemsPerDay` rule. 400 for an
+unknown or retired item, or a count below 1.
 
 A habit carries its fields (`id`, `title`, `path`, `schedule` parsed with `raw`, `active`,
 `targetPerWeek`, `graceDays`, `icon`, `iconImage`, `parts`, `color`, `created`, `pauses`,

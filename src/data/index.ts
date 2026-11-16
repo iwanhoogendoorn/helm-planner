@@ -3,12 +3,12 @@
  * Never a source of truth — delete it and rebuild at any time.
  */
 import type { DrawingTarget } from '../core/types';
-import type { DailyNoteInfo, Diagnostic, Goal, Habit, HabitCompletion, HelmSettings, IsoDate, Project, Snapshot, Task, TaskOrigin } from '../core/types';
+import type { DailyNoteInfo, Diagnostic, Goal, Habit, HabitCompletion, HabitItemCompletion, HelmSettings, IsoDate, Project, Snapshot, Task, TaskOrigin } from '../core/types';
 import { DEFAULT_PERIOD_FORMATS, formatPeriod, parsePeriodFromPath, type Period, type PeriodKind } from '../core/periods';
 import { sectionRange } from '../core/document';
 import { parseDocument } from '../core/document';
 import { isProjectNote, parseProject } from '../core/project';
-import { parseHabit } from '../core/habit';
+import { itemsNeeded, parseHabit, splitItemCount } from '../core/habit';
 import { findRegion, partOfLine, type Section } from '../core/dailyNote';
 import { derivedKey, hash } from '../core/ids';
 import { formatDate, parseDateFromPath } from '../core/dates';
@@ -69,6 +69,7 @@ interface FileEntry {
   period?: Period;
   hasRegion: boolean;
   completions: HabitCompletion[];
+  itemCompletions: HabitItemCompletion[];
   diagnostics: Diagnostic[];
 }
 
@@ -286,7 +287,7 @@ export class HelmIndex {
 
   private parseFile(path: string, content: string): FileEntry {
     const s = this.settings;
-    const entry: FileEntry = { path, kind: 'note', hash: hash(content), tasks: [], hasRegion: false, completions: [], diagnostics: [] };
+    const entry: FileEntry = { path, kind: 'note', hash: hash(content), tasks: [], hasRegion: false, completions: [], itemCompletions: [], diagnostics: [] };
     const mtime = this.vault.mtime(path);
     if (isDrawingPath(path)) { entry.kind = 'drawing'; entry.drawing = parseDrawing(path, content, mtime); return entry; }
     if (path.endsWith('.md')) entry.preview = notePreview(content);
@@ -360,11 +361,22 @@ export class HelmIndex {
     if (scan.region) for (const sec of ['habits', 'morning', 'afternoon', 'evening', 'anytime'] as Section[]) for (const l of scan.region.sections[sec].taskLines) sectionOfLine.set(l, sec);
 
     const keyOfLine = new Map<number, string>();
+    const habitLines = new Map<number, HabitCompletion>();
     for (const dt of doc.tasks) {
       const sec = sectionOfLine.get(dt.line);
+      // Sub-habit lines: indented straight under a habit's line (the song practised inside Guitar).
+      const parentHabit = dt.parentLine !== undefined ? habitLines.get(dt.parentLine) : undefined;
+      if (date !== undefined && parentHabit) {
+        const { text, count } = splitItemCount(dt.task.text);
+        if (text === '' && !dt.task.id) continue;
+        entry.itemCompletions.push({ habitId: parentHabit.habitId, ...(dt.task.id?.startsWith('hsi-') ? { itemId: dt.task.id } : {}), text, count, date, path, line: dt.line, parentLine: parentHabit.line, state: dt.task.status === 'done' ? 'done' : dt.task.status === 'cancelled' ? 'skipped' : 'missed', ...(parentHabit.part ? { part: parentHabit.part } : {}) });
+        continue;
+      }
       // Habit lines: the Habits section, or a `hab-…` line inside a part of the day (one occurrence per part).
       if (date !== undefined && dt.task.id && (sec === 'habits' || (dt.task.id.startsWith('hab-') && (sec === 'morning' || sec === 'afternoon' || sec === 'evening')))) {
-        entry.completions.push({ habitId: dt.task.id, date, path, line: dt.line, state: dt.task.status === 'done' ? 'done' : dt.task.status === 'cancelled' ? 'skipped' : 'missed', ...(dt.task.text.trim() ? { text: dt.task.text.trim() } : {}), ...(sec !== 'habits' ? { part: sec } : {}) });
+        const c: HabitCompletion = { habitId: dt.task.id, date, path, line: dt.line, state: dt.task.status === 'done' ? 'done' : dt.task.status === 'cancelled' ? 'skipped' : 'missed', ...(dt.task.text.trim() ? { text: dt.task.text.trim() } : {}), ...(sec !== 'habits' ? { part: sec } : {}) };
+        entry.completions.push(c);
+        if (dt.task.id.startsWith('hab-')) habitLines.set(dt.line, c);
         continue;
       }
       if (dt.task.text.trim() === '' && dt.task.unknown.length === 0) continue; // empty planner slot
@@ -387,7 +399,8 @@ export class HelmIndex {
     const projects = new Map<string, Project>();
     const habits = new Map<string, Habit>();
     const goals = new Map<string, Goal>();
-    const completions: HabitCompletion[] = [];
+    let completions: HabitCompletion[] = [];
+    const itemCompletions: HabitItemCompletion[] = [];
     const dailyNotes = new Map<IsoDate, DailyNoteInfo>();
     const diagnostics: Diagnostic[] = [];
     const tasksByPath = new Map<string, string[]>();
@@ -396,6 +409,7 @@ export class HelmIndex {
     for (const f of files) {
       diagnostics.push(...f.diagnostics);
       completions.push(...f.completions);
+      itemCompletions.push(...f.itemCompletions);
       const keys: string[] = [];
       // A task whose id is already taken gets a key of its own. Its subtasks were keyed to the id back
       // when the file was parsed, so they have to be re-pointed at it — otherwise they hang themselves
@@ -488,7 +502,8 @@ export class HelmIndex {
     const drawings = new Map<string, Drawing>();
     const notes = new Map<string, NoteRef>();
     for (const e of this.files.values()) { if (e.drawing) drawings.set(e.path, e.drawing); if (e.noteRef) notes.set(e.path, e.noteRef); }
-    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, dailyNotes, diagnostics, tasksByPath, drawings, notes };
+    completions = withItemRule(completions, itemCompletions, habits);
+    this.snapshot = { builtAt: Date.now(), tasks, projects, habits, goals, completions, itemCompletions, dailyNotes, diagnostics, tasksByPath, drawings, notes };
     // Every task's wikilinks, parsed once: both attachment passes look targets up here instead of
     // re-parsing 8,000 task lines for each of 400 drawings.
     this.tasksByLink = new Map();
@@ -817,7 +832,7 @@ export class HelmIndex {
 }
 
 export function emptySnapshot(): Snapshot {
-  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map(), drawings: new Map(), notes: new Map() };
+  return { builtAt: 0, tasks: new Map(), projects: new Map(), habits: new Map(), goals: new Map(), completions: [], itemCompletions: [], dailyNotes: new Map(), diagnostics: [], tasksByPath: new Map(), drawings: new Map(), notes: new Map() };
 }
 
 /** Is this frontmatter a song's? Maestro writes `type: song`, sometimes as a list. */
@@ -847,4 +862,25 @@ function parseSongNote(path: string, fm: Record<string, unknown>): SongNote {
     ...(one('time') ? { time: one('time')! } : {}),
     ...(one('status') ? { status: one('status')! } : {}),
   };
+}
+
+/**
+ * A habit line counts as done once enough of its sub-habits are ticked under it, even when the parent
+ * box itself was left open — ticking the songs in the note by hand is doing Guitar.
+ */
+export function withItemRule(completions: HabitCompletion[], items: HabitItemCompletion[], habits: Map<string, Habit>): HabitCompletion[] {
+  if (items.length === 0) return completions;
+  const doneUnder = new Map<string, Set<string>>();
+  for (const it of items) {
+    if (it.state !== 'done') continue;
+    const k = `${it.path}|${it.parentLine}`;
+    (doneUnder.get(k) ?? doneUnder.set(k, new Set()).get(k)!).add(it.itemId ?? `t:${it.text.toLowerCase()}`);
+  }
+  return completions.map((c) => {
+    if (c.state === 'done') return c;
+    const h = habits.get(c.habitId);
+    const n = doneUnder.get(`${c.path}|${c.line}`)?.size ?? 0;
+    if (!h || n === 0) return c;
+    return n >= itemsNeeded(h) ? { ...c, state: 'done' } : c;
+  });
 }

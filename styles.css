@@ -1147,6 +1147,20 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-habit-tile-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .helm-habit-tile-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .helm-habit-tile-sub .helm-habit-tile-moved { padding: 0 6px; line-height: 1.5; }
+.helm-subhabits { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+.helm-subhabits.is-compact { margin-top: 1px; }
+.helm-subhabit { display: inline-flex; align-items: center; gap: 3px; height: auto; font-size: 11px; line-height: 1.5; padding: 0 7px; border-radius: 10px; border: 1px solid rgba(var(--hc-rgb, var(--color-green-rgb)), 0.35); background: transparent; color: var(--text-muted); box-shadow: none; cursor: pointer; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.helm-subhabit:hover { background: rgba(var(--hc-rgb, var(--color-green-rgb)), 0.12); color: var(--text-normal); }
+.helm-subhabit svg { width: 11px; height: 11px; flex: none; }
+.helm-subhabit.is-done { background: rgba(var(--hc-rgb, var(--color-green-rgb)), 0.22); border-color: var(--hc, var(--color-green)); color: var(--text-normal); }
+.helm-subhabit.is-skipped { opacity: 0.55; text-decoration: line-through; }
+.helm-subhabit.is-next { border-style: dashed; color: var(--text-normal); }
+.helm-subhabit-count { font-weight: 600; font-variant-numeric: tabular-nums; }
+.helm-subhabit-more { border-style: dotted; }
+.helm-subhabit-edit { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.helm-subhabit-row { display: flex; align-items: center; gap: 6px; }
+.helm-subhabit-row .helm-subhabit-title { flex: 1 1 auto; min-width: 0; }
+.helm-subhabit-row.is-retired .helm-subhabit-title { opacity: 0.55; text-decoration: line-through; }
 .helm-habit-tile-title { min-width: 0; font-size: var(--font-ui-small); font-weight: 600; line-height: 1.25; color: var(--text-normal); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .helm-habit-tile .helm-habit-attach { flex: none; display: inline-flex; }
 .helm-habit-tile .helm-habit-attach .helm-iconbtn { padding: 0 3px; height: auto; }
@@ -1241,3 +1255,7 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-day-nav-end { padding: var(--size-4-3) 0; margin-top: var(--size-4-2); border-top: 1px solid var(--background-modifier-border); }
 .helm-comic-badge { color: var(--color-purple); }
 .helm-mini-day.has-comic::before { content: ''; position: absolute; left: 2px; bottom: 2px; width: 4px; height: 4px; border-radius: 2px; background: var(--color-purple); }
+
+/* The installed version, small: top of the settings and the view's tab bar. */
+.helm-version { font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 0 4px; user-select: text; }
+.helm-settings-version { font-size: var(--font-ui-smaller); color: var(--text-faint); padding: 0 10px 6px; user-select: text; }

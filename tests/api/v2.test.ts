@@ -93,7 +93,7 @@ describe('v2 · the day', () => {
     expect(d.timeBlocks).toEqual([]);
     expect(d.habits.map((h: any) => h.id).sort()).toEqual(['hab-read', 'hab-workout']);
     const workout = d.habits.find((h: any) => h.id === 'hab-workout');
-    expect(workout.occurrences).toEqual([{ part: null, state: 'done', line: expect.any(Number) }]);
+    expect(workout.occurrences).toEqual([{ part: null, state: 'done', line: expect.any(Number), items: [] }]);
     expect(d.daybook).toEqual({ heading: null, entries: [] });
     expect(d.timeline.timed.some((e: any) => e.task.text === 'Start with OIB' && e.start === 8 * 60)).toBe(true);
     expect((await call('GET', 'day/friday')).status).toBe(400);
@@ -266,7 +266,7 @@ describe('v2 · habits', () => {
     const { call, vault, index } = await api();
     const done = await call('POST', 'habits/hab-workout/state', { date: TODAY, state: 'done' });
     expect(done.status).toBe(200);
-    expect(done.body.occurrences).toEqual([{ part: null, state: 'done', line: expect.any(Number) }]);
+    expect(done.body.occurrences).toEqual([{ part: null, state: 'done', line: expect.any(Number), items: [] }]);
     const note = await vault.read(index.dailyPath(TODAY));
     expect(note).toMatch(/- \[x\] 🏃 Morning workout 🆔 hab-workout ✅ 2026-08-26/);
     const cleared = await call('POST', 'habits/hab-workout/state', { date: TODAY, state: 'pending' });

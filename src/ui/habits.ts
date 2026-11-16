@@ -7,6 +7,7 @@ import { addDrawingItems, targetForHabit } from './drawings';
 import { dayPartOf } from '../data/habits';
 import { addNoteItems } from './notes';
 import { confirmModal } from './modals/confirm';
+import { pickItemMenu } from './habitItems';
 
 export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { date?: IsoDate; part?: HabitPart; state?: 'done' | 'skipped' | 'missed' | 'pending' } = {}): void {
   ev.preventDefault();
@@ -19,6 +20,10 @@ export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { dat
     if (opts.state !== 'done') menu.addItem((i) => i.setTitle(`Mark done${label}`).setIcon('check').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, 'done', opts.part))));
     if (opts.state !== 'skipped') menu.addItem((i) => i.setTitle(`Skip today${label}`).setIcon('minus').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, 'skipped', opts.part))));
     if (opts.state === 'done' || opts.state === 'skipped') menu.addItem((i) => i.setTitle(`Clear${label}`).setIcon('circle').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitState(hb.id, date, 'missed', opts.part))));
+  }
+  if (opts.date && (hb.items ?? []).some((x) => !x.retired)) {
+    const date = opts.date;
+    menu.addItem((i) => i.setTitle('Log a sub-habit…').setIcon('list-plus').onClick((ev) => pickItemMenu(ctx, hb, date, ev instanceof MouseEvent ? ev : new MouseEvent('click', { clientX: 0, clientY: 0 }))));
   }
   if (opts.date && !(hb.parts && hb.parts.length)) {
     const date = opts.date;

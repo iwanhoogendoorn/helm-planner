@@ -8,12 +8,12 @@
 import { DAY_PICTURE_KINDS, type DayPictureKind } from '../core/dayPictures';
 import type { ApiRequest, ApiResponse } from './routes';
 import { asRecord, bad, day, findTask, has, isHhmm, made, missing, notAllowed, num, ok, PARTS, str, strList, tagList } from './routes';
-import { candidateJson, dayItemJson, daybookJson, goalJson, habitJson, horizonPeriodJson, layoutJson, periodJson, refOf, taskJson, type Ctx } from './json';
+import { candidateJson, dayItemJson, daybookJson, goalJson, habitItemsJson, habitJson, horizonPeriodJson, layoutJson, periodJson, refOf, taskJson, type Ctx } from './json';
 import { addDays, diffDays, isIsoDate } from '../core/dates';
 import type { DayPart } from '../core/dailyNote';
 import { HABIT_COLORS, HABIT_PARTS, type Goal, type Habit, type HabitColor, type HabitPart, type IsoDate, type Task } from '../core/types';
 import { candidates, dayPlan, horizonPeriod, horizons, inboxItems, tasksByDay, weekView, wrapUpItems } from '../data/planner';
-import { ghostHabits, habitHistories, habitsOnDay, habitStats } from '../data/habits';
+import { ghostHabits, habitHistories, habitsOnDay, habitStats, itemLinesOn, type HabitDayRow } from '../data/habits';
 import { layOutDay } from '../data/timegrid';
 import { layOutDayPlan } from '../core/pomodoro';
 import { bookingsOn, freeWindowsOn, preferredSlot } from '../data/conflicts';
@@ -614,6 +614,45 @@ function habitNumber(body: Record<string, unknown>, k: 'graceDays' | 'targetPerW
   return { value: n };
 }
 
+/** `itemsPerDay`: a whole number ≥ 0 (0 = every active sub-habit), or "all". */
+function itemsPerDayOf(body: Record<string, unknown>): { value?: number; error?: string } {
+  const v = body['itemsPerDay'];
+  if (v === undefined || v === null) return {};
+  if (v === 'all') return { value: 0 };
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) return { error: 'itemsPerDay must be a whole number, 0 or more (0 = all of them)' };
+  return { value: v };
+}
+
+/** `/habits/:id/items[/:itemId]`: add, rename, retire and remove sub-habits. */
+async function habitItemsRoute(h: Habit, itemId: string | undefined, method: string, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
+  if (h.removed) return bad('This habit has no note any more');
+  const fresh = (): Record<string, unknown> => habitJson(findHabit(h.id, d) ?? h, d);
+  if (itemId === undefined && method === 'GET') return ok({ items: habitItemsJson(h, d).items });
+  if (itemId === undefined && method === 'POST') {
+    const title = str(body['title']);
+    if (!title) return bad('A sub-habit needs a title');
+    try {
+      const item = await d.mutations.addHabitItem(h.id, title);
+      return made({ item: { id: item.id, title: item.title, retired: false }, habit: fresh(), written: d.written() });
+    } catch (e) { return bad((e as Error).message); }
+  }
+  if (itemId === undefined) return undefined;
+  if (!(h.items ?? []).some((x) => x.id === itemId)) return missing(`${h.title} has no sub-habit ${itemId}`);
+  if (method === 'PATCH' || method === 'PUT') {
+    const fields: { title?: string; retired?: boolean } = {};
+    if (has(body, 'title')) { const t = str(body['title']); if (!t) return bad('title must not be empty'); fields.title = t; }
+    if (has(body, 'retired')) { if (typeof body['retired'] !== 'boolean') return bad('retired must be true or false'); fields.retired = body['retired']; }
+    if (Object.keys(fields).length === 0) return bad('Nothing to change');
+    await d.mutations.setHabitItem(h.id, itemId, fields);
+    return ok({ habit: fresh(), written: d.written() });
+  }
+  if (method === 'DELETE') {
+    await d.mutations.removeHabitItem(h.id, itemId);
+    return ok({ habit: fresh(), written: d.written() });
+  }
+  return undefined;
+}
+
 async function habitsRoute(ref: string | undefined, sub: string | undefined, tail: string | undefined, method: string, query: Record<string, string>, body: Record<string, unknown>, d: Ctx): Promise<ApiResponse | undefined> {
   const snap = d.index.snapshot;
   if (ref === undefined && method === 'GET') {
@@ -634,7 +673,10 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
     if (target.error) return bad(target.error);
     const grace = habitNumber(body, 'graceDays');
     if (grace.error) return bad(grace.error);
-    const id = await d.mutations.createHabit({ title, schedule, ...(target.value != null ? { targetPerWeek: target.value } : {}), ...(grace.value != null ? { graceDays: grace.value } : {}), ...(str(body['icon']) ? { icon: str(body['icon'])! } : {}), ...(parts.length ? { parts: parts as HabitPart[] } : {}), ...(color ? { color: color as HabitColor } : {}) });
+    const items = strList(body['items'], 'items');
+    const ipd = itemsPerDayOf(body);
+    if (ipd.error) return bad(ipd.error);
+    const id = await d.mutations.createHabit({ ...(items.length ? { items } : {}), ...(ipd.value !== undefined ? { itemsPerDay: ipd.value } : {}), title, schedule, ...(target.value != null ? { targetPerWeek: target.value } : {}), ...(grace.value != null ? { graceDays: grace.value } : {}), ...(str(body['icon']) ? { icon: str(body['icon'])! } : {}), ...(parts.length ? { parts: parts as HabitPart[] } : {}), ...(color ? { color: color as HabitColor } : {}) });
     const h = findHabit(id, d);
     return made({ habit: h ? habitJson(h, d) : { id }, written: d.written() });
   }
@@ -670,6 +712,7 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
       }
     }
     if (has(body, 'parts')) { const parts = strList(body['parts'], 'parts'); if (parts.some((p) => !HABIT_PARTS.includes(p as HabitPart))) return bad(`parts must be from ${HABIT_PARTS.join(', ')}`); fields.parts = parts as HabitPart[]; }
+    if (has(body, 'itemsPerDay')) { const n = itemsPerDayOf(body); if (n.error || n.value === undefined) return bad(n.error ?? 'itemsPerDay must be a whole number, 0 or more'); fields.itemsPerDay = n.value; }
     if (has(body, 'color')) { const c = body['color'] === null ? null : str(body['color']); if (c && !HABIT_COLORS.includes(c as HabitColor)) return bad(`color must be one of ${HABIT_COLORS.join(', ')}`); fields.color = (c ?? null) as HabitColor | null; }
     if (Object.keys(fields).length === 0) return bad('Nothing to change');
     await d.mutations.setHabitFields(h.id, fields);
@@ -680,6 +723,24 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
     if (h.removed) return bad('This habit has no note any more');
     await d.mutations.deleteHabit(h.id);
     return ok({ deleted: h.id, written: d.written() });
+  }
+  if (sub === 'items') return habitItemsRoute(h, tail, method, body, d);
+  if (sub === 'state' && method === 'POST' && body['item'] !== undefined) {
+    const date = day(body['date']) ?? d.today();
+    const itemId = str(body['item']);
+    const state = str(body['state']);
+    if (!state || !HABIT_STATES.includes(state as typeof HABIT_STATES[number])) return bad(`state must be one of ${HABIT_STATES.join(', ')}`);
+    const item = (h.items ?? []).find((x) => x.id === itemId);
+    if (!itemId || !item) return bad(`${h.title} has no sub-habit ${itemId ?? ''}`.trim());
+    if (item.retired && state !== 'missed' && state !== 'pending') return bad(`“${item.title}” is retired; bring it back first`);
+    const part = str(body['part']);
+    if (part && !HABIT_PARTS.includes(part as HabitPart)) return bad(`part must be one of ${HABIT_PARTS.join(', ')}`);
+    if (h.parts?.length && !part) return bad(`This habit is done per part of the day; send part: ${h.parts.join(' | ')}`);
+    let count: number | undefined;
+    if (body['count'] !== undefined && body['count'] !== null) { const n = body['count']; if (typeof n !== 'number' || !Number.isInteger(n) || n < 1) return bad('count must be a whole number, 1 or more'); count = n; }
+    await d.mutations.setHabitItemState(h.id, item.id, date, state === 'pending' ? 'missed' : state as 'done' | 'skipped' | 'missed', { ...(part ? { part: part as HabitPart } : {}), ...(count !== undefined ? { count } : {}) });
+    const row = habitsOnDay([findHabit(h.id, d) ?? h], d.index.snapshot.completions, date)[0];
+    return ok({ id: h.id, date, item: item.id, occurrences: row ? occurrencesJson(row, date, d) : [], written: d.written() });
   }
   if (sub === 'state' && method === 'POST') {
     const date = day(body['date']) ?? d.today();
@@ -693,7 +754,7 @@ async function habitsRoute(ref: string | undefined, sub: string | undefined, tai
     // "pending" undoes a tick the way the Today tab does: the line goes back to `[ ]`.
     await d.mutations.setHabitState(h.id, date, state === 'pending' ? 'missed' : state as 'done' | 'skipped' | 'missed', part as HabitPart | undefined, placeIn ? { placeIn: placeIn as HabitPart } : {});
     const row = habitsOnDay([findHabit(h.id, d) ?? h], d.index.snapshot.completions, date)[0];
-    return ok({ id: h.id, date, occurrences: (row?.occurrences ?? []).map((o) => ({ part: o.part ?? null, state: o.state, line: o.line ?? null })), written: d.written() });
+    return ok({ id: h.id, date, occurrences: row ? occurrencesJson(row, date, d) : [], written: d.written() });
   }
   if (sub === 'move' && method === 'POST') {
     const date = day(body['date']) ?? d.today();
@@ -742,7 +803,8 @@ export function dayJson(date: IsoDate, d: Ctx): Record<string, unknown> {
   const habits = habitsOnDay(d.index.allHabits(), snap.completions, date).map((row) => {
     const st = habitStats(row.habit, snap.completions, d.today(), settings.weekStartsOn, 14);
     const h = row.habit;
-    return { id: h.id, title: h.title, icon: h.icon ?? null, iconImage: h.iconImage ?? null, color: h.color ?? null, parts: h.parts ?? [], dueToday: row.due, occurrences: row.occurrences.map((o) => ({ part: o.part ?? null, state: o.state, line: o.line ?? null })), streak: st.streak };
+    const it = habitItemsJson(h, d);
+    return { id: h.id, title: h.title, icon: h.icon ?? null, iconImage: h.iconImage ?? null, color: h.color ?? null, parts: h.parts ?? [], dueToday: row.due, occurrences: occurrencesJson(row, date, d), streak: st.streak, items: it.items.filter((x) => !x['retired']).map((x) => ({ id: x['id'], title: x['title'] })), itemsPerDay: it.itemsPerDay, suggestedItem: it.suggestedItem };
   });
   const heading = d.index.daybookHeadingLine(date);
   const info = snap.dailyNotes.get(date);
@@ -760,6 +822,11 @@ export function dayJson(date: IsoDate, d: Ctx): Record<string, unknown> {
     pictures: d.index.dayPictures(date),
     timeline: layoutJson(layOutDay(date, shown, settings), d),
   };
+}
+
+/** A day's occurrences of one habit, each with the sub-habit lines under it. */
+function occurrencesJson(row: HabitDayRow, date: IsoDate, d: Ctx): Record<string, unknown>[] {
+  return row.occurrences.map((o) => ({ part: o.part ?? null, state: o.state, line: o.line ?? null, items: itemLinesOn(row.habit, d.index.snapshot.itemCompletions, date, o.path, o.line).map((x) => ({ id: x.id ?? null, title: x.title, state: x.state === 'missed' ? 'pending' : x.state, count: x.count, line: x.line })) }));
 }
 
 /** The Plan-day modal's confirm button: plan the picked items (the daily note and its habits come first), then unschedule the removed ones. */

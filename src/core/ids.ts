@@ -2,7 +2,7 @@
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
-export type IdPrefix = 'tsk' | 'prj' | 'hab' | 'gol';
+export type IdPrefix = 'tsk' | 'prj' | 'hab' | 'gol' | 'hsi';
 
 export function randomId(prefix: IdPrefix, length = 6, rng: () => number = Math.random): string {
   let s = '';

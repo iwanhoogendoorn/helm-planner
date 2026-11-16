@@ -198,6 +198,7 @@ export class HelmSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass('helm-settings');
     this.sectionNavEl = containerEl.createDiv({ cls: 'helm-settings-nav' });
+    this.sectionNavEl.createDiv({ cls: 'helm-settings-version', text: `Helm v${this.host.manifest.version}` });
     this.bodyEl = containerEl.createDiv({ cls: 'helm-settings-body' });
     for (const section of NAV_SECTIONS) {
       const btn = this.sectionNavEl.createEl('button', { cls: 'helm-settings-nav-item' });

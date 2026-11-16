@@ -131,6 +131,39 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
   };
   drawParts();
 
+  // ── Sub-habits ───────────────────────────────────────────────────────
+  // Edited here, written on save: the songs under Guitar, the pieces under Piano.
+  type Draft = { id?: string; title: string; original?: string; retired: boolean; wasRetired: boolean; deleted: boolean };
+  const drafts: Draft[] = (existing?.items ?? []).map((i) => ({ id: i.id, title: i.title, original: i.title, retired: !!i.retired, wasRetired: !!i.retired, deleted: false }));
+  let perDay = existing?.itemsPerDay ?? 1;
+  const itemList = h('div', { cls: 'helm-subhabit-edit' });
+  const perDayRow = h('div', { cls: 'helm-segmented' });
+  const newItem = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: 'Add a song, a piece, an exercise… (Enter)' } });
+  const addDraft = (): void => {
+    for (const t of newItem.value.split(/[\n;]/).map((x) => x.trim()).filter(Boolean)) {
+      if (!drafts.some((d) => !d.deleted && d.title.toLowerCase() === t.toLowerCase())) drafts.push({ title: t, retired: false, wasRetired: false, deleted: false });
+    }
+    newItem.value = '';
+    drawItems();
+  };
+  newItem.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); addDraft(); } });
+  const drawItems = (): void => {
+    const live = drafts.filter((d) => !d.deleted);
+    itemList.replaceChildren(...live.map((d) => {
+      const input = h('input', { cls: 'helm-subhabit-title', attr: { type: 'text', value: d.title } });
+      input.addEventListener('input', () => { d.title = input.value; });
+      return h('div', { cls: ['helm-subhabit-row', d.retired && 'is-retired'] },
+        input,
+        button(d.retired ? 'Bring back' : 'Retire', { icon: d.retired ? 'rotate-ccw' : 'archive', cls: 'helm-btn-quiet', title: d.retired ? 'Offer it again' : 'Learned or shelved: no longer offered, its history kept', onClick: () => { d.retired = !d.retired; drawItems(); } }),
+        button('', { icon: 'x', cls: 'helm-btn-quiet', title: 'Remove (lines already in daily notes stay)', onClick: () => { if (d.id) d.deleted = true; else drafts.splice(drafts.indexOf(d), 1); drawItems(); } }));
+    }));
+    const n = live.filter((d) => !d.retired).length;
+    perDayRow.replaceChildren(...[1, 2, 3].filter((k) => k < Math.max(2, n)).map((k) => h('button', { cls: ['helm-seg', perDay === k && 'is-active'], text: `${k}`, onClick: () => { perDay = k; drawItems(); } })),
+      h('button', { cls: ['helm-seg', perDay === 0 && 'is-active'], text: 'all of them', onClick: () => { perDay = 0; drawItems(); } }));
+    perDayRow.style.display = n > 0 ? '' : 'none';
+  };
+  drawItems();
+
   // ── Target and grace ─────────────────────────────────────────────────
   // New habit: attachments chosen now, created / linked right after the habit note exists.
   type Pending = { kind: 'note' | 'drawing'; mode: 'new' | 'link'; label: string; name?: string; folder?: string; path?: string };
@@ -198,6 +231,8 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
     field('Schedule', '', presets, weekdayRow, nRow, monthRow, understood),
     field('Part of the day', 'pick several for a habit you do more than once a day', partsRow, partsHint),
     field('Colour', 'for the board, the week cells and the charts', colorRow),
+    field('Sub-habits', 'what you practise inside this habit — log one or more a day, several times each', itemList, newItem),
+    field('Sub-habits that make the day', 'the habit ticks itself once this many are done', perDayRow),
     ...(existing ? [field('Notes', 'attached to this habit', notesSection(ctx, targetForHabit(existing))), field('Drawings', 'attached to this habit', drawingsSection(ctx, targetForHabit(existing)))]
       : [field('Notes & drawings', 'created or linked as soon as the habit is', pendingRow, pendingList)]),
     h('div', { cls: 'helm-grid2' },
@@ -219,9 +254,19 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       if (pendingUpload) image = await ctx.mutations.saveHabitIcon(pendingUpload.name || name, pendingUpload.data, pendingUpload.ext);
       const schedule = formatRecurrence(r);
       const partList = HABIT_PARTS.filter((pt) => parts.has(pt));
-      if (existing) await ctx.mutations.setHabitFields(existing.id, { title: name, schedule, active, graceDays: grace, targetPerWeek: target ?? null, icon: emoji, iconImage: image ?? null, parts: partList, color: color ?? null });
-      else {
-        const id = await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}), ...(color ? { color } : {}) });
+      if (newItem.value.trim()) addDraft();
+      const anyItems = drafts.some((d) => !d.deleted);
+      if (existing) {
+        await ctx.mutations.setHabitFields(existing.id, { title: name, schedule, active, graceDays: grace, targetPerWeek: target ?? null, icon: emoji, iconImage: image ?? null, parts: partList, color: color ?? null, ...(anyItems || existing.itemsPerDay !== undefined ? { itemsPerDay: perDay } : {}) });
+        for (const d of drafts) {
+          const t = d.title.trim();
+          if (d.id && d.deleted) await ctx.mutations.removeHabitItem(existing.id, d.id);
+          else if (d.id && ((t && t !== d.original) || d.retired !== d.wasRetired)) await ctx.mutations.setHabitItem(existing.id, d.id, { ...(t && t !== d.original ? { title: t } : {}), retired: d.retired });
+          else if (!d.id && t) await ctx.mutations.addHabitItem(existing.id, t);
+        }
+      } else {
+        const items = drafts.filter((d) => !d.deleted && d.title.trim()).map((d) => d.title.trim());
+        const id = await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}), ...(color ? { color } : {}), ...(items.length ? { items, itemsPerDay: perDay } : {}) });
         await applyPending(id, name);
       }
     });

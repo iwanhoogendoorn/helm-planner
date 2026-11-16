@@ -166,7 +166,9 @@ export class HelmView extends ItemView {
       list.appendChild(b);
     });
     this.indexingHint = h('span', { cls: 'helm-hint helm-indexing', text: 'indexing…' });
+    const version = (this.app as unknown as { plugins?: { manifests?: Record<string, { version?: string }> } } | undefined)?.plugins?.manifests?.['helm-planner']?.version;
     bar.append(list, h('span', { cls: 'helm-spacer' }), this.indexingHint,
+      ...(version ? [h('span', { cls: 'helm-version', text: `v${version}`, title: `Helm ${version}` })] : []),
       iconButton('search', 'Search everything (tasks, projects, notes, drawings)', () => openSearch(this.ctx()), 'helm-tab-search'),
       iconButton('plus', 'Capture (quick add)', () => openCapture(this.ctx(), this.tab === 'today' ? { date: this.todayState.date } : {}), 'helm-tab-capture'),
       iconButton('refresh-cw', 'Rebuild index', () => { const ctx = this.ctx(); void ctx.run('Rebuild index', () => ctx.index.rebuild()); }));

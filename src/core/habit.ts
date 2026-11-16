@@ -15,13 +15,19 @@
  *   - 2026-06-30 every day
  * paused:                          # spans not due: "<from>..<to>", open when still paused
  *   - 2026-07-01..2026-07-14
+ * items:                           # sub-habits: "<title> 🆔 <id>"
+ *   - Wonderwall 🆔 hsi-a1b2c3
+ * items_retired:                   # learned / shelved sub-habits, history kept
+ *   - Smoke on the Water 🆔 hsi-0f0f0f
+ * items_per_day: 1                 # sub-habits that make the day count; 0 or "all" = every active one
  * ---
  * ```
  */
-import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitPart, type Recurrence } from './types';
+import { HABIT_COLORS, HABIT_PARTS, type Habit, type HabitColor, type HabitItem, type HabitPart, type Recurrence } from './types';
 import { parseDocument, type Document } from './document';
 import { scalar, yamlScalar } from './frontmatter';
 import { formatRecurrence, parseRecurrence } from './recurrence';
+import { hash } from './ids';
 
 export function isHabitNote(doc: Document): boolean {
   const t = scalar(doc.frontmatter.values['type'] ?? doc.frontmatter.values['Type']);
@@ -61,8 +67,53 @@ export function parseHabit(path: string, content: string, fallbackId?: string): 
   if (pauses.length > 0) habit.pauses = pauses;
   const img = scalar(fm['icon_image']) ?? scalar(fm['image']);
   if (img) habit.iconImage = img.replace(/^\[\[|\]\]$/g, '').replace(/^!\[\[|\]\]$/g, '');
+  const items = [...asList(fm['items']).map((x) => parseItemEntry(x, false)), ...asList(fm['items_retired']).map((x) => parseItemEntry(x, true))].filter((x): x is HabitItem => x !== undefined);
+  const seenItems = new Set<string>();
+  const uniq = items.filter((it) => !seenItems.has(it.id) && seenItems.add(it.id));
+  if (uniq.length > 0) habit.items = uniq;
+  const ipd = scalar(fm['items_per_day']);
+  if (ipd !== undefined && ipd.trim() !== '') { const n = /^all$/i.test(ipd.trim()) ? 0 : Number(ipd); if (Number.isInteger(n) && n >= 0) habit.itemsPerDay = n; }
   return habit;
 }
+
+const ITEM_ID_RE = /\s*🆔\s*(hsi-[a-z0-9]+)\s*$/;
+
+/** `Wonderwall 🆔 hsi-a1b2c3` → a sub-habit. An entry without an id gets one derived from its title, so it stays put. */
+export function parseItemEntry(raw: string, retired: boolean): HabitItem | undefined {
+  const text = String(raw).trim();
+  if (!text) return undefined;
+  const m = ITEM_ID_RE.exec(text);
+  const title = (m ? text.slice(0, m.index) : text).trim();
+  if (!title) return undefined;
+  const id = m ? m[1]! : `hsi-t${hash(title.toLowerCase())}`;
+  return { id, title, ...(retired ? { retired: true } : {}) };
+}
+
+export const formatItemEntry = (it: { id: string; title: string }): string => `${it.title.trim()} 🆔 ${it.id}`;
+
+/** The frontmatter values for a habit's sub-habits (undefined removes the key). */
+export function itemsFrontmatter(items: HabitItem[]): { items: string[] | undefined; items_retired: string[] | undefined } {
+  const act = items.filter((i) => !i.retired).map(formatItemEntry);
+  const ret = items.filter((i) => i.retired).map(formatItemEntry);
+  return { items: act.length ? act : undefined, items_retired: ret.length ? ret : undefined };
+}
+
+/** How many distinct sub-habits make an occurrence count: `itemsPerDay`, 0 meaning every active one. */
+export function itemsNeeded(h: Pick<Habit, 'items' | 'itemsPerDay'>): number {
+  const active = (h.items ?? []).filter((i) => !i.retired).length;
+  if (active === 0) return Infinity;
+  const n = h.itemsPerDay ?? 1;
+  return n === 0 ? active : Math.min(n, active);
+}
+
+/** `Wonderwall ×3` → { text: 'Wonderwall', count: 3 }. Also reads `x3`. */
+export function splitItemCount(text: string): { text: string; count: number } {
+  const m = /\s+[×x](\d{1,3})$/.exec(text.trim());
+  if (!m) return { text: text.trim(), count: 1 };
+  return { text: text.trim().slice(0, m.index).trim(), count: Math.max(1, Number(m[1])) };
+}
+
+export const itemLineText = (title: string, count: number): string => count > 1 ? `${title} ×${count}` : title;
 
 const asList = (v: unknown): string[] => Array.isArray(v) ? v.map(String) : typeof v === 'string' && v.trim() ? [v] : [];
 const PARTS_RE = /\s*\[?parts:\s*([a-z, ]+)\]?\s*$/i;
@@ -90,7 +141,7 @@ export function parsePauseEntry(raw: string): { from: string; to?: string } | un
 
 export const formatPauseEntry = (p: { from: string; to?: string }): string => `${p.from}..${p.to ?? ''}`;
 
-export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor; today: string }): string {
+export function renderHabitNote(h: { id: string; title: string; schedule: string; targetPerWeek?: number; graceDays?: number; icon?: string; iconImage?: string; parts?: HabitPart[]; color?: HabitColor; items?: HabitItem[]; itemsPerDay?: number; today: string }): string {
   const fm = ['---', `title: ${yamlScalar(h.title)}`, 'type: habit', `id: ${h.id}`, `schedule: ${yamlScalar(h.schedule)}`, 'active: true'];
   if (h.targetPerWeek) fm.push(`target_per_week: ${h.targetPerWeek}`);
   fm.push(`grace_days: ${h.graceDays ?? 0}`);
@@ -98,6 +149,8 @@ export function renderHabitNote(h: { id: string; title: string; schedule: string
   if (h.iconImage) fm.push(`icon_image: ${yamlScalar(h.iconImage)}`);
   if (h.parts && h.parts.length > 0) fm.push(`parts: [${h.parts.join(', ')}]`);
   if (h.color) fm.push(`color: ${h.color}`);
+  if (h.items && h.items.length > 0) fm.push('items:', ...h.items.map((it) => `  - ${yamlScalar(formatItemEntry(it))}`));
+  if (h.itemsPerDay !== undefined) fm.push(`items_per_day: ${h.itemsPerDay}`);
   fm.push(`creation_date: ${h.today}`, '---', '', `# ${h.title}`, '', 'Why this habit matters:', '', '');
   return fm.join('\n');
 }
