@@ -1147,16 +1147,21 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-habit-tile-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .helm-habit-tile-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .helm-habit-tile-sub .helm-habit-tile-moved { padding: 0 6px; line-height: 1.5; }
-.helm-subhabits { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
-.helm-subhabits.is-compact { margin-top: 1px; }
-.helm-subhabit { display: inline-flex; align-items: center; gap: 3px; height: auto; font-size: 11px; line-height: 1.5; padding: 0 7px; border-radius: 10px; border: 1px solid rgba(var(--hc-rgb, var(--color-green-rgb)), 0.35); background: transparent; color: var(--text-muted); box-shadow: none; cursor: pointer; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.helm-subhabits { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.helm-subhabit { display: inline-flex; align-items: center; gap: 4px; height: 20px; min-width: 0; max-width: 100%; font-size: 11px; line-height: 1; padding: 0 8px; border-radius: 10px; border: 1px solid rgba(var(--hc-rgb, var(--color-green-rgb)), 0.3); background: var(--background-primary); color: var(--text-muted); box-shadow: none; cursor: pointer; white-space: nowrap; }
+.helm-subhabit-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .helm-subhabit:hover { background: rgba(var(--hc-rgb, var(--color-green-rgb)), 0.12); color: var(--text-normal); }
-.helm-subhabit svg { width: 11px; height: 11px; flex: none; }
-.helm-subhabit.is-done { background: rgba(var(--hc-rgb, var(--color-green-rgb)), 0.22); border-color: var(--hc, var(--color-green)); color: var(--text-normal); }
+.helm-subhabit svg, .helm-subhabit .svg-icon { width: 11px; height: 11px; flex: none; }
+.helm-subhabit.is-done { background: rgba(var(--hc-rgb, var(--color-green-rgb)), 0.2); border-color: rgba(var(--hc-rgb, var(--color-green-rgb)), 0.6); color: var(--text-normal); }
 .helm-subhabit.is-skipped { opacity: 0.55; text-decoration: line-through; }
 .helm-subhabit.is-next { border-style: dashed; color: var(--text-normal); }
-.helm-subhabit-count { font-weight: 600; font-variant-numeric: tabular-nums; }
-.helm-subhabit-more { border-style: dotted; }
+.helm-subhabit-count { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* The Today tile's one pill: same shape as the tile's other chips, never taller than one line. */
+button.helm-subhabit-summary { height: auto; min-width: 0; max-width: 100%; line-height: 1.5; border: none; box-shadow: none; cursor: pointer; font-weight: 500; background: rgba(var(--hc-rgb), 0.15); color: var(--text-muted); }
+button.helm-subhabit-summary span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.helm-subhabit-summary:hover { background: rgba(var(--hc-rgb), 0.28); color: var(--text-normal); }
+button.helm-subhabit-summary.is-next { background: transparent; border: 1px dashed rgba(var(--hc-rgb), 0.5); }
+button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 .helm-subhabit-edit { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
 .helm-subhabit-row { display: flex; align-items: center; gap: 6px; }
 .helm-subhabit-row .helm-subhabit-title { flex: 1 1 auto; min-width: 0; }
@@ -1259,3 +1264,6 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 /* The installed version, small: top of the settings and the view's tab bar. */
 .helm-version { font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 0 4px; user-select: text; }
 .helm-settings-version { font-size: var(--font-ui-smaller); color: var(--text-faint); padding: 0 10px 6px; user-select: text; }
+.helm-habit-tile-sub { flex-wrap: nowrap; overflow: hidden; }
+.helm-habit-tile-sub > * { flex: 0 0 auto; }
+.helm-habit-tile-sub > .helm-subhabit-summary { flex: 0 1 auto; min-width: 48px; }

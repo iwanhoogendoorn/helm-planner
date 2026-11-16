@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.56.1 — 2026-11-16
+
+- **Sub-habits on the Today tile are one small pill**, not a column of song chips:
+  the number practised today, or the song up next when there is none yet. Its
+  tooltip lists what was practised; a click opens the list to log one. Every tile
+  is the same height again. The Habits card keeps the full row of chips.
+
 ## 1.56.0 — 2026-11-16
 
 - **Sub-habits.** A habit can hold the things you practise inside it — the songs

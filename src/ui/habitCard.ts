@@ -14,7 +14,7 @@ import { completionsOn, habitStats } from './habitMemo';
 import { h, icon } from './dom';
 import { habitBadge } from './fields';
 import { habitMenu } from './habits';
-import { itemChips } from './habitItems';
+import { itemChips, itemSummary } from './habitItems';
 import { drawingsMenu, targetForHabit } from './drawings';
 import { notesMenu } from './notes';
 import { iconButton } from './dom';
@@ -152,8 +152,11 @@ export function habitTile(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
   const states = occ.map((p) => stateOf(p));
   const all = states.every((s) => s === 'done') ? 'done' : states.some((s) => s === 'done') ? 'partial' : states.every((s) => s === 'skipped') ? 'skipped' : 'pending';
   const pills = attachPills(ctx, hb);
+  const summary = itemSummary(ctx, hb, date);
   const extras = [
-    movedTo && !(hb.parts && hb.parts.length) ? h('span', { cls: 'helm-habit-tile-moved helm-habit-moved', title: `Moved to the ${movedTo} for this day only` }, icon(PART_ICON[movedTo]), h('span', { text: movedTo })) : null,
+    // Beside the sub-habit pill the part of the day is its icon alone; the tooltip still names it.
+    movedTo && !(hb.parts && hb.parts.length) ? h('span', { cls: 'helm-habit-tile-moved helm-habit-moved', title: `Moved to the ${movedTo} for this day only` }, icon(PART_ICON[movedTo]), summary ? null : h('span', { text: movedTo })) : null,
+    summary,
     pills,
   ].filter((x): x is HTMLElement => x !== null);
   const ticks = occ.map((part, i) => h('button', {
@@ -175,8 +178,7 @@ export function habitTile(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
     // The name has the line to itself; what else it carries today goes underneath, only when there is any.
     h('div', { cls: 'helm-habit-tile-main' },
       h('span', { cls: 'helm-habit-tile-title', text: hb.title }),
-      extras.length ? h('div', { cls: 'helm-habit-tile-sub' }, ...extras) : null,
-      itemChips(ctx, hb, date, { compact: true })),
+      extras.length ? h('div', { cls: 'helm-habit-tile-sub' }, ...extras) : null),
     h('span', { cls: 'helm-habit-tile-meta' },
       st.streak > 0 ? h('span', { cls: 'helm-habit-tile-streak', text: `🔥${st.streak}` }) : null,
       h('span', { cls: 'helm-habit-tile-week', text: `${st.doneThisWeek}/${st.scheduledThisWeek}`, title: 'Done this week' })),

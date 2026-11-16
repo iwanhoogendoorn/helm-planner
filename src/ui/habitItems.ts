@@ -86,17 +86,35 @@ export function pickItemMenu(ctx: UiContext, hb: Habit, date: IsoDate, ev: Mouse
 const since = (s: HabitItemStats): string => s.daysSince === undefined ? 'never practised' : s.daysSince === 0 ? 'practised today' : s.daysSince === 1 ? 'last practised yesterday' : `last practised ${s.daysSince} days ago`;
 
 /**
- * The sub-habit chips for a habit on a day. `compact` (the Today tile) shows what was done and what
- * is up next, with a “+” for the rest; the Habits card shows them all. Null for a habit without any.
+ * The Today tile's one-line summary of a habit's sub-habits: what was practised today (“3 practised”),
+ * or the one up next when nothing was. One small pill, the same size as the tile's other chips, so a
+ * habit with ten songs is no taller than one without; a click opens the list to log one.
  */
-export function itemChips(ctx: UiContext, hb: Habit, date: IsoDate, opts: { compact?: boolean } = {}): HTMLElement | null {
+export function itemSummary(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement | null {
+  const active = (hb.items ?? []).filter((i) => !i.retired);
+  if (active.length === 0) return null;
+  const today = itemsOn(ctx, hb, date);
+  const done = active.filter((i) => today.get(i.id)?.state === 'done');
+  const need = hb.itemsPerDay === 0 ? active.length : Math.min(hb.itemsPerDay ?? 1, active.length);
+  const next = suggestedItem(habitItemStats(hb, ctx.index.snapshot.itemCompletions, ctx.today()));
+  const lines = done.map((i) => `✓ ${i.title}${today.get(i.id)!.count > 1 ? ` ×${today.get(i.id)!.count}` : ''}`);
+  const title = [done.length ? `${done.length} practised today (${need} make the day):` : '', lines.length ? lines.join('\n') : 'Nothing practised yet', next && !done.some((i) => i.id === next.id) ? `Up next: ${next.title}` : '', 'Click to log one'].filter(Boolean).join('\n');
+  const label = done.length > 0 ? String(done.length) : next ? next.title : `${active.length}`;
+  return h('button', {
+    cls: ['helm-habit-tile-moved', 'helm-subhabit-summary', done.length >= need && 'is-met', done.length === 0 && 'is-next'],
+    title,
+    onClick: (ev) => pickItemMenu(ctx, hb, date, ev),
+  }, icon(done.length > 0 ? 'music' : 'arrow-right'), h('span', { text: label }));
+}
+
+/** The sub-habit chips for a habit on a day, every active one (the Habits card). Null for a habit without any. */
+export function itemChips(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement | null {
   const active = (hb.items ?? []).filter((i) => !i.retired);
   if (active.length === 0) return null;
   const today = itemsOn(ctx, hb, date);
   const stats = habitItemStats(hb, ctx.index.snapshot.itemCompletions, ctx.today());
   const statOf = new Map(stats.map((s) => [s.item.id, s]));
   const next = suggestedItem(stats);
-  const shown = opts.compact ? active.filter((i) => today.has(i.id) || i.id === next?.id) : active;
   const chip = (item: HabitItem): HTMLElement => {
     const now = today.get(item.id);
     const st = statOf.get(item.id)!;
@@ -113,13 +131,8 @@ export function itemChips(ctx: UiContext, hb: Habit, date: IsoDate, opts: { comp
       onContextMenu: (ev) => itemMenu(ctx, hb, item, date, ev),
     },
       now?.state === 'done' ? icon('check') : now?.state === 'skipped' ? icon('minus') : isNext ? icon('arrow-right') : null,
-      h('span', { text: item.title }),
+      h('span', { cls: 'helm-subhabit-name', text: item.title }),
       now?.state === 'done' && now.count > 1 ? h('span', { cls: 'helm-subhabit-count', text: `×${now.count}` }) : null);
   };
-  const doneN = active.filter((i) => today.get(i.id)?.state === 'done').length;
-  const need = hb.itemsPerDay === 0 ? active.length : Math.min(hb.itemsPerDay ?? 1, active.length);
-  return h('div', { cls: ['helm-subhabits', opts.compact && 'is-compact'], onClick: (ev) => ev.stopPropagation() },
-    ...shown.map(chip),
-    opts.compact ? h('button', { cls: 'helm-subhabit helm-subhabit-more', title: `Log a sub-habit (${doneN}/${need} for today)`, onClick: (ev) => pickItemMenu(ctx, hb, date, ev) }, icon('plus'), h('span', { text: `${doneN}/${need}` })) : null,
-  );
+  return h('div', { cls: 'helm-subhabits', onClick: (ev) => ev.stopPropagation() }, ...active.map(chip));
 }

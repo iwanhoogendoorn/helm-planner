@@ -766,19 +766,24 @@ describe('Today tab', () => {
     expect(await vault.read(dailyPath(TODAY))).toContain('- [x] Evening reading 🆔 hab-read ✅ 2026-08-26');
   });
 
-  it('sub-habit chips: the tile shows what is up next, a click logs it under the habit, again adds a repetition', async () => {
-    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n---\n';
+  it('sub-habits: the Today tile carries one summary pill, the Habits card the chips; a chip click logs a song, again adds a round', async () => {
+    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n  - Layla 🆔 hsi-layla\n---\n';
     const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
     const tile = (): HTMLElement => [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
-    expect(texts(tile(), '.helm-subhabit')).toEqual(['Wonderwall', '0/1']);
-    expect(tile().querySelector('.helm-subhabit.is-next')!.textContent).toBe('Wonderwall');
-    click(tile().querySelector('.helm-subhabit.is-next'));
+    // One pill, never a column of chips: nothing done yet, so it names the song up next.
+    expect(tile().querySelectorAll('.helm-subhabit')).toHaveLength(0);
+    expect(texts(tile(), '.helm-subhabit-summary')).toEqual(['Wonderwall']);
+    const card = (): HTMLElement => [...render((r) => renderHabits(ctx, r, defaultHabitsState())).querySelectorAll<HTMLElement>('.helm-habit-card')].find((e) => e.textContent?.includes('Guitar'))!;
+    expect(texts(card(), '.helm-subhabit')).toEqual(['Wonderwall', 'Blackbird', 'Layla']);
+    click(card().querySelector('.helm-subhabit.is-next'));
     await flush();
     expect(await vault.read(dailyPath(TODAY))).toMatch(/- \[x\] Guitar 🆔 hab-guitar ✅ 2026-08-26\n\t- \[x\] Wonderwall 🆔 hsi-wonder/);
-    click(tile().querySelector('.helm-subhabit.is-done'));
+    click(card().querySelector('.helm-subhabit.is-done'));
     await flush();
     expect(await vault.read(dailyPath(TODAY))).toContain('Wonderwall ×2 🆔 hsi-wonder');
     expect(tile().classList.contains('is-day-done')).toBe(true);
+    expect(texts(tile(), '.helm-subhabit-summary')).toEqual(['1']);
+    expect(tile().querySelector('.helm-subhabit-summary')!.getAttribute('title')).toContain('✓ Wonderwall ×2');
   });
 
   it('keeps the Habits section when every habit is paused, with New habit and one-click Resume', async () => {
