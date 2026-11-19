@@ -217,5 +217,8 @@ describe('sub-habit groups and the day plan', () => {
     expect(r.body.habit.items.find((i: any) => i.id === 'hsi-black').group).toBeNull();
     r = await call('PUT', 'habits/hab-guitar/plan', { items: [] });
     expect(r.body.planned).toEqual([]);
+    r = await call('PUT', 'habits/hab-guitar/items', { order: ['hsi-black', 'hsi-wonder'] });
+    expect(r.body.habit.items.map((i: any) => i.id)).toEqual(['hsi-black', 'hsi-wonder', 'hsi-smoke']);
+    expect((await call('PUT', 'habits/hab-guitar/items', { order: ['hsi-nope'] })).status).toBe(400);
   });
 });

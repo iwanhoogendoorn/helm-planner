@@ -1306,3 +1306,9 @@ button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 .helm-itemlog .helm-itemlog-name .helm-itemlog-sub { color: var(--text-faint); }
 .helm-itemlog .helm-itemlog-count { color: var(--text-normal); }
 .helm-itemlog .helm-itemlog-row:not(.is-done) .helm-itemlog-count { color: var(--text-faint); }
+.helm-subhabit-grip { flex: none; display: inline-flex; align-items: center; color: var(--text-faint); cursor: grab; padding: 0 2px; }
+.helm-subhabit-grip:hover { color: var(--text-normal); }
+.helm-subhabit-grip .svg-icon, .helm-subhabit-grip svg { width: 16px; height: 16px; }
+.helm-subhabit-row.is-dragging { opacity: 0.4; }
+.helm-subhabit-row.is-drop-before { box-shadow: 0 -2px 0 var(--interactive-accent); }
+.helm-subhabit-row.is-drop-after { box-shadow: 0 2px 0 var(--interactive-accent); }

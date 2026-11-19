@@ -307,6 +307,7 @@ PATCH  /habits/:id/groups         { from, to }                  rename; its sub-
 PUT    /habits/:id/groups         { order: [..every group..] }  reorder
 DELETE /habits/:id/groups?name=   remove; its sub-habits stay, ungrouped
 PUT    /habits/:id/plan           { date?, items: [ids] }       the day's plan (replaces it; [] clears)
+PUT    /habits/:id/items          { order: [ids] }              the sub-habits' order (since 1.59.0; ids left out stay after)
 ```
 
 `suggestedItem` is still sent for older clients; Helm itself no longer shows an "up next". The habit's own line follows the `itemsPerDay` rule. 400 for an

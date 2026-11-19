@@ -628,6 +628,10 @@ async function habitItemsRoute(h: Habit, itemId: string | undefined, method: str
   if (h.removed) return bad('This habit has no note any more');
   const fresh = (): Record<string, unknown> => habitJson(findHabit(h.id, d) ?? h, d);
   if (itemId === undefined && method === 'GET') return ok({ items: habitItemsJson(h, d).items });
+  if (itemId === undefined && method === 'PUT') {
+    try { await d.mutations.orderHabitItems(h.id, strList(body['order'], 'order')); } catch (e) { return bad((e as Error).message); }
+    return ok({ habit: fresh(), written: d.written() });
+  }
   if (itemId === undefined && method === 'POST') {
     const title = str(body['title']);
     if (!title) return bad('A sub-habit needs a title');

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.59.0 — 2026-11-19
+
+- **Change the order of sub-habits.** In the habit form each song has a grip:
+  drag it up or down (or press Alt+↑ / Alt+↓ in its name). The order is saved
+  with the habit and used in Log practice, the plan and the chips.
+
 ## 1.58.0 — 2026-11-19
 
 - **Plan your practice.** Log practice has a *Plan* mode: tick what you'll

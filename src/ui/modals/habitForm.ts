@@ -7,7 +7,7 @@ import { notesSection, pickNote } from '../notes';
 import { askNameAndLocation } from '../fields';
 import { formatRecurrence, parseRecurrence } from '../../core/recurrence';
 import { WEEKDAY_SHORT } from '../../core/dates';
-import { button, h } from '../dom';
+import { button, h, icon } from '../dom';
 import type { UiContext } from '../context';
 import { confirmModal } from './confirm';
 
@@ -147,15 +147,50 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
     drawItems();
   };
   newItem.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); addDraft(); } });
-  const drawItems = (): void => {
+  /** Move a draft to just before `to` (or to the end), keeping the deleted ones out of the way. */
+  const moveDraft = (d: Draft, to: Draft | undefined): void => {
+    if (d === to) return;
+    drafts.splice(drafts.indexOf(d), 1);
+    drafts.splice(to ? drafts.indexOf(to) : drafts.length, 0, d);
+    drawItems();
+  };
+  let dragging: Draft | undefined;
+  const drawItems = (focus?: Draft): void => {
     const live = drafts.filter((d) => !d.deleted);
-    itemList.replaceChildren(...live.map((d) => {
-      const input = h('input', { cls: 'helm-subhabit-title', attr: { type: 'text', value: d.title } });
+    itemList.replaceChildren(...live.map((d, i) => {
+      const input = h('input', { cls: 'helm-subhabit-title', attr: { type: 'text', value: d.title, 'aria-label': `${d.title} (Alt+↑/↓ to move)` } });
       input.addEventListener('input', () => { d.title = input.value; });
-      return h('div', { cls: ['helm-subhabit-row', d.retired && 'is-retired'] },
-        input,
+      // Alt+↑ / Alt+↓ move the song from the keyboard.
+      input.addEventListener('keydown', (ev) => {
+        if (!ev.altKey || (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown')) return;
+        ev.preventDefault();
+        if (ev.key === 'ArrowUp' && i > 0) { moveDraft(d, live[i - 1]); drawItems(d); }
+        if (ev.key === 'ArrowDown' && i < live.length - 1) { moveDraft(d, live[i + 2]); drawItems(d); }
+      });
+      if (focus === d) setTimeout(() => input.focus(), 0);
+      const handle = h('span', { cls: 'helm-subhabit-grip', title: 'Drag to change the order', attr: { 'aria-hidden': 'true' } }, icon('grip-vertical'));
+      const row = h('div', { cls: ['helm-subhabit-row', d.retired && 'is-retired'] }, handle, input,
         button(d.retired ? 'Bring back' : 'Retire', { icon: d.retired ? 'rotate-ccw' : 'archive', cls: 'helm-btn-quiet', title: d.retired ? 'Offer it again' : 'Learned or shelved: no longer offered, its history kept', onClick: () => { d.retired = !d.retired; drawItems(); } }),
         button('', { icon: 'x', cls: 'helm-btn-quiet', title: 'Remove (lines already in daily notes stay)', onClick: () => { if (d.id) d.deleted = true; else drafts.splice(drafts.indexOf(d), 1); drawItems(); } }));
+      // Only the grip starts a drag, so the text field still selects text.
+      handle.addEventListener('mousedown', () => { row.draggable = true; });
+      row.addEventListener('mouseup', () => { row.draggable = false; });
+      row.addEventListener('dragstart', (ev) => { dragging = d; row.addClass('is-dragging'); ev.dataTransfer?.setData('text/plain', d.title); if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'; });
+      row.addEventListener('dragend', () => { dragging = undefined; row.draggable = false; drawItems(); });
+      row.addEventListener('dragover', (ev) => {
+        if (!dragging || dragging === d) return;
+        ev.preventDefault();
+        const below = ev.offsetY > row.offsetHeight / 2;
+        row.toggleClass('is-drop-before', !below); row.toggleClass('is-drop-after', below);
+      });
+      row.addEventListener('dragleave', () => { row.removeClass('is-drop-before'); row.removeClass('is-drop-after'); });
+      row.addEventListener('drop', (ev) => {
+        if (!dragging) return;
+        ev.preventDefault();
+        const below = ev.offsetY > row.offsetHeight / 2;
+        moveDraft(dragging, below ? live[i + 1] : d);
+      });
+      return row;
     }));
     const n = live.filter((d) => !d.retired).length;
     perDayRow.replaceChildren(...[1, 2, 3].filter((k) => k < Math.max(2, n)).map((k) => h('button', { cls: ['helm-seg', perDay === k && 'is-active'], text: `${k}`, onClick: () => { perDay = k; drawItems(); } })),
@@ -262,8 +297,11 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
           const t = d.title.trim();
           if (d.id && d.deleted) await ctx.mutations.removeHabitItem(existing.id, d.id);
           else if (d.id && ((t && t !== d.original) || d.retired !== d.wasRetired)) await ctx.mutations.setHabitItem(existing.id, d.id, { ...(t && t !== d.original ? { title: t } : {}), retired: d.retired });
-          else if (!d.id && t) await ctx.mutations.addHabitItem(existing.id, t);
+          else if (!d.id && t) d.id = (await ctx.mutations.addHabitItem(existing.id, t)).id;
         }
+        // Then the order as dragged (retired ones keep their own list, in the same order).
+        const order = drafts.filter((d) => !d.deleted && d.id).map((d) => d.id!);
+        if (order.length > 1) await ctx.mutations.orderHabitItems(existing.id, order);
       } else {
         const items = drafts.filter((d) => !d.deleted && d.title.trim()).map((d) => d.title.trim());
         const id = await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}), ...(color ? { color } : {}), ...(items.length ? { items, itemsPerDay: perDay } : {}) });

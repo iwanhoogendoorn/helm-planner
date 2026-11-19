@@ -889,6 +889,29 @@ describe('Today tab', () => {
     expect(await habitNote()).toMatch(/item_groups:\n {2}- G major\n/);
   });
 
+  it('habit form: sub-habits change order (Alt+↓ here; the grip drags), saved with a new one in place', async () => {
+    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder 📂 G major\n  - Blackbird 🆔 hsi-black\n  - Layla 🆔 hsi-layla\nitems_retired:\n  - Smoke 🆔 hsi-smoke\n---\n';
+    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
+    openHabitForm(ctx, ctx.index.snapshot.habits.get('hab-guitar'));
+    const form = Modal.last!.contentEl;
+    const inputs = (): HTMLInputElement[] => [...form.querySelectorAll<HTMLInputElement>('.helm-subhabit-row .helm-subhabit-title')];
+    expect(form.querySelectorAll('.helm-subhabit-grip')).toHaveLength(4);
+    inputs()[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true }));
+    expect(inputs().map((i) => i.value)).toEqual(['Blackbird', 'Wonderwall', 'Layla', 'Smoke']);
+    inputs()[2]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true }));
+    expect(inputs().map((i) => i.value)).toEqual(['Blackbird', 'Layla', 'Wonderwall', 'Smoke']);
+    const add = form.querySelector<HTMLInputElement>('input[placeholder^="Add a song"]')!;
+    add.value = 'Hotel California';
+    add.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    inputs()[4]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true })); // above Smoke
+    inputs()[3]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true })); // above Wonderwall
+    click([...form.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    await flush(); await flush(); await flush();
+    const note = await vault.read('02 PROJECTS/Habits/Guitar.md');
+    expect(note).toMatch(/items:\n {2}- Blackbird 🆔 hsi-black\n {2}- Layla 🆔 hsi-layla\n {2}- Hotel California 🆔 hsi-[a-z0-9]+\n {2}- Wonderwall 🆔 hsi-wonder 📂 G major\n/);
+    expect(note).toContain('items_retired:\n  - Smoke 🆔 hsi-smoke');
+  });
+
   it('keeps the Habits section when every habit is paused, with New habit and one-click Resume', async () => {
     const paused = (id: string, title: string): string => `---\ntype: habit\nid: ${id}\ntitle: ${title}\nschedule: every day\nactive: false\n---\n`;
     const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Morning workout.md': paused('hab-workout', 'Morning workout'), '02 PROJECTS/Habits/Evening reading.md': paused('hab-read', 'Evening reading') });

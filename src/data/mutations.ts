@@ -1880,6 +1880,18 @@ export class Mutations {
     else await this.writeItems(h, items);
   }
 
+  /** Put the sub-habits in this order (ids; any left out keep their place after the named ones). */
+  async orderHabitItems(habitId: string, order: string[]): Promise<void> {
+    const h = this.habitOrThrow(habitId);
+    const items = h.items ?? [];
+    const rank = new Map(order.map((id, i) => [id, i]));
+    const bad = order.find((id) => !items.some((x) => x.id === id));
+    if (bad) throw new Error(`${h.title} has no sub-habit ${bad}`);
+    const sorted = [...items].sort((a, b) => (rank.get(a.id) ?? order.length + items.indexOf(a)) - (rank.get(b.id) ?? order.length + items.indexOf(b)));
+    if (sorted.every((x, i) => x.id === items[i]!.id)) return;
+    await this.writeItems(h, sorted);
+  }
+
   /** Add a group to sort sub-habits into (a key, a scale). Returns its name as stored. */
   async addItemGroup(habitId: string, name: string): Promise<string> {
     const h = this.habitOrThrow(habitId);
