@@ -20,6 +20,9 @@
  * items_retired:                   # learned / shelved sub-habits, history kept
  *   - Smoke on the Water 🆔 hsi-0f0f0f
  * items_per_day: 1                 # sub-habits that make the day count; 0 or "all" = every active one
+ * item_groups: [C major, G major]  # groups the sub-habits sit in, in order ("<title> 🆔 <id> 📂 <group>")
+ * items_plan_date: 2026-11-16      # the day of the plan below
+ * items_plan: [hsi-a1b2c3]         # sub-habits you mean to practise that day
  * ---
  * ```
  */
@@ -73,23 +76,38 @@ export function parseHabit(path: string, content: string, fallbackId?: string): 
   if (uniq.length > 0) habit.items = uniq;
   const ipd = scalar(fm['items_per_day']);
   if (ipd !== undefined && ipd.trim() !== '') { const n = /^all$/i.test(ipd.trim()) ? 0 : Number(ipd); if (Number.isInteger(n) && n >= 0) habit.itemsPerDay = n; }
+  // Groups: the listed ones in order, then any an item names that the list lacks.
+  const groups = [...new Set([...asList(fm['item_groups']).map((g) => cleanGroup(g)).filter(Boolean), ...uniq.map((i) => i.group).filter((g): g is string => !!g)])];
+  if (groups.length > 0) habit.itemGroups = groups;
+  const planDate = scalar(fm['items_plan_date']);
+  if (planDate && /^\d{4}-\d{2}-\d{2}/.test(planDate)) {
+    const ids = new Set(uniq.map((i) => i.id));
+    habit.itemPlan = { date: planDate.slice(0, 10), items: [...new Set(asList(fm['items_plan']).map((x) => x.trim()).filter((x) => ids.has(x)))] };
+  }
   return habit;
 }
 
 const ITEM_ID_RE = /\s*🆔\s*(hsi-[a-z0-9]+)\s*$/;
+const ITEM_GROUP_RE = /\s*📂\s*([^🆔📂]*)$/u;
 
-/** `Wonderwall 🆔 hsi-a1b2c3` → a sub-habit. An entry without an id gets one derived from its title, so it stays put. */
+/** A group name as stored: trimmed, without the markers the entry format uses. */
+export const cleanGroup = (g: string): string => String(g).replace(/[🆔📂]/gu, '').replace(/\s+/g, ' ').trim();
+
+/** `Wonderwall 🆔 hsi-a1b2c3 📂 C major` → a sub-habit. An entry without an id gets one derived from its title, so it stays put. */
 export function parseItemEntry(raw: string, retired: boolean): HabitItem | undefined {
-  const text = String(raw).trim();
+  let text = String(raw).trim();
   if (!text) return undefined;
+  const g = ITEM_GROUP_RE.exec(text);
+  const group = g ? cleanGroup(g[1]!) : '';
+  if (g) text = text.slice(0, g.index).trim();
   const m = ITEM_ID_RE.exec(text);
   const title = (m ? text.slice(0, m.index) : text).trim();
   if (!title) return undefined;
   const id = m ? m[1]! : `hsi-t${hash(title.toLowerCase())}`;
-  return { id, title, ...(retired ? { retired: true } : {}) };
+  return { id, title, ...(retired ? { retired: true } : {}), ...(group ? { group } : {}) };
 }
 
-export const formatItemEntry = (it: { id: string; title: string }): string => `${it.title.trim()} 🆔 ${it.id}`;
+export const formatItemEntry = (it: { id: string; title: string; group?: string }): string => `${it.title.trim()} 🆔 ${it.id}${it.group ? ` 📂 ${cleanGroup(it.group)}` : ''}`;
 
 /** The frontmatter values for a habit's sub-habits (undefined removes the key). */
 export function itemsFrontmatter(items: HabitItem[]): { items: string[] | undefined; items_retired: string[] | undefined } {

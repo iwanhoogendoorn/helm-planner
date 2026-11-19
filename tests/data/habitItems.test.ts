@@ -183,3 +183,39 @@ describe('sub-habits: the API', () => {
     expect(r.body.habit.items.map((i: any) => i.title)).toEqual(['Für Elise', 'Gymnopédie']);
   });
 });
+
+describe('sub-habit groups and the day plan', () => {
+  it('parses groups and a plan; an entry keeps its group through a rename', () => {
+    const src = GUITAR.replace('  - Blackbird 🆔 hsi-black', '  - Blackbird 🆔 hsi-black 📂 C major').replace('items_per_day: 1', 'items_per_day: 1\nitem_groups: [G major]\nitems_plan_date: 2026-08-26\nitems_plan: [hsi-black, hsi-gone]');
+    const h = parseHabit(PATH, src)!;
+    expect(h.items![1]).toEqual({ id: 'hsi-black', title: 'Blackbird', group: 'C major' });
+    expect(h.itemGroups).toEqual(['G major', 'C major']); // a group an item names joins the list
+    expect(h.itemPlan).toEqual({ date: '2026-08-26', items: ['hsi-black'] }); // unknown ids dropped
+    expect(parseItemEntry('Layla 📂 Blues', false)).toMatchObject({ title: 'Layla', group: 'Blues' });
+  });
+
+  it('API: groups, moving a song, and the plan', async () => {
+    const { call } = await api({ [PATH]: GUITAR });
+    let r = await call('POST', 'habits/hab-guitar/groups', { name: 'C major' });
+    expect(r.status).toBe(201);
+    expect(r.body.habit.itemGroups).toEqual(['C major']);
+    expect((await call('POST', 'habits/hab-guitar/groups', { name: 'c major' })).status).toBe(400);
+    r = await call('PATCH', 'habits/hab-guitar/items/hsi-black', { group: 'C major' });
+    expect(r.body.habit.items.find((i: any) => i.id === 'hsi-black').group).toBe('C major');
+    r = await call('PATCH', 'habits/hab-guitar/groups', { from: 'C major', to: 'C scale' });
+    expect(r.body.habit.items.find((i: any) => i.id === 'hsi-black').group).toBe('C scale');
+    r = await call('PUT', 'habits/hab-guitar/plan', { items: ['hsi-black', 'hsi-wonder'] });
+    expect(r.body.planned).toEqual(['hsi-black', 'hsi-wonder']);
+    expect((await call('PUT', 'habits/hab-guitar/plan', { items: ['hsi-smoke'] })).status).toBe(400); // retired
+    r = await call('GET', `day/${TODAY}`);
+    const row = r.body.habits.find((x: any) => x.id === 'hab-guitar');
+    expect(row.planned).toEqual(['hsi-black', 'hsi-wonder']);
+    expect(row.itemGroups).toEqual(['C scale']);
+    expect(row.items.find((i: any) => i.id === 'hsi-black').group).toBe('C scale');
+    r = await call('DELETE', 'habits/hab-guitar/groups', undefined, { name: 'C scale' });
+    expect(r.body.habit.itemGroups).toEqual([]);
+    expect(r.body.habit.items.find((i: any) => i.id === 'hsi-black').group).toBeNull();
+    r = await call('PUT', 'habits/hab-guitar/plan', { items: [] });
+    expect(r.body.planned).toEqual([]);
+  });
+});

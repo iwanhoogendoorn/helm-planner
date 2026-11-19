@@ -170,6 +170,22 @@ items_retired:               # learned / shelved: no longer offered, history kep
 items_per_day: 1             # sub-habits that make the day; 0 or `all` = every active one (default 1)
 ```
 
+Sub-habits can sit in **groups** you make (a key, a scale, a technique): the
+entry carries `📂 <group>`, and `item_groups` lists the groups in the order
+shown (a group an entry names that the list lacks is added after the listed
+ones). The **plan for a day**, what you mean to practise, lives beside them,
+apart from the log, so taking a log off leaves a song on the plan:
+
+```yaml
+items:
+  - Wonderwall 🆔 hsi-a1b2c3 📂 G major
+  - C major scale 🆔 hsi-d4e5f6 📂 C major
+  - Blackbird 🆔 hsi-0a0b0c
+item_groups: [C major, G major]
+items_plan_date: 2026-11-19
+items_plan: [hsi-a1b2c3, hsi-0a0b0c]
+```
+
 A sub-habit practised on a day is a line indented straight under the habit's
 line (under the occurrence's line for a habit with parts); `×N` (or `xN`) says
 how many times:

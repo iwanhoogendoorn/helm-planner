@@ -246,10 +246,12 @@ export function habitJson(h: Habit, c: Ctx, stats?: HabitStats): Record<string, 
 }
 
 /** A habit's sub-habits with their numbers, how many make a day, and which one is up next. */
-export function habitItemsJson(h: Habit, c: Ctx): { items: Record<string, unknown>[]; itemsPerDay: number; suggestedItem: string | null } {
+export function habitItemsJson(h: Habit, c: Ctx): { items: Record<string, unknown>[]; itemsPerDay: number; suggestedItem: string | null; itemGroups: string[]; itemPlan: { date: string; items: string[] } | null } {
   const stats = habitItemStats(h, c.index.snapshot.itemCompletions, c.today());
   return {
-    items: stats.map((s) => ({ id: s.item.id, title: s.item.title, retired: s.item.retired ?? false, stats: { lastDone: s.lastDone ?? null, daysSince: s.daysSince ?? null, count7: s.count7, count30: s.count30, days30: s.days30, total: s.total, todayCount: s.todayCount, todayState: s.todayState } })),
+    itemGroups: h.itemGroups ?? [],
+    itemPlan: h.itemPlan ?? null,
+    items: stats.map((s) => ({ id: s.item.id, title: s.item.title, retired: s.item.retired ?? false, group: s.item.group ?? null, stats: { lastDone: s.lastDone ?? null, daysSince: s.daysSince ?? null, count7: s.count7, count30: s.count30, days30: s.days30, total: s.total, todayCount: s.todayCount, todayState: s.todayState } })),
     itemsPerDay: h.itemsPerDay ?? 1,
     suggestedItem: suggestedItem(stats)?.id ?? null,
   };

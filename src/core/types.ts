@@ -191,6 +191,10 @@ export interface Habit {
   items?: HabitItem[];
   /** Distinct sub-habits that make an occurrence count as done; 0 = every active one. Default 1. */
   itemsPerDay?: number;
+  /** The groups sub-habits are sorted into (a key, a scale, a part of the day), in the order shown. */
+  itemGroups?: string[];
+  /** What you mean to practise on one day: sub-habit ids, kept apart from what was logged. */
+  itemPlan?: { date: IsoDate; items: string[] };
 }
 
 /** One sub-habit of a habit: what is practised inside it on a day. */
@@ -199,6 +203,8 @@ export interface HabitItem {
   title: string;
   /** Learned or shelved: no longer offered, its history kept. */
   retired?: boolean;
+  /** The group it sits in (one of the habit's `itemGroups`); undefined = no group. */
+  group?: string;
 }
 
 /** A sub-habit line under a habit's line in a daily note. */

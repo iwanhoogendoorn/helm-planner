@@ -19,7 +19,7 @@ import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, partOfTime, readReg
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, diffDays, formatDate } from '../core/dates';
 import { formatRecurrence, nextOccurrence, shiftRecurrence } from '../core/recurrence';
-import { formatHistoryEntry, formatPauseEntry, itemLineText, itemsFrontmatter, itemsNeeded, splitItemCount } from '../core/habit';
+import { cleanGroup, formatHistoryEntry, formatPauseEntry, itemLineText, itemsFrontmatter, itemsNeeded, splitItemCount } from '../core/habit';
 import { derivedKey, uniqueId } from '../core/ids';
 import { setFrontmatter } from '../core/frontmatter';
 import { parseProject, renderProjectNote } from '../core/project';
@@ -1862,19 +1862,76 @@ export class Mutations {
   }
 
   /** Rename, retire or bring back a sub-habit. Its lines in past notes keep their id, so history follows it. */
-  async setHabitItem(habitId: string, itemId: string, fields: { title?: string; retired?: boolean }): Promise<void> {
+  async setHabitItem(habitId: string, itemId: string, fields: { title?: string; retired?: boolean; group?: string | null }): Promise<void> {
     const h = this.habitOrThrow(habitId);
     const items = [...(h.items ?? [])];
     const i = items.findIndex((x) => x.id === itemId);
     if (i === -1) throw new Error('Sub-habit not found');
     const cur = items[i]!;
     const title = fields.title?.replace(/🆔/g, '').trim();
-    const next: HabitItem = { id: cur.id, title: title || cur.title, ...((fields.retired ?? cur.retired) ? { retired: true } : {}) };
+    const group = fields.group === undefined ? cur.group : fields.group === null ? undefined : cleanGroup(fields.group) || undefined;
+    const next: HabitItem = { id: cur.id, title: title || cur.title, ...((fields.retired ?? cur.retired) ? { retired: true } : {}), ...(group ? { group } : {}) };
     items.splice(i, 1);
     if (!!next.retired === !!cur.retired) items.splice(i, 0, next);
     else if (next.retired) items.push(next);
     else items.splice(items.filter((x) => !x.retired).length, 0, next);
-    await this.writeItems(h, items);
+    // A group named here for the first time joins the list.
+    if (group && !(h.itemGroups ?? []).includes(group)) await this.editFile(h.path, (lines) => setFrontmatter(lines, { ...itemsFrontmatter(items), item_groups: [...(h.itemGroups ?? []), group] }));
+    else await this.writeItems(h, items);
+  }
+
+  /** Add a group to sort sub-habits into (a key, a scale). Returns its name as stored. */
+  async addItemGroup(habitId: string, name: string): Promise<string> {
+    const h = this.habitOrThrow(habitId);
+    const g = cleanGroup(name);
+    if (!g) throw new Error('A group needs a name');
+    const groups = h.itemGroups ?? [];
+    if (groups.some((x) => x.toLowerCase() === g.toLowerCase())) throw new Error(`${h.title} already has a group “${g}”`);
+    await this.editFile(h.path, (lines) => setFrontmatter(lines, { item_groups: [...groups, g] }));
+    return g;
+  }
+
+  /** Rename a group; its sub-habits go along. */
+  async renameItemGroup(habitId: string, from: string, to: string): Promise<void> {
+    const h = this.habitOrThrow(habitId);
+    const groups = h.itemGroups ?? [];
+    if (!groups.includes(from)) throw new Error(`${h.title} has no group “${from}”`);
+    const g = cleanGroup(to);
+    if (!g) throw new Error('A group needs a name');
+    if (g !== from && groups.some((x) => x !== from && x.toLowerCase() === g.toLowerCase())) throw new Error(`${h.title} already has a group “${g}”`);
+    const items = (h.items ?? []).map((i) => (i.group === from ? { ...i, group: g } : i));
+    await this.editFile(h.path, (lines) => setFrontmatter(lines, { ...itemsFrontmatter(items), item_groups: groups.map((x) => (x === from ? g : x)) }));
+  }
+
+  /** Take a group away; its sub-habits stay, without a group. */
+  async removeItemGroup(habitId: string, name: string): Promise<void> {
+    const h = this.habitOrThrow(habitId);
+    const groups = h.itemGroups ?? [];
+    if (!groups.includes(name)) throw new Error(`${h.title} has no group “${name}”`);
+    const items = (h.items ?? []).map((i) => { if (i.group !== name) return i; const { group: _g, ...rest } = i; return rest; });
+    const left = groups.filter((x) => x !== name);
+    await this.editFile(h.path, (lines) => setFrontmatter(lines, { ...itemsFrontmatter(items), item_groups: left.length ? left : undefined }));
+  }
+
+  /** Put the groups in this order (every one, once). */
+  async orderItemGroups(habitId: string, order: string[]): Promise<void> {
+    const h = this.habitOrThrow(habitId);
+    const groups = h.itemGroups ?? [];
+    if (order.length !== groups.length || !groups.every((g) => order.includes(g))) throw new Error('Name every group once');
+    await this.editFile(h.path, (lines) => setFrontmatter(lines, { item_groups: order.length ? order : undefined }));
+  }
+
+  /**
+   * What you mean to practise on a day: these sub-habits, in place of any earlier plan. It lives on the
+   * habit note, apart from the log, so taking a log off leaves it planned. An empty list clears it.
+   */
+  async setItemPlan(habitId: string, date: IsoDate, itemIds: string[]): Promise<void> {
+    const h = this.habitOrThrow(habitId);
+    const known = new Set((h.items ?? []).filter((i) => !i.retired).map((i) => i.id));
+    const bad = itemIds.find((x) => !known.has(x));
+    if (bad) throw new Error(`${h.title} has no active sub-habit ${bad}`);
+    const ids = [...new Set(itemIds)];
+    await this.editFile(h.path, (lines) => setFrontmatter(lines, ids.length ? { items_plan_date: date, items_plan: ids } : { items_plan_date: undefined, items_plan: undefined }));
   }
 
   /** Take a sub-habit off the habit. The lines already in daily notes stay as they are. */

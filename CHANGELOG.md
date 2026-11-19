@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.58.0 — 2026-11-19
+
+- **Plan your practice.** Log practice has a *Plan* mode: tick what you'll
+  practise that day, then *Start practising*. The plan sits on top, the rest
+  folds under *Everything else*. The Today pill shows how far along the plan
+  you are (`1/3`). The plan is kept apart from the log, so taking a log off
+  leaves the song on the plan.
+- **Groups for sub-habits.** Sort songs into groups you make (a key, a scale, a
+  technique, a part of the day). In Plan mode the folder button on a song moves
+  it; a group's menu renames, reorders or removes it (its songs stay).
+- **No more “up next”.** You decide what to practise; songs keep the order you
+  gave them.
+
 ## 1.57.0 — 2026-11-16
 
 - **Sub-habits are logged by session.** Songs practised in the afternoon go under

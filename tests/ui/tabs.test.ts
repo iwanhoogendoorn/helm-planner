@@ -770,12 +770,13 @@ describe('Today tab', () => {
     const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n  - Layla 🆔 hsi-layla\n---\n';
     const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
     const tile = (): HTMLElement => [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
-    // One pill, never a column of chips: nothing done yet, so it names the song up next.
+    // One pill, never a column of chips: nothing done yet, no plan, so 0 (no "up next": you pick).
     expect(tile().querySelectorAll('.helm-subhabit')).toHaveLength(0);
-    expect(texts(tile(), '.helm-subhabit-summary')).toEqual(['Wonderwall']);
+    expect(texts(tile(), '.helm-subhabit-summary')).toEqual(['0']);
     const card = (): HTMLElement => [...render((r) => renderHabits(ctx, r, defaultHabitsState())).querySelectorAll<HTMLElement>('.helm-habit-card')].find((e) => e.textContent?.includes('Guitar'))!;
     expect(texts(card(), '.helm-subhabit')).toEqual(['Wonderwall', 'Blackbird', 'Layla', 'Log practice…']);
-    click(card().querySelector('.helm-subhabit.is-next'));
+    expect(card().querySelector('.is-next')).toBeNull();
+    click([...card().querySelectorAll('.helm-subhabit')].find((b) => b.textContent === 'Wonderwall'));
     await flush();
     expect(await vault.read(dailyPath(TODAY))).toMatch(/- \[x\] Guitar 🆔 hab-guitar ✅ 2026-08-26\n\t- \[x\] Wonderwall 🆔 hsi-wonder/);
     expect(tile().classList.contains('is-day-done')).toBe(true);
@@ -794,7 +795,8 @@ describe('Today tab', () => {
     const panel = (): HTMLElement => Modal.last!.contentEl;
     const row = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes(name))!;
     const note = (): Promise<string> => vault.read(dailyPath(TODAY)).catch(() => '');
-    expect(texts(panel(), '.helm-itemlog-title > span:first-child')).toEqual(['Wonderwall', 'Blackbird']); // up next first
+    expect(texts(panel(), '.helm-itemlog-title > span:first-child')).toEqual(['Wonderwall', 'Blackbird']); // as listed
+    expect(panel().textContent).not.toContain('up next');
     expect(panel().querySelector('.helm-itemlog-head')!.textContent).toContain('0 of 2 today');
     const plus = (name: string): void => click(row(name).querySelector('[aria-label^="One more"]'));
     const minus = (name: string): void => click(row(name).querySelector('[aria-label^="One less"]'));
@@ -825,11 +827,11 @@ describe('Today tab', () => {
     click(tile.querySelector('.helm-subhabit-summary'));
     const panel = (): HTMLElement => Modal.last!.contentEl;
     const row = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes(name))!;
-    const seg = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('.helm-seg')].find((b) => b.textContent?.startsWith(name))!;
+    const seg = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('[aria-label="Session"] .helm-seg')].find((b) => b.textContent?.startsWith(name))!;
     const count = (name: string): string => row(name).querySelector('.helm-itemlog-count')!.textContent!;
     const note = (): Promise<string> => vault.read(dailyPath(TODAY)).catch(() => '');
     // 14:37: the panel starts on the afternoon.
-    expect(texts(panel(), '.helm-seg')).toEqual(['Morning', 'Afternoon', 'Evening']);
+    expect(texts(panel(), '[aria-label="Session"] .helm-seg')).toEqual(['Morning', 'Afternoon', 'Evening']);
     expect(seg('Afternoon').classList.contains('is-active')).toBe(true);
     click(row('Wonderwall').querySelector('[aria-label^="One more"]')); await flush(); await flush();
     click(seg('Evening'));
@@ -846,6 +848,45 @@ describe('Today tab', () => {
     expect(after).not.toContain('Blackbird');
     expect(after.match(/- \[.\] Guitar 🆔 hab-guitar/g)).toHaveLength(1);
     expect(after).toContain('\t- [x] Wonderwall 🆔 hsi-wonder');
+  });
+
+  it('Log practice: plan the day, then practise from it; groups sort the songs and a song moves between them', async () => {
+    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder 📂 G major\n  - Blackbird 🆔 hsi-black\n  - Layla 🆔 hsi-layla\nitem_groups:\n  - C major\n  - G major\n---\n';
+    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
+    const tile = (): HTMLElement => [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
+    click(tile().querySelector('.helm-subhabit-summary'));
+    const panel = (): HTMLElement => Modal.last!.contentEl;
+    const habitNote = (): Promise<string> => vault.read('02 PROJECTS/Habits/Guitar.md');
+    const groups = (): string[] => texts(panel(), '.helm-itemlog-group-name');
+    const titles = (): string[] => texts(panel(), '.helm-itemlog-title > span:first-child');
+    const row = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes(name))!;
+    // No plan: every song by group (C major is empty), the ungrouped last.
+    expect(groups()).toEqual(['C major', 'G major', 'Not in a group']);
+    expect(titles()).toEqual(['Wonderwall', 'Blackbird', 'Layla']);
+    // Plan mode: tick two, then start practising.
+    click(panel().querySelector('.helm-itemlog-plancta'));
+    click(row('Layla').querySelector('.helm-itemlog-name')); click(row('Wonderwall').querySelector('.helm-itemlog-name'));
+    await flush(); await flush();
+    expect(await habitNote()).toMatch(/items_plan_date: 2026-08-26\nitems_plan:\n {2}- hsi-wonder\n {2}- hsi-layla/);
+    click([...panel().querySelectorAll('button')].find((b) => b.textContent === 'Start practising (2)'));
+    expect(texts(panel(), '.helm-itemlog-group-name')).toEqual(["Today's plan"]);
+    expect(titles()).toEqual(['Wonderwall', 'Layla']); // the rest folded away
+    expect(panel().querySelector('.helm-itemlog-rest')!.textContent).toBe('Everything else (1)');
+    click(row('Layla').querySelector('[aria-label^="One more"]')); await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('- [x] Layla 🆔 hsi-layla');
+    expect(panel().querySelector('.helm-itemlog-group-count')!.textContent).toBe('1 of 2 done');
+    // Taking the log off leaves it on the plan.
+    click(row('Layla').querySelector('[aria-label^="One less"]')); await flush(); await flush();
+    expect(titles()).toEqual(['Wonderwall', 'Layla']);
+    expect(texts(tile(), '.helm-subhabit-summary')).toEqual(['0/2']);
+    // Moving a song to a group writes it on the habit note.
+    await ctx.mutations.setHabitItem('hab-guitar', 'hsi-black', { group: 'C major' });
+    expect(await habitNote()).toContain('  - Blackbird 🆔 hsi-black 📂 C major');
+    await ctx.mutations.renameItemGroup('hab-guitar', 'C major', 'C major scale');
+    expect(await habitNote()).toContain('  - Blackbird 🆔 hsi-black 📂 C major scale');
+    await ctx.mutations.removeItemGroup('hab-guitar', 'C major scale');
+    expect(await habitNote()).toContain('  - Blackbird 🆔 hsi-black\n');
+    expect(await habitNote()).toMatch(/item_groups:\n {2}- G major\n/);
   });
 
   it('keeps the Habits section when every habit is paused, with New habit and one-click Resume', async () => {

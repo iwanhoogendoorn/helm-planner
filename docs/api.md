@@ -294,7 +294,22 @@ was practised in: a Guitar line in that part of the day is used or added (the fi
 day's open line there). Without `part` a log goes to the part of the day it is now (today) and a
 take-off to the line the item is on; `part: null` names the line in the Habits list. A habit logged
 in more than one session has one occurrence per session in `GET /day/:date`, each with its part;
-any done one makes the day. The habit's own line follows the `itemsPerDay` rule. 400 for an
+any done one makes the day.
+
+**Groups and the day plan** (since 1.58.0). Items carry `group` (or null); a habit carries
+`itemGroups` (in order) and `itemPlan: { date, items } | null`. Day rows add `itemGroups`, `planned`
+(the ids planned for that date, else `[]`) and `group` on each item. Routes:
+
+```
+PATCH  /habits/:id/items/:itemId  { group: "C major" | null }   move a sub-habit (a new name adds the group)
+POST   /habits/:id/groups         { name }                      add a group
+PATCH  /habits/:id/groups         { from, to }                  rename; its sub-habits follow
+PUT    /habits/:id/groups         { order: [..every group..] }  reorder
+DELETE /habits/:id/groups?name=   remove; its sub-habits stay, ungrouped
+PUT    /habits/:id/plan           { date?, items: [ids] }       the day's plan (replaces it; [] clears)
+```
+
+`suggestedItem` is still sent for older clients; Helm itself no longer shows an "up next". The habit's own line follows the `itemsPerDay` rule. 400 for an
 unknown or retired item, or a count below 1.
 
 A habit carries its fields (`id`, `title`, `path`, `schedule` parsed with `raw`, `active`,

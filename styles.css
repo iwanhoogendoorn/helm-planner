@@ -1154,13 +1154,13 @@ button.helm-month-wk:hover { color: var(--text-accent); }
 .helm-subhabit svg, .helm-subhabit .svg-icon { width: 11px; height: 11px; flex: none; }
 .helm-subhabit.is-done { background: rgba(var(--hc-rgb, var(--color-green-rgb)), 0.2); border-color: rgba(var(--hc-rgb, var(--color-green-rgb)), 0.6); color: var(--text-normal); }
 .helm-subhabit.is-skipped { opacity: 0.55; text-decoration: line-through; }
-.helm-subhabit.is-next { border-style: dashed; color: var(--text-normal); }
+.helm-subhabit.is-planned { border-color: var(--interactive-accent); color: var(--text-normal); }
 .helm-subhabit-count { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* The Today tile's one pill: same shape as the tile's other chips, never taller than one line. */
 button.helm-subhabit-summary { height: auto; min-width: 0; max-width: 100%; line-height: 1.5; border: none; box-shadow: none; cursor: pointer; font-weight: 500; background: rgba(var(--hc-rgb), 0.15); color: var(--text-muted); }
 button.helm-subhabit-summary span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.helm-subhabit-summary:hover { background: rgba(var(--hc-rgb), 0.28); color: var(--text-normal); }
-button.helm-subhabit-summary.is-next { background: transparent; border: 1px dashed rgba(var(--hc-rgb), 0.5); }
+button.helm-subhabit-summary.is-planned:not(.is-met) { background: transparent; border: 1px solid rgba(var(--hc-rgb), 0.6); }
 button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 .helm-subhabit-edit { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
 .helm-subhabit-row { display: flex; align-items: center; gap: 6px; }
@@ -1270,7 +1270,23 @@ button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 
 /* Log practice: a row per sub-habit, its name a toggle, − count + on the right. */
 .helm-itemlog { min-width: min(460px, 90vw); }
-.helm-itemlog-head { display: flex; gap: 6px; align-items: baseline; font-weight: 600; margin-bottom: 10px; }
+.helm-itemlog-head { display: flex; gap: 6px; align-items: center; font-weight: 600; margin-bottom: 10px; }
+.helm-itemlog-head .helm-spacer { flex: 1; }
+.helm-itemlog .helm-itemlog-mode { margin: 0; font-weight: 500; }
+.helm-itemlog-hint { margin: 0 0 8px; }
+.helm-itemlog-group { display: flex; align-items: center; gap: 6px; margin: 8px 2px 2px; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.helm-itemlog-group:first-child { margin-top: 0; }
+.helm-itemlog-group .svg-icon, .helm-itemlog-group svg { width: 14px; height: 14px; }
+.helm-itemlog-group.is-plan { color: var(--interactive-accent); }
+.helm-itemlog-group-count { font-weight: 500; color: var(--text-faint); text-transform: none; letter-spacing: 0; }
+.helm-itemlog .helm-itemlog-group-menu { margin-left: auto; padding: 2px; height: auto; }
+.helm-itemlog-row.is-planned:not(.is-done) { border-color: rgba(var(--interactive-accent-rgb), 0.5); }
+.helm-itemlog-planrow.is-planned { background: rgba(var(--interactive-accent-rgb), 0.07); }
+.helm-itemlog-planrow.is-planned .helm-itemlog-name > .svg-icon, .helm-itemlog-planrow.is-planned .helm-itemlog-name > svg { color: var(--interactive-accent); }
+.helm-itemlog .helm-itemlog-move { flex: none; }
+.helm-itemlog .helm-itemlog-rest, .helm-itemlog .helm-itemlog-newgroup { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; margin-top: 6px; }
+.helm-itemlog .helm-itemlog-plancta { width: 100%; display: flex; gap: 8px; align-items: center; justify-content: flex-start; margin-bottom: 10px; padding: 8px 10px; height: auto; border: 1px dashed var(--background-modifier-border-hover); background: transparent; box-shadow: none; color: var(--text-muted); }
+.helm-itemlog .helm-itemlog-plancta:hover { color: var(--text-normal); border-color: var(--interactive-accent); }
 .helm-itemlog-head.is-met { color: var(--color-green); }
 .helm-itemlog .helm-segmented { margin-bottom: 10px; }
 .helm-itemlog-list { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
@@ -1281,7 +1297,6 @@ button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 .helm-itemlog-row.is-done .helm-itemlog-name > .svg-icon, .helm-itemlog-row.is-done .helm-itemlog-name > svg { color: var(--color-green); }
 .helm-itemlog-title { display: flex; gap: 6px; align-items: baseline; min-width: 0; font-weight: 500; color: var(--text-normal); }
 .helm-itemlog-title > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.helm-itemlog-next { flex: none; font-size: 10px; padding: 0 6px; border-radius: 8px; border: 1px dashed var(--text-faint); color: var(--text-muted); }
 .helm-itemlog-sub { grid-column: 2; font-size: 11px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .helm-itemlog-stepper { flex: none; display: flex; align-items: center; gap: 4px; }
 .helm-itemlog .helm-itemlog-step { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
