@@ -24,6 +24,9 @@ export function isBlocked(t: Task, snap: Snapshot): boolean {
  * old note), in which case that later date is the plan.
  */
 export function plannedDate(t: Task): IsoDate | undefined {
+  // A forwarded line is the record a day keeps of what moved on from it: it belongs to that day only.
+  // Read by its ⏳ or 📅 it turned up again on another day, next to the task it is a record of.
+  if (t.status === 'forwarded' && t.origin === 'daily' && t.noteDate) return t.noteDate;
   if (t.scheduled) return t.scheduled;
   if (t.origin !== 'daily' || !t.noteDate) return undefined;
   return t.due !== undefined && t.due > t.noteDate ? t.due : t.noteDate;
@@ -96,7 +99,9 @@ export function dayPlan(snap: Snapshot, date: IsoDate, settings: HelmSettings): 
     if (t.depth > 0) continue; // subtasks travel with their parent
     if (t.origin === 'daily-mirror' && t.noteDate === date) {
       const source = t.mirrorOf ? snap.tasks.get(t.mirrorOf) : undefined;
-      plan.mirrors.push({ mirror: t, ...(source ? { source } : {}) });
+      // A forwarded mirror is the record of a day the task moved on from: it shows as that record, not
+      // as the live task, or the task would be on that day and on the one it moved to.
+      plan.mirrors.push({ mirror: t, ...(source && t.status !== 'forwarded' ? { source } : {}) });
       if (t.mirrorOf) mirroredSources.add(t.mirrorOf);
     }
   }

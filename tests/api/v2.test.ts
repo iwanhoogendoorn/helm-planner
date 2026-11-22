@@ -430,8 +430,27 @@ describe('v2 · task extras', () => {
     const added = await call('POST', 'tasks/tsk-0002/links', { url: 'https://example.com/spec', label: 'Spec' });
     expect(added.body.task.links).toEqual([{ url: 'https://example.com/spec', label: 'Spec' }]);
     expect((await call('POST', 'tasks/tsk-0002/links', { url: 'not a url' })).status).toBe(400);
+    // PATCH renames it (or re-points it), in place; leaving label out keeps the title.
+    const renamed = await call('PATCH', 'tasks/tsk-0002/links', { url: 'https://example.com/spec', label: 'The spec' });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.task.links).toEqual([{ url: 'https://example.com/spec', label: 'The spec' }]);
+    const moved = await call('PATCH', 'tasks/tsk-0002/links', { url: 'https://example.com/spec', newUrl: 'example.com/spec-v2' });
+    expect(moved.body.task.links).toEqual([{ url: 'https://example.com/spec-v2', label: 'The spec' }]);
+    expect((await call('PATCH', 'tasks/tsk-0002/links', { url: 'https://example.com/spec-v2' })).status).toBe(400);   // nothing to change
+    expect((await call('PATCH', 'tasks/tsk-0002/links', { url: 'https://example.com/spec-v2', newUrl: 'not a url' })).status).toBe(400);
+    const back = await call('PATCH', 'tasks/tsk-0002/links', { url: 'https://example.com/spec-v2', newUrl: 'https://example.com/spec', label: 'Spec' });
+    expect(back.body.task.links).toEqual([{ url: 'https://example.com/spec', label: 'Spec' }]);
     const removed = await call('DELETE', 'tasks/tsk-0002/links', { url: 'https://example.com/spec' });
     expect(removed.body.task.links).toEqual([]);
+
+    // A project's and a phase's links too.
+    await call('POST', 'projects/prj-kitchen/links', { url: 'https://example.com/quote', label: 'Quote' });
+    const pr = await call('PATCH', 'projects/prj-kitchen/links', { url: 'https://example.com/quote', label: 'Signed quote' });
+    expect(pr.body.links).toEqual([{ url: 'https://example.com/quote', label: 'Signed quote' }]);
+    await call('POST', 'projects/prj-book/phases/outline/links', { url: 'https://example.com/toc', label: 'TOC' });
+    const ph = await call('PATCH', 'projects/prj-book/phases/outline/links', { url: 'https://example.com/toc', label: 'Table of contents' });
+    expect(ph.status).toBe(200);
+    expect(ph.body.links).toEqual([{ url: 'https://example.com/toc', label: 'Table of contents' }]);
 
     const parent = (await call('POST', 'tasks', { text: 'Ship the draft', scheduled: TODAY })).body.task;
     const a = (await call('POST', `tasks/${parent.id}/subtasks`, { text: 'A' })).body.task;
@@ -613,6 +632,18 @@ describe('v2 · capture, attachments, notes, files', () => {
     expect((await call('POST', 'capture', { text: 'x', projectId: 'prj-nope' })).status).toBe(404);
     const rec = await call('POST', 'capture', { text: 'Water the plants', scheduled: TODAY, recurrence: 'every 3 days', time: '18:00', timeEnd: '18:10' });
     expect(rec.body.task).toMatchObject({ recurrence: 'every 3 days', time: '18:00', timeEnd: '18:10' });
+  });
+
+  it('captures with links and new notes, as the dialog’s sections do', async () => {
+    const { call, vault } = await api();
+    const r = await call('POST', 'capture', { text: 'Plan the offsite', scheduled: TODAY, links: [{ url: 'venue.example.com', label: 'Venue' }, 'https://docs.example.com/agenda'], notes: [{ name: 'Offsite agenda' }] });
+    expect(r.status).toBe(201);
+    expect(r.body.task.text).toBe('Plan the offsite [Venue](https://venue.example.com) [docs.example.com/agenda](https://docs.example.com/agenda)');
+    expect(r.body.task.links).toEqual([{ url: 'https://venue.example.com', label: 'Venue' }, { url: 'https://docs.example.com/agenda', label: 'docs.example.com/agenda' }]);
+    expect(r.body.attachments.notes.map((n: any) => n.title)).toEqual(['Offsite agenda']);
+    expect([...vault.files.keys()].some((p) => p.endsWith('Offsite agenda.md'))).toBe(true);
+    expect((await call('POST', 'capture', { text: 'x', links: [{ url: 'not a link' }] })).status).toBe(400);
+    expect((await call('POST', 'capture', { text: 'x', links: 'https://a.example.com' })).status).toBe(400);
   });
 
   it('says what each attached note and drawing holds, and where it sits', async () => {

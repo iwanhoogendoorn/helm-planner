@@ -41,7 +41,7 @@ import { drawingTitle, renderExcalidrawDocument, type Drawing } from '../core/dr
 import { noteTitle, renderNewNote, listValues, type NoteRef } from '../core/noteRef';
 import { parseDaybook, renderEntry, renderReply, type DaybookEntry } from '../core/daybook';
 import type { DrawingTarget } from '../core/types';
-import { addLinkToText, linkLabel, linksIn, normaliseLink, removeLinkFromText } from '../core/links';
+import { addLinkToText, linkLabel, linksIn, normaliseLink, removeLinkFromText, replaceLinkInText } from '../core/links';
 import { plainLabel } from '../core/label';
 
 export interface MutationDeps {
@@ -672,10 +672,18 @@ export class Mutations {
     // Remove mirrors on other days (today or later). Past days keep their record; remember the part it sat in.
     const days = new Set<IsoDate>();
     let previousPart: DayPart | undefined;
+    const records: Task[] = [];
     for (const m of this.index.mirrorsOf(t.key)) {
       if (m.noteDate && m.noteDate !== date && m.noteDate >= today) { days.add(m.noteDate); previousPart ??= m.part; }
+      // A past day keeps its line, as a record that the task moved on — left open it showed the live
+      // task on that day as well as on the one it moved to.
+      else if (m.noteDate && m.noteDate < today && m.noteDate !== date && (m.status === 'todo' || m.status === 'doing' || m.status === 'waiting')) records.push(m);
     }
     for (const d of days) await this.editRegion(d, (rc) => { removeLines(rc, (l) => l.id === t.id); return rc; });
+    for (const r of records) {
+      const now = this.index.task(r.key);
+      if (now) { try { await this.writeLineStatus(now, 'forwarded', r.noteDate!); } catch (e) { if (!(e instanceof LineMovedError)) throw e; } }
+    }
     if (date !== undefined) {
       const src = t;
       await this.editRegion(date, (rc) => {
@@ -942,6 +950,11 @@ export class Mutations {
     }));
     delete rebased[0]!.done;
     delete rebased[0]!.cancelled;
+    // The note it lands in is its day now. A ⏳ from before would pull it onto that old day (and leave it
+    // listed there as well as here); a 📅 later than the new day would do the same, so that one is held
+    // to the new day with a ⏳ of its own.
+    delete rebased[0]!.scheduled;
+    if (date !== undefined && rebased[0]!.due !== undefined && rebased[0]!.due > date) rebased[0]!.scheduled = date;
     if (date !== undefined) {
       // With no part named, a timed task goes where its time falls — the old section can be stale (an
       // 11:00 task left sitting under Evening), and carrying that forward only spreads the mistake.
@@ -1295,6 +1308,45 @@ export class Mutations {
       if (at === -1) return false;
       lines.splice(at, 1);
       return true;
+    });
+  }
+
+  /**
+   * A `- [label](url)` line in a note, rewritten in place: the first list line holding `oldUrl` in the
+   * range. `label` undefined keeps the title it has; empty gives it the address's own short name.
+   */
+  private async editLinkLine(path: string, oldUrl: string, url: string, label: string | undefined, range: (lines: string[]) => { from: number; to: number } | undefined): Promise<void> {
+    const r = normaliseLink(url, '');
+    if (!r) throw new Error(`Not a web address: ${url}`);
+    let found = false;
+    await this.editFile(path, (lines) => {
+      const span = range(lines);
+      if (!span) return false;
+      const at = lines.findIndex((l, i) => i >= span.from && i < span.to && /^\s*[-*]\s/.test(l) && linksIn(l).some((x) => x.url === oldUrl));
+      if (at === -1) return false;
+      found = true;
+      const head = /^\s*[-*]\s+/.exec(lines[at]!)![0];
+      const body = lines[at]!.slice(head.length);
+      const cur = linksIn(body).find((x) => x.url === oldUrl)!;
+      const keep = cur.raw !== cur.url ? cur.label : undefined;
+      lines[at] = head + replaceLinkInText(body, oldUrl, r.url, label === undefined ? keep : label);
+      return true;
+    });
+    if (!found) throw new Error(`No link to ${oldUrl} there`);
+  }
+
+  async editProjectLink(projectId: string, oldUrl: string, url: string, label?: string): Promise<void> {
+    const p = this.index.project(projectId);
+    if (!p) throw new Error('Project not found');
+    await this.editLinkLine(p.path, oldUrl, url, label, (lines) => ({ from: 0, to: lines.length }));
+  }
+
+  async editPhaseLink(phaseId: string, oldUrl: string, url: string, label?: string): Promise<void> {
+    const project = this.index.project(phaseId.split('#')[0]!);
+    if (!project) throw new Error('Phase not found');
+    await this.editLinkLine(project.path, oldUrl, url, label, (lines) => {
+      const ph = this.phasesNow(project, lines).find((x) => x.id === phaseId);
+      return ph ? { from: ph.startLine, to: ph.endLine } : undefined;
     });
   }
 
@@ -2103,6 +2155,22 @@ export class Mutations {
     const t = this.fresh(key);
     const src = t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf) ? this.fresh(t.mirrorOf) : t;
     await this.updateTask(src.key, { text: addLinkToText(src.text, url, label) });
+  }
+
+  /**
+   * Rename a link on a task, or point it at another address, where it stands in the text. `label`
+   * undefined keeps the title it has; empty gives it the address's own short name.
+   */
+  async editLink(key: string, oldUrl: string, url: string, label?: string): Promise<void> {
+    const r = normaliseLink(url, '');
+    if (!r) throw new Error(`Not a web address: ${url}`);
+    const t = this.fresh(key);
+    const src = t.origin === 'daily-mirror' && t.mirrorOf && this.index.task(t.mirrorOf) ? this.fresh(t.mirrorOf) : t;
+    const cur = linksIn(src.text).find((l) => l.url === oldUrl);
+    if (!cur) throw new Error(`The task has no link to ${oldUrl}`);
+    const keep = cur.raw !== cur.url ? cur.label : undefined;                // a bare address has no title of its own
+    const next = replaceLinkInText(src.text, oldUrl, r.url, label === undefined ? keep : label);
+    if (next !== src.text) await this.updateTask(src.key, { text: next });
   }
 
   async removeLink(key: string, url: string): Promise<void> {

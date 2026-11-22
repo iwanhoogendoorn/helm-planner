@@ -483,6 +483,7 @@ function phaseLinks(ctx: UiContext, ph: Phase): LinkHolder {
     list: () => ph.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addPhaseLink(ph.id, url, label)),
     remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removePhaseLink(ph.id, url)),
+    edit: (oldUrl, r) => void ctx.run('Edit link', () => ctx.mutations.editPhaseLink(ph.id, oldUrl, r.url, r.label)),
     move: (l, ev) => moveLinkMenu(ctx, { kind: 'phase', id: ph.id }, l, ev),
   };
 }
@@ -524,6 +525,7 @@ function projectLinks(ctx: UiContext, p: Project): LinkHolder {
     list: () => p.links.map((l) => ({ ...l, raw: `[${l.label}](${l.url})` })),
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addProjectLink(p.id, url, label)),
     remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removeProjectLink(p.id, url)),
+    edit: (oldUrl, r) => void ctx.run('Edit link', () => ctx.mutations.editProjectLink(p.id, oldUrl, r.url, r.label)),
     move: (l, ev) => moveLinkMenu(ctx, { kind: 'project', id: p.id }, l, ev),
   };
 }

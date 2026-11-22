@@ -44,3 +44,13 @@ describe('making sense of the Add link boxes', () => {
     expect(looksLikeUrl('docs.example.com')).toBe(true);
   });
 });
+
+describe('replaceLinkInText', () => {
+  it('renames a link where it stands', async () => {
+    const { replaceLinkInText } = await import('../../src/core/links');
+    expect(replaceLinkInText('Call [Ticket](https://x.example.com/1) now', 'https://x.example.com/1', 'https://x.example.com/1', 'RSC-1')).toBe('Call [RSC-1](https://x.example.com/1) now');
+    expect(replaceLinkInText('Call https://x.example.com/1 now', 'https://x.example.com/1', 'https://x.example.com/1', 'RSC-1')).toBe('Call [RSC-1](https://x.example.com/1) now');
+    expect(replaceLinkInText('Call [T](https://x.example.com/1)', 'https://x.example.com/1', 'https://x.example.com/2', '')).toBe('Call [x.example.com/2](https://x.example.com/2)');
+    expect(replaceLinkInText('No links', 'https://x.example.com/1', 'https://y.example.com', 'Y')).toBe('No links');
+  });
+});

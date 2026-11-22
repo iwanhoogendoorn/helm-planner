@@ -42,11 +42,12 @@ describe('scheduling', () => {
     expect(await vault.read(BOOK)).not.toContain('⏳');
   });
 
-  it('a past mirror is left alone when rescheduling', async () => {
+  it('a past mirror stays as a forwarded record when rescheduling', async () => {
     const { m, vault, index } = await setup({ [BOOK]: (await setup()).vault.files.get(BOOK)!.replace('- [ ] Chapter 1 📅 2026-08-20', '- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 ⏳ 2026-08-25') });
     expect(index.mirrorsOf('tsk-0003')).toHaveLength(1);
     await m.schedule('tsk-0003', TODAY);
-    expect(await vault.read(dailyPath('2026-08-25'))).toContain('- [ ] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 [[Oracle Book Writing]]');
+    // Kept as history, but as a record of the move: left open it showed the task on both days.
+    expect(await vault.read(dailyPath('2026-08-25'))).toMatch(/- \[>\] Chapter 1 🆔 tsk-0003 📅 2026-08-20 🔗 \[\[Oracle Book Writing\]\]/);
     expect(await vault.read(dailyPath(TODAY))).toContain('tsk-0003');
   });
 

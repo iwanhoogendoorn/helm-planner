@@ -26,7 +26,8 @@ import { computeStats, filterOptions, STATS_SOURCES, type DashboardStats, type S
 import { parseQuery, search, startingPoints } from '../data/search';
 import { parseCapture } from '../core/nlp';
 import { captureDestination, captureFields } from '../data/capture';
-import { attachmentsJson, healthOf, hitJson, projectJson } from './json';
+import { addLinkToText, linksIn, normaliseLink } from '../core/links';
+import { attachmentsJson, healthOf, hitJson, projectJson, targetOfTask } from './json';
 import type { DrawingTarget, Priority } from '../core/types';
 import { PRIORITIES } from './routes';
 import { isSafeVaultPath, safeFolder } from '../core/paths';
@@ -570,6 +571,26 @@ async function captureRoute(body: Record<string, unknown>, d: Ctx, write: boolea
   let finalText = c.text;
   const tags = new Set(c.tags);
   for (const tag of tagList(body['tags'])) { if (!tags.has(tag)) { finalText = `${finalText} #${tag}`; tags.add(tag); } }
+  // Links and new notes, as the dialog's sections: links go on the line, notes are made once it exists.
+  const links: { url: string; label?: string }[] = [];
+  if (has(body, 'links')) {
+    if (!Array.isArray(body['links'])) return bad('links must be a list of { url, label? }');
+    for (const x of body['links'] as unknown[]) {
+      const o = (typeof x === 'string' ? { url: x } : x) as Record<string, unknown> | null;
+      const l = o && typeof o === 'object' ? normaliseLink(str(o['url']) ?? '', str(o['label']) ?? '') : undefined;
+      if (!l) return bad('every link needs a url that is a web address');
+      links.push(l);
+    }
+  }
+  const notes: { name?: string }[] = [];
+  if (has(body, 'notes')) {
+    if (!Array.isArray(body['notes'])) return bad('notes must be a list of { name? }');
+    for (const x of body['notes'] as unknown[]) {
+      const name = typeof x === 'string' ? x.trim() : x && typeof x === 'object' ? str((x as Record<string, unknown>)['name'])?.trim() : undefined;
+      notes.push(name ? { name } : {});
+    }
+  }
+  for (const l of links) if (!linksIn(finalText).some((x) => x.url === l.url)) finalText = addLinkToText(finalText, l.url, l.label);
   const fields = captureFields(c, effort, time);
   const dest = captureDestination({ ...(project ? { project } : {}), ...(phaseId ? { phaseId } : {}), ...(date ? { date } : {}), ...(part ? { part } : {}), ...(time ? { time } : {}), settings: s });
   const parsed = {
@@ -584,8 +605,10 @@ async function captureRoute(body: Record<string, unknown>, d: Ctx, write: boolea
   };
   if (!write) return ok(parsed);
   if (c.project && !project && !projectId) return bad(`@${c.project} is not a project Helm knows; send projectId, or drop the @`);
-  const t = await d.mutations.addTaskReturning({ text: finalText, fields, ...(project ? { projectId: project.id } : {}), ...(phaseId ? { phaseId } : {}), ...(date ? { date } : {}), ...(date && part ? { part } : {}) });
-  return made({ task: taskJson(t, d), parsed, destination: dest, written: d.written() });
+  let t = await d.mutations.addTaskReturning({ text: finalText, fields, ...(project ? { projectId: project.id } : {}), ...(phaseId ? { phaseId } : {}), ...(date ? { date } : {}), ...(date && part ? { part } : {}) });
+  for (const n of notes) await d.mutations.createNote(targetOfTask(t), n);
+  if (notes.length) t = (t.id ? d.index.taskById(t.id) : undefined) ?? t;
+  return made({ task: taskJson(t, d), parsed, destination: dest, ...(notes.length ? { attachments: attachmentsJson(targetOfTask(t), d) } : {}), written: d.written() });
 }
 
 export function findGoal(ref: string, d: Ctx): Goal | undefined {

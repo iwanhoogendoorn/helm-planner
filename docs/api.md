@@ -370,6 +370,7 @@ POST   /tasks/:id/followup          { date, text?, part?, markOriginalDone?, add
 POST   /tasks/:id/plan-into         { date, time: { start, end }, effortMinutes? }
 POST   /tasks/:id/project           { title?, status?, priority?, area?, parentId?, period?, due? } → 201 { project, carried, written }
 POST   /tasks/:id/links             { url, label? }        DELETE /tasks/:id/links { url }
+PATCH  /tasks/:id/links             { url, label?, newUrl? }   rename a link (label; empty = the address's own name) or re-point it (newUrl), in place; label left out keeps the title
 POST   /tasks/:id/subtasks/reorder  { beforeRef: "tsk-…" | null }   (null = to the end)
 GET    /tasks/:id/attachments
 ```
@@ -392,6 +393,7 @@ PATCH  /projects/:id/phases/:slug        { title?, due?: date | null }
 DELETE /projects/:id/phases/:slug        → { deleted, carried }   (its tasks move under ## Tasks; nothing is removed)
 POST   /projects/:id/log                 { text } → 201 { log }
 POST   /projects/:id/links               { url, label? }   DELETE /projects/:id/links { url }
+PATCH  /projects/:id/links               { url, label?, newUrl? }   (the same for a phase: PATCH /projects/:id/phases/:slug/links)
 POST   /projects/:id/related             { ref }           DELETE /projects/:id/related/:taskId
 POST   /projects/:id/goal                { goalKey | null }
 GET    /projects/:id/attachments
@@ -434,7 +436,10 @@ does and applies the overrides on top, without writing: `{ text, tags, priority,
 due, part, partByTime, effortMinutes, time, timeEnd, recurrence, project, unknownProject,
 destination: { kind: inbox|day|project|project+day, date?, part?, projectId?, phaseId?,
 sentence } }`. `POST /capture` with the same body performs the dialog's write → 201
-`{ task, parsed, destination, written }`. An `@Name` that is not a project is a 400 on write
+`{ task, parsed, destination, written }`. Since 1.60.0 it also takes the dialog's Links and
+Notes sections: `links: [{ url, label? }]` (or bare URL strings) go on the line, `notes: [{ name? }]`
+are made as notes of the new task once it exists (no name: named after the task), and the reply then
+carries `attachments`. An `@Name` that is not a project is a 400 on write
 (and `unknownProject` on parse).
 
 The grammar's date words, for a client that mirrors them: a bare weekday is the coming one

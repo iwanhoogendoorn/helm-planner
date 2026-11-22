@@ -35,6 +35,21 @@ export function addLinkToText(text: string, url: string, label?: string): string
   return `${text.trim()} ${md}`.trim();
 }
 
+/**
+ * Change one link in place — its title, its address, or both — keeping where it sits in the text. An
+ * empty label goes back to the address's own short name. Unknown `oldUrl`: the text is returned as is.
+ */
+export function replaceLinkInText(text: string, oldUrl: string, url: string, label?: string): string {
+  const existing = linksIn(text).find((l) => l.url === oldUrl);
+  if (!existing) return text;
+  const u = url.trim();
+  const lab = (label ?? '').trim() || linkLabel(u);
+  // The same address twice would be one link written twice: the other copy goes.
+  const twin = u !== oldUrl ? linksIn(text).find((l) => l.url === u) : undefined;
+  const out = text.replace(existing.raw, `[${lab}](${u})`);
+  return twin ? out.replace(twin.raw, '').replace(/\s{2,}/g, ' ').trim() : out;
+}
+
 export function removeLinkFromText(text: string, url: string): string {
   const existing = linksIn(text).find((l) => l.url === url);
   if (!existing) return text;

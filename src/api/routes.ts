@@ -304,7 +304,7 @@ async function route(req: ApiRequest, deps: ApiDeps): Promise<ApiResponse> {
       const r = await attachmentRoutes({ kind: 'phase', id: ph.id, projectId: p.id, title: ph.title }, parts[4], parts[5], method, body, req.query, d);
       if (r) return r;
     }
-    if (ref !== undefined && sub === 'phases' && parts[3] !== undefined && parts[4] === 'links' && (method === 'POST' || method === 'DELETE')) {
+    if (ref !== undefined && sub === 'phases' && parts[3] !== undefined && parts[4] === 'links' && (method === 'POST' || method === 'DELETE' || method === 'PATCH')) {
       const p = d.index.project(ref);
       if (!p) return missing(`No project ${ref}`);
       const slug = parts[3];
@@ -316,6 +316,10 @@ async function route(req: ApiRequest, deps: ApiDeps): Promise<ApiResponse> {
         const link = normaliseLink(url, str(body['label']) ?? '');
         if (!link) return bad('url must be a web address');
         await d.mutations.addPhaseLink(ph.id, link.url, link.label);
+      } else if (method === 'PATCH') {
+        const edit = linkEdit(url, body);
+        if ('error' in edit) return bad(edit.error);
+        await d.mutations.editPhaseLink(ph.id, url, edit.url, edit.label);
       } else await d.mutations.removePhaseLink(ph.id, url);
       return ok({ phase: { id: ph.id, slug: ph.slug, title: ph.title }, links: d.index.project(p.id)?.phases.find((x) => x.id === ph.id)?.links ?? [], written: d.written() });
     }
@@ -352,7 +356,7 @@ async function route(req: ApiRequest, deps: ApiDeps): Promise<ApiResponse> {
       await d.mutations.appendLog(p.id, text);
       return made({ log: parseProjectLog(await d.read(p.path)), written: d.written() });
     }
-    if (ref !== undefined && sub === 'links' && (method === 'POST' || method === 'DELETE')) {
+    if (ref !== undefined && sub === 'links' && (method === 'POST' || method === 'DELETE' || method === 'PATCH')) {
       const p = d.index.project(ref);
       if (!p) return missing(`No project ${ref}`);
       const url = str(body['url']) ?? req.query['url'];
@@ -361,6 +365,10 @@ async function route(req: ApiRequest, deps: ApiDeps): Promise<ApiResponse> {
         const link = normaliseLink(url, str(body['label']) ?? '');
         if (!link) return bad('url must be a web address');
         await d.mutations.addProjectLink(p.id, link.url, link.label);
+      } else if (method === 'PATCH') {
+        const edit = linkEdit(url, body);
+        if ('error' in edit) return bad(edit.error);
+        await d.mutations.editProjectLink(p.id, url, edit.url, edit.label);
       } else await d.mutations.removeProjectLink(p.id, url);
       return ok({ links: d.index.project(p.id)?.links ?? [], written: d.written() });
     }
@@ -582,17 +590,34 @@ async function taskAction(t: Task, sub: string, method: string, body: Record<str
     const fresh = d.index.project(r.project.id) ?? r.project;
     return made({ project: projectJson(fresh, d, { health: true }), carried: r.carried, written: d.written() });
   }
-  if (sub === 'links' && (method === 'POST' || method === 'DELETE')) {
+  if (sub === 'links' && (method === 'POST' || method === 'DELETE' || method === 'PATCH')) {
     const url = str(body['url']);
     if (!url) return bad('Send the url');
     if (method === 'POST') {
       const link = normaliseLink(url, str(body['label']) ?? '');
       if (!link) return bad('url must be a web address');
       await d.mutations.addLink(t.key, link.url, link.label);
+    } else if (method === 'PATCH') {
+      const edit = linkEdit(url, body);
+      if ('error' in edit) return bad(edit.error);
+      await d.mutations.editLink(t.key, url, edit.url, edit.label);
     } else await d.mutations.removeLink(t.key, url);
     return ok({ task: taskJson(findTask(refOf(t), d) ?? t, d), written: d.written() });
   }
   return undefined;
+}
+
+/**
+ * `PATCH …/links { url, label?, newUrl? }`: `url` names the link as it is, `label` is its new title
+ * (empty or null: the address's own short name), `newUrl` its new address. Leaving `label` out keeps
+ * the title it has — the caller can change just the address.
+ */
+function linkEdit(url: string, body: Record<string, unknown>): { url: string; label?: string } | { error: string } {
+  if (!has(body, 'label') && !has(body, 'newUrl')) return { error: 'Send label, newUrl or both' };
+  const link = normaliseLink(str(body['newUrl']) ?? url, '');
+  if (!link) return { error: 'newUrl must be a web address' };
+  if (!has(body, 'label')) return { url: link.url };                        // keep the title it has
+  return { url: link.url, label: typeof body['label'] === 'string' ? body['label'].trim() : '' };
 }
 
 const BULK_ACTIONS = ['schedule', 'part', 'status', 'move', 'delete'] as const;

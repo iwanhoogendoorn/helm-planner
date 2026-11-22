@@ -3,9 +3,10 @@
  * understood and where it will land.
  */
 import { Modal } from 'obsidian';
-import type { IsoDate, Project, Recurrence } from '../../core/types';
-import { addDays, humanDate, minutesToHuman, startOfWeek } from '../../core/dates';
+import type { IsoDate, Priority, Project, Recurrence } from '../../core/types';
+import { addDays, humanDate, isIsoDate, minutesToHuman, startOfWeek } from '../../core/dates';
 import { parseCapture, REPEAT_PATTERN } from '../../core/nlp';
+import { linksIn } from '../../core/links';
 import { captureDestination, captureFields } from '../../data/capture';
 import { formatRecurrence } from '../../core/recurrence';
 import { append, button, chip, h, setShown } from '../dom';
@@ -15,6 +16,9 @@ import { partOfTime } from '../../core/dailyNote';
 import { conflictWarning, effortField, linkTimes, repeatButtons, wikilinkSuggest } from '../fields';
 import { conflictsFor, describeConflicts, freeSlotOn, partWindow, preferredSlot } from '../../data/conflicts';
 import { confirmModal } from './confirm';
+import { draftAttachments } from '../draftAttachments';
+import { targetForProject } from '../drawings';
+import { PRIORITY_ORDER } from '../../core/taskLine';
 
 export interface CaptureDefaults {
   date?: IsoDate;
@@ -132,6 +136,20 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
   };
   const drawRepeat = (rec: Recurrence | undefined): void => repeatButtons(repeatRow, rec, setRepeat);
   const dest = h('div', { cls: 'helm-capture-dest' });
+  // The editor's fields, here too: what the text says fills them, what you pick wins.
+  const prioritySel = h('select', { title: 'Priority — or type !, !!, !!! in the text' });
+  prioritySel.appendChild(h('option', { text: 'from the text', attr: { value: '' } }));
+  for (const p of PRIORITY_ORDER) prioritySel.appendChild(h('option', { text: p, attr: { value: p } }));
+  const dueInput = h('input', { attr: { type: 'date' }, title: 'Due — or type “due friday” in the text' });
+  prioritySel.addEventListener('change', () => render());
+  dueInput.addEventListener('change', () => render());
+  const pickedPriority = (): Priority | undefined => (prioritySel.value ? prioritySel.value as Priority : undefined);
+  const pickedDue = (): IsoDate | undefined => (isIsoDate(dueInput.value) ? dueInput.value : undefined);
+  const attach = draftAttachments(ctx, {
+    title: () => parseCapture(input.value, today, ctx.settings().weekStartsOn).text.trim(),
+    projectTarget: () => (project ? targetForProject(project.id, project.title) : undefined),
+  });
+  const field = (label: string, ...els: HTMLElement[]): HTMLElement => h('label', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: label }), ...els);
   const help = h('div', { cls: 'helm-hint', text: 'Dates: today, tomorrow, fri, next week, in 3 days, 1/9, due friday · Part: morning, afternoon, evening, tonight · Priority: !, !!, !!! · Project: @Name · Effort: ~45m · Time: 14:00-15:00 · Repeat: every week' });
 
   let rendering = false;
@@ -149,7 +167,8 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     const c = parseCapture(input.value, today, ctx.settings().weekStartsOn);
     preview.replaceChildren();
     preview.appendChild(h('span', { cls: 'helm-capture-text', text: c.text || '…' }));
-    if (c.priority !== 'normal') preview.appendChild(chip(c.priority, `prio prio-${c.priority}`));
+    const prio = pickedPriority() ?? c.priority;
+    if (prio !== 'normal') preview.appendChild(chip(prio, `prio prio-${prio}`));
     if (c.project && !project) { const p = ctx.index.projectByTitle(c.project); if (p) project = p; else preview.appendChild(chip(`@${c.project} (unknown project)`, 'warn')); }
     if (c.scheduled && !explicitDate) date = c.scheduled;
     if (c.part && !explicitPart) part = c.part;
@@ -157,7 +176,8 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     const time = timeOf(c);
     const shownPart = part ?? (time ? partOfTime(time.start, ctx.settings()) : undefined);
     if (date) preview.appendChild(chip(`plan ${humanDate(date, today)}${shownPart ? ` · ${shownPart}${!part ? ' (by time)' : ''}` : ''}`, 'scheduled'));
-    if (c.due) preview.appendChild(chip(`due ${humanDate(c.due, today)}`, 'due'));
+    const dueOn = pickedDue() ?? c.due;
+    if (dueOn) preview.appendChild(chip(`due ${humanDate(dueOn, today)}`, 'due'));
     if (c.effortMinutes !== grammarEffort) { grammarEffort = c.effortMinutes; if (c.effortMinutes) { effort.set(c.effortMinutes); if (timeStart.value) poke(timeStart); } }
     const eff = effort.get();
     if (eff) preview.appendChild(chip(minutesToHuman(eff), 'effort'));
@@ -194,16 +214,29 @@ export function openCapture(ctx: UiContext, defaults: CaptureDefaults = {}): voi
     if (c.text.trim() === '') return;
     if (conflictText && !(await confirmModal(ctx, { title: 'Overlapping time', body: `This overlaps ${conflictText}.\n\nAdd it anyway?`, cta: 'Add anyway' }))) return;
     const fields = captureFields(c, effort.get(), timeOf(c));
+    if (pickedPriority()) fields.priority = pickedPriority()!;
+    if (pickedDue()) fields.due = pickedDue()!;
     const p = project ?? (c.project ? ctx.index.projectByTitle(c.project) : undefined);
     const d = date;
-    const text = c.text;
+    // Links picked in the Links section go on the line, after anything typed into the text itself.
+    const typed = new Set(linksIn(c.text).map((l) => l.url));
+    const text = [c.text.trim(), ...attach.linkList().filter((l) => !typed.has(l.url)).map((l) => l.raw)].join(' ');
     if (!keepOpen) m.close();
     const pt = part;
-    await ctx.run('Capture', () => ctx.mutations.addTask({ text, fields, ...(p ? { projectId: p.id } : {}), ...(phaseId ? { phaseId } : {}), ...(d ? { date: d } : {}), ...(d && pt ? { part: pt } : {}) }));
-    if (keepOpen) { input.value = ''; render(); input.focus(); }
+    const spec = { text, fields, ...(p ? { projectId: p.id } : {}), ...(phaseId ? { phaseId } : {}), ...(d ? { date: d } : {}), ...(d && pt ? { part: pt } : {}) };
+    // A note or a drawing hangs off the task, so the task is made first and they follow it.
+    if (attach.needsTask()) await ctx.run('Capture', async () => { const made = await ctx.mutations.addTaskReturning(spec); await attach.apply(made); });
+    else await ctx.run('Capture', () => ctx.mutations.addTask(spec));
+    if (keepOpen) { input.value = ''; prioritySel.value = ''; dueInput.value = ''; attach.clear(); render(); input.focus(); }
   }
 
-  root.append(input, preview, dayRow, tagRow, repeatRow, conflict, dest, help, h('div', { cls: 'helm-modal-buttons' },
+  // Same order as the editor: the line, when, what else — then notes, drawings and links.
+  root.append(input, preview, dayRow, tagRow, repeatRow, conflict, dest,
+    h('div', { cls: 'helm-grid2' }, field('Priority', prioritySel), field('Due', dueInput)),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Notes' }), attach.notes),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Drawings' }), attach.drawings),
+    h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Links' }), attach.links),
+    help, h('div', { cls: 'helm-modal-buttons' },
     h('span', { cls: 'helm-hint', text: 'Enter to add · Shift+Enter to add and keep capturing' }),
     h('span', { cls: 'helm-spacer' }),
     button('Cancel', { onClick: () => m.close() }),

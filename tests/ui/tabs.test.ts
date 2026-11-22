@@ -1991,6 +1991,83 @@ describe('Modals', () => {
     expect(await vault.read(dailyPath(TODAY))).toContain('Chase UC3 again [jira.example.com/browse/RSC-1](https://jira.example.com/browse/RSC-1)');
   });
 
+  it('the editor renames a link in its Links section, and Save writes the new title', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await ctx.mutations.addTask({ text: 'Chase UC3 [Ticket](https://jira.example.com/browse/RSC-1)', date: TODAY, part: 'morning' });
+    openTaskEditor(ctx, [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Chase UC3'))!);
+    const ed = Modal.last!;
+    click(ed.contentEl.querySelector('.helm-attach-row button[aria-label="Edit the title or address"]'));
+    const dlg = Modal.last!;
+    expect(dlg.titleEl.textContent).toBe('Edit link');
+    const label = dlg.contentEl.querySelectorAll<HTMLInputElement>('input')[1]!;
+    expect(label.value).toBe('Ticket');
+    label.value = 'RSC-1 in Jira';
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    expect(texts(ed.contentEl, '.helm-attach-row a')).toEqual(['RSC-1 in Jira']);        // at once, in the form
+    expect(await vault.read(dailyPath(TODAY))).toContain('[Ticket]');                     // not written yet
+    click([...ed.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    await flush(); await flush();
+    const note = await vault.read(dailyPath(TODAY));
+    expect(note).toContain('Chase UC3 [RSC-1 in Jira](https://jira.example.com/browse/RSC-1)');
+    expect(note).not.toContain('[Ticket]');
+  });
+
+  it('a task link is renamed from the task menu, keeping its place in the text', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await ctx.mutations.addTask({ text: 'Chase [Ticket](https://jira.example.com/browse/RSC-1) today', date: TODAY, part: 'morning' });
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const row = [...root.querySelectorAll<HTMLElement>('.helm-task')].find((r) => r.textContent?.includes('Chase'))!;
+    click(row.querySelector('button[aria-label="More…"]'));
+    Menu.last!.items.find((i) => i.title === 'Links')!.sub!.items.find((i) => i.title === 'Edit link…')!.sub!.items[0]!.click!();
+    const dlg = Modal.last!;
+    dlg.contentEl.querySelectorAll<HTMLInputElement>('input')[1]!.value = 'The ticket';
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    await flush(); await flush();
+    expect(await vault.read(dailyPath(TODAY))).toContain('Chase [The ticket](https://jira.example.com/browse/RSC-1) today');
+    void index;
+  });
+
+  it('Capture has the editor’s Notes, Drawings and Links, and writes them with the task', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    openCapture(ctx, { date: TODAY });
+    const m = Modal.last!;
+    const labels = [...m.contentEl.querySelectorAll('.helm-field-label')].map((x) => x.textContent);
+    expect(labels).toEqual(expect.arrayContaining(['Priority', 'Due', 'Notes', 'Drawings', 'Links']));
+    const input = m.contentEl.querySelector<HTMLInputElement>('input[type="text"]')!;
+    input.value = 'Plan the offsite'; input.dispatchEvent(new Event('input'));
+    // A link, renamed before it is ever written.
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent?.includes('Add link')));
+    let dlg = Modal.last!;
+    dlg.contentEl.querySelectorAll<HTMLInputElement>('input')[0]!.value = 'https://venue.example.com';
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
+    click(m.contentEl.querySelector('.helm-attach-row button[aria-label="Edit the title or address"]'));
+    dlg = Modal.last!;
+    dlg.contentEl.querySelectorAll<HTMLInputElement>('input')[1]!.value = 'Venue';
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    // A new note and a new drawing, made once the task exists.
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'New note'));
+    dlg = Modal.last!;
+    dlg.contentEl.querySelectorAll<HTMLInputElement>('input')[0]!.value = 'Offsite agenda';
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Create'));
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'New drawing'));
+    click([...Modal.last!.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Create'));
+    expect(m.contentEl.textContent).toContain('New note: Offsite agenda');
+    expect(vault.files.size).toBeGreaterThan(0);
+    const before = [...vault.files.keys()];
+    expect(before.some((p) => p.includes('Offsite agenda'))).toBe(false);                  // nothing until Add
+    // Priority and due from the fields.
+    const sel = m.contentEl.querySelector<HTMLSelectElement>('select[title^="Priority"]')!;
+    sel.value = 'high'; sel.dispatchEvent(new Event('change'));
+    click([...m.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
+    await flush(); await flush(); await flush();
+    const made = [...index.snapshot.tasks.values()].find((x) => x.text.startsWith('Plan the offsite') && x.origin === 'daily')!;
+    expect(made.text).toBe('Plan the offsite [Venue](https://venue.example.com)');
+    expect(made.priority).toBe('high');
+    const target = { kind: 'task' as const, key: made.key, ...(made.id ? { id: made.id } : {}), title: made.text };
+    expect(index.notesFor(target).map((n) => n.title)).toContain('Offsite agenda');
+    expect(index.drawingsFor(target)).toHaveLength(1);
+  });
+
   it('task links: bare URLs render as labelled anchors; the menu opens, adds and removes links; the row shows a pill', async () => {
     const { ctx, index, vault } = await ctxFor();
     await ctx.mutations.addTask({ text: 'Chase UC3 https://jira.example.com/browse/RSC-1', date: TODAY, part: 'morning' });
@@ -2004,7 +2081,7 @@ describe('Modals', () => {
     expect(row().querySelector('.helm-task-links .helm-badge')!.textContent).toBe('1');
     click(row().querySelector('button[aria-label="More…"]'));
     const links = Menu.last!.items.find((i) => i.title === 'Links')!;
-    expect(links.sub!.items.map((i) => i.title)).toEqual(['jira.example.com/browse/RSC-1', 'Add link…', 'Remove link']);
+    expect(links.sub!.items.map((i) => i.title)).toEqual(['jira.example.com/browse/RSC-1', 'Add link…', 'Edit link…', 'Remove link']);
     links.sub!.items[1]!.click!();
     const dlg = Modal.last!;
     expect(dlg.titleEl.textContent).toBe('Add link');
@@ -3243,6 +3320,24 @@ describe('dragging a task between parts of the day', () => {
     expect(Notice.messages.at(-1)).toBe('“Exam guide” moved to OCI Certification.');
   });
 
+  it('a project link can be given a new title from its menu, in place', async () => {
+    const { ctx, m, index, vault } = await ctxFor();
+    await m.addProjectLink('prj-kitchen', 'https://example.com/quote', 'The quote');
+    const root = render((r) => renderProjects(ctx, r, { projectId: 'prj-kitchen', filter: '', showClosed: false, showDone: false, collapsed: new Map() }));
+    click(root.querySelector<HTMLElement>('.helm-detail-title .helm-links-btn')!);
+    Menu.last!.items.find((i) => i.title === 'Edit link…')!.sub!.items[0]!.click!();
+    const dlg = Modal.last!;
+    expect(dlg.titleEl.textContent).toBe('Edit link');
+    const [url, label] = [...dlg.contentEl.querySelectorAll<HTMLInputElement>('input')];
+    expect(url!.value).toBe('https://example.com/quote');
+    expect(label!.value).toBe('The quote');
+    label!.value = 'Signed quote';
+    click([...dlg.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    await flush(); await flush();
+    expect(index.project('prj-kitchen')!.links).toEqual([{ url: 'https://example.com/quote', label: 'Signed quote' }]);
+    expect(await vault.read(index.project('prj-kitchen')!.path)).not.toContain('The quote');
+  });
+
   it('has a links button in the project header that opens, adds and removes links', async () => {
     const { ctx, m, index } = await ctxFor();
     await m.addProjectLink('prj-kitchen', 'https://example.com/quote', 'The quote');
@@ -3251,7 +3346,7 @@ describe('dragging a task between parts of the day', () => {
     expect(btn).toBeTruthy();
     expect(btn.textContent).toBe('1'); // the count sits on the button
     click(btn);
-    expect(Menu.last!.items.map((i) => i.title)).toEqual(['The quote', 'Add link…', 'Move link to…', 'Remove link']);
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(['The quote', 'Add link…', 'Edit link…', 'Move link to…', 'Remove link']);
     Menu.last!.items.find((i) => i.title === 'Remove link')!.sub!.items[0]!.click!();
     await flush(); await flush();
     expect(index.project('prj-kitchen')!.links).toEqual([]);

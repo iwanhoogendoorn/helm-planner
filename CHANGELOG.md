@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.60.0 — 2026-11-22
+
+- **No more twin tasks after a move.** Moving a task that sat on a day already
+  gone (say, Monday's leftover moved on Wednesday to Friday) could show it on two
+  days. The forwarded record the old day keeps now stays on that day only, even
+  when the line carried a ⏳ or 📅 for another day; the moved line drops a stale
+  ⏳ (and a later 📅 no longer pulls it off the day you picked); and a project
+  task's line on a past day becomes a forwarded record instead of staying open
+  next to the live one.
+- **Capture has the editor's sections.** Notes (new or linked), Drawings (new or
+  linked) and Links, plus Priority and Due fields, in the same order as Edit
+  task. They are made the moment the task is: cancel and nothing is left behind.
+- **Edit a link's title.** Every links list — the task editor, Capture, the task
+  menu, a project and a phase — has a pencil (or *Edit link…*) to change a link's
+  title or address in place. `PATCH …/links` for the app, and `POST /capture`
+  takes `links` and `notes`.
+
 ## 1.59.0 — 2026-11-19
 
 - **Change the order of sub-habits.** In the habit form each song has a grip:

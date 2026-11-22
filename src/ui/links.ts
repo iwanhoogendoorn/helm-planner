@@ -10,9 +10,9 @@ export function openExternal(url: string): void {
 }
 
 /** URL + optional label dialog. */
-export function askLink(ctx: UiContext, onDone: (r: { url: string; label?: string } | undefined) => void, initial: { url?: string; label?: string } = {}): void {
+export function askLink(ctx: UiContext, onDone: (r: { url: string; label?: string } | undefined) => void, initial: { url?: string; label?: string } = {}, opts: { title?: string; cta?: string } = {}): void {
   const m = new Modal(ctx.app);
-  m.titleEl.setText('Add link');
+  m.titleEl.setText(opts.title ?? 'Add link');
   m.contentEl.addClass('helm-modal', 'helm-link-modal');
   const url = h('input', { cls: 'helm-input-wide', attr: { type: 'url', placeholder: 'https://…', value: initial.url ?? '' } });
   const label = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: 'e.g. Jira ticket', value: initial.label ?? '' } });
@@ -39,14 +39,21 @@ export function askLink(ctx: UiContext, onDone: (r: { url: string; label?: strin
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Label' }), label, h('div', { cls: 'helm-hint', text: 'Leave empty to show the address. Swap the two boxes round and Helm sorts it out.' })),
     problem,
     h('div', { cls: 'helm-field' }, h('span', { cls: 'helm-field-label', text: 'Written as' }), preview),
-    h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), h('button', { cls: 'helm-btn', text: 'Cancel', onClick: () => m.close() }), h('button', { cls: 'helm-btn mod-cta', text: 'Add', onClick: accept })),
+    h('div', { cls: 'helm-modal-buttons' }, h('span', { cls: 'helm-spacer' }), h('button', { cls: 'helm-btn', text: 'Cancel', onClick: () => m.close() }), h('button', { cls: 'helm-btn mod-cta', text: opts.cta ?? 'Add', onClick: accept })),
   );
   const origClose = m.onClose.bind(m);
   m.onClose = () => { origClose(); if (!accepted) onDone(undefined); };
   update();
   m.open();
   ctx.trackModal(m);
-  setTimeout(() => url.focus(), 0);
+  // Editing: the title is what you came to change, so that box has the cursor, its text selected.
+  setTimeout(() => { if (initial.url) { label.focus(); label.select(); } else url.focus(); }, 0);
+}
+
+/** Change a link's title or address: the same dialog, filled in. An empty title means the address's own name. */
+export function editLinkDialog(ctx: UiContext, link: TaskLink, onDone: (r: { url: string; label: string }) => void): void {
+  const titled = link.raw !== link.url;   // a bare address has no title of its own yet
+  askLink(ctx, (r) => { if (r) onDone({ url: r.url, label: r.label ?? '' }); }, { url: link.url, label: titled ? link.label : '' }, { title: 'Edit link', cta: 'Save' });
 }
 
 export function addLink(ctx: UiContext, task: Task): void {
@@ -58,6 +65,8 @@ export interface LinkHolder {
   list: () => TaskLink[];
   add: (url: string, label?: string) => void;
   remove: (url: string) => void;
+  /** Give a link a new title or address, keeping its place. An empty label falls back to the address's name. */
+  edit?: (oldUrl: string, next: { url: string; label: string }) => void;
   /**
    * Offer to send a link somewhere else. Where “somewhere else” can be is the caller's business —
    * a phase knows about its project and its siblings, a task does not — so it hands in the picker.
@@ -71,6 +80,11 @@ export function addLinkItemsFor(menu: Menu, ctx: UiContext, holder: LinkHolder):
   for (const l of links) menu.addItem((i) => i.setTitle(l.label).setIcon('external-link').onClick(() => openExternal(l.url)));
   if (links.length > 0) menu.addSeparator();
   menu.addItem((i) => i.setTitle('Add link…').setIcon('link').onClick(() => askLink(ctx, (r) => { if (r) holder.add(r.url, r.label); })));
+  if (links.length > 0 && holder.edit) menu.addItem((i) => {
+    i.setTitle('Edit link…').setIcon('pencil');
+    const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+    for (const l of links) sub.addItem((j) => j.setTitle(l.label).setIcon('pencil').onClick(() => editLinkDialog(ctx, l, (r) => holder.edit!(l.url, r))));
+  });
   if (links.length > 0 && holder.move) menu.addItem((i) => {
     i.setTitle('Move link to…').setIcon('folder-input');
     const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
@@ -92,12 +106,29 @@ export function linksButton(ctx: UiContext, holder: LinkHolder, title = 'Links')
   return b;
 }
 
+/**
+ * Links held in a form until it is saved — the task editor's, Capture's. Nothing is written: the
+ * caller reads `list()` on save and puts them on the line.
+ */
+export function draftLinks(initial: TaskLink[] = []): LinkHolder & { set: (l: TaskLink[]) => void } {
+  let links = [...initial];
+  const make = (url: string, label?: string): TaskLink => { const lab = label?.trim() || linkLabel(url); return { url, label: lab, raw: `[${lab}](${url})` }; };
+  return {
+    list: () => links,
+    set: (l) => { links = [...l]; },
+    add: (url, label) => { links = [...links.filter((l) => l.url !== url), make(url, label)]; },
+    remove: (url) => { links = links.filter((l) => l.url !== url); },
+    edit: (oldUrl, r) => { links = links.filter((l) => l.url === oldUrl || l.url !== r.url).map((l) => (l.url === oldUrl ? make(r.url, r.label) : l)); },
+  };
+}
+
 /** A task's own links: the same menu, over its text. */
 export function taskLinks(ctx: UiContext, task: Task): LinkHolder {
   return {
     list: () => linksIn(task.text),
     add: (url, label) => void ctx.run('Add link', () => ctx.mutations.addLink(task.key, url, label)),
     remove: (url) => void ctx.run('Remove link', () => ctx.mutations.removeLink(task.key, url)),
+    edit: (oldUrl, r) => void ctx.run('Edit link', () => ctx.mutations.editLink(task.key, oldUrl, r.url, r.label)),
   };
 }
 
@@ -133,6 +164,7 @@ export function linksSection(ctx: UiContext, links: LinkHolder): HTMLElement {
       ...list.map((l) => h('div', { cls: 'helm-attach-row' },
         h('a', { cls: 'external-link helm-link', text: l.label, attr: { href: l.url, target: '_blank', rel: 'noopener' }, title: l.url }),
         h('span', { cls: 'helm-spacer' }),
+        ...(links.edit ? [iconButton('pencil', 'Edit the title or address', () => editLinkDialog(ctx, l, (r) => { links.edit!(l.url, r); draw(); }))] : []),
         ...(links.move ? [iconButton('folder-input', 'Move this link somewhere else', (ev) => links.move!(l, ev))] : []),
         iconButton('x', 'Remove this link', () => { links.remove(l.url); draw(); }),
       )),
@@ -141,5 +173,6 @@ export function linksSection(ctx: UiContext, links: LinkHolder): HTMLElement {
     );
   };
   draw();
+  root.addEventListener('helm-redraw', draw);   // the holder changed from outside (a form cleared)
   return root;
 }
