@@ -3011,6 +3011,31 @@ describe('managing habits from Today', () => {
     void index;
   });
 
+  it('a ticked habit that landed in the morning comes out again with “Remove from morning”, and the habit stays', async () => {
+    const { ctx, index, vault } = await ctxFor();
+    await ctx.mutations.schedule('tsk-0001', TODAY, 'afternoon');
+    await ctx.mutations.setHabitState('hab-workout', TODAY, 'done', undefined, { placeIn: 'morning' });
+    expect(await vault.read(dailyPath(TODAY))).toMatch(/#+ Morning\n+- \[x\] 🏃 Morning workout 🆔 hab-workout/);
+    const root = render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() }));
+    const chip = root.querySelector<HTMLElement>('.helm-section.part-morning .helm-part-habits .helm-habit')!;
+    chip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const remove = Menu.last!.items.find((i) => i.title === 'Remove from morning')!;
+    expect(remove).toBeTruthy();
+    remove.click!();
+    await flush(); await flush();
+    const note = await vault.read(dailyPath(TODAY));
+    expect(note).not.toMatch(/#+ Morning\n+- \[.\] 🏃 Morning workout/);
+    expect(note).toMatch(/#+ Habits\n+(- .*\n)*- \[x\] 🏃 Morning workout 🆔 hab-workout/);
+    expect(note.match(/hab-workout/g)).toHaveLength(1);
+    expect(index.snapshot.habits.has('hab-workout')).toBe(true);
+  });
+
+  it('Delete habit says it removes the whole habit, on every day', async () => {
+    const { deleteHabitBody } = await import('../../src/ui/modals/habitForm');
+    expect(deleteHabitBody('Guitar')).toMatch(/whole habit .*every day/);
+    expect(deleteHabitBody('Guitar')).toContain('Remove from');
+  });
+
   it('moves a day-level habit into a part of the day for one date only: menu, drag-drop, tick where it sits, back to general next day', async () => {
     const { ctx, index, vault } = await ctxFor();
     await ctx.mutations.schedule('tsk-0001', TODAY, 'afternoon'); // an open task, so every part of the day is drawn

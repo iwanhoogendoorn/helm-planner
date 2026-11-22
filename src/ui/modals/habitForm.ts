@@ -28,6 +28,11 @@ function dataUrl(data: ArrayBuffer, ext: string): string {
 
 type Preset = 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'everyN' | 'monthly';
 
+/** The Delete habit question: says plainly that it is the whole habit, not one day or one part of the day. */
+export function deleteHabitBody(title: string): string {
+  return `Delete the whole habit “${title}”, on every day? Its note goes to the trash; past daily notes keep their ticks. To take it out of a morning, afternoon or evening only, use “Remove from …” or “For this day” instead.`;
+}
+
 export function openHabitForm(ctx: UiContext, existing?: Habit): void {
   const m = new Modal(ctx.app);
   m.titleEl.setText(existing ? 'Edit habit' : 'New habit');
@@ -274,7 +279,7 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       field('Target per week', 'counts against the streak', targetRow),
       field('Grace', 'misses tolerated before a streak breaks', graceRow),
     ),
-    h('div', { cls: 'helm-modal-buttons' }, h('div', { cls: 'helm-segmented' }, activeBtn), existing ? button('Delete', { icon: 'trash', cls: 'helm-btn-quiet', title: 'Move the habit note to the trash', onClick: () => { void confirmModal(ctx, { title: 'Delete habit', body: `Move the habit “${existing.title}” to the trash? Past daily notes keep their ticks.`, cta: 'Move to trash', warning: true }).then((ok) => { if (ok) { m.close(); void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(existing.id)); } }); } }) : null, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button(existing ? 'Save' : 'Create habit', { primary: true, onClick: () => void save() })),
+    h('div', { cls: 'helm-modal-buttons' }, h('div', { cls: 'helm-segmented' }, activeBtn), existing ? button('Delete', { icon: 'trash', cls: 'helm-btn-quiet', title: 'Move the habit note to the trash', onClick: () => { void confirmModal(ctx, { title: 'Delete habit', body: deleteHabitBody(existing.title), cta: 'Move to trash', warning: true }).then((ok) => { if (ok) { m.close(); void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(existing.id)); } }); } }) : null, h('span', { cls: 'helm-spacer' }), button('Cancel', { onClick: () => m.close() }), button(existing ? 'Save' : 'Create habit', { primary: true, onClick: () => void save() })),
   );
   drawIcon();
 

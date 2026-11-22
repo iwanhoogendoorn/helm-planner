@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.61.0 — 2026-11-22
+
+- **Take a habit out of the morning without deleting it.** Ticking a habit during
+  the morning puts it in the morning, and there was no plain way back out, so
+  "remove" ended at Delete habit, which removes the whole habit. A habit sitting
+  in a morning, afternoon or evening now has **Remove from morning** (or
+  afternoon, evening) in its right-click menu; it goes back to the general
+  Habits list for that day, tick and all.
+- **Delete habit says what it does.** The question now reads "Delete the whole
+  habit …, on every day?" and points to Remove from … for a single part of the day.
+
 ## 1.60.0 — 2026-11-22
 
 - **No more twin tasks after a move.** Moving a task that sat on a day already

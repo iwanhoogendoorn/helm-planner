@@ -2,7 +2,7 @@
 import { Menu } from 'obsidian';
 import type { Habit, HabitPart, IsoDate } from '../core/types';
 import type { UiContext } from './context';
-import { openHabitForm } from './modals/habitForm';
+import { deleteHabitBody, openHabitForm } from './modals/habitForm';
 import { addDrawingItems, targetForHabit } from './drawings';
 import { dayPartOf } from '../data/habits';
 import { addNoteItems } from './notes';
@@ -28,6 +28,9 @@ export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { dat
   if (opts.date && !(hb.parts && hb.parts.length)) {
     const date = opts.date;
     const current = dayPartOf(hb, ctx.index.snapshot.completions, date);
+    // Ticking a habit during the morning puts it in the morning. Taking it out again is one click, and
+    // never needs Delete habit (which removes the habit from every day).
+    if (current) menu.addItem((i) => i.setTitle(`Remove from ${current}`).setIcon('undo-2').onClick(() => void ctx.run('Move habit', () => ctx.mutations.moveHabitForDay(hb.id, date, undefined))));
     menu.addItem((i) => {
       i.setTitle('For this day').setIcon('sun-moon');
       const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
@@ -42,6 +45,6 @@ export function habitMenu(ctx: UiContext, hb: Habit, ev: MouseEvent, opts: { dat
   menu.addSeparator();
   menu.addItem((i) => i.setTitle(hb.active ? 'Pause habit' : 'Resume habit').setIcon(hb.active ? 'pause' : 'play').onClick(() => void ctx.run('Habit', () => ctx.mutations.setHabitFields(hb.id, { active: !hb.active }))));
   menu.addItem((i) => i.setTitle('Open note').setIcon('file-text').onClick(() => void ctx.openFile(hb.path)));
-  menu.addItem((i) => i.setTitle('Delete habit…').setIcon('trash').setWarning(true).onClick(() => { void confirmModal(ctx, { title: 'Delete habit', body: `Move the habit “${hb.title}” to the trash? Past daily notes keep their ticks.`, cta: 'Move to trash', warning: true }).then((ok) => { if (ok) void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(hb.id)); }); }));
+  menu.addItem((i) => i.setTitle('Delete habit…').setIcon('trash').setWarning(true).onClick(() => { void confirmModal(ctx, { title: 'Delete habit', body: deleteHabitBody(hb.title), cta: 'Move to trash', warning: true }).then((ok) => { if (ok) void ctx.run('Delete habit', () => ctx.mutations.deleteHabit(hb.id)); }); }));
   menu.showAtMouseEvent(ev);
 }
