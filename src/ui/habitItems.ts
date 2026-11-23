@@ -156,6 +156,63 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
     make: (kind) => askItemNote(ctx, habit.id, item.title, kind, (r) => enqueue(`New ${kind}`, () => ctx.mutations.createItemNote(habit.id, item.id, { ...r, kind }))),
   });
   const moveTo = (item: HabitItem, group: string | null): void => enqueue('Sub-habit group', () => ctx.mutations.setHabitItem(habit.id, item.id, { group }));
+  /**
+   * Move a song before or after another (or to the end of a group, `target` undefined), into that
+   * row's group. The groups show the songs in the habit's order, so it is one new order (and a new
+   * group when it crossed over).
+   */
+  const reorder = (hb: Habit, item: HabitItem, target: HabitItem | undefined, after: boolean, group: string | undefined): void => {
+    const live = (hb.items ?? []).filter((i) => !i.retired);
+    const ids = live.map((i) => i.id).filter((id) => id !== item.id);
+    let at: number;
+    if (target) at = ids.indexOf(target.id) + (after ? 1 : 0);
+    else { const last = live.filter((i) => i.id !== item.id && (i.group ?? undefined) === group).pop(); at = last ? ids.indexOf(last.id) + 1 : ids.length; }
+    ids.splice(at, 0, item.id);
+    const moved = (item.group ?? undefined) !== group;
+    if (!moved && ids.every((id, i) => id === live[i]!.id)) return;
+    if (moved) enqueue('Sub-habit group', () => ctx.mutations.setHabitItem(habit.id, item.id, { group: group ?? null }));
+    enqueue('Order', () => ctx.mutations.orderHabitItems(habit.id, ids));
+  };
+  let dragging: HabitItem | undefined;
+  const clearDrop = (): void => root.querySelectorAll('.is-drop-before, .is-drop-after, .is-drop-into').forEach((el) => el.removeClass('is-drop-before', 'is-drop-after', 'is-drop-into'));
+  /** A grip that drags the row; Alt+↑/↓ on the row's name moves it within its group. */
+  const sortable = (hb: Habit, row: HTMLElement, item: HabitItem, siblings: HabitItem[]): HTMLElement => {
+    const grip = h('span', { cls: 'helm-subhabit-grip helm-itemlog-grip', title: 'Drag to change the order (or into another group) · Alt+↑/↓', attr: { 'aria-hidden': 'true' } }, icon('grip-vertical'));
+    row.prepend(grip);
+    grip.addEventListener('mousedown', () => { row.draggable = true; });
+    row.addEventListener('mouseup', () => { row.draggable = false; });
+    row.addEventListener('dragstart', (ev) => { dragging = item; row.addClass('is-dragging'); ev.dataTransfer?.setData('text/plain', item.title); if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'; });
+    row.addEventListener('dragend', () => { dragging = undefined; row.draggable = false; row.removeClass('is-dragging'); clearDrop(); });
+    row.addEventListener('dragover', (ev) => {
+      if (!dragging || dragging.id === item.id) return;
+      ev.preventDefault();
+      const below = ev.offsetY > row.offsetHeight / 2;
+      row.toggleClass('is-drop-before', !below); row.toggleClass('is-drop-after', below);
+    });
+    row.addEventListener('dragleave', () => { row.removeClass('is-drop-before'); row.removeClass('is-drop-after'); });
+    row.addEventListener('drop', (ev) => {
+      if (!dragging) return;
+      ev.preventDefault();
+      const d = dragging; dragging = undefined; clearDrop();
+      reorder(hb, d, item, ev.offsetY > row.offsetHeight / 2, item.group && (hb.itemGroups ?? []).includes(item.group) ? item.group : undefined);
+    });
+    row.querySelector('.helm-itemlog-name')?.addEventListener('keydown', (ev) => {
+      const k = ev as KeyboardEvent;
+      if (!k.altKey || (k.key !== 'ArrowUp' && k.key !== 'ArrowDown')) return;
+      ev.preventDefault();
+      const i = siblings.findIndex((x) => x.id === item.id);
+      const to = siblings[k.key === 'ArrowUp' ? i - 1 : i + 1];
+      if (to) reorder(hb, item, to, k.key === 'ArrowDown', item.group && (hb.itemGroups ?? []).includes(item.group) ? item.group : undefined);
+    });
+    return row;
+  };
+  /** A group's header takes a dropped song at the end of that group. */
+  const dropInto = (head: HTMLElement, hb: Habit, group: string | undefined): HTMLElement => {
+    head.addEventListener('dragover', (ev) => { if (!dragging) return; ev.preventDefault(); head.addClass('is-drop-into'); });
+    head.addEventListener('dragleave', () => head.removeClass('is-drop-into'));
+    head.addEventListener('drop', (ev) => { if (!dragging) return; ev.preventDefault(); const d = dragging; dragging = undefined; clearDrop(); reorder(hb, d, undefined, true, group); });
+    return head;
+  };
   const newGroup = (then?: (name: string) => void): void => askText(ctx, {
     title: 'New group', label: 'Name', placeholder: 'C major, Fingerpicking, Morning warm-up…', cta: 'Add',
     hint: 'A group sorts sub-habits: a key, a scale, a technique, a part of the day.',
@@ -227,8 +284,13 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
         h('button', { cls: ['helm-itemlog-setlink', 'clickable-icon', !!st.item.links?.length && 'is-linked'], title: st.item.links?.length ? `Linked to ${st.item.links.map(itemLinkLabel).join(', ')}: open, add or remove` : 'Link notes, drawings or web pages to it', attr: { 'aria-label': `Links of ${st.item.title}` }, onClick: (ev) => linkMenu(hb, st.item, ev) }, icon('link'), st.item.links?.length ? h('span', { cls: 'helm-itemlog-setlink-count', text: String(st.item.links.length) }) : null),
         h('button', { cls: 'helm-itemlog-move clickable-icon', title: st.item.group ? `In ${st.item.group}: move to another group` : 'Put it in a group', attr: { 'aria-label': `Move ${st.item.title}` }, onClick: (ev) => moveMenu(hb, st.item, ev) }, icon('folder-input')));
     };
+    // Grouped rows can be dragged into a new order, or into another group (its header takes it at the end).
     const byGroup = (rows: HabitItemStats[], row: (st: HabitItemStats) => HTMLElement, withMenu: boolean): HTMLElement[] =>
-      grouped(hb, rows).flatMap(({ group, rows: rs }) => [groupHead(group, rs.length, withMenu), ...rs.map(row)].filter((x): x is HTMLElement => x !== null));
+      grouped(hb, rows).flatMap(({ group, rows: rs }) => {
+        const head = groupHead(group, rs.length, withMenu);
+        const siblings = rs.map((r) => r.item);
+        return [head && dropInto(head, hb, group), ...rs.map((st) => sortable(hb, row(st), st.item, siblings))].filter((x): x is HTMLElement => !!x);
+      });
 
     const head = h('div', { cls: ['helm-itemlog-head', doneN >= need && 'is-met'] },
       h('span', { text: `${doneN} of ${active.length} ${dayWord}` }),
@@ -241,7 +303,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
     const body: (HTMLElement | null)[] = [];
     if (mode === 'plan') {
       body.push(
-        h('p', { cls: 'helm-hint helm-itemlog-hint', text: `Tick what you'll practise ${dayWord}. The link button ties a song to its note or a web page; the folder button moves it to another group.` }),
+        h('p', { cls: 'helm-hint helm-itemlog-hint', text: `Tick what you'll practise ${dayWord}. Drag a song by its grip to change the order or move it to another group; the link button adds notes, drawings and web pages.` }),
         h('div', { cls: 'helm-itemlog-list' }, ...byGroup(active, planRow, true),
           h('button', { cls: 'helm-btn helm-btn-quiet helm-itemlog-newgroup', onClick: () => newGroup() }, icon('folder-plus'), h('span', { text: 'New group…' }))),
         h('div', { cls: 'helm-modal-buttons' },

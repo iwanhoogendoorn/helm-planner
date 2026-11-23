@@ -14,6 +14,10 @@
   a pen or an outward arrow): a note or drawing opens in a new tab and the panel
   steps aside; a web page opens in the browser and the panel stays. Right-click
   a song's chip on the Habits card for **Open …** too.
+- **Change the order in Log practice.** Each song in the grouped list has a grip:
+  drag it up or down, or onto another group (or its header) to move it there
+  too; Alt+↑/↓ on a song's name moves it within its group. The order is the
+  habit's, so the habit form, the plan and the chips follow it.
 - **API:** items carry `links` (each with its kind, a label, a URL to open and
   its vault path) and the first flat as `link`, `linkUrl`, `linkPath`;
   `PATCH /habits/:id/items/:itemId` takes `addLink`, `removeLink`, `links` or `link`.

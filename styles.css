@@ -1321,3 +1321,8 @@ button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 .helm-subhabit-row.is-dragging { opacity: 0.4; }
 .helm-subhabit-row.is-drop-before { box-shadow: 0 -2px 0 var(--interactive-accent); }
 .helm-subhabit-row.is-drop-after { box-shadow: 0 2px 0 var(--interactive-accent); }
+.helm-itemlog-row.is-dragging { opacity: 0.4; }
+.helm-itemlog-row.is-drop-before { box-shadow: 0 -2px 0 var(--interactive-accent); }
+.helm-itemlog-row.is-drop-after { box-shadow: 0 2px 0 var(--interactive-accent); }
+.helm-itemlog-group.is-drop-into { outline: 2px dashed var(--interactive-accent); outline-offset: 2px; border-radius: var(--radius-s); }
+.helm-itemlog .helm-itemlog-grip { margin-right: -6px; }

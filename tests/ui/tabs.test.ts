@@ -971,6 +971,40 @@ describe('Today tab', () => {
     web.mockRestore();
   });
 
+  it('Log practice: drag a song into a new order or another group; Alt+↓ moves it within its group', async () => {
+    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder 📂 G major\n  - Blackbird 🆔 hsi-black\n  - Layla 🆔 hsi-layla\nitem_groups: [G major]\n---\n';
+    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
+    const habitNote = (): Promise<string> => vault.read('02 PROJECTS/Habits/Guitar.md');
+    const tile = [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
+    click(tile.querySelector('.helm-subhabit-summary'));
+    const panel = (): HTMLElement => Modal.last!.contentEl;
+    const row = (name: string): HTMLElement => [...panel().querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes(name))!;
+    const titles = (): string[] => texts(panel(), '.helm-itemlog-title > span:first-child');
+    expect(panel().querySelectorAll('.helm-itemlog-grip')).toHaveLength(3);
+    const drag = (from: HTMLElement, to: HTMLElement): void => {
+      from.querySelector('.helm-itemlog-grip')!.dispatchEvent(new Event('mousedown', { bubbles: true }));
+      expect(from.draggable).toBe(true);
+      from.dispatchEvent(new Event('dragstart'));
+      to.dispatchEvent(new Event('dragover', { cancelable: true }));
+      to.dispatchEvent(new Event('drop', { cancelable: true })); // offsetY 0: the top half, so before it
+    };
+    // Layla onto Wonderwall: into G major, above it.
+    drag(row('Layla'), row('Wonderwall'));
+    await flush(); await flush(); await flush();
+    expect(await habitNote()).toContain('items:\n  - Layla 🆔 hsi-layla 📂 G major\n  - Wonderwall 🆔 hsi-wonder 📂 G major\n  - Blackbird 🆔 hsi-black\n');
+    expect(titles()).toEqual(['Layla', 'Wonderwall', 'Blackbird']);
+    // Alt+↓ on Layla's name: below Wonderwall.
+    row('Layla').querySelector('.helm-itemlog-name')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }));
+    await flush(); await flush(); await flush();
+    expect(titles()).toEqual(['Wonderwall', 'Layla', 'Blackbird']);
+    // Wonderwall onto the "Not in a group" header: out of G major, at the end.
+    const loose = [...panel().querySelectorAll<HTMLElement>('.helm-itemlog-group')].find((g) => g.textContent?.includes('Not in a group'))!;
+    drag(row('Wonderwall'), loose);
+    await flush(); await flush(); await flush();
+    expect(await habitNote()).toContain('items:\n  - Layla 🆔 hsi-layla 📂 G major\n  - Blackbird 🆔 hsi-black\n  - Wonderwall 🆔 hsi-wonder\n');
+    expect(titles()).toEqual(['Layla', 'Blackbird', 'Wonderwall']);
+  });
+
   it('keeps the Habits section when every habit is paused, with New habit and one-click Resume', async () => {
     const paused = (id: string, title: string): string => `---\ntype: habit\nid: ${id}\ntitle: ${title}\nschedule: every day\nactive: false\n---\n`;
     const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Morning workout.md': paused('hab-workout', 'Morning workout'), '02 PROJECTS/Habits/Evening reading.md': paused('hab-read', 'Evening reading') });
