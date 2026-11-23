@@ -8,9 +8,10 @@ import type { DaybookEntry } from '../core/daybook';
 import type { Drawing } from '../core/drawing';
 import type { NoteRef } from '../core/noteRef';
 import { plainLabel } from '../core/label';
+import { itemLinkTarget } from '../core/habit';
 import { linksIn } from '../core/links';
 import type { Period } from '../core/periods';
-import type { DrawingTarget, Goal, Habit, HelmSettings, IsoDate, Project, Task } from '../core/types';
+import type { DrawingTarget, Goal, Habit, HabitItem, HelmSettings, IsoDate, Project, Task } from '../core/types';
 import type { HelmIndex } from '../data/index';
 import type { Mutations } from '../data/mutations';
 import { habitItemStats, habitStats, suggestedItem, type HabitStats } from '../data/habits';
@@ -245,13 +246,27 @@ export function habitJson(h: Habit, c: Ctx, stats?: HabitStats): Record<string, 
   };
 }
 
+/**
+ * A sub-habit's link for a client: `link` as stored, `linkUrl` a web address or an obsidian:// URL that
+ * opens the note, `linkPath` the note's vault path when it exists (null when it does not yet).
+ */
+export function itemLinkJson(item: HabitItem, h: Habit, c: Ctx): { link: string | null; linkUrl: string | null; linkPath: string | null } {
+  if (!item.link) return { link: null, linkUrl: null, linkPath: null };
+  const t = itemLinkTarget(item.link);
+  if ('url' in t) return { link: item.link, linkUrl: t.url, linkPath: null };
+  const path = c.index.notePathOfLink(t.note, h.path) ?? null;
+  const file = path ?? t.note;
+  const url = c.vaultName ? `obsidian://open?vault=${encodeURIComponent(c.vaultName)}&file=${encodeURIComponent(file.replace(/\.md$/, ''))}` : null;
+  return { link: item.link, linkUrl: url, linkPath: path };
+}
+
 /** A habit's sub-habits with their numbers, how many make a day, and which one is up next. */
 export function habitItemsJson(h: Habit, c: Ctx): { items: Record<string, unknown>[]; itemsPerDay: number; suggestedItem: string | null; itemGroups: string[]; itemPlan: { date: string; items: string[] } | null } {
   const stats = habitItemStats(h, c.index.snapshot.itemCompletions, c.today());
   return {
     itemGroups: h.itemGroups ?? [],
     itemPlan: h.itemPlan ?? null,
-    items: stats.map((s) => ({ id: s.item.id, title: s.item.title, retired: s.item.retired ?? false, group: s.item.group ?? null, stats: { lastDone: s.lastDone ?? null, daysSince: s.daysSince ?? null, count7: s.count7, count30: s.count30, days30: s.days30, total: s.total, todayCount: s.todayCount, todayState: s.todayState } })),
+    items: stats.map((s) => ({ id: s.item.id, title: s.item.title, retired: s.item.retired ?? false, group: s.item.group ?? null, ...itemLinkJson(s.item, h, c), stats: { lastDone: s.lastDone ?? null, daysSince: s.daysSince ?? null, count7: s.count7, count30: s.count30, days30: s.days30, total: s.total, todayCount: s.todayCount, todayState: s.todayState } })),
     itemsPerDay: h.itemsPerDay ?? 1,
     suggestedItem: suggestedItem(stats)?.id ?? null,
   };

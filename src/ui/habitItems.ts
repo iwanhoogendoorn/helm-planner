@@ -10,6 +10,7 @@ import { HABIT_PARTS, type Habit, type HabitItem, type HabitPart, type IsoDate }
 import { partOfTime } from '../core/dailyNote';
 import { dayPartOf, habitItemStats, habitOccurrences, type HabitItemStats } from '../data/habits';
 import { askText } from './fields';
+import { askItemNote, itemLinkButton, itemLinkLabel, itemLinkMenu, openItemLink } from './itemLink';
 import { h, icon } from './dom';
 import type { UiContext } from './context';
 
@@ -66,6 +67,7 @@ export function itemMenu(ctx: UiContext, hb: Habit, item: HabitItem, date: IsoDa
   const part: Where | undefined = hb.parts?.length ? partFor(ctx, hb, date, now.part) : at;
   const menu = new Menu();
   menu.addItem((i) => i.setTitle(item.title).setDisabled(true));
+  if (item.link) menu.addItem((i) => i.setTitle(`Open ${itemLinkLabel(item.link!)}`).setIcon('file-text').onClick(() => openItemLink(ctx, hb, item.link!)));
   if (now.state !== 'done') menu.addItem((i) => i.setTitle('Practised').setIcon('check').onClick(() => set(ctx, hb, item, date, 'done', part, 1)));
   else menu.addItem((i) => i.setTitle(`One more (×${now.count + 1})`).setIcon('plus').onClick(() => set(ctx, hb, item, date, 'done', part, now.count + 1)));
   menu.addItem((i) => {
@@ -147,6 +149,11 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
     enqueue('Plan', () => ctx.mutations.setItemPlan(habit.id, date, ids));
   };
   const clearPlan = (): void => { planned = new Set(); draw(); enqueue('Plan', () => ctx.mutations.setItemPlan(habit.id, date, [])); };
+  const linkMenu = (hb: Habit, item: HabitItem, ev: MouseEvent): void => itemLinkMenu(ctx, {
+    hb, title: item.title, link: item.link, ev,
+    set: (link) => enqueue('Sub-habit link', () => ctx.mutations.setHabitItem(habit.id, item.id, { link })),
+    newNote: () => askItemNote(ctx, habit.id, item.title, (r) => enqueue('New note', () => ctx.mutations.createItemNote(habit.id, item.id, r))),
+  });
   const moveTo = (item: HabitItem, group: string | null): void => enqueue('Sub-habit group', () => ctx.mutations.setHabitItem(habit.id, item.id, { group }));
   const newGroup = (then?: (name: string) => void): void => askText(ctx, {
     title: 'New group', label: 'Name', placeholder: 'C major, Fingerpicking, Morning warm-up…', cta: 'Add',
@@ -203,6 +210,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
           icon(n > 0 ? 'check-circle-2' : 'circle'),
           h('span', { cls: 'helm-itemlog-title' }, h('span', { text: st.item.title })),
           h('span', { cls: 'helm-itemlog-sub', text: `${since(st)} · ${st.count30}× in 30 days` })),
+        itemLinkButton(ctx, hb, st.item, () => m.close()),
         h('div', { cls: 'helm-itemlog-stepper' },
           h('button', { cls: 'helm-itemlog-step', title: n > 1 ? 'One round less' : 'Take the log off', attr: { 'aria-label': `One less ${st.item.title}`, ...(n === 0 ? { disabled: 'true' } : {}) }, onClick: () => change(st.item, n - 1) }, icon('minus')),
           h('span', { cls: 'helm-itemlog-count', text: String(n) }),
@@ -215,6 +223,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
           icon(on ? 'check-square' : 'square'),
           h('span', { cls: 'helm-itemlog-title' }, h('span', { text: st.item.title })),
           h('span', { cls: 'helm-itemlog-sub', text: `${since(st)} · ${st.count30}× in 30 days` })),
+        h('button', { cls: ['helm-itemlog-setlink', 'clickable-icon', !!st.item.link && 'is-linked'], title: st.item.link ? `Linked to ${itemLinkLabel(st.item.link)}: open, change or remove` : 'Link it to a note or a web page', attr: { 'aria-label': `Link ${st.item.title}` }, onClick: (ev) => linkMenu(hb, st.item, ev) }, icon(st.item.link ? 'file-text' : 'link')),
         h('button', { cls: 'helm-itemlog-move clickable-icon', title: st.item.group ? `In ${st.item.group}: move to another group` : 'Put it in a group', attr: { 'aria-label': `Move ${st.item.title}` }, onClick: (ev) => moveMenu(hb, st.item, ev) }, icon('folder-input')));
     };
     const byGroup = (rows: HabitItemStats[], row: (st: HabitItemStats) => HTMLElement, withMenu: boolean): HTMLElement[] =>
@@ -231,7 +240,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
     const body: (HTMLElement | null)[] = [];
     if (mode === 'plan') {
       body.push(
-        h('p', { cls: 'helm-hint helm-itemlog-hint', text: `Tick what you'll practise ${dayWord}. The folder button moves a song to another group.` }),
+        h('p', { cls: 'helm-hint helm-itemlog-hint', text: `Tick what you'll practise ${dayWord}. The link button ties a song to its note or a web page; the folder button moves it to another group.` }),
         h('div', { cls: 'helm-itemlog-list' }, ...byGroup(active, planRow, true),
           h('button', { cls: 'helm-btn helm-btn-quiet helm-itemlog-newgroup', onClick: () => newGroup() }, icon('folder-plus'), h('span', { text: 'New group…' }))),
         h('div', { cls: 'helm-modal-buttons' },
@@ -319,7 +328,7 @@ export function itemChips(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
     const isPlanned = plan.has(item.id) && now?.state !== 'done';
     return h('button', {
       cls: ['helm-subhabit', now && `is-${now.state}`, isPlanned && 'is-planned'],
-      title: `${item.title}${item.group ? ` (${item.group})` : ''} — ${since(st)} · ${st.count30}× in 30 days · ${st.total}× in all${isPlanned ? ' · on the plan' : ''}\nClick: log it / take the log off · right-click: more · rounds: Log practice`,
+      title: `${item.title}${item.group ? ` (${item.group})` : ''}${item.link ? ` → ${itemLinkLabel(item.link)}` : ''} — ${since(st)} · ${st.count30}× in 30 days · ${st.total}× in all${isPlanned ? ' · on the plan' : ''}\nClick: log it / take the log off · right-click: more · rounds: Log practice`,
       onClick: (ev) => {
         ev.stopPropagation();
         // Off: from the line it is on. On: the part it is now (a once-a-day habit's session, picked by Helm).

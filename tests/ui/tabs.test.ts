@@ -912,6 +912,47 @@ describe('Today tab', () => {
     expect(note).toContain('items_retired:\n  - Smoke 🆔 hsi-smoke');
   });
 
+  it('sub-habit links: the form links a web page and makes a note; Log practice opens them', async () => {
+    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n---\n';
+    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
+    const habitNote = (): Promise<string> => vault.read('02 PROJECTS/Habits/Guitar.md');
+    openHabitForm(ctx, ctx.index.snapshot.habits.get('hab-guitar'));
+    const form = Modal.last!.contentEl;
+    const linkBtn = (name: string): HTMLElement => [...form.querySelectorAll<HTMLElement>('.helm-subhabit-row')].find((r) => r.querySelector<HTMLInputElement>('input')!.value === name)!.querySelector<HTMLElement>('.helm-subhabit-link')!;
+    const pick = (title: string): void => Menu.last!.items.find((i) => i.title === title)!.click!();
+    // Wonderwall: a web page.
+    click(linkBtn('Wonderwall'));
+    pick('A web page…');
+    const ask = Modal.last!.contentEl;
+    ask.querySelector<HTMLInputElement>('input')!.value = 'youtu.be/6hzrDeceEKc';
+    click([...ask.querySelectorAll('button')].find((b) => b.textContent === 'Link'));
+    expect(linkBtn('Wonderwall').textContent).toBe('youtu.be');
+    // Blackbird: a new note, made on save.
+    click(linkBtn('Blackbird'));
+    pick('New note…');
+    const where = Modal.last!.contentEl;
+    expect(where.querySelector('.helm-path-preview')!.textContent).toBe('Notes/Guitar/Blackbird.md');
+    click([...where.querySelectorAll('button')].find((b) => b.textContent === 'Create'));
+    expect(linkBtn('Blackbird').textContent).toBe('new note');
+    click([...form.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
+    await flush(); await flush(); await flush();
+    expect(await habitNote()).toContain('  - Wonderwall 🆔 hsi-wonder 🔗 https://youtu.be/6hzrDeceEKc\n  - Blackbird 🆔 hsi-black 🔗 [[Notes/Guitar/Blackbird]]\n');
+    expect(await vault.read('Notes/Guitar/Blackbird.md')).toContain('# Blackbird');
+    // Log practice: a button per linked song; the note opens (and the panel steps aside), the web page opens outside.
+    const tile = [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
+    click(tile.querySelector('.helm-subhabit-summary'));
+    const panel = Modal.last!;
+    const opened = vi.fn();
+    (ctx.app as unknown as { workspace: unknown }).workspace = { openLinkText: opened };
+    const web = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const rowLink = (name: string): HTMLElement => [...panel.contentEl.querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes(name))!.querySelector<HTMLElement>('.helm-itemlog-link')!;
+    click(rowLink('Wonderwall'));
+    expect(web).toHaveBeenCalledWith('https://youtu.be/6hzrDeceEKc', '_blank', 'noopener');
+    click(rowLink('Blackbird'));
+    expect(opened).toHaveBeenCalledWith('Notes/Guitar/Blackbird', '02 PROJECTS/Habits/Guitar.md', true);
+    web.mockRestore();
+  });
+
   it('keeps the Habits section when every habit is paused, with New habit and one-click Resume', async () => {
     const paused = (id: string, title: string): string => `---\ntype: habit\nid: ${id}\ntitle: ${title}\nschedule: every day\nactive: false\n---\n`;
     const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Morning workout.md': paused('hab-workout', 'Morning workout'), '02 PROJECTS/Habits/Evening reading.md': paused('hab-read', 'Evening reading') });

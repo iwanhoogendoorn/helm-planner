@@ -205,6 +205,8 @@ export interface HabitItem {
   retired?: boolean;
   /** The group it sits in (one of the habit's `itemGroups`); undefined = no group. */
   group?: string;
+  /** What it is: a note in the vault (`[[Ode to Joy]]`) or a web address (`https://…`); undefined = none. */
+  link?: string;
 }
 
 /** A sub-habit line under a habit's line in a daily note. */

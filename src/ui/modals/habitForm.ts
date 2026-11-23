@@ -10,6 +10,7 @@ import { WEEKDAY_SHORT } from '../../core/dates';
 import { button, h, icon } from '../dom';
 import type { UiContext } from '../context';
 import { confirmModal } from './confirm';
+import { askItemNote, itemLinkLabel, itemLinkMenu } from '../itemLink';
 
 const EMOJIS = ['🏃', '🚶', '🏋️', '🧘', '🚴', '🏊', '⚽', '🎾', '🥗', '🍎', '💧', '☕', '🚭', '😴', '🌅', '📖', '✍️', '🎹', '🎸', '🎤', '🎨', '💻', '🧠', '🗣️', '🇪🇸', '🧹', '🧺', '🌱', '🐕', '💊', '🦷', '🧴', '💰', '📧', '📓', '🙏', '❤️', '📵', '🎯', '⭐'];
 
@@ -138,8 +139,11 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
 
   // ── Sub-habits ───────────────────────────────────────────────────────
   // Edited here, written on save: the songs under Guitar, the pieces under Piano.
-  type Draft = { id?: string; title: string; original?: string; retired: boolean; wasRetired: boolean; deleted: boolean };
-  const drafts: Draft[] = (existing?.items ?? []).map((i) => ({ id: i.id, title: i.title, original: i.title, retired: !!i.retired, wasRetired: !!i.retired, deleted: false }));
+  // `link` as it will be saved; `newNote` a note to make for it on save (it then links to that).
+  type Draft = { id?: string; title: string; original?: string; retired: boolean; wasRetired: boolean; deleted: boolean; link?: string; linkWas?: string; newNote?: { name?: string; folder?: string } };
+  const drafts: Draft[] = (existing?.items ?? []).map((i) => ({ id: i.id, title: i.title, original: i.title, retired: !!i.retired, wasRetired: !!i.retired, deleted: false, ...(i.link ? { link: i.link, linkWas: i.link } : {}) }));
+  const draftHabit = (): Habit => existing ?? ({ id: 'hab-new', title: title.value.trim() || 'New habit', path: '' } as unknown as Habit);
+  const linkLabel = (d: Draft): string | undefined => d.newNote ? `new note${d.newNote.name ? ` “${d.newNote.name}”` : ''}` : d.link ? itemLinkLabel(d.link) : undefined;
   let perDay = existing?.itemsPerDay ?? 1;
   const itemList = h('div', { cls: 'helm-subhabit-edit' });
   const perDayRow = h('div', { cls: 'helm-segmented' });
@@ -174,7 +178,22 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       });
       if (focus === d) setTimeout(() => input.focus(), 0);
       const handle = h('span', { cls: 'helm-subhabit-grip', title: 'Drag to change the order', attr: { 'aria-hidden': 'true' } }, icon('grip-vertical'));
-      const row = h('div', { cls: ['helm-subhabit-row', d.retired && 'is-retired'] }, handle, input,
+      const label = linkLabel(d);
+      const linkBtn = h('button', {
+        cls: ['helm-subhabit-link', 'clickable-icon', !!label && 'is-linked'],
+        title: label ? `Linked to ${label}: open, change or remove` : 'Link it to a note or a web page (the song, the exercise)',
+        attr: { 'aria-label': `Link ${d.title}` },
+        onClick: (ev) => itemLinkMenu(ctx, {
+          hb: draftHabit(), title: d.title.trim() || 'this sub-habit', link: d.newNote ? undefined : d.link, ev,
+          set: (link) => { delete d.newNote; if (link) d.link = link; else delete d.link; drawItems(); },
+          newNote: () => {
+            const t = d.title.trim() || 'Untitled';
+            if (existing) askItemNote(ctx, existing.id, t, (r) => { d.newNote = r; drawItems(); });
+            else { d.newNote = {}; drawItems(); }
+          },
+        }),
+      }, icon(label ? 'file-text' : 'link'), label ? h('span', { cls: 'helm-subhabit-link-label', text: label }) : null);
+      const row = h('div', { cls: ['helm-subhabit-row', d.retired && 'is-retired'] }, handle, input, linkBtn,
         button(d.retired ? 'Bring back' : 'Retire', { icon: d.retired ? 'rotate-ccw' : 'archive', cls: 'helm-btn-quiet', title: d.retired ? 'Offer it again' : 'Learned or shelved: no longer offered, its history kept', onClick: () => { d.retired = !d.retired; drawItems(); } }),
         button('', { icon: 'x', cls: 'helm-btn-quiet', title: 'Remove (lines already in daily notes stay)', onClick: () => { if (d.id) d.deleted = true; else drafts.splice(drafts.indexOf(d), 1); drawItems(); } }));
       // Only the grip starts a drag, so the text field still selects text.
@@ -303,6 +322,7 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
           if (d.id && d.deleted) await ctx.mutations.removeHabitItem(existing.id, d.id);
           else if (d.id && ((t && t !== d.original) || d.retired !== d.wasRetired)) await ctx.mutations.setHabitItem(existing.id, d.id, { ...(t && t !== d.original ? { title: t } : {}), retired: d.retired });
           else if (!d.id && t) d.id = (await ctx.mutations.addHabitItem(existing.id, t)).id;
+          if (d.id && !d.deleted) await saveLink(existing.id, d);
         }
         // Then the order as dragged (retired ones keep their own list, in the same order).
         const order = drafts.filter((d) => !d.deleted && d.id).map((d) => d.id!);
@@ -311,8 +331,18 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
         const items = drafts.filter((d) => !d.deleted && d.title.trim()).map((d) => d.title.trim());
         const id = await ctx.mutations.createHabit({ title: name, schedule, graceDays: grace, ...(target ? { targetPerWeek: target } : {}), ...(emoji ? { icon: emoji } : {}), ...(image ? { iconImage: image } : {}), ...(partList.length ? { parts: partList } : {}), ...(color ? { color } : {}), ...(items.length ? { items, itemsPerDay: perDay } : {}) });
         await applyPending(id, name);
+        // Links: the sub-habits got their ids with the habit note; match them by title.
+        const made = ctx.index.snapshot.habits.get(id)?.items ?? [];
+        for (const d of drafts) {
+          const it = made.find((x) => x.title.toLowerCase() === d.title.trim().toLowerCase());
+          if (it && !d.deleted) { d.id = it.id; await saveLink(id, d); }
+        }
       }
     });
+  }
+  async function saveLink(habitId: string, d: Draft): Promise<void> {
+    if (d.newNote) { await ctx.mutations.createItemNote(habitId, d.id!, d.newNote); return; }
+    if ((d.link ?? '') !== (d.linkWas ?? '')) await ctx.mutations.setHabitItem(habitId, d.id!, { link: d.link ?? null });
   }
   m.open();
   ctx.trackModal(m);

@@ -704,6 +704,17 @@ export class HelmIndex {
     return out.sort((a, b) => a.title.localeCompare(b.title));
   }
 
+  /** The vault path a `[[link]]` target points at (`Ode to Joy`, `Songs/Ode to Joy`), if the note exists. */
+  notePathOfLink(link: string, from = ''): string | undefined {
+    const l = link.split('#')[0]!.trim();
+    if (!l) return undefined;
+    const viaVault = this.vault.resolveLink?.(l, from);
+    if (viaVault) return viaVault;
+    const asPath = l.endsWith('.md') ? l : `${l}.md`;
+    if (this.files.has(asPath)) return asPath;
+    return this.allNoteTitles.get(noteTitle(asPath).toLowerCase());
+  }
+
   /** The `[[links]]` under a note's own Notes heading (a project's song, say), whether or not they resolve yet. */
   noteLinksOf(path: string): string[] {
     return this.files.get(path)?.noteLinks ?? [];

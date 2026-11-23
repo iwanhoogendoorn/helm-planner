@@ -23,6 +23,7 @@
  * item_groups: [C major, G major]  # groups the sub-habits sit in, in order ("<title> 🆔 <id> 📂 <group>")
  * items_plan_date: 2026-11-16      # the day of the plan below
  * items_plan: [hsi-a1b2c3]         # sub-habits you mean to practise that day
+ *                                  # a sub-habit's note or web page goes last: "… 🔗 [[Wonderwall]]" or "… 🔗 https://…"
  * ---
  * ```
  */
@@ -88,15 +89,40 @@ export function parseHabit(path: string, content: string, fallbackId?: string): 
 }
 
 const ITEM_ID_RE = /\s*🆔\s*(hsi-[a-z0-9]+)\s*$/;
-const ITEM_GROUP_RE = /\s*📂\s*([^🆔📂]*)$/u;
+const ITEM_GROUP_RE = /\s*📂\s*([^🆔📂🔗]*)$/u;
+const ITEM_LINK_RE = /\s*🔗\s*([^🆔📂🔗]*)$/u;
 
 /** A group name as stored: trimmed, without the markers the entry format uses. */
-export const cleanGroup = (g: string): string => String(g).replace(/[🆔📂]/gu, '').replace(/\s+/g, ' ').trim();
+export const cleanGroup = (g: string): string => String(g).replace(/[🆔📂🔗]/gu, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * A sub-habit's link as stored: a web address as is, anything else a `[[wikilink]]` (a bare note name
+ * or path gets the brackets). Empty when there is nothing to link to.
+ */
+export function cleanItemLink(raw: string): string {
+  const s = String(raw).replace(/[🆔📂🔗]/gu, '').replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^obsidian:/i.test(s)) return s.replace(/\s/g, '%20');
+  const inner = s.replace(/^!?\[\[/, '').replace(/\]\]$/, '').replace(/\.md$/i, '').trim();
+  return inner ? `[[${inner}]]` : '';
+}
+
+/** What a stored link points at: a web address, or the note's link text (`Ode to Joy`, a path, no alias). */
+export function itemLinkTarget(link: string): { url: string } | { note: string; label: string } {
+  if (!link.startsWith('[[')) return { url: link };
+  const inner = link.slice(2, -2);
+  const [target, alias] = inner.split('|');
+  const note = target!.trim();
+  return { note, label: (alias ?? note.split('/').pop() ?? note).trim() };
+}
 
 /** `Wonderwall 🆔 hsi-a1b2c3 📂 C major` → a sub-habit. An entry without an id gets one derived from its title, so it stays put. */
 export function parseItemEntry(raw: string, retired: boolean): HabitItem | undefined {
   let text = String(raw).trim();
   if (!text) return undefined;
+  const l = ITEM_LINK_RE.exec(text);
+  const link = l ? cleanItemLink(l[1]!) : '';
+  if (l) text = text.slice(0, l.index).trim();
   const g = ITEM_GROUP_RE.exec(text);
   const group = g ? cleanGroup(g[1]!) : '';
   if (g) text = text.slice(0, g.index).trim();
@@ -104,10 +130,13 @@ export function parseItemEntry(raw: string, retired: boolean): HabitItem | undef
   const title = (m ? text.slice(0, m.index) : text).trim();
   if (!title) return undefined;
   const id = m ? m[1]! : `hsi-t${hash(title.toLowerCase())}`;
-  return { id, title, ...(retired ? { retired: true } : {}), ...(group ? { group } : {}) };
+  return { id, title, ...(retired ? { retired: true } : {}), ...(group ? { group } : {}), ...(link ? { link } : {}) };
 }
 
-export const formatItemEntry = (it: { id: string; title: string; group?: string }): string => `${it.title.trim()} 🆔 ${it.id}${it.group ? ` 📂 ${cleanGroup(it.group)}` : ''}`;
+export const formatItemEntry = (it: { id: string; title: string; group?: string; link?: string }): string => {
+  const link = it.link ? cleanItemLink(it.link) : '';
+  return `${it.title.trim()} 🆔 ${it.id}${it.group ? ` 📂 ${cleanGroup(it.group)}` : ''}${link ? ` 🔗 ${link}` : ''}`;
+};
 
 /** The frontmatter values for a habit's sub-habits (undefined removes the key). */
 export function itemsFrontmatter(items: HabitItem[]): { items: string[] | undefined; items_retired: string[] | undefined } {

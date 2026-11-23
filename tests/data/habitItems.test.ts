@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { setup, TODAY, dailyPath } from './fixture';
 import { api } from '../api/v2.test';
-import { itemsNeeded, parseHabit, parseItemEntry, renderHabitNote, splitItemCount } from '../../src/core/habit';
+import { cleanItemLink, formatItemEntry, itemsNeeded, parseHabit, parseItemEntry, renderHabitNote, splitItemCount } from '../../src/core/habit';
 import { habitItemStats, habitsOnDay, habitStats, suggestedItem } from '../../src/data/habits';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -220,5 +220,48 @@ describe('sub-habit groups and the day plan', () => {
     r = await call('PUT', 'habits/hab-guitar/items', { order: ['hsi-black', 'hsi-wonder'] });
     expect(r.body.habit.items.map((i: any) => i.id)).toEqual(['hsi-black', 'hsi-wonder', 'hsi-smoke']);
     expect((await call('PUT', 'habits/hab-guitar/items', { order: ['hsi-nope'] })).status).toBe(400);
+  });
+});
+
+describe('sub-habit links: the song or exercise it is about', () => {
+  it('parses and writes a note link or a web address after the group', () => {
+    expect(parseItemEntry('Ode to Joy 🆔 hsi-ode 📂 C major 🔗 [[Songs/Ode to Joy]]', false)).toEqual({ id: 'hsi-ode', title: 'Ode to Joy', group: 'C major', link: '[[Songs/Ode to Joy]]' });
+    expect(parseItemEntry('Layla 🆔 hsi-layla 🔗 https://www.songsterr.com/a/wsa/layla', false)).toEqual({ id: 'hsi-layla', title: 'Layla', link: 'https://www.songsterr.com/a/wsa/layla' });
+    expect(formatItemEntry({ id: 'hsi-ode', title: 'Ode to Joy', group: 'C major', link: 'Ode to Joy' })).toBe('Ode to Joy 🆔 hsi-ode 📂 C major 🔗 [[Ode to Joy]]');
+    expect(cleanItemLink('Songs/Ode to Joy.md')).toBe('[[Songs/Ode to Joy]]');
+    expect(cleanItemLink('  ')).toBe('');
+    const h = parseHabit(PATH, GUITAR.replace('  - Blackbird 🆔 hsi-black', '  - "Blackbird 🆔 hsi-black 🔗 [[Blackbird tabs]]"'))!;
+    expect(h.items![1]).toEqual({ id: 'hsi-black', title: 'Blackbird', link: '[[Blackbird tabs]]' });
+  });
+
+  it('a link is set, kept through a rename and a move, made as a new note, and taken off', async () => {
+    const s = await setup({ [PATH]: GUITAR, 'Songs/Blackbird tabs.md': '# Blackbird tabs\n' });
+    const note = (): Promise<string> => s.vault.read(PATH);
+    await s.m.setHabitItem('hab-guitar', 'hsi-black', { link: 'Songs/Blackbird tabs' });
+    expect(await note()).toContain('  - Blackbird 🆔 hsi-black 🔗 [[Songs/Blackbird tabs]]\n');
+    await s.m.setHabitItem('hab-guitar', 'hsi-black', { title: 'Blackbird (Beatles)', group: 'G major' });
+    expect(await note()).toContain('Blackbird (Beatles) 🆔 hsi-black 📂 G major 🔗 [[Songs/Blackbird tabs]]');
+    const path = await s.m.createItemNote('hab-guitar', 'hsi-wonder');
+    expect(path).toBe('Notes/Guitar/Wonderwall.md');
+    expect(await s.vault.read(path)).toContain('habit: "[[Guitar]]"\nsub_habit: hsi-wonder');
+    expect(await note()).toContain('Wonderwall 🆔 hsi-wonder 🔗 [[Notes/Guitar/Wonderwall]]');
+    expect(await s.m.createItemNote('hab-guitar', 'hsi-wonder')).toBe('Notes/Guitar/Wonderwall 2.md'); // never over an existing note
+    await s.m.setHabitItem('hab-guitar', 'hsi-black', { link: null });
+    expect(await note()).toContain('Blackbird (Beatles) 🆔 hsi-black 📂 G major\n');
+  });
+
+  it('API: PATCH sets a link; habit and day JSON carry it with a URL to open', async () => {
+    const { call } = await api({ [PATH]: GUITAR, 'Songs/Blackbird tabs.md': '# Blackbird tabs\n' });
+    let r = await call('PATCH', 'habits/hab-guitar/items/hsi-black', { link: '[[Songs/Blackbird tabs]]' });
+    let it = r.body.habit.items.find((i: any) => i.id === 'hsi-black');
+    expect(it).toMatchObject({ link: '[[Songs/Blackbird tabs]]', linkPath: 'Songs/Blackbird tabs.md', linkUrl: 'obsidian://open?vault=Test%20vault&file=Songs%2FBlackbird%20tabs' });
+    r = await call('PATCH', 'habits/hab-guitar/items/hsi-wonder', { link: 'https://youtu.be/6hzrDeceEKc' });
+    it = r.body.habit.items.find((i: any) => i.id === 'hsi-wonder');
+    expect(it).toMatchObject({ link: 'https://youtu.be/6hzrDeceEKc', linkUrl: 'https://youtu.be/6hzrDeceEKc', linkPath: null });
+    r = await call('GET', `day/${TODAY}`);
+    expect(r.body.habits.find((x: any) => x.id === 'hab-guitar').items.find((i: any) => i.id === 'hsi-wonder').linkUrl).toBe('https://youtu.be/6hzrDeceEKc');
+    expect((await call('PATCH', 'habits/hab-guitar/items/hsi-wonder', { link: 3 })).status).toBe(400);
+    r = await call('PATCH', 'habits/hab-guitar/items/hsi-wonder', { link: null });
+    expect(r.body.habit.items.find((i: any) => i.id === 'hsi-wonder').link).toBeNull();
   });
 });

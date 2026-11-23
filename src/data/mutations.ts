@@ -19,9 +19,9 @@ import { DAY_PARTS, emptyContent, findRegion, isEmptyRegion, partOfTime, readReg
 import { parseDocument, sectionInsertPoint, type Document } from '../core/document';
 import { addDays, diffDays, formatDate } from '../core/dates';
 import { formatRecurrence, nextOccurrence, shiftRecurrence } from '../core/recurrence';
-import { cleanGroup, formatHistoryEntry, formatPauseEntry, itemLineText, itemsFrontmatter, itemsNeeded, splitItemCount } from '../core/habit';
+import { cleanGroup, cleanItemLink, formatHistoryEntry, formatPauseEntry, itemLineText, itemsFrontmatter, itemsNeeded, splitItemCount } from '../core/habit';
 import { derivedKey, uniqueId } from '../core/ids';
-import { setFrontmatter } from '../core/frontmatter';
+import { setFrontmatter, yamlScalar } from '../core/frontmatter';
 import { parseProject, renderProjectNote } from '../core/project';
 import { assignmentLine, type Assignment } from '../core/profiles';
 import { renderHabitNote } from '../core/habit';
@@ -1865,7 +1865,7 @@ export class Mutations {
     const taken = new Set([...existing.map((i) => i.id), ...[...this.index.snapshot.habits.values()].flatMap((h) => (h.items ?? []).map((i) => i.id))]);
     const out: HabitItem[] = [];
     for (const raw of titles) {
-      const title = raw.replace(/🆔/g, '').trim();
+      const title = raw.replace(/[🆔📂🔗]/gu, '').trim();
       if (!title) continue;
       const id = uniqueId('hsi', (x) => taken.has(x), this.d.rng);
       taken.add(id);
@@ -1914,15 +1914,16 @@ export class Mutations {
   }
 
   /** Rename, retire or bring back a sub-habit. Its lines in past notes keep their id, so history follows it. */
-  async setHabitItem(habitId: string, itemId: string, fields: { title?: string; retired?: boolean; group?: string | null }): Promise<void> {
+  async setHabitItem(habitId: string, itemId: string, fields: { title?: string; retired?: boolean; group?: string | null; link?: string | null }): Promise<void> {
     const h = this.habitOrThrow(habitId);
     const items = [...(h.items ?? [])];
     const i = items.findIndex((x) => x.id === itemId);
     if (i === -1) throw new Error('Sub-habit not found');
     const cur = items[i]!;
-    const title = fields.title?.replace(/🆔/g, '').trim();
+    const title = fields.title?.replace(/[🆔📂🔗]/gu, '').trim();
     const group = fields.group === undefined ? cur.group : fields.group === null ? undefined : cleanGroup(fields.group) || undefined;
-    const next: HabitItem = { id: cur.id, title: title || cur.title, ...((fields.retired ?? cur.retired) ? { retired: true } : {}), ...(group ? { group } : {}) };
+    const link = fields.link === undefined ? cur.link : fields.link === null ? undefined : cleanItemLink(fields.link) || undefined;
+    const next: HabitItem = { id: cur.id, title: title || cur.title, ...((fields.retired ?? cur.retired) ? { retired: true } : {}), ...(group ? { group } : {}), ...(link ? { link } : {}) };
     items.splice(i, 1);
     if (!!next.retired === !!cur.retired) items.splice(i, 0, next);
     else if (next.retired) items.push(next);
@@ -1930,6 +1931,36 @@ export class Mutations {
     // A group named here for the first time joins the list.
     if (group && !(h.itemGroups ?? []).includes(group)) await this.editFile(h.path, (lines) => setFrontmatter(lines, { ...itemsFrontmatter(items), item_groups: [...(h.itemGroups ?? []), group] }));
     else await this.writeItems(h, items);
+  }
+
+  /** Where a sub-habit's new note goes by default: a folder named after its habit in the notes folder. */
+  itemNoteFolder(habitId: string): string {
+    const h = this.habitOrThrow(habitId);
+    const base = (this.settings.notesFolder.trim() || 'Notes').replace(/\/+$/, '');
+    return `${base}/${this.safeName(h.title) || 'Habit'}`;
+  }
+
+  /** The path a sub-habit's new note would get (before it is made unique). */
+  itemNotePathFor(habitId: string, title: string, name?: string, folder?: string): string {
+    const dir = (folder ?? this.itemNoteFolder(habitId)).trim().replace(/\/+$/, '');
+    const stem = this.safeName(name?.trim() || title).slice(0, 120) || 'Untitled';
+    return `${dir ? dir + '/' : ''}${stem}.md`;
+  }
+
+  /**
+   * Make a note for a sub-habit (the song's chords, tabs, a lesson link) and link the sub-habit to it.
+   * The note says which habit it belongs to. Returns the note's path.
+   */
+  async createItemNote(habitId: string, itemId: string, opts: { name?: string; folder?: string } = {}): Promise<string> {
+    const h = this.habitOrThrow(habitId);
+    const item = (h.items ?? []).find((x) => x.id === itemId);
+    if (!item) throw new Error('Sub-habit not found');
+    const path = await this.uniqueNotePath(this.itemNotePathFor(habitId, item.title, opts.name, opts.folder));
+    const habitLink = `[[${noteTitle(h.path)}]]`;
+    const content = ['---', `habit: ${yamlScalar(habitLink)}`, `sub_habit: ${item.id}`, `created: ${this.today}`, '---', '', `# ${noteTitle(path)}`, '', `Part of ${habitLink}.`, '', ''].join('\n');
+    await this.put(path, content);
+    await this.setHabitItem(habitId, itemId, { link: `[[${path.replace(/\.md$/, '')}]]` });
+    return path;
   }
 
   /** Put the sub-habits in this order (ids; any left out keep their place after the named ones). */

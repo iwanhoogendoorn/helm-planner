@@ -186,6 +186,17 @@ items_plan_date: 2026-11-19
 items_plan: [hsi-a1b2c3, hsi-0a0b0c]
 ```
 
+A sub-habit can **link** to what it is about, last on its entry: a note in the
+vault (`🔗 [[Songs/Ode to Joy]]`, chords, tabs, what to work on) or a web page
+(`🔗 https://…`, a lesson, a backing track). A note made from Helm goes to
+`<notes folder>/<habit>/<song>.md` and names its habit in `habit:`:
+
+```yaml
+items:
+  - Ode to Joy 🆔 hsi-0d0e0f 📂 C major 🔗 [[Notes/Guitar Practice/Ode to Joy]]
+  - Wonderwall 🆔 hsi-a1b2c3 🔗 https://www.youtube.com/watch?v=6hzrDeceEKc
+```
+
 A sub-habit practised on a day is a line indented straight under the habit's
 line (under the occurrence's line for a habit with parts); `×N` (or `xN`) says
 how many times:
