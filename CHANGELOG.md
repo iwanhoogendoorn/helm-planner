@@ -3,14 +3,17 @@
 ## 1.62.0 — 2026-11-23
 
 - **A sub-habit links to its song or exercise.** Each song can point to a note
-  in the vault (chords, tabs, what to work on) or a web page (a lesson on
-  YouTube, a tab on Songsterr). Set it with the link button on the song's row in
-  the habit form, or in Log practice's Plan mode: **A note in the vault…**,
-  **New note…** (made in `Notes/<habit>/` and linked straight away), **A web
-  page…**, or **Remove the link**. In Log practice a linked song has a note (or
-  globe-out) button next to its name: the note opens in a new tab and the panel
-  steps aside; a web page opens in the browser and the panel stays. Right-click
-  a song's chip on the Habits card for **Open …** too.
+  in the vault (chords, tabs, what to work on), an **Excalidraw drawing** (a
+  fretboard sketch), or a web page (a lesson on YouTube, a tab on Songsterr).
+  Set it with the link button on the song's row in the habit form, or in Log
+  practice's Plan mode: **A note…**, **An Excalidraw drawing…**, **A web page
+  or a [[link]]…** (a web address, a wikilink, or a note's or drawing's name),
+  **New note…** or **New drawing…** (made in `Notes/<habit>/` and linked
+  straight away), or **Remove the link**. In Log practice a linked song has a
+  button next to its name (a page, a pen or an outward arrow): a note or
+  drawing opens in a new tab and the panel steps aside; a web page opens in the
+  browser and the panel stays. Right-click a song's chip on the Habits card for
+  **Open …** too.
 - **API:** items carry `link`, `linkUrl` (a web address or an obsidian:// URL) and
   `linkPath`; `PATCH /habits/:id/items/:itemId` takes `link`.
 

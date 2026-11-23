@@ -912,9 +912,9 @@ describe('Today tab', () => {
     expect(note).toContain('items_retired:\n  - Smoke 🆔 hsi-smoke');
   });
 
-  it('sub-habit links: the form links a web page and makes a note; Log practice opens them', async () => {
-    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n---\n';
-    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR });
+  it('sub-habit links: the form links a web page, a drawing and a new note; Log practice opens them', async () => {
+    const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n  - Ode to Joy 🆔 hsi-ode\n---\n';
+    const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR, 'Guitar/Ode To Joy - Guitar.excalidraw.md': '---\nexcalidraw-plugin: parsed\n---\n# Drawing\n' });
     const habitNote = (): Promise<string> => vault.read('02 PROJECTS/Habits/Guitar.md');
     openHabitForm(ctx, ctx.index.snapshot.habits.get('hab-guitar'));
     const form = Modal.last!.contentEl;
@@ -922,7 +922,7 @@ describe('Today tab', () => {
     const pick = (title: string): void => Menu.last!.items.find((i) => i.title === title)!.click!();
     // Wonderwall: a web page.
     click(linkBtn('Wonderwall'));
-    pick('A web page…');
+    pick('A web page or a [[link]]…');
     const ask = Modal.last!.contentEl;
     ask.querySelector<HTMLInputElement>('input')!.value = 'youtu.be/6hzrDeceEKc';
     click([...ask.querySelectorAll('button')].find((b) => b.textContent === 'Link'));
@@ -934,9 +934,17 @@ describe('Today tab', () => {
     expect(where.querySelector('.helm-path-preview')!.textContent).toBe('Notes/Guitar/Blackbird.md');
     click([...where.querySelectorAll('button')].find((b) => b.textContent === 'Create'));
     expect(linkBtn('Blackbird').textContent).toBe('new note');
+    // Ode to Joy: an Excalidraw drawing already in the vault (the note picker leaves drawings out).
+    click(linkBtn('Ode to Joy'));
+    pick('An Excalidraw drawing…');
+    const picker = Modal.last as unknown as { getItems: () => { path: string }[]; onChooseItem: (d: unknown) => void };
+    const drawing = picker.getItems().find((d) => d.path === 'Guitar/Ode To Joy - Guitar.excalidraw.md')!;
+    picker.onChooseItem(drawing);
+    expect(linkBtn('Ode to Joy').textContent).toBe('Ode To Joy - Guitar');
+    expect(linkBtn('Ode to Joy').querySelector('[data-icon]')!.getAttribute('data-icon')).toBe('pen-tool');
     click([...form.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
     await flush(); await flush(); await flush();
-    expect(await habitNote()).toContain('  - Wonderwall 🆔 hsi-wonder 🔗 https://youtu.be/6hzrDeceEKc\n  - Blackbird 🆔 hsi-black 🔗 [[Notes/Guitar/Blackbird]]\n');
+    expect(await habitNote()).toContain('  - Wonderwall 🆔 hsi-wonder 🔗 https://youtu.be/6hzrDeceEKc\n  - Blackbird 🆔 hsi-black 🔗 [[Notes/Guitar/Blackbird]]\n  - Ode to Joy 🆔 hsi-ode 🔗 [[Guitar/Ode To Joy - Guitar.excalidraw]]\n');
     expect(await vault.read('Notes/Guitar/Blackbird.md')).toContain('# Blackbird');
     // Log practice: a button per linked song; the note opens (and the panel steps aside), the web page opens outside.
     const tile = [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
@@ -950,6 +958,8 @@ describe('Today tab', () => {
     expect(web).toHaveBeenCalledWith('https://youtu.be/6hzrDeceEKc', '_blank', 'noopener');
     click(rowLink('Blackbird'));
     expect(opened).toHaveBeenCalledWith('Notes/Guitar/Blackbird', '02 PROJECTS/Habits/Guitar.md', true);
+    click(rowLink('Ode to Joy'));
+    expect(opened).toHaveBeenCalledWith('Guitar/Ode To Joy - Guitar.excalidraw', '02 PROJECTS/Habits/Guitar.md', true);
     web.mockRestore();
   });
 

@@ -9,65 +9,98 @@ import { itemLinkTarget } from '../core/habit';
 import { askNameAndLocation, askText } from './fields';
 import { openExternal } from './links';
 import { pickNote } from './notes';
+import { pickDrawing } from './drawings';
 import { h, icon } from './dom';
 import type { UiContext } from './context';
 
-/** A short name for what the link points at: the note's name, or the web site. */
+/** What a link points at, for icons and words: a web page, an Excalidraw drawing, or a note. */
+export function itemLinkKind(link: string): 'web' | 'drawing' | 'note' {
+  const t = itemLinkTarget(link);
+  if ('url' in t) return 'web';
+  return /\.excalidraw$/i.test(t.note) ? 'drawing' : 'note';
+}
+const KIND_ICON = { web: 'external-link', drawing: 'pen-tool', note: 'file-text' } as const;
+const KIND_WORD = { web: 'web page', drawing: 'drawing', note: 'note' } as const;
+export const itemLinkIcon = (link: string): string => KIND_ICON[itemLinkKind(link)];
+
+/** A short name for what the link points at: the note's or drawing's name, or the web site. */
 export function itemLinkLabel(link: string): string {
   const t = itemLinkTarget(link);
-  if ('note' in t) return t.label;
+  if ('note' in t) return t.label.replace(/\.excalidraw$/i, '');
   try { return new URL(t.url).hostname.replace(/^www\./, ''); } catch { return t.url; }
 }
 
-export const isWebLink = (link: string): boolean => 'url' in itemLinkTarget(link);
+export const isWebLink = (link: string): boolean => itemLinkKind(link) === 'web';
 
-/** Open a sub-habit's note (in a new tab with Cmd/Ctrl, or from a panel that closes) or its web page. */
+/**
+ * What was typed or pasted, as a link: `[[…]]` as is, a web address (with or without `https://`),
+ * else the name or path of a note or drawing.
+ */
+export function typedLink(v: string): string {
+  const s = v.trim();
+  if (s.startsWith('[[')) return s;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  if (!/\s/.test(s) && /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s) && !/\.(md|excalidraw|canvas|pdf|png|jpe?g)$/i.test(s)) return `https://${s}`;
+  return `[[${s.replace(/\.md$/i, '')}]]`;
+}
+
+/** Open a sub-habit's note or drawing (in a new tab) or its web page. */
 export function openItemLink(ctx: UiContext, hb: Habit, link: string, newTab = true): void {
   const t = itemLinkTarget(link);
   if ('url' in t) { openExternal(t.url); return; }
   void ctx.app.workspace.openLinkText(t.note, hb.path, newTab);
 }
 
-/** A button that opens the link, for a row; null when the sub-habit has none. `onNote` runs before a note opens (a panel closes to show it). */
+/** A button that opens the link, for a row; null when the sub-habit has none. `onNote` runs before a note or drawing opens (a panel closes to show it). */
 export function itemLinkButton(ctx: UiContext, hb: Habit, item: HabitItem, onNote?: () => void): HTMLElement | null {
   if (!item.link) return null;
-  const web = isWebLink(item.link);
+  const kind = itemLinkKind(item.link);
   return h('button', {
     cls: 'helm-itemlog-link clickable-icon',
-    title: `${web ? 'Open' : 'Open the note'} ${itemLinkLabel(item.link)}`,
-    attr: { 'aria-label': `Open ${item.title}'s ${web ? 'link' : 'note'}` },
-    onClick: (ev) => { ev.stopPropagation(); if (!web) onNote?.(); openItemLink(ctx, hb, item.link!); },
-  }, icon(web ? 'external-link' : 'file-text'));
+    title: `Open the ${KIND_WORD[kind]} ${itemLinkLabel(item.link)}`,
+    attr: { 'aria-label': `Open ${item.title}'s ${KIND_WORD[kind]}` },
+    onClick: (ev) => { ev.stopPropagation(); if (kind !== 'web') onNote?.(); openItemLink(ctx, hb, item.link!); },
+  }, icon(KIND_ICON[kind]));
 }
 
 /**
- * The link menu: open what is linked, link a note, paste a web address, make a new note, or take the
- * link off. `set` gets the new link (null = none); `newNote` makes a note for the sub-habit.
+ * The link menu: open what is linked; link a note, a drawing or a typed link; make a new note or
+ * drawing; or take the link off. `set` gets the new link (null = none); `make` makes a note or a
+ * drawing for the sub-habit.
  */
-export function itemLinkMenu(ctx: UiContext, o: { hb: Habit; title: string; link: string | undefined; ev: MouseEvent; set: (link: string | null) => void; newNote: () => void }): void {
+export function itemLinkMenu(ctx: UiContext, o: { hb: Habit; title: string; link: string | undefined; ev: MouseEvent; set: (link: string | null) => void; make: (kind: 'note' | 'drawing') => void }): void {
   o.ev.preventDefault(); o.ev.stopPropagation();
   const menu = new Menu();
   menu.addItem((i) => i.setTitle(o.link ? `${o.title} → ${itemLinkLabel(o.link)}` : `Link “${o.title}” to…`).setDisabled(true));
-  if (o.link) menu.addItem((i) => i.setTitle(isWebLink(o.link!) ? 'Open the web page' : 'Open the note').setIcon(isWebLink(o.link!) ? 'external-link' : 'file-text').onClick(() => openItemLink(ctx, o.hb, o.link!)));
-  menu.addItem((i) => i.setTitle(o.link ? 'Link another note…' : 'A note in the vault…').setIcon('link').onClick(() => pickNote(ctx, new Set(), (n) => o.set(`[[${n.path.replace(/\.md$/, '')}]]`))));
-  menu.addItem((i) => i.setTitle('New note…').setIcon('file-plus').onClick(() => o.newNote()));
-  menu.addItem((i) => i.setTitle('A web page…').setIcon('globe').onClick(() => askText(ctx, {
-    title: `Web page for ${o.title}`, label: 'Address', placeholder: 'https://…', cta: 'Link',
-    ...(o.link && isWebLink(o.link) ? { value: o.link } : {}),
-    hint: 'A lesson, a tab, a backing track: YouTube, Songsterr, Ultimate Guitar…',
-    onDone: (v) => { if (!v) return; o.set(/^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`); },
+  if (o.link) { const k = itemLinkKind(o.link); menu.addItem((i) => i.setTitle(`Open the ${KIND_WORD[k]}`).setIcon(KIND_ICON[k]).onClick(() => openItemLink(ctx, o.hb, o.link!))); menu.addSeparator(); }
+  menu.addItem((i) => i.setTitle('A note…').setIcon('file-text').onClick(() => pickNote(ctx, new Set(), (n) => o.set(`[[${n.path.replace(/\.md$/, '')}]]`))));
+  menu.addItem((i) => i.setTitle('An Excalidraw drawing…').setIcon('pen-tool').onClick(() => pickDrawing(ctx, new Set(), (d) => o.set(`[[${d.path.replace(/\.md$/, '')}]]`))));
+  menu.addItem((i) => i.setTitle('A web page or a [[link]]…').setIcon('link').onClick(() => askText(ctx, {
+    title: `Link for ${o.title}`, label: 'Link', placeholder: 'https://…, [[Note]] or a note name', cta: 'Link',
+    ...(o.link ? { value: o.link } : {}),
+    hint: 'A web page (YouTube, Songsterr, Ultimate Guitar…), a [[wikilink]], or the name of a note or drawing.',
+    onDone: (v) => {
+      if (!v) return;
+      const link = typedLink(v);
+      const t = itemLinkTarget(link);
+      if ('note' in t && !ctx.index.notePathOfLink(t.note, o.hb.path)) ctx.notify(`No note or drawing “${t.label}” yet: it is made when you open the link.`);
+      o.set(link);
+    },
   })));
-  if (o.link) menu.addItem((i) => i.setTitle('Remove the link').setIcon('unlink').onClick(() => o.set(null)));
+  menu.addSeparator();
+  menu.addItem((i) => i.setTitle('New note…').setIcon('file-plus').onClick(() => o.make('note')));
+  menu.addItem((i) => i.setTitle('New drawing…').setIcon('pencil').onClick(() => o.make('drawing')));
+  if (o.link) { menu.addSeparator(); menu.addItem((i) => i.setTitle('Remove the link').setIcon('unlink').onClick(() => o.set(null))); }
   menu.showAtMouseEvent(o.ev);
 }
 
-/** Ask where a sub-habit's new note goes (its habit's folder in the notes folder by default). */
-export function askItemNote(ctx: UiContext, habitId: string, title: string, onDone: (r: { name?: string; folder?: string }) => void): void {
+/** Ask where a sub-habit's new note or drawing goes (its habit's folder in the notes folder by default). */
+export function askItemNote(ctx: UiContext, habitId: string, title: string, kind: 'note' | 'drawing', onDone: (r: { name?: string; folder?: string }) => void): void {
   askNameAndLocation(ctx, {
-    title: `New note for ${title}`,
+    title: `New ${kind} for ${title}`,
     placeholder: title,
     defaultFolder: ctx.mutations.itemNoteFolder(habitId),
-    preview: (name, folder) => ctx.mutations.itemNotePathFor(habitId, title, name, folder || undefined),
+    preview: (name, folder) => ctx.mutations.itemNotePathFor(habitId, title, name, folder || undefined, kind),
     onDone: (r) => { if (r) onDone(r); },
   });
 }

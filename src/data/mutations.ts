@@ -1940,25 +1940,35 @@ export class Mutations {
     return `${base}/${this.safeName(h.title) || 'Habit'}`;
   }
 
-  /** The path a sub-habit's new note would get (before it is made unique). */
-  itemNotePathFor(habitId: string, title: string, name?: string, folder?: string): string {
+  /** The path a sub-habit's new note (or drawing) would get, before it is made unique. */
+  itemNotePathFor(habitId: string, title: string, name?: string, folder?: string, kind: 'note' | 'drawing' = 'note'): string {
     const dir = (folder ?? this.itemNoteFolder(habitId)).trim().replace(/\/+$/, '');
     const stem = this.safeName(name?.trim() || title).slice(0, 120) || 'Untitled';
-    return `${dir ? dir + '/' : ''}${stem}.md`;
+    return `${dir ? dir + '/' : ''}${stem}${kind === 'drawing' ? '.excalidraw.md' : '.md'}`;
   }
 
   /**
-   * Make a note for a sub-habit (the song's chords, tabs, a lesson link) and link the sub-habit to it.
-   * The note says which habit it belongs to. Returns the note's path.
+   * Make a note or an Excalidraw drawing for a sub-habit (the song's chords and tabs, a fretboard
+   * sketch) and link the sub-habit to it. It names the habit it belongs to. Returns its path.
    */
-  async createItemNote(habitId: string, itemId: string, opts: { name?: string; folder?: string } = {}): Promise<string> {
+  async createItemNote(habitId: string, itemId: string, opts: { name?: string; folder?: string; kind?: 'note' | 'drawing' } = {}): Promise<string> {
     const h = this.habitOrThrow(habitId);
     const item = (h.items ?? []).find((x) => x.id === itemId);
     if (!item) throw new Error('Sub-habit not found');
-    const path = await this.uniqueNotePath(this.itemNotePathFor(habitId, item.title, opts.name, opts.folder));
+    const kind = opts.kind ?? 'note';
+    const want = this.itemNotePathFor(habitId, item.title, opts.name, opts.folder, kind);
     const habitLink = `[[${noteTitle(h.path)}]]`;
-    const content = ['---', `habit: ${yamlScalar(habitLink)}`, `sub_habit: ${item.id}`, `created: ${this.today}`, '---', '', `# ${noteTitle(path)}`, '', `Part of ${habitLink}.`, '', ''].join('\n');
-    await this.put(path, content);
+    let path: string;
+    if (kind === 'drawing') {
+      path = await this.uniquePath(want);
+      const fm = { habit: yamlScalar(habitLink), sub_habit: item.id };
+      const tplPath = this.settings.drawingTemplate.trim();
+      const tpl = tplPath ? await this.d.vault.read(tplPath.endsWith('.md') ? tplPath : `${tplPath}.md`).catch(() => undefined) : undefined;
+      await this.put(path, tpl !== undefined ? setFrontmatter(tpl.split('\n'), { habit: habitLink, sub_habit: item.id }).join('\n') : renderExcalidrawDocument({ frontmatter: fm }));
+    } else {
+      path = await this.uniqueNotePath(want);
+      await this.put(path, ['---', `habit: ${yamlScalar(habitLink)}`, `sub_habit: ${item.id}`, `created: ${this.today}`, '---', '', `# ${noteTitle(path)}`, '', `Part of ${habitLink}.`, '', ''].join('\n'));
+    }
     await this.setHabitItem(habitId, itemId, { link: `[[${path.replace(/\.md$/, '')}]]` });
     return path;
   }

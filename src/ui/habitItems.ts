@@ -10,7 +10,7 @@ import { HABIT_PARTS, type Habit, type HabitItem, type HabitPart, type IsoDate }
 import { partOfTime } from '../core/dailyNote';
 import { dayPartOf, habitItemStats, habitOccurrences, type HabitItemStats } from '../data/habits';
 import { askText } from './fields';
-import { askItemNote, itemLinkButton, itemLinkLabel, itemLinkMenu, openItemLink } from './itemLink';
+import { askItemNote, itemLinkButton, itemLinkIcon, itemLinkLabel, itemLinkMenu, openItemLink } from './itemLink';
 import { h, icon } from './dom';
 import type { UiContext } from './context';
 
@@ -67,7 +67,7 @@ export function itemMenu(ctx: UiContext, hb: Habit, item: HabitItem, date: IsoDa
   const part: Where | undefined = hb.parts?.length ? partFor(ctx, hb, date, now.part) : at;
   const menu = new Menu();
   menu.addItem((i) => i.setTitle(item.title).setDisabled(true));
-  if (item.link) menu.addItem((i) => i.setTitle(`Open ${itemLinkLabel(item.link!)}`).setIcon('file-text').onClick(() => openItemLink(ctx, hb, item.link!)));
+  if (item.link) menu.addItem((i) => i.setTitle(`Open ${itemLinkLabel(item.link!)}`).setIcon(itemLinkIcon(item.link!)).onClick(() => openItemLink(ctx, hb, item.link!)));
   if (now.state !== 'done') menu.addItem((i) => i.setTitle('Practised').setIcon('check').onClick(() => set(ctx, hb, item, date, 'done', part, 1)));
   else menu.addItem((i) => i.setTitle(`One more (×${now.count + 1})`).setIcon('plus').onClick(() => set(ctx, hb, item, date, 'done', part, now.count + 1)));
   menu.addItem((i) => {
@@ -152,7 +152,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
   const linkMenu = (hb: Habit, item: HabitItem, ev: MouseEvent): void => itemLinkMenu(ctx, {
     hb, title: item.title, link: item.link, ev,
     set: (link) => enqueue('Sub-habit link', () => ctx.mutations.setHabitItem(habit.id, item.id, { link })),
-    newNote: () => askItemNote(ctx, habit.id, item.title, (r) => enqueue('New note', () => ctx.mutations.createItemNote(habit.id, item.id, r))),
+    make: (kind) => askItemNote(ctx, habit.id, item.title, kind, (r) => enqueue(`New ${kind}`, () => ctx.mutations.createItemNote(habit.id, item.id, { ...r, kind }))),
   });
   const moveTo = (item: HabitItem, group: string | null): void => enqueue('Sub-habit group', () => ctx.mutations.setHabitItem(habit.id, item.id, { group }));
   const newGroup = (then?: (name: string) => void): void => askText(ctx, {
@@ -223,7 +223,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
           icon(on ? 'check-square' : 'square'),
           h('span', { cls: 'helm-itemlog-title' }, h('span', { text: st.item.title })),
           h('span', { cls: 'helm-itemlog-sub', text: `${since(st)} · ${st.count30}× in 30 days` })),
-        h('button', { cls: ['helm-itemlog-setlink', 'clickable-icon', !!st.item.link && 'is-linked'], title: st.item.link ? `Linked to ${itemLinkLabel(st.item.link)}: open, change or remove` : 'Link it to a note or a web page', attr: { 'aria-label': `Link ${st.item.title}` }, onClick: (ev) => linkMenu(hb, st.item, ev) }, icon(st.item.link ? 'file-text' : 'link')),
+        h('button', { cls: ['helm-itemlog-setlink', 'clickable-icon', !!st.item.link && 'is-linked'], title: st.item.link ? `Linked to ${itemLinkLabel(st.item.link)}: open, change or remove` : 'Link it to a note, a drawing or a web page', attr: { 'aria-label': `Link ${st.item.title}` }, onClick: (ev) => linkMenu(hb, st.item, ev) }, icon(st.item.link ? itemLinkIcon(st.item.link) : 'link')),
         h('button', { cls: 'helm-itemlog-move clickable-icon', title: st.item.group ? `In ${st.item.group}: move to another group` : 'Put it in a group', attr: { 'aria-label': `Move ${st.item.title}` }, onClick: (ev) => moveMenu(hb, st.item, ev) }, icon('folder-input')));
     };
     const byGroup = (rows: HabitItemStats[], row: (st: HabitItemStats) => HTMLElement, withMenu: boolean): HTMLElement[] =>

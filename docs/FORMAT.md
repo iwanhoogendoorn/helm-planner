@@ -187,9 +187,10 @@ items_plan: [hsi-a1b2c3, hsi-0a0b0c]
 ```
 
 A sub-habit can **link** to what it is about, last on its entry: a note in the
-vault (`🔗 [[Songs/Ode to Joy]]`, chords, tabs, what to work on) or a web page
-(`🔗 https://…`, a lesson, a backing track). A note made from Helm goes to
-`<notes folder>/<habit>/<song>.md` and names its habit in `habit:`:
+vault (`🔗 [[Songs/Ode to Joy]]`, chords, tabs, what to work on), an Excalidraw
+drawing (`🔗 [[Songs/Ode to Joy.excalidraw]]`) or a web page (`🔗 https://…`, a
+lesson, a backing track). A note or drawing made from Helm goes to
+`<notes folder>/<habit>/<song>.md` (`.excalidraw.md`) and names its habit in `habit:`:
 
 ```yaml
 items:

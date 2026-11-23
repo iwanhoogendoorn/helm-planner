@@ -246,6 +246,11 @@ describe('sub-habit links: the song or exercise it is about', () => {
     expect(await s.vault.read(path)).toContain('habit: "[[Guitar]]"\nsub_habit: hsi-wonder');
     expect(await note()).toContain('Wonderwall 🆔 hsi-wonder 🔗 [[Notes/Guitar/Wonderwall]]');
     expect(await s.m.createItemNote('hab-guitar', 'hsi-wonder')).toBe('Notes/Guitar/Wonderwall 2.md'); // never over an existing note
+    const drawing = await s.m.createItemNote('hab-guitar', 'hsi-black', { kind: 'drawing' });
+    expect(drawing).toBe('Notes/Guitar/Blackbird (Beatles).excalidraw.md');
+    expect(await s.vault.read(drawing)).toContain('excalidraw-plugin: parsed');
+    expect(await s.vault.read(drawing)).toContain('sub_habit: hsi-black');
+    expect(await note()).toContain('Blackbird (Beatles) 🆔 hsi-black 📂 G major 🔗 [[Notes/Guitar/Blackbird (Beatles).excalidraw]]');
     await s.m.setHabitItem('hab-guitar', 'hsi-black', { link: null });
     expect(await note()).toContain('Blackbird (Beatles) 🆔 hsi-black 📂 G major\n');
   });
@@ -263,5 +268,20 @@ describe('sub-habit links: the song or exercise it is about', () => {
     expect((await call('PATCH', 'habits/hab-guitar/items/hsi-wonder', { link: 3 })).status).toBe(400);
     r = await call('PATCH', 'habits/hab-guitar/items/hsi-wonder', { link: null });
     expect(r.body.habit.items.find((i: any) => i.id === 'hsi-wonder').link).toBeNull();
+  });
+});
+
+describe('sub-habit links: what is typed', () => {
+  it('a web address, a [[link]], or a note or drawing name', async () => {
+    const { typedLink, itemLinkKind } = await import('../../src/ui/itemLink');
+    expect(typedLink('youtu.be/6hzrDeceEKc')).toBe('https://youtu.be/6hzrDeceEKc');
+    expect(typedLink('https://www.songsterr.com/a/x')).toBe('https://www.songsterr.com/a/x');
+    expect(typedLink('[[Ode to Joy]]')).toBe('[[Ode to Joy]]');
+    expect(typedLink('Ode To Joy - Guitar.excalidraw')).toBe('[[Ode To Joy - Guitar.excalidraw]]');
+    expect(typedLink('Tabs.excalidraw')).toBe('[[Tabs.excalidraw]]');
+    expect(typedLink('Songs/Blackbird.md')).toBe('[[Songs/Blackbird]]');
+    expect(itemLinkKind('[[Ode To Joy - Guitar.excalidraw]]')).toBe('drawing');
+    expect(itemLinkKind('[[Ode to Joy]]')).toBe('note');
+    expect(itemLinkKind('https://youtu.be/x')).toBe('web');
   });
 });
