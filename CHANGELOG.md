@@ -18,6 +18,10 @@
   drag it up or down, or onto another group (or its header) to move it there
   too; Alt+↑/↓ on a song's name moves it within its group. The order is the
   habit's, so the habit form, the plan and the chips follow it.
+- **Log practice scrolls in one place.** The panel used to scroll as a whole and
+  the song list inside it too. Now the header (counts, session, plan) and the
+  buttons stay put and only the list scrolls, up to the window's height; the
+  list keeps its scroll position when you tap + or −.
 - **API:** items carry `links` (each with its kind, a label, a URL to open and
   its vault path) and the first flat as `link`, `linkUrl`, `linkPath`;
   `PATCH /habits/:id/items/:itemId` takes `addLink`, `removeLink`, `links` or `link`.

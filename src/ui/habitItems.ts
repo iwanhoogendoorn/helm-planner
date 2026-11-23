@@ -110,6 +110,8 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
   m.titleEl.setText(`Log practice · ${habit.title}`);
   const root = m.contentEl;
   root.addClass('helm-modal', 'helm-itemlog');
+  // One scroll area: the header and the buttons stay put, the song list scrolls between them.
+  m.modalEl?.addClass('helm-itemlog-modal');
   // A habit with parts logs into one of them; a once-a-day habit into the session (part of the day)
   // it is practised in, today the one it is now, so songs played tonight sit under an Evening line.
   const parted = !!habit.parts?.length;
@@ -240,6 +242,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
     menu.showAtMouseEvent(ev);
   };
 
+  let sameMode = mode;
   const draw = (): void => {
     const hb = freshHabit(ctx, habit);
     const stats = habitItemStats(hb, ctx.index.snapshot.itemCompletions, ctx.today());
@@ -334,7 +337,11 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
           h('span', { cls: 'helm-spacer' }),
           h('button', { cls: 'helm-btn mod-cta', text: 'Done', onClick: () => m.close() })));
     }
+    const scrolled = root.querySelector('.helm-itemlog-list')?.scrollTop ?? 0;
     root.replaceChildren(...[head, ...body].filter((x): x is HTMLElement => x !== null));
+    const list = root.querySelector<HTMLElement>('.helm-itemlog-list');
+    if (list && scrolled && sameMode === mode) list.scrollTop = scrolled;
+    sameMode = mode;
   };
   draw();
   m.open();

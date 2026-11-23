@@ -1298,7 +1298,14 @@ button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 .helm-itemlog .helm-itemlog-plancta:hover { color: var(--text-normal); border-color: var(--interactive-accent); }
 .helm-itemlog-head.is-met { color: var(--color-green); }
 .helm-itemlog .helm-segmented { margin-bottom: 10px; }
-.helm-itemlog-list { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
+/* Log practice: the panel is as tall as it needs, up to the window; only the song list scrolls. */
+.modal.helm-itemlog-modal { display: flex; flex-direction: column; max-height: min(88vh, 900px); overflow: hidden; }
+.modal.helm-itemlog-modal > .modal-header, .modal.helm-itemlog-modal > .modal-title { flex: none; }
+.modal.helm-itemlog-modal > .modal-content.helm-itemlog { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.helm-itemlog > * { flex: none; }
+.helm-itemlog > .helm-itemlog-list { flex: 0 1 auto; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 2px 4px; margin: 0 -2px; }
+.helm-itemlog-list { display: flex; flex-direction: column; gap: 4px; }
+.helm-itemlog-list > .helm-itemlog-row { flex: none; }
 .helm-itemlog-row { display: flex; align-items: center; gap: 10px; padding: 4px 6px; border-radius: var(--radius-m); border: 1px solid var(--background-modifier-border); }
 .helm-itemlog-row.is-done { background: rgba(var(--color-green-rgb), 0.08); border-color: rgba(var(--color-green-rgb), 0.4); }
 .helm-itemlog .helm-itemlog-name { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; text-align: left; height: auto; padding: 4px 2px; background: transparent; border: none; box-shadow: none; cursor: pointer; }
