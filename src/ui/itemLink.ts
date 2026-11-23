@@ -1,6 +1,6 @@
 /**
- * A sub-habit's link: the song or exercise it is about, a note in the vault (chords, tabs, what to
- * work on) or a web page (a lesson, a backing track). The Log practice rows show it as a button; the
+ * A sub-habit's links: the song or exercise it is about, as many as you like: notes in the vault
+ * (chords, tabs, what to work on), Excalidraw drawings, web pages (a lesson, a backing track). The Log practice rows show it as a button; the
  * habit form and Plan mode set it.
  */
 import { Menu } from 'obsidian';
@@ -51,46 +51,61 @@ export function openItemLink(ctx: UiContext, hb: Habit, link: string, newTab = t
   void ctx.app.workspace.openLinkText(t.note, hb.path, newTab);
 }
 
-/** A button that opens the link, for a row; null when the sub-habit has none. `onNote` runs before a note or drawing opens (a panel closes to show it). */
-export function itemLinkButton(ctx: UiContext, hb: Habit, item: HabitItem, onNote?: () => void): HTMLElement | null {
-  if (!item.link) return null;
-  const kind = itemLinkKind(item.link);
-  return h('button', {
-    cls: 'helm-itemlog-link clickable-icon',
-    title: `Open the ${KIND_WORD[kind]} ${itemLinkLabel(item.link)}`,
-    attr: { 'aria-label': `Open ${item.title}'s ${KIND_WORD[kind]}` },
-    onClick: (ev) => { ev.stopPropagation(); if (kind !== 'web') onNote?.(); openItemLink(ctx, hb, item.link!); },
-  }, icon(KIND_ICON[kind]));
+/** The open buttons for a row, one per link; null when the sub-habit has none. `onNote` runs before a note or drawing opens (a panel closes to show it). */
+export function itemLinkButtons(ctx: UiContext, hb: Habit, item: HabitItem, onNote?: () => void): HTMLElement | null {
+  const links = item.links ?? [];
+  if (links.length === 0) return null;
+  return h('span', { cls: 'helm-itemlog-links' }, ...links.map((link) => {
+    const kind = itemLinkKind(link);
+    return h('button', {
+      cls: 'helm-itemlog-link clickable-icon',
+      title: `Open the ${KIND_WORD[kind]} ${itemLinkLabel(link)}`,
+      attr: { 'aria-label': `Open ${item.title}'s ${KIND_WORD[kind]} ${itemLinkLabel(link)}` },
+      onClick: (ev) => { ev.stopPropagation(); if (kind !== 'web') onNote?.(); openItemLink(ctx, hb, link); },
+    }, icon(KIND_ICON[kind]));
+  }));
+}
+
+/** The menu items that open each of a sub-habit's links. */
+export function addOpenItems(menu: Menu, ctx: UiContext, hb: Habit, links: string[]): void {
+  for (const l of links) menu.addItem((i) => i.setTitle(`Open ${itemLinkLabel(l)}`).setIcon(itemLinkIcon(l)).onClick(() => openItemLink(ctx, hb, l)));
 }
 
 /**
- * The link menu: open what is linked; link a note, a drawing or a typed link; make a new note or
- * drawing; or take the link off. `set` gets the new link (null = none); `make` makes a note or a
- * drawing for the sub-habit.
+ * The links menu: open each link; add a note, a drawing or a typed link; make a new note or
+ * drawing; or take one off. A sub-habit keeps as many links as you like.
  */
-export function itemLinkMenu(ctx: UiContext, o: { hb: Habit; title: string; link: string | undefined; ev: MouseEvent; set: (link: string | null) => void; make: (kind: 'note' | 'drawing') => void }): void {
+export function itemLinkMenu(ctx: UiContext, o: { hb: Habit; title: string; links: string[]; ev: MouseEvent; add: (link: string) => void; remove: (link: string) => void; make: (kind: 'note' | 'drawing') => void }): void {
   o.ev.preventDefault(); o.ev.stopPropagation();
   const menu = new Menu();
-  menu.addItem((i) => i.setTitle(o.link ? `${o.title} → ${itemLinkLabel(o.link)}` : `Link “${o.title}” to…`).setDisabled(true));
-  if (o.link) { const k = itemLinkKind(o.link); menu.addItem((i) => i.setTitle(`Open the ${KIND_WORD[k]}`).setIcon(KIND_ICON[k]).onClick(() => openItemLink(ctx, o.hb, o.link!))); menu.addSeparator(); }
-  menu.addItem((i) => i.setTitle('A note…').setIcon('file-text').onClick(() => pickNote(ctx, new Set(), (n) => o.set(`[[${n.path.replace(/\.md$/, '')}]]`))));
-  menu.addItem((i) => i.setTitle('An Excalidraw drawing…').setIcon('pen-tool').onClick(() => pickDrawing(ctx, new Set(), (d) => o.set(`[[${d.path.replace(/\.md$/, '')}]]`))));
-  menu.addItem((i) => i.setTitle('A web page or a [[link]]…').setIcon('link').onClick(() => askText(ctx, {
-    title: `Link for ${o.title}`, label: 'Link', placeholder: 'https://…, [[Note]] or a note name', cta: 'Link',
-    ...(o.link ? { value: o.link } : {}),
+  menu.addItem((i) => i.setTitle(o.links.length ? `${o.title}: ${o.links.length} link${o.links.length === 1 ? '' : 's'}` : `Link “${o.title}” to…`).setDisabled(true));
+  if (o.links.length) { addOpenItems(menu, ctx, o.hb, o.links); menu.addSeparator(); }
+  const add = (link: string): void => { if (o.links.includes(link)) { ctx.notify(`${itemLinkLabel(link)} is already linked.`); return; } o.add(link); };
+  menu.addItem((i) => i.setTitle('Add a note…').setIcon('file-text').onClick(() => pickNote(ctx, new Set(), (n) => add(`[[${n.path.replace(/\.md$/, '')}]]`))));
+  menu.addItem((i) => i.setTitle('Add an Excalidraw drawing…').setIcon('pen-tool').onClick(() => pickDrawing(ctx, new Set(), (d) => add(`[[${d.path.replace(/\.md$/, '')}]]`))));
+  menu.addItem((i) => i.setTitle('Add a web page or a [[link]]…').setIcon('link').onClick(() => askText(ctx, {
+    title: `Link for ${o.title}`, label: 'Link', placeholder: 'https://…, [[Note]] or a note name', cta: 'Add',
     hint: 'A web page (YouTube, Songsterr, Ultimate Guitar…), a [[wikilink]], or the name of a note or drawing.',
     onDone: (v) => {
       if (!v) return;
       const link = typedLink(v);
       const t = itemLinkTarget(link);
       if ('note' in t && !ctx.index.notePathOfLink(t.note, o.hb.path)) ctx.notify(`No note or drawing “${t.label}” yet: it is made when you open the link.`);
-      o.set(link);
+      add(link);
     },
   })));
   menu.addSeparator();
   menu.addItem((i) => i.setTitle('New note…').setIcon('file-plus').onClick(() => o.make('note')));
   menu.addItem((i) => i.setTitle('New drawing…').setIcon('pencil').onClick(() => o.make('drawing')));
-  if (o.link) { menu.addSeparator(); menu.addItem((i) => i.setTitle('Remove the link').setIcon('unlink').onClick(() => o.set(null))); }
+  if (o.links.length) {
+    menu.addSeparator();
+    if (o.links.length === 1) menu.addItem((i) => i.setTitle(`Remove ${itemLinkLabel(o.links[0]!)}`).setIcon('unlink').onClick(() => o.remove(o.links[0]!)));
+    else menu.addItem((i) => {
+      i.setTitle('Remove a link').setIcon('unlink');
+      const sub = (i as unknown as { setSubmenu: () => Menu }).setSubmenu();
+      for (const l of o.links) sub.addItem((j) => j.setTitle(itemLinkLabel(l)).setIcon(itemLinkIcon(l)).onClick(() => o.remove(l)));
+    });
+  }
   menu.showAtMouseEvent(o.ev);
 }
 

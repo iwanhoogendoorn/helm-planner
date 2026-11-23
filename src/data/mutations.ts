@@ -1914,7 +1914,7 @@ export class Mutations {
   }
 
   /** Rename, retire or bring back a sub-habit. Its lines in past notes keep their id, so history follows it. */
-  async setHabitItem(habitId: string, itemId: string, fields: { title?: string; retired?: boolean; group?: string | null; link?: string | null }): Promise<void> {
+  async setHabitItem(habitId: string, itemId: string, fields: { title?: string; retired?: boolean; group?: string | null; links?: string[]; addLink?: string; removeLink?: string }): Promise<void> {
     const h = this.habitOrThrow(habitId);
     const items = [...(h.items ?? [])];
     const i = items.findIndex((x) => x.id === itemId);
@@ -1922,8 +1922,12 @@ export class Mutations {
     const cur = items[i]!;
     const title = fields.title?.replace(/[🆔📂🔗]/gu, '').trim();
     const group = fields.group === undefined ? cur.group : fields.group === null ? undefined : cleanGroup(fields.group) || undefined;
-    const link = fields.link === undefined ? cur.link : fields.link === null ? undefined : cleanItemLink(fields.link) || undefined;
-    const next: HabitItem = { id: cur.id, title: title || cur.title, ...((fields.retired ?? cur.retired) ? { retired: true } : {}), ...(group ? { group } : {}), ...(link ? { link } : {}) };
+    // Links: `links` replaces the list, `addLink` appends one (once), `removeLink` takes one off.
+    let links = (fields.links ?? cur.links ?? []).map(cleanItemLink).filter(Boolean);
+    if (fields.addLink !== undefined) { const a = cleanItemLink(fields.addLink); if (!a) throw new Error('Nothing to link'); links.push(a); }
+    if (fields.removeLink !== undefined) { const r = cleanItemLink(fields.removeLink); links = links.filter((x) => x !== r); }
+    links = [...new Set(links)];
+    const next: HabitItem = { id: cur.id, title: title || cur.title, ...((fields.retired ?? cur.retired) ? { retired: true } : {}), ...(group ? { group } : {}), ...(links.length ? { links } : {}) };
     items.splice(i, 1);
     if (!!next.retired === !!cur.retired) items.splice(i, 0, next);
     else if (next.retired) items.push(next);
@@ -1969,7 +1973,7 @@ export class Mutations {
       path = await this.uniqueNotePath(want);
       await this.put(path, ['---', `habit: ${yamlScalar(habitLink)}`, `sub_habit: ${item.id}`, `created: ${this.today}`, '---', '', `# ${noteTitle(path)}`, '', `Part of ${habitLink}.`, '', ''].join('\n'));
     }
-    await this.setHabitItem(habitId, itemId, { link: `[[${path.replace(/\.md$/, '')}]]` });
+    await this.setHabitItem(habitId, itemId, { addLink: `[[${path.replace(/\.md$/, '')}]]` });
     return path;
   }
 

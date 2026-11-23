@@ -186,15 +186,16 @@ items_plan_date: 2026-11-19
 items_plan: [hsi-a1b2c3, hsi-0a0b0c]
 ```
 
-A sub-habit can **link** to what it is about, last on its entry: a note in the
-vault (`🔗 [[Songs/Ode to Joy]]`, chords, tabs, what to work on), an Excalidraw
-drawing (`🔗 [[Songs/Ode to Joy.excalidraw]]`) or a web page (`🔗 https://…`, a
-lesson, a backing track). A note or drawing made from Helm goes to
-`<notes folder>/<habit>/<song>.md` (`.excalidraw.md`) and names its habit in `habit:`:
+A sub-habit can **link** to what it is about, as many times as you like, last on
+its entry: notes in the vault (`🔗 [[Songs/Ode to Joy]]`, chords, tabs, what to
+work on), Excalidraw drawings (`🔗 [[Songs/Ode to Joy.excalidraw]]`) and web
+pages (`🔗 https://…`, a lesson, a backing track), in the order shown. A note or
+drawing made from Helm goes to `<notes folder>/<habit>/<song>.md`
+(`.excalidraw.md`) and names its habit in `habit:`:
 
 ```yaml
 items:
-  - Ode to Joy 🆔 hsi-0d0e0f 📂 C major 🔗 [[Notes/Guitar Practice/Ode to Joy]]
+  - Ode to Joy 🆔 hsi-0d0e0f 📂 C major 🔗 [[Notes/Guitar Practice/Ode to Joy]] 🔗 [[Songs/Ode to Joy.excalidraw]] 🔗 https://youtu.be/…
   - Wonderwall 🆔 hsi-a1b2c3 🔗 https://www.youtube.com/watch?v=6hzrDeceEKc
 ```
 

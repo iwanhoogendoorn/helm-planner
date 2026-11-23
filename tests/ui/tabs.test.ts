@@ -912,7 +912,7 @@ describe('Today tab', () => {
     expect(note).toContain('items_retired:\n  - Smoke 🆔 hsi-smoke');
   });
 
-  it('sub-habit links: the form links a web page, a drawing and a new note; Log practice opens them', async () => {
+  it('sub-habit links: one song gets a drawing, a web page and a new note; Log practice opens each', async () => {
     const GUITAR = '---\ntitle: Guitar\ntype: habit\nid: hab-guitar\nschedule: every day\nactive: true\nitems:\n  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n  - Ode to Joy 🆔 hsi-ode\n---\n';
     const { ctx, vault } = await ctxFor({ '02 PROJECTS/Habits/Guitar.md': GUITAR, 'Guitar/Ode To Joy - Guitar.excalidraw.md': '---\nexcalidraw-plugin: parsed\n---\n# Drawing\n' });
     const habitNote = (): Promise<string> => vault.read('02 PROJECTS/Habits/Guitar.md');
@@ -920,46 +920,54 @@ describe('Today tab', () => {
     const form = Modal.last!.contentEl;
     const linkBtn = (name: string): HTMLElement => [...form.querySelectorAll<HTMLElement>('.helm-subhabit-row')].find((r) => r.querySelector<HTMLInputElement>('input')!.value === name)!.querySelector<HTMLElement>('.helm-subhabit-link')!;
     const pick = (title: string): void => Menu.last!.items.find((i) => i.title === title)!.click!();
-    // Wonderwall: a web page.
-    click(linkBtn('Wonderwall'));
-    pick('A web page or a [[link]]…');
+    // Ode to Joy: the Excalidraw drawing already in the vault (the note picker leaves drawings out)…
+    click(linkBtn('Ode to Joy'));
+    pick('Add an Excalidraw drawing…');
+    const picker = Modal.last as unknown as { getItems: () => { path: string }[]; onChooseItem: (d: unknown) => void };
+    picker.onChooseItem(picker.getItems().find((d) => d.path === 'Guitar/Ode To Joy - Guitar.excalidraw.md')!);
+    expect(linkBtn('Ode to Joy').textContent).toBe('Ode To Joy - Guitar');
+    // …a web page…
+    click(linkBtn('Ode to Joy'));
+    pick('Add a web page or a [[link]]…');
     const ask = Modal.last!.contentEl;
     ask.querySelector<HTMLInputElement>('input')!.value = 'youtu.be/6hzrDeceEKc';
-    click([...ask.querySelectorAll('button')].find((b) => b.textContent === 'Link'));
-    expect(linkBtn('Wonderwall').textContent).toBe('youtu.be');
-    // Blackbird: a new note, made on save.
-    click(linkBtn('Blackbird'));
+    click([...ask.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
+    // …and a new note, made on save.
+    click(linkBtn('Ode to Joy'));
+    expect(Menu.last!.items.map((i) => i.title)).toEqual(expect.arrayContaining(['Ode to Joy: 2 links', 'Open Ode To Joy - Guitar', 'Open youtu.be', 'Remove a link']));
     pick('New note…');
     const where = Modal.last!.contentEl;
-    expect(where.querySelector('.helm-path-preview')!.textContent).toBe('Notes/Guitar/Blackbird.md');
+    expect(where.querySelector('.helm-path-preview')!.textContent).toBe('Notes/Guitar/Ode to Joy.md');
     click([...where.querySelectorAll('button')].find((b) => b.textContent === 'Create'));
-    expect(linkBtn('Blackbird').textContent).toBe('new note');
-    // Ode to Joy: an Excalidraw drawing already in the vault (the note picker leaves drawings out).
-    click(linkBtn('Ode to Joy'));
-    pick('An Excalidraw drawing…');
-    const picker = Modal.last as unknown as { getItems: () => { path: string }[]; onChooseItem: (d: unknown) => void };
-    const drawing = picker.getItems().find((d) => d.path === 'Guitar/Ode To Joy - Guitar.excalidraw.md')!;
-    picker.onChooseItem(drawing);
-    expect(linkBtn('Ode to Joy').textContent).toBe('Ode To Joy - Guitar');
-    expect(linkBtn('Ode to Joy').querySelector('[data-icon]')!.getAttribute('data-icon')).toBe('pen-tool');
+    expect(linkBtn('Ode to Joy').textContent).toBe('3 links');
+    // Wonderwall: a link added, then taken off again before saving.
+    click(linkBtn('Wonderwall'));
+    pick('Add a web page or a [[link]]…');
+    Modal.last!.contentEl.querySelector<HTMLInputElement>('input')!.value = 'https://example.com/wonderwall';
+    click([...Modal.last!.contentEl.querySelectorAll('button')].find((b) => b.textContent === 'Add'));
+    click(linkBtn('Wonderwall'));
+    pick('Remove example.com');
+    expect(linkBtn('Wonderwall').textContent).toBe('');
     click([...form.querySelectorAll('button')].find((b) => b.textContent === 'Save'));
     await flush(); await flush(); await flush();
-    expect(await habitNote()).toContain('  - Wonderwall 🆔 hsi-wonder 🔗 https://youtu.be/6hzrDeceEKc\n  - Blackbird 🆔 hsi-black 🔗 [[Notes/Guitar/Blackbird]]\n  - Ode to Joy 🆔 hsi-ode 🔗 [[Guitar/Ode To Joy - Guitar.excalidraw]]\n');
-    expect(await vault.read('Notes/Guitar/Blackbird.md')).toContain('# Blackbird');
-    // Log practice: a button per linked song; the note opens (and the panel steps aside), the web page opens outside.
+    expect(await habitNote()).toContain('  - Wonderwall 🆔 hsi-wonder\n  - Blackbird 🆔 hsi-black\n  - Ode to Joy 🆔 hsi-ode 🔗 [[Guitar/Ode To Joy - Guitar.excalidraw]] 🔗 https://youtu.be/6hzrDeceEKc 🔗 [[Notes/Guitar/Ode to Joy]]\n');
+    expect(await vault.read('Notes/Guitar/Ode to Joy.md')).toContain('# Ode to Joy');
+    // Log practice: a button per link; a note or drawing opens (the panel steps aside), the web page opens outside.
     const tile = [...render((r) => renderToday(ctx, r, { date: TODAY, collapsed: new Map() })).querySelectorAll<HTMLElement>('.helm-habit-tile')].find((e) => e.textContent?.includes('Guitar'))!;
     click(tile.querySelector('.helm-subhabit-summary'));
     const panel = Modal.last!;
     const opened = vi.fn();
     (ctx.app as unknown as { workspace: unknown }).workspace = { openLinkText: opened };
     const web = vi.spyOn(window, 'open').mockImplementation(() => null);
-    const rowLink = (name: string): HTMLElement => [...panel.contentEl.querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes(name))!.querySelector<HTMLElement>('.helm-itemlog-link')!;
-    click(rowLink('Wonderwall'));
+    const buttons = [...[...panel.contentEl.querySelectorAll<HTMLElement>('.helm-itemlog-row')].find((r) => r.textContent?.includes('Ode to Joy'))!.querySelectorAll<HTMLElement>('.helm-itemlog-link')];
+    expect(buttons.map((b) => b.querySelector('[data-icon]')!.getAttribute('data-icon'))).toEqual(['pen-tool', 'external-link', 'file-text']);
+    click(buttons[1]);
     expect(web).toHaveBeenCalledWith('https://youtu.be/6hzrDeceEKc', '_blank', 'noopener');
-    click(rowLink('Blackbird'));
-    expect(opened).toHaveBeenCalledWith('Notes/Guitar/Blackbird', '02 PROJECTS/Habits/Guitar.md', true);
-    click(rowLink('Ode to Joy'));
+    click(buttons[0]);
     expect(opened).toHaveBeenCalledWith('Guitar/Ode To Joy - Guitar.excalidraw', '02 PROJECTS/Habits/Guitar.md', true);
+    click(buttons[2]);
+    expect(opened).toHaveBeenCalledWith('Notes/Guitar/Ode to Joy', '02 PROJECTS/Habits/Guitar.md', true);
+    expect([...panel.contentEl.querySelectorAll('.helm-itemlog-row')].find((r) => r.textContent?.includes('Wonderwall'))!.querySelector('.helm-itemlog-link')).toBeNull();
     web.mockRestore();
   });
 

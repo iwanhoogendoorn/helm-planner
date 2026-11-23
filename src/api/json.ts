@@ -246,18 +246,21 @@ export function habitJson(h: Habit, c: Ctx, stats?: HabitStats): Record<string, 
   };
 }
 
-/**
- * A sub-habit's link for a client: `link` as stored, `linkUrl` a web address or an obsidian:// URL that
- * opens the note, `linkPath` the note's vault path when it exists (null when it does not yet).
- */
-export function itemLinkJson(item: HabitItem, h: Habit, c: Ctx): { link: string | null; linkUrl: string | null; linkPath: string | null } {
-  if (!item.link) return { link: null, linkUrl: null, linkPath: null };
-  const t = itemLinkTarget(item.link);
-  if ('url' in t) return { link: item.link, linkUrl: t.url, linkPath: null };
+/** One link of a sub-habit for a client: as stored, its kind, a label, a URL to open (web or obsidian://), and the vault path when it exists. */
+export function itemLinkEntry(link: string, h: Habit, c: Ctx): { link: string; kind: 'web' | 'note' | 'drawing'; label: string; url: string | null; path: string | null } {
+  const t = itemLinkTarget(link);
+  if ('url' in t) { let label = t.url; try { label = new URL(t.url).hostname.replace(/^www\./, ''); } catch { /* as typed */ } return { link, kind: 'web', label, url: t.url, path: null }; }
   const path = c.index.notePathOfLink(t.note, h.path) ?? null;
   const file = path ?? t.note;
   const url = c.vaultName ? `obsidian://open?vault=${encodeURIComponent(c.vaultName)}&file=${encodeURIComponent(file.replace(/\.md$/, ''))}` : null;
-  return { link: item.link, linkUrl: url, linkPath: path };
+  return { link, kind: /\.excalidraw$/i.test(t.note) ? 'drawing' : 'note', label: t.label.replace(/\.excalidraw$/i, ''), url, path };
+}
+
+/** A sub-habit's links (`links`), with the first also as `link` / `linkUrl` / `linkPath` for a client that shows one. */
+export function itemLinkJson(item: HabitItem, h: Habit, c: Ctx): { links: ReturnType<typeof itemLinkEntry>[]; link: string | null; linkUrl: string | null; linkPath: string | null } {
+  const links = (item.links ?? []).map((l) => itemLinkEntry(l, h, c));
+  const first = links[0];
+  return { links, link: first?.link ?? null, linkUrl: first?.url ?? null, linkPath: first?.path ?? null };
 }
 
 /** A habit's sub-habits with their numbers, how many make a day, and which one is up next. */

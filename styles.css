@@ -1290,6 +1290,9 @@ button.helm-subhabit-summary.is-met { color: var(--text-normal); }
 .helm-itemlog .helm-itemlog-setlink, .helm-itemlog .helm-itemlog-link { flex: none; color: var(--text-muted); }
 .helm-itemlog .helm-itemlog-setlink.is-linked, .helm-itemlog .helm-itemlog-link { color: var(--text-accent); }
 .helm-itemlog .helm-itemlog-link:hover { color: var(--text-accent-hover); }
+.helm-itemlog-links { flex: none; display: inline-flex; align-items: center; gap: 0; }
+.helm-itemlog .helm-itemlog-setlink { display: inline-flex; align-items: center; gap: 2px; }
+.helm-itemlog-setlink-count { font-size: var(--font-ui-smaller); font-weight: 600; }
 .helm-itemlog .helm-itemlog-rest, .helm-itemlog .helm-itemlog-newgroup { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; margin-top: 6px; }
 .helm-itemlog .helm-itemlog-plancta { width: 100%; display: flex; gap: 8px; align-items: center; justify-content: flex-start; margin-bottom: 10px; padding: 8px 10px; height: auto; border: 1px dashed var(--background-modifier-border-hover); background: transparent; box-shadow: none; color: var(--text-muted); }
 .helm-itemlog .helm-itemlog-plancta:hover { color: var(--text-normal); border-color: var(--interactive-accent); }

@@ -310,11 +310,13 @@ PUT    /habits/:id/plan           { date?, items: [ids] }       the day's plan (
 PUT    /habits/:id/items          { order: [ids] }              the sub-habits' order (since 1.59.0; ids left out stay after)
 ```
 
-**Links** (since 1.62.0). Each item carries `link` (as stored: `"[[Songs/Ode to Joy]]"` or a web
-address, else null), `linkUrl` (the web address, or an `obsidian://open?vault=…&file=…` URL for a
-note) and `linkPath` (the note's vault path when it exists, else null). Day rows carry `link` and
-`linkUrl`. `PATCH /habits/:id/items/:itemId { link: "Ode to Joy" | "[[…]]" | "https://…" | null }`
-sets or removes it (a bare name or path gets the brackets).
+**Links** (since 1.62.0). Each item carries `links`, in order: `[ { link, kind: "note" | "drawing" |
+"web", label, url, path } ]`, where `link` is as stored (`"[[Songs/Ode to Joy]]"` or a web address), `url`
+the web address or an `obsidian://open?vault=…&file=…` URL for a note or drawing, and `path` its vault path
+when it exists (else null). The first is also sent flat as `link`, `linkUrl`, `linkPath` (null when there
+are none). Day rows carry `links`, `link` and `linkUrl`. `PATCH /habits/:id/items/:itemId` takes
+`{ addLink }` (appends; once), `{ removeLink }`, `{ links: [..] }` (replaces) or `{ link: … | null }` (one,
+or none). A bare name or path gets the brackets.
 
 `suggestedItem` is still sent for older clients; Helm itself no longer shows an "up next". The habit's own line follows the `itemsPerDay` rule. 400 for an
 unknown or retired item, or a count below 1.

@@ -666,11 +666,14 @@ async function habitItemsRoute(h: Habit, itemId: string | undefined, method: str
   if (itemId === undefined) return undefined;
   if (!(h.items ?? []).some((x) => x.id === itemId)) return missing(`${h.title} has no sub-habit ${itemId}`);
   if (method === 'PATCH' || method === 'PUT') {
-    const fields: { title?: string; retired?: boolean; group?: string | null; link?: string | null } = {};
+    const fields: { title?: string; retired?: boolean; group?: string | null; links?: string[]; addLink?: string; removeLink?: string } = {};
     if (has(body, 'title')) { const t = str(body['title']); if (!t) return bad('title must not be empty'); fields.title = t; }
     if (has(body, 'group')) { const g = body['group']; if (g !== null && typeof g !== 'string') return bad('group must be a name or null'); fields.group = g === null || g.trim() === '' ? null : g; }
     if (has(body, 'retired')) { if (typeof body['retired'] !== 'boolean') return bad('retired must be true or false'); fields.retired = body['retired']; }
-    if (has(body, 'link')) { const l = body['link']; if (l !== null && typeof l !== 'string') return bad('link must be a note name, a [[link]], a web address or null'); fields.link = l === null || l.trim() === '' ? null : l; }
+    if (has(body, 'links')) { const l = body['links']; if (l !== null && (!Array.isArray(l) || l.some((x) => typeof x !== 'string'))) return bad('links must be a list of note names, [[links]] or web addresses'); fields.links = (l ?? []) as string[]; }
+    if (has(body, 'link')) { const l = body['link']; if (l !== null && typeof l !== 'string') return bad('link must be a note name, a [[link]], a web address or null'); fields.links = l === null || l.trim() === '' ? [] : [l]; }
+    if (has(body, 'addLink')) { const l = str(body['addLink']); if (!l) return bad('addLink must be a note name, a [[link]] or a web address'); fields.addLink = l; }
+    if (has(body, 'removeLink')) { const l = str(body['removeLink']); if (!l) return bad('removeLink must be one of the links'); fields.removeLink = l; }
     if (Object.keys(fields).length === 0) return bad('Nothing to change');
     await d.mutations.setHabitItem(h.id, itemId, fields);
     return ok({ habit: fresh(), written: d.written() });
@@ -856,7 +859,7 @@ export function dayJson(date: IsoDate, d: Ctx): Record<string, unknown> {
     const st = habitStats(row.habit, snap.completions, d.today(), settings.weekStartsOn, 14);
     const h = row.habit;
     const it = habitItemsJson(h, d);
-    return { id: h.id, title: h.title, icon: h.icon ?? null, iconImage: h.iconImage ?? null, color: h.color ?? null, parts: h.parts ?? [], dueToday: row.due, occurrences: occurrencesJson(row, date, d), streak: st.streak, items: it.items.filter((x) => !x['retired']).map((x) => ({ id: x['id'], title: x['title'], group: x['group'], link: x['link'], linkUrl: x['linkUrl'] })), itemsPerDay: it.itemsPerDay, suggestedItem: it.suggestedItem, itemGroups: it.itemGroups, planned: h.itemPlan?.date === date ? h.itemPlan.items : [] };
+    return { id: h.id, title: h.title, icon: h.icon ?? null, iconImage: h.iconImage ?? null, color: h.color ?? null, parts: h.parts ?? [], dueToday: row.due, occurrences: occurrencesJson(row, date, d), streak: st.streak, items: it.items.filter((x) => !x['retired']).map((x) => ({ id: x['id'], title: x['title'], group: x['group'], links: x['links'], link: x['link'], linkUrl: x['linkUrl'] })), itemsPerDay: it.itemsPerDay, suggestedItem: it.suggestedItem, itemGroups: it.itemGroups, planned: h.itemPlan?.date === date ? h.itemPlan.items : [] };
   });
   const heading = d.index.daybookHeadingLine(date);
   const info = snap.dailyNotes.get(date);

@@ -2,20 +2,21 @@
 
 ## 1.62.0 — 2026-11-23
 
-- **A sub-habit links to its song or exercise.** Each song can point to a note
-  in the vault (chords, tabs, what to work on), an **Excalidraw drawing** (a
-  fretboard sketch), or a web page (a lesson on YouTube, a tab on Songsterr).
-  Set it with the link button on the song's row in the habit form, or in Log
-  practice's Plan mode: **A note…**, **An Excalidraw drawing…**, **A web page
-  or a [[link]]…** (a web address, a wikilink, or a note's or drawing's name),
-  **New note…** or **New drawing…** (made in `Notes/<habit>/` and linked
-  straight away), or **Remove the link**. In Log practice a linked song has a
-  button next to its name (a page, a pen or an outward arrow): a note or
-  drawing opens in a new tab and the panel steps aside; a web page opens in the
-  browser and the panel stays. Right-click a song's chip on the Habits card for
-  **Open …** too.
-- **API:** items carry `link`, `linkUrl` (a web address or an obsidian:// URL) and
-  `linkPath`; `PATCH /habits/:id/items/:itemId` takes `link`.
+- **A sub-habit links to its song or exercise, as often as you like.** Each song
+  can carry any mix of notes in the vault (chords, tabs, what to work on),
+  **Excalidraw drawings** (a fretboard sketch) and web pages (a lesson on
+  YouTube, a tab on Songsterr). The link button on the song's row in the habit
+  form, or in Log practice's Plan mode, opens each one and has **Add a note…**,
+  **Add an Excalidraw drawing…**, **Add a web page or a [[link]]…** (a web
+  address, a wikilink, or a note's or drawing's name), **New note…** and **New
+  drawing…** (made in `Notes/<habit>/` and added straight away), and **Remove**.
+  In Log practice a linked song has a button per link next to its name (a page,
+  a pen or an outward arrow): a note or drawing opens in a new tab and the panel
+  steps aside; a web page opens in the browser and the panel stays. Right-click
+  a song's chip on the Habits card for **Open …** too.
+- **API:** items carry `links` (each with its kind, a label, a URL to open and
+  its vault path) and the first flat as `link`, `linkUrl`, `linkPath`;
+  `PATCH /habits/:id/items/:itemId` takes `addLink`, `removeLink`, `links` or `link`.
 
 ## 1.61.0 — 2026-11-22
 

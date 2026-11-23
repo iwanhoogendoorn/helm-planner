@@ -10,7 +10,7 @@ import { WEEKDAY_SHORT } from '../../core/dates';
 import { button, h, icon } from '../dom';
 import type { UiContext } from '../context';
 import { confirmModal } from './confirm';
-import { askItemNote, itemLinkIcon, itemLinkLabel, itemLinkMenu } from '../itemLink';
+import { askItemNote, itemLinkLabel, itemLinkMenu } from '../itemLink';
 
 const EMOJIS = ['🏃', '🚶', '🏋️', '🧘', '🚴', '🏊', '⚽', '🎾', '🥗', '🍎', '💧', '☕', '🚭', '😴', '🌅', '📖', '✍️', '🎹', '🎸', '🎤', '🎨', '💻', '🧠', '🗣️', '🇪🇸', '🧹', '🧺', '🌱', '🐕', '💊', '🦷', '🧴', '💰', '📧', '📓', '🙏', '❤️', '📵', '🎯', '⭐'];
 
@@ -139,18 +139,19 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
 
   // ── Sub-habits ───────────────────────────────────────────────────────
   // Edited here, written on save: the songs under Guitar, the pieces under Piano.
-  // `link` as it will be saved; `newNote` a note to make for it on save (it then links to that).
-  type Draft = { id?: string; title: string; original?: string; retired: boolean; wasRetired: boolean; deleted: boolean; link?: string; linkWas?: string; newNote?: { name?: string; folder?: string; kind: 'note' | 'drawing' } };
-  const drafts: Draft[] = (existing?.items ?? []).map((i) => ({ id: i.id, title: i.title, original: i.title, retired: !!i.retired, wasRetired: !!i.retired, deleted: false, ...(i.link ? { link: i.link, linkWas: i.link } : {}) }));
+  // `links` as they will be saved; `make` notes and drawings to make for it on save (each then joins its links).
+  type Make = { name?: string; folder?: string; kind: 'note' | 'drawing' };
+  type Draft = { id?: string; title: string; original?: string; retired: boolean; wasRetired: boolean; deleted: boolean; links: string[]; linksWas: string[]; make: Make[] };
+  const drafts: Draft[] = (existing?.items ?? []).map((i) => ({ id: i.id, title: i.title, original: i.title, retired: !!i.retired, wasRetired: !!i.retired, deleted: false, links: [...(i.links ?? [])], linksWas: [...(i.links ?? [])], make: [] }));
   const draftHabit = (): Habit => existing ?? ({ id: 'hab-new', title: title.value.trim() || 'New habit', path: '' } as unknown as Habit);
-  const linkLabel = (d: Draft): string | undefined => d.newNote ? `new ${d.newNote.kind}${d.newNote.name ? ` “${d.newNote.name}”` : ''}` : d.link ? itemLinkLabel(d.link) : undefined;
+  const linkLabels = (d: Draft): string[] => [...d.links.map(itemLinkLabel), ...d.make.map((x) => `new ${x.kind}${x.name ? ` “${x.name}”` : ''}`)];
   let perDay = existing?.itemsPerDay ?? 1;
   const itemList = h('div', { cls: 'helm-subhabit-edit' });
   const perDayRow = h('div', { cls: 'helm-segmented' });
   const newItem = h('input', { cls: 'helm-input-wide', attr: { type: 'text', placeholder: 'Add a song, a piece, an exercise… (Enter)' } });
   const addDraft = (): void => {
     for (const t of newItem.value.split(/[\n;]/).map((x) => x.trim()).filter(Boolean)) {
-      if (!drafts.some((d) => !d.deleted && d.title.toLowerCase() === t.toLowerCase())) drafts.push({ title: t, retired: false, wasRetired: false, deleted: false });
+      if (!drafts.some((d) => !d.deleted && d.title.toLowerCase() === t.toLowerCase())) drafts.push({ title: t, retired: false, wasRetired: false, deleted: false, links: [], linksWas: [], make: [] });
     }
     newItem.value = '';
     drawItems();
@@ -178,21 +179,22 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
       });
       if (focus === d) setTimeout(() => input.focus(), 0);
       const handle = h('span', { cls: 'helm-subhabit-grip', title: 'Drag to change the order', attr: { 'aria-hidden': 'true' } }, icon('grip-vertical'));
-      const label = linkLabel(d);
+      const labels = linkLabels(d);
       const linkBtn = h('button', {
-        cls: ['helm-subhabit-link', 'clickable-icon', !!label && 'is-linked'],
-        title: label ? `Linked to ${label}: open, change or remove` : 'Link it to a note, an Excalidraw drawing or a web page (the song, the exercise)',
-        attr: { 'aria-label': `Link ${d.title}` },
+        cls: ['helm-subhabit-link', 'clickable-icon', labels.length > 0 && 'is-linked'],
+        title: labels.length ? `Linked to ${labels.join(', ')}: open, add or remove` : 'Link notes, Excalidraw drawings or web pages to it (the song, the exercise)',
+        attr: { 'aria-label': `Links of ${d.title}` },
         onClick: (ev) => itemLinkMenu(ctx, {
-          hb: draftHabit(), title: d.title.trim() || 'this sub-habit', link: d.newNote ? undefined : d.link, ev,
-          set: (link) => { delete d.newNote; if (link) d.link = link; else delete d.link; drawItems(); },
+          hb: draftHabit(), title: d.title.trim() || 'this sub-habit', links: d.links, ev,
+          add: (link) => { d.links.push(link); drawItems(); },
+          remove: (link) => { d.links = d.links.filter((x) => x !== link); drawItems(); },
           make: (kind) => {
             const t = d.title.trim() || 'Untitled';
-            if (existing) askItemNote(ctx, existing.id, t, kind, (r) => { d.newNote = { ...r, kind }; drawItems(); });
-            else { d.newNote = { kind }; drawItems(); }
+            if (existing) askItemNote(ctx, existing.id, t, kind, (r) => { d.make.push({ ...r, kind }); drawItems(); });
+            else { d.make.push({ kind }); drawItems(); }
           },
         }),
-      }, icon(d.newNote ? (d.newNote.kind === 'drawing' ? 'pen-tool' : 'file-text') : d.link ? itemLinkIcon(d.link) : 'link'), label ? h('span', { cls: 'helm-subhabit-link-label', text: label }) : null);
+      }, icon('link'), labels.length ? h('span', { cls: 'helm-subhabit-link-label', text: labels.length === 1 ? labels[0]! : `${labels.length} links` }) : null);
       const row = h('div', { cls: ['helm-subhabit-row', d.retired && 'is-retired'] }, handle, input, linkBtn,
         button(d.retired ? 'Bring back' : 'Retire', { icon: d.retired ? 'rotate-ccw' : 'archive', cls: 'helm-btn-quiet', title: d.retired ? 'Offer it again' : 'Learned or shelved: no longer offered, its history kept', onClick: () => { d.retired = !d.retired; drawItems(); } }),
         button('', { icon: 'x', cls: 'helm-btn-quiet', title: 'Remove (lines already in daily notes stay)', onClick: () => { if (d.id) d.deleted = true; else drafts.splice(drafts.indexOf(d), 1); drawItems(); } }));
@@ -341,8 +343,8 @@ export function openHabitForm(ctx: UiContext, existing?: Habit): void {
     });
   }
   async function saveLink(habitId: string, d: Draft): Promise<void> {
-    if (d.newNote) { await ctx.mutations.createItemNote(habitId, d.id!, d.newNote); return; }
-    if ((d.link ?? '') !== (d.linkWas ?? '')) await ctx.mutations.setHabitItem(habitId, d.id!, { link: d.link ?? null });
+    if (d.links.join('\n') !== d.linksWas.join('\n')) await ctx.mutations.setHabitItem(habitId, d.id!, { links: d.links });
+    for (const x of d.make) await ctx.mutations.createItemNote(habitId, d.id!, x);
   }
   m.open();
   ctx.trackModal(m);

@@ -23,7 +23,7 @@
  * item_groups: [C major, G major]  # groups the sub-habits sit in, in order ("<title> 🆔 <id> 📂 <group>")
  * items_plan_date: 2026-11-16      # the day of the plan below
  * items_plan: [hsi-a1b2c3]         # sub-habits you mean to practise that day
- *                                  # a sub-habit's note or web page goes last: "… 🔗 [[Wonderwall]]" or "… 🔗 https://…"
+ *                                  # a sub-habit's notes, drawings and web pages go last: "… 🔗 [[Wonderwall]] 🔗 https://…"
  * ---
  * ```
  */
@@ -120,9 +120,13 @@ export function itemLinkTarget(link: string): { url: string } | { note: string; 
 export function parseItemEntry(raw: string, retired: boolean): HabitItem | undefined {
   let text = String(raw).trim();
   if (!text) return undefined;
-  const l = ITEM_LINK_RE.exec(text);
-  const link = l ? cleanItemLink(l[1]!) : '';
-  if (l) text = text.slice(0, l.index).trim();
+  // Links last, any number of them: peel them off the end, then put them back in order.
+  const links: string[] = [];
+  for (let l = ITEM_LINK_RE.exec(text); l; l = ITEM_LINK_RE.exec(text)) {
+    const link = cleanItemLink(l[1]!);
+    if (link) links.unshift(link);
+    text = text.slice(0, l.index).trim();
+  }
   const g = ITEM_GROUP_RE.exec(text);
   const group = g ? cleanGroup(g[1]!) : '';
   if (g) text = text.slice(0, g.index).trim();
@@ -130,12 +134,12 @@ export function parseItemEntry(raw: string, retired: boolean): HabitItem | undef
   const title = (m ? text.slice(0, m.index) : text).trim();
   if (!title) return undefined;
   const id = m ? m[1]! : `hsi-t${hash(title.toLowerCase())}`;
-  return { id, title, ...(retired ? { retired: true } : {}), ...(group ? { group } : {}), ...(link ? { link } : {}) };
+  return { id, title, ...(retired ? { retired: true } : {}), ...(group ? { group } : {}), ...(links.length ? { links: [...new Set(links)] } : {}) };
 }
 
-export const formatItemEntry = (it: { id: string; title: string; group?: string; link?: string }): string => {
-  const link = it.link ? cleanItemLink(it.link) : '';
-  return `${it.title.trim()} 🆔 ${it.id}${it.group ? ` 📂 ${cleanGroup(it.group)}` : ''}${link ? ` 🔗 ${link}` : ''}`;
+export const formatItemEntry = (it: { id: string; title: string; group?: string; links?: string[] }): string => {
+  const links = [...new Set((it.links ?? []).map(cleanItemLink).filter(Boolean))];
+  return `${it.title.trim()} 🆔 ${it.id}${it.group ? ` 📂 ${cleanGroup(it.group)}` : ''}${links.map((l) => ` 🔗 ${l}`).join('')}`;
 };
 
 /** The frontmatter values for a habit's sub-habits (undefined removes the key). */

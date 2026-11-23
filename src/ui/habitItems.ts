@@ -10,7 +10,7 @@ import { HABIT_PARTS, type Habit, type HabitItem, type HabitPart, type IsoDate }
 import { partOfTime } from '../core/dailyNote';
 import { dayPartOf, habitItemStats, habitOccurrences, type HabitItemStats } from '../data/habits';
 import { askText } from './fields';
-import { askItemNote, itemLinkButton, itemLinkIcon, itemLinkLabel, itemLinkMenu, openItemLink } from './itemLink';
+import { addOpenItems, askItemNote, itemLinkButtons, itemLinkLabel, itemLinkMenu } from './itemLink';
 import { h, icon } from './dom';
 import type { UiContext } from './context';
 
@@ -67,7 +67,7 @@ export function itemMenu(ctx: UiContext, hb: Habit, item: HabitItem, date: IsoDa
   const part: Where | undefined = hb.parts?.length ? partFor(ctx, hb, date, now.part) : at;
   const menu = new Menu();
   menu.addItem((i) => i.setTitle(item.title).setDisabled(true));
-  if (item.link) menu.addItem((i) => i.setTitle(`Open ${itemLinkLabel(item.link!)}`).setIcon(itemLinkIcon(item.link!)).onClick(() => openItemLink(ctx, hb, item.link!)));
+  addOpenItems(menu, ctx, hb, item.links ?? []);
   if (now.state !== 'done') menu.addItem((i) => i.setTitle('Practised').setIcon('check').onClick(() => set(ctx, hb, item, date, 'done', part, 1)));
   else menu.addItem((i) => i.setTitle(`One more (×${now.count + 1})`).setIcon('plus').onClick(() => set(ctx, hb, item, date, 'done', part, now.count + 1)));
   menu.addItem((i) => {
@@ -150,8 +150,9 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
   };
   const clearPlan = (): void => { planned = new Set(); draw(); enqueue('Plan', () => ctx.mutations.setItemPlan(habit.id, date, [])); };
   const linkMenu = (hb: Habit, item: HabitItem, ev: MouseEvent): void => itemLinkMenu(ctx, {
-    hb, title: item.title, link: item.link, ev,
-    set: (link) => enqueue('Sub-habit link', () => ctx.mutations.setHabitItem(habit.id, item.id, { link })),
+    hb, title: item.title, links: item.links ?? [], ev,
+    add: (link) => enqueue('Sub-habit link', () => ctx.mutations.setHabitItem(habit.id, item.id, { addLink: link })),
+    remove: (link) => enqueue('Sub-habit link', () => ctx.mutations.setHabitItem(habit.id, item.id, { removeLink: link })),
     make: (kind) => askItemNote(ctx, habit.id, item.title, kind, (r) => enqueue(`New ${kind}`, () => ctx.mutations.createItemNote(habit.id, item.id, { ...r, kind }))),
   });
   const moveTo = (item: HabitItem, group: string | null): void => enqueue('Sub-habit group', () => ctx.mutations.setHabitItem(habit.id, item.id, { group }));
@@ -210,7 +211,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
           icon(n > 0 ? 'check-circle-2' : 'circle'),
           h('span', { cls: 'helm-itemlog-title' }, h('span', { text: st.item.title })),
           h('span', { cls: 'helm-itemlog-sub', text: `${since(st)} · ${st.count30}× in 30 days` })),
-        itemLinkButton(ctx, hb, st.item, () => m.close()),
+        itemLinkButtons(ctx, hb, st.item, () => m.close()),
         h('div', { cls: 'helm-itemlog-stepper' },
           h('button', { cls: 'helm-itemlog-step', title: n > 1 ? 'One round less' : 'Take the log off', attr: { 'aria-label': `One less ${st.item.title}`, ...(n === 0 ? { disabled: 'true' } : {}) }, onClick: () => change(st.item, n - 1) }, icon('minus')),
           h('span', { cls: 'helm-itemlog-count', text: String(n) }),
@@ -223,7 +224,7 @@ export function openItemLog(ctx: UiContext, habit: Habit, date: IsoDate, opts: {
           icon(on ? 'check-square' : 'square'),
           h('span', { cls: 'helm-itemlog-title' }, h('span', { text: st.item.title })),
           h('span', { cls: 'helm-itemlog-sub', text: `${since(st)} · ${st.count30}× in 30 days` })),
-        h('button', { cls: ['helm-itemlog-setlink', 'clickable-icon', !!st.item.link && 'is-linked'], title: st.item.link ? `Linked to ${itemLinkLabel(st.item.link)}: open, change or remove` : 'Link it to a note, a drawing or a web page', attr: { 'aria-label': `Link ${st.item.title}` }, onClick: (ev) => linkMenu(hb, st.item, ev) }, icon(st.item.link ? itemLinkIcon(st.item.link) : 'link')),
+        h('button', { cls: ['helm-itemlog-setlink', 'clickable-icon', !!st.item.links?.length && 'is-linked'], title: st.item.links?.length ? `Linked to ${st.item.links.map(itemLinkLabel).join(', ')}: open, add or remove` : 'Link notes, drawings or web pages to it', attr: { 'aria-label': `Links of ${st.item.title}` }, onClick: (ev) => linkMenu(hb, st.item, ev) }, icon('link'), st.item.links?.length ? h('span', { cls: 'helm-itemlog-setlink-count', text: String(st.item.links.length) }) : null),
         h('button', { cls: 'helm-itemlog-move clickable-icon', title: st.item.group ? `In ${st.item.group}: move to another group` : 'Put it in a group', attr: { 'aria-label': `Move ${st.item.title}` }, onClick: (ev) => moveMenu(hb, st.item, ev) }, icon('folder-input')));
     };
     const byGroup = (rows: HabitItemStats[], row: (st: HabitItemStats) => HTMLElement, withMenu: boolean): HTMLElement[] =>
@@ -328,7 +329,7 @@ export function itemChips(ctx: UiContext, hb: Habit, date: IsoDate): HTMLElement
     const isPlanned = plan.has(item.id) && now?.state !== 'done';
     return h('button', {
       cls: ['helm-subhabit', now && `is-${now.state}`, isPlanned && 'is-planned'],
-      title: `${item.title}${item.group ? ` (${item.group})` : ''}${item.link ? ` → ${itemLinkLabel(item.link)}` : ''} — ${since(st)} · ${st.count30}× in 30 days · ${st.total}× in all${isPlanned ? ' · on the plan' : ''}\nClick: log it / take the log off · right-click: more · rounds: Log practice`,
+      title: `${item.title}${item.group ? ` (${item.group})` : ''}${item.links?.length ? ` → ${item.links.map(itemLinkLabel).join(', ')}` : ''} — ${since(st)} · ${st.count30}× in 30 days · ${st.total}× in all${isPlanned ? ' · on the plan' : ''}\nClick: log it / take the log off · right-click: more · rounds: Log practice`,
       onClick: (ev) => {
         ev.stopPropagation();
         // Off: from the line it is on. On: the part it is now (a once-a-day habit's session, picked by Helm).
